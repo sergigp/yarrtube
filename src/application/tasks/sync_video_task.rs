@@ -309,6 +309,7 @@ mod tests {
         ));
         let video = Video {
             chapters: None,
+            chapters_settled: false,
             ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
         };
         save_channel_video(
@@ -1789,20 +1790,23 @@ mod tests {
     /// recorded and its subtitles still Missing, with its chapters already
     /// checked so a sync schedules no chapters fetch.
     fn downloaded_video() -> Video {
-        my_video()
-            .start_download(fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                DOWNLOADED_FILENAME,
-                Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
-                None,
-                fixed_timestamp(),
-            )
-            .with_episode_number(
-                EpisodeNumber::from_columns(2026, 31501).unwrap(),
-                fixed_timestamp(),
-            )
-            .with_chapters(vec![], fixed_timestamp())
+        Video {
+            chapters_settled: true,
+            ..my_video()
+                .start_download(fixed_timestamp())
+                .mark_downloaded(
+                    Quality::High,
+                    DOWNLOADED_FILENAME,
+                    Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                    None,
+                    fixed_timestamp(),
+                )
+                .with_episode_number(
+                    EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                    fixed_timestamp(),
+                )
+                .with_chapters(vec![], fixed_timestamp())
+        }
     }
 
     /// Stores `video` as the only video of `my_channel()`.

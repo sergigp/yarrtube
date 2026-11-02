@@ -350,9 +350,9 @@ impl Video {
     }
 
     /// Whether a chapters fetch is worth attempting: Downloaded and its
-    /// chapters never checked.
+    /// chapters unsettled.
     pub fn is_chapters_fetchable(&self) -> bool {
-        self.is_downloaded() && self.chapters.is_none()
+        self.is_downloaded() && !self.chapters_settled
     }
 
     /// Records the video's checked chapters. Touches only `chapters` and

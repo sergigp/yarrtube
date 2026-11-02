@@ -2048,6 +2048,7 @@ mod tests {
                 duration_seconds: None,
                 updated_at: fixed_timestamp(),
                 synced_at: None,
+                chapters_settled: false,
                 ..video.clone()
             }]
         );
@@ -2940,16 +2941,19 @@ mod tests {
 
     /// Its chapters already checked, so a sync schedules no chapters fetch.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
-        my_video()
-            .start_download(fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                filename,
-                thumbnail_filename.map(str::to_string),
-                None,
-                fixed_timestamp(),
-            )
-            .with_chapters(vec![], fixed_timestamp())
+        Video {
+            chapters_settled: true,
+            ..my_video()
+                .start_download(fixed_timestamp())
+                .mark_downloaded(
+                    Quality::High,
+                    filename,
+                    thumbnail_filename.map(str::to_string),
+                    None,
+                    fixed_timestamp(),
+                )
+                .with_chapters(vec![], fixed_timestamp())
+        }
     }
 
     /// `my_video()` downloaded into its season folder as episode

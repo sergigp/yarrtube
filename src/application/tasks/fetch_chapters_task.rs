@@ -90,6 +90,52 @@ mod tests {
     }
 
     #[test]
+    fn it_should_recheck_unsettled_empty_chapters() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
+        );
+        let video = Video {
+            chapters_checks: LateDataChecks {
+                last_checked_at: Some(fixed_timestamp()),
+                failed_attempts: 0,
+            },
+            ..downloaded_video().with_chapters(vec![], fixed_timestamp())
+        };
+        video_repository.save(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: Some(intro_chapters()),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 0,
+                },
+                chapters_settled: true,
+                updated_at: later(),
+                ..video
+            }]
+        );
+        assert_eq!(
+            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            vec![YT1_URL.to_string()]
+        );
+    }
+
+    #[test]
     fn it_should_keep_empty_chapters_unsettled_for_a_young_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
