@@ -240,6 +240,73 @@ mod tests {
     }
 
     #[test]
+    fn it_should_leave_quality_unsettled_for_a_young_video_below_its_cap() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    height: Some(360),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(
+            &task,
+            &Task::DownloadVideo {
+                video_id: video.id.as_str().to_string(),
+                quality: "mid".to_string(),
+                output_dir: output_dir.path().to_string_lossy().to_string(),
+            }
+            .payload()
+            .to_string(),
+            false,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                downloaded_height: Some(360),
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(fixed_timestamp()),
+                    failed_attempts: 0,
+                },
+                ..video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::Mid,
+                        "Season 2026/S2026E031501 - My Video.mp4",
+                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_record_the_chapters_of_a_downloaded_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
