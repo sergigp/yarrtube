@@ -53,7 +53,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 sqlite_migrations: `it_should_settle_checked_chapters_and_downloaded_quality` — backfill of the settled flags (test passes)
+- [x] 3.1 sqlite_migrations: `it_should_settle_checked_chapters_and_downloaded_quality` — backfill of the settled flags (test passes)
 - [ ] 3.2 sqlite_migrations: `it_should_keep_the_first_missing_time_as_the_last_subtitles_check` — the renamed column keeps its value (test passes)
 - [ ] 3.3 sqlite_video_repository: `it_should_round_trip_late_data_checks` — every new column maps both ways (test passes)
 - [ ] 3.4 sqlite_video_repository: `it_should_update_only_quality_fields` — `update_quality` touches only its fields (test passes)

@@ -867,6 +867,74 @@ mod tests {
             ))
         );
     }
+    #[test]
+    fn it_should_settle_checked_chapters_and_downloaded_quality() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_video_chapters(&mut conn);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, chapters)
+             VALUES ('checked', 'yt1', 'Checked', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00', '[]');
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, chapters)
+             VALUES ('unchecked', 'yt2', 'Unchecked', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00', NULL);
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, chapters)
+             VALUES ('pending', 'yt3', 'Pending', 'PENDING', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00', NULL);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let settled = conn
+            .prepare("SELECT id, chapters_settled, quality_settled FROM videos ORDER BY id")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, bool>(1)?,
+                    row.get::<_, bool>(2)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        assert_eq!(
+            settled,
+            Ok(vec![
+                ("checked".to_string(), true, true),
+                ("pending".to_string(), false, false),
+                ("unchecked".to_string(), false, true),
+            ])
+        );
+    }
+
+    fn migrate_to_video_chapters(conn: &mut Connection) {
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+            M::up(RECONCILE_INTERVAL_SQL),
+            M::up(VIDEO_SUBTITLES_SQL),
+            M::up(CATEGORIES_SQL),
+            M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+            M::up(CATEGORY_COLOR_SQL),
+            M::up(VIDEO_CATEGORIES_SQL),
+            M::up(PLEX_LABELS_SQL),
+            M::up(EPISODE_LABELS_GENERATION_SQL),
+            M::up(PREFERENCES_SQL),
+            M::up_with_hook(
+                CATEGORY_COLOR_STRENGTHEN_SQL,
+                strengthen_light_category_colors,
+            ),
+            M::up(CATEGORY_PALETTE_REFRESH_SQL),
+            M::up(VIDEO_CHAPTERS_SQL),
+        ])
+        .to_latest(conn)
+        .unwrap();
+    }
+
     fn migrate_to_preferences(conn: &mut Connection) {
         Migrations::new(vec![
             M::up(BASELINE_SQL),
