@@ -173,6 +173,8 @@ pub fn download_video(
         // `--print` stdout. See the `log-sabr-detection` change.
         "--quiet".to_string(),
         "--print".to_string(),
+        "%(height)s".to_string(),
+        "--print".to_string(),
         "%(chapters)j".to_string(),
         "--print".to_string(),
         "%(timestamp)s".to_string(),
@@ -223,16 +225,17 @@ pub fn download_video(
     let duration_seconds = line_before_last(&lines, 1).and_then(parse_duration_seconds);
     let published_at = parse_published_at(line_before_last(&lines, 3), line_before_last(&lines, 2));
     let chapters = line_before_last(&lines, 4).and_then(parse_chapters);
+    let height = line_before_last(&lines, 5).and_then(|line| line.trim().parse().ok());
 
     let media_path = staging_dir.join(filename);
     Ok(DownloadAttempt::Succeeded(DownloadedVideo {
-        height: None,
         thumbnail_path: staged_thumbnail(&media_path),
         media_path,
         duration_seconds,
         published_at,
         sabr_notice,
         chapters,
+        height,
     }))
 }
 
@@ -1332,6 +1335,42 @@ mod tests {
             }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_report_the_downloaded_height() {
+        let fake = test_support::FakeYtDlp::with_stdout("1080\n[]\nNA\nNA\n223\nyt1.mp4\n");
+        let staging_dir = test_support::unique_temp_dir("ytdlp-output-height");
+
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                Quality::High,
+                &staging_dir,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            result,
+            DownloadedVideo {
+                height: Some(1080),
+                media_path: staging_dir.join("yt1.mp4"),
+                thumbnail_path: None,
+                duration_seconds: Some(223),
+                published_at: None,
+                sabr_notice: None,
+                chapters: Some(vec![]),
+            }
+        );
+        assert!(
+            fake.captured_args()
+                .windows(2)
+                .any(|pair| pair == ["--print", "%(height)s"])
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 
     #[test]
