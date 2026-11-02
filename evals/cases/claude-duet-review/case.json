@@ -1,7 +1,77 @@
 {
+  "youtube_id": "HYb5w4PfPZM",
   "title": "Claude Duet review- Great design, but...",
+  "youtube_title": "I tested Claude Duet. Is it worth switching from Grok Bot?",
   "lang": "en",
   "duration_s": 982,
+  "chapters": [
+    {
+      "start_seconds": 0,
+      "end_seconds": 40,
+      "title": "Personal agent fatigue: does Claude Duet make the cut?"
+    },
+    {
+      "start_seconds": 40,
+      "end_seconds": 99,
+      "title": "What Claude Duet is and who it's for"
+    },
+    {
+      "start_seconds": 99,
+      "end_seconds": 186,
+      "title": "Why the design polish stands out"
+    },
+    {
+      "start_seconds": 186,
+      "end_seconds": 293,
+      "title": "Task lists, artifacts, and channels"
+    },
+    {
+      "start_seconds": 293,
+      "end_seconds": 327,
+      "title": "The icon"
+    },
+    {
+      "start_seconds": 327,
+      "end_seconds": 422,
+      "title": "What I didn't like: not proactive enough"
+    },
+    {
+      "start_seconds": 422,
+      "end_seconds": 461,
+      "title": "Testing it on email, Slack, and Warriors tickets"
+    },
+    {
+      "start_seconds": 461,
+      "end_seconds": 620,
+      "title": "Why latency matters so much in a personal agent"
+    },
+    {
+      "start_seconds": 620,
+      "end_seconds": 732,
+      "title": "The missing desktop app"
+    },
+    {
+      "start_seconds": 732,
+      "end_seconds": 790,
+      "title": "Sales pipeline and a Google Docs deck"
+    },
+    {
+      "start_seconds": 790,
+      "end_seconds": 840,
+      "title": "Launch videos and the local skills gap"
+    },
+    {
+      "start_seconds": 840,
+      "end_seconds": 905,
+      "title": "Single-player vs. multiplayer agents"
+    },
+    {
+      "start_seconds": 905,
+      "end_seconds": 982,
+      "title": "Final verdict"
+    }
+  ],
+  "description": "Anthropic's new personal agent, Claude Duet, lives on your phone, inherits all your Claude plugins and connectors, and is pitched at small business owners and busy professionals. It's the most polished agent launch I've seen: thoughtful onboarding, task lists, first-class artifacts, and Slack-style channels. But polish isn't enough when you're competing with every other personal agent for attention. I put it to work on my inbox and Slack, my sales pipeline, a Google Docs sales deck, a launch video, and finding Warriors tickets for my kids, and I'll walk you through what it nails, where it stalls, and what Anthropic needs to fix before it can become anyone's number one agent.\n\n*What you'll learn:*\n1. What Claude Duet is and who Anthropic built it for\n2. The design details that make it far more polished than other personal agent launches\n3. How task lists, artifacts, and channels work as agent primitives\n4. Why a \"proactive\" agent that never nudges you is a growth problem\n5. How model latency kills your willingness to work with an agent synchronously\n6. Where it fell short on real tasks, from inbox triage to sales decks to launch videos\n7. Why missing desktop and multiplayer support keeps it out of my working stack\n\n*In this episode, we cover:*\n(00:00) Personal agent fatigue: does Claude Duet make the cut?\n(00:40) What Claude Duet is and who it's for\n(01:39) Why the design polish stands out\n(03:06) Task lists, artifacts, and channels\n(04:53) The icon\n(05:27) What I didn't like: not proactive enough\n(07:02) Testing it on email, Slack, and Warriors tickets\n(07:41) Why latency matters so much in a personal agent\n(10:20) The missing desktop app\n(12:12) Sales pipeline and a Google Docs deck\n(13:10) Launch videos and the local skills gap\n(14:00) Single-player vs. multiplayer agents\n(15:05) Final verdict\n\n*Blog and detailed workflow walkthroughs from this episode:*\nClaude Duet Is Beautiful. That Doesn’t Make It My Go-To Agent.: https://www.chatprd.ai/how-i-ai/claude-duet-review  \n↳ How to Draft a Sales Deck on Your Phone Using Claude Duet: https://www.chatprd.ai/how-i-ai/workflows/claude-duet-sales-deck  \n↳ Analyze Your Sales Pipeline Using Claude Duet's Connected Apps: https://www.chatprd.ai/how-i-ai/workflows/claude-duet-sales-pipeline\n\n*Tools referenced:*\n• Claude Duet: https://claude.com/product/claude-duet\n• Introducing Claude Duet (Anthropic): https://claude.com/resources/articles/claude-duet\n• Claude Cowork: https://claude.com/product/cowork\n• Meta Muse: https://ai.meta.com/muse/\n• Codex: https://openai.com/codex\n• Grok Bot: https://x.ai/bot\n\n*Where to find Claire Vo:*\nChatPRD: https://www.chatprd.ai/\nWebsite: https://clairevo.com/\nLinkedIn: https://www.linkedin.com/in/clairevo/\nX: https://x.com/clairevo\n\n*Have a really cool use case of how you use AI in your work? Let us know:*\nhttps://docs.google.com/forms/d/e/1FAIpQLSfP8wYCeDo5K0DxscDmoqgkxYY8ngA3B2anUDDvC4xadGTerg/viewform\n\n_Production and marketing by https://penname.co/._\n_For inquiries about sponsoring the podcast, email jordan@penname.co._",
   "summary": {
     "facts": [
       {
