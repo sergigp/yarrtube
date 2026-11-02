@@ -40,7 +40,9 @@ mod tests {
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
-    use crate::domain::video::{EpisodeNumber, LateDataChecks, Video, VideoChapter, VideoId};
+    use crate::domain::video::{
+        EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoChapter, VideoId, VideoStatus,
+    };
     use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -1375,6 +1377,98 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &fetch_thumbnail(&video)),
+                pending_task(2, &download_video(&video)),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_reset_every_check_on_redownload() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = Video {
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(fixed_timestamp() - Duration::hours(1)),
+                failed_attempts: 2,
+            },
+            chapters_checks: LateDataChecks {
+                last_checked_at: Some(fixed_timestamp() - Duration::hours(1)),
+                failed_attempts: 2,
+            },
+            downloaded_height: Some(720),
+            quality_checks: LateDataChecks {
+                last_checked_at: Some(fixed_timestamp() - Duration::hours(1)),
+                failed_attempts: 2,
+            },
+            ..downloaded_video()
+        };
+        save_channel_video(
+            &video_repository,
+            &channel_repository,
+            &channel_video_repository,
+            &video,
+        );
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                channel_video_repository,
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                channel_repository,
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            video_category_assigner(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                status: VideoStatus::Pending,
+                quality: None,
+                filename: None,
+                thumbnail_filename: None,
+                duration_seconds: None,
+                synced_at: None,
+                subtitle_state: SubtitleState::Missing,
+                subtitle_filename: None,
+                subtitle_checks: LateDataChecks::default(),
+                chapters_checks: LateDataChecks::default(),
+                chapters_settled: false,
+                downloaded_height: None,
+                quality_checks: LateDataChecks::default(),
+                quality_settled: false,
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
