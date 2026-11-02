@@ -115,6 +115,9 @@ export function VideoPlayer({
           <video
             ref={videoRef}
             controls
+            // iOS Safari goes fullscreen on play without it; stay inline so the chapter
+            // rail stays reachable, fullscreen remains one tap away in the controls.
+            playsInline
             autoPlay={autoplay}
             className={cn(
             'block h-full w-full md:h-auto md:rounded-lg',

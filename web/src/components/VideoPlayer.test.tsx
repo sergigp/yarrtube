@@ -65,6 +65,12 @@ describe('VideoPlayer', () => {
     expect(container.querySelector('track')).not.toBe(firstTrack)
   })
 
+  it('plays inline instead of going fullscreen on phones', () => {
+    const { container } = renderPlayer(null)
+
+    expect(container.querySelector('video')!.hasAttribute('playsinline')).toBe(true)
+  })
+
   it('offers no captions track for a video without subtitles', () => {
     const { container } = renderPlayer(null)
 
