@@ -49,20 +49,29 @@ fn output_retrying_busy(cmd: &mut Command) -> io::Result<std::process::Output> {
 /// into mp4 whenever it isn't already, independent of whether a merge
 /// happened, so every download consistently lands as `.mp4`.
 pub fn args_for_quality(quality: Quality) -> Vec<String> {
-    let format = match quality {
-        Quality::High => "bv+ba/b".to_string(),
-        Quality::Mid => "bv[height<=720]+ba/b[height<=720]".to_string(),
-        Quality::Low => "bv[height<=480]+ba/b[height<=480]".to_string(),
-    };
-    vec![
-        "-f".to_string(),
-        format,
-        "-S".to_string(),
-        "codec:h264:aac,ext:mp4:m4a".to_string(),
+    let mut args = format_selection_args(quality);
+    args.extend([
         "--merge-output-format".to_string(),
         "mp4".to_string(),
         "--remux-video".to_string(),
         "mp4".to_string(),
+    ]);
+    args
+}
+
+/// The `-f`/`-S` format selection a quality tier downloads with: its
+/// resolution cap, preferring mp4/h264/aac.
+fn format_selection_args(quality: Quality) -> Vec<String> {
+    let format = match quality {
+        Quality::High => "bv+ba/b",
+        Quality::Mid => "bv[height<=720]+ba/b[height<=720]",
+        Quality::Low => "bv[height<=480]+ba/b[height<=480]",
+    };
+    vec![
+        "-f".to_string(),
+        format.to_string(),
+        "-S".to_string(),
+        "codec:h264:aac,ext:mp4:m4a".to_string(),
     ]
 }
 
@@ -434,15 +443,44 @@ pub struct FetchedSubtitles {
 /// The height `quality`'s format selector picks for the video now, and its
 /// publish time, downloading nothing. `Err` on any failure, clean or
 /// systemic.
-pub fn probe_quality(
-    _ytdlp_path: &Path,
-    _video_url: &str,
-    _quality: Quality,
-) -> Result<QualityProbe> {
-    Ok(QualityProbe {
-        height: None,
-        published_at: None,
-    })
+pub fn probe_quality(ytdlp_path: &Path, video_url: &str, quality: Quality) -> Result<QualityProbe> {
+    let mut cmd = Command::new(ytdlp_path);
+    cmd.args(format_selection_args(quality))
+        .args([
+            "--skip-download",
+            "--quiet",
+            "--no-warnings",
+            "--print",
+            "%(height)s",
+            "--print",
+            "%(timestamp)s",
+            "--print",
+            "%(upload_date)s",
+        ])
+        .arg(video_url)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    match run(
+        &mut cmd,
+        || not_found_message(ytdlp_path),
+        |e| format!("Failed to run yt-dlp to probe the quality of {video_url}: {e}"),
+    )? {
+        RunOutcome::Success(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let lines: Vec<&str> = stdout.lines().collect();
+            Ok(QualityProbe {
+                height: line_before_last(&lines, 2).and_then(|line| line.trim().parse().ok()),
+                published_at: parse_published_at(
+                    line_before_last(&lines, 1),
+                    lines.last().copied(),
+                ),
+            })
+        }
+        RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
+            "yt-dlp failed to probe the quality of {video_url}: {}",
+            reason_excluding_warnings(&stderr_raw).unwrap_or_else(|| "no reason given".to_string())
+        )),
+    }
 }
 
 /// `-J --skip-download --write-subs` without `--no-warnings`: subtitle
@@ -1590,6 +1628,45 @@ mod tests {
                         .to_utc()
                 ),
             })
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_probe_the_height_for_a_quality() {
+        let fake = test_support::FakeYtDlp::with_stdout("720\n1773568800\n20260315\n");
+
+        let result = probe_quality(&fake.path, "https://example.com/video", Quality::Mid);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(QualityProbe {
+                height: Some(720),
+                published_at: Some(
+                    DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+            })
+        );
+        assert_eq!(
+            fake.captured_args(),
+            vec![
+                "-f",
+                "bv[height<=720]+ba/b[height<=720]",
+                "-S",
+                "codec:h264:aac,ext:mp4:m4a",
+                "--skip-download",
+                "--quiet",
+                "--no-warnings",
+                "--print",
+                "%(height)s",
+                "--print",
+                "%(timestamp)s",
+                "--print",
+                "%(upload_date)s",
+                "https://example.com/video",
+            ]
         );
     }
 
