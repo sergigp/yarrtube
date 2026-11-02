@@ -14,6 +14,7 @@ import { reconcilePlaylist, deletePlaylist, markPlaylistWatched } from '@/api/cl
 import { useWatchProgress } from '@/hooks/useWatchProgress'
 import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
+import { youtubePlaylistUrl } from '@/lib/sourcePath'
 import { VideoPlayer } from './VideoPlayer'
 import { VideoDetail } from './VideoDetail'
 import { VideoListPane } from './VideoListPane'
@@ -66,6 +67,7 @@ export function PlaylistDetail() {
         unwatchedCountHidden={playlist.hide_unwatched_count}
         onSetUnwatchedCountHidden={(hidden) => setPlaylistUnwatchedCountHidden(id, hidden)}
         onEditRequest={() => setEditing(true)}
+        youtubeLink={{ href: youtubePlaylistUrl(id), label: 'Open playlist on YouTube' }}
         onDelete={refreshing(async () => {
           await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
           navigate('/')

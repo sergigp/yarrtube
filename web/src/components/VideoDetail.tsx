@@ -1,12 +1,13 @@
 import { Fragment, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ExternalLink } from 'lucide-react'
 import { avatarMediaUrl } from '@/api/client'
 import type { ChannelListItem, Video } from '@/api/types'
 import { formatDate, formatDateTime, formatRelativeTime } from '@/lib/formatDateTime'
 import { Thumbnail } from './Thumbnail'
 import { PlaybackSpeedMenu } from './PlaybackSpeedMenu'
-import { VideoWatchedControl } from './VideoWatchedControl'
+import { MarkWatchedButton } from './MarkWatchedButton'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { storageLocation } from '@/lib/storageLocation'
@@ -37,8 +38,9 @@ interface VideoDetailProps {
  * The selected video's detail pane in a playlist or channel detail view.
  * `channel` is only given in a channel view, where its avatar is shown and
  * links to the channel; in a playlist view the meta line names the video's
- * channel instead. `playbackRate` is the player's current speed, shown in
- * the title row's speed control.
+ * channel instead. The title row ends with the video's own actions: "Mark
+ * watched" (until it is watched), the speed control for the player's
+ * current `playbackRate`, and a link to the video on YouTube.
  */
 export function VideoDetail({
   basePath,
@@ -64,21 +66,23 @@ export function VideoDetail({
         <h3 className="min-w-0 flex-1 font-heading text-lg font-semibold text-foreground md:text-xl">
           {video.title}
         </h3>
-        <PlaybackSpeedMenu
-          rate={playbackRate}
-          onRateChange={onPlaybackRateChange}
-          disabled={video.status !== 'DOWNLOADED'}
-          className="mt-0.5"
-        />
+        <div className="mt-0.5 flex shrink-0 items-center gap-1">
+          <MarkWatchedButton
+            videoId={video.id}
+            title={video.title}
+            watched={video.watched}
+            downloaded={video.status === 'DOWNLOADED'}
+            className="mr-1"
+          />
+          <PlaybackSpeedMenu
+            rate={playbackRate}
+            onRateChange={onPlaybackRateChange}
+            disabled={video.status !== 'DOWNLOADED'}
+          />
+          <YouTubeLink videoId={video.id} />
+        </div>
       </div>
       <MetaLine video={video} showChannelName={!channel} />
-      <VideoWatchedControl
-        videoId={video.id}
-        title={video.title}
-        watched={video.watched}
-        downloaded={video.status === 'DOWNLOADED'}
-        className="mt-2"
-      />
       {expanded && (
         <div className="mt-3 mb-1">
           {video.status !== 'DOWNLOADED' && (
@@ -88,14 +92,6 @@ export function VideoDetail({
           )}
           {video.description && <Description key={video.id} text={video.description} />}
           <p className="mt-2 text-xs break-words text-muted-foreground">{location}</p>
-          <a
-            className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
-            href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}
-            target="_blank"
-            rel="noopener"
-          >
-            Open on YouTube
-          </a>
         </div>
       )}
       <button
@@ -111,12 +107,37 @@ export function VideoDetail({
   )
 }
 
+/** An icon link opening the video on YouTube in a new tab. */
+function YouTubeLink({ videoId }: { videoId: string }) {
+  const label = 'Open video on YouTube'
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a
+            href={`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`}
+            target="_blank"
+            rel="noopener"
+            aria-label={label}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <ExternalLink className="size-4" />
+          </a>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 /**
- * `[<channel> · ]Published <date> · Synced <relative>`, omitting any part
- * whose value is absent, and nothing at all when every part is.
+ * `[Watched · ][<channel> · ]Published <date> · Synced <relative>`, omitting
+ * any part whose value is absent, and nothing at all when every part is.
+ * "Synced" shows only from the desktop breakpoint, so the line fits a phone.
  */
 function MetaLine({ video, showChannelName }: { video: Video; showChannelName: boolean }) {
   const parts = [
+    video.watched && <span key="watched">Watched</span>,
     showChannelName && video.channel_name && <span key="channel">{video.channel_name}</span>,
     video.published_at && <span key="published">Published {formatDate(video.published_at)}</span>,
     video.synced_at && (
@@ -132,12 +153,20 @@ function MetaLine({ video, showChannelName }: { video: Video; showChannelName: b
 
   return (
     <p className="mt-1 text-sm text-muted-foreground">
-      {parts.map((part, index) => (
-        <Fragment key={part.key}>
-          {index > 0 && ' · '}
-          {part}
-        </Fragment>
-      ))}
+      {parts.map((part, index) =>
+        part.key === 'synced' ? (
+          // Hidden with its separator below the desktop breakpoint.
+          <span key={part.key} className="max-md:hidden">
+            {index > 0 && ' · '}
+            {part}
+          </span>
+        ) : (
+          <Fragment key={part.key}>
+            {index > 0 && ' · '}
+            {part}
+          </Fragment>
+        ),
+      )}
     </p>
   )
 }

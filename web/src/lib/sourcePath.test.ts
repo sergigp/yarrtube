@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { channelPath, playlistPath } from './sourcePath'
+import { channelPath, playlistPath, youtubeChannelUrl, youtubePlaylistUrl } from './sourcePath'
 
 describe('channelPath', () => {
   it('keeps a plain handle readable', () => {
@@ -18,5 +18,21 @@ describe('channelPath', () => {
 describe('playlistPath', () => {
   it('builds the playlist route', () => {
     expect(playlistPath('PL123')).toBe('/playlists/PL123')
+  })
+})
+
+describe('youtubeChannelUrl', () => {
+  it('links the handle page', () => {
+    expect(youtubeChannelUrl('@somechannel')).toBe('https://www.youtube.com/@somechannel')
+  })
+
+  it('encodes a non-Latin handle', () => {
+    expect(youtubeChannelUrl('@Сон')).toBe('https://www.youtube.com/@%D0%A1%D0%BE%D0%BD')
+  })
+})
+
+describe('youtubePlaylistUrl', () => {
+  it('links the playlist page', () => {
+    expect(youtubePlaylistUrl('PL123')).toBe('https://www.youtube.com/playlist?list=PL123')
   })
 })

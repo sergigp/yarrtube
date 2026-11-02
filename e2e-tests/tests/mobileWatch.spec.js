@@ -57,12 +57,15 @@ test('video details start collapsed and More expands them @mobile', async ({ pag
   await page.goto(playlistPage(seeded))
   await expect(page.locator('main h3').first()).toHaveText(seeded.video.title)
 
+  // The YouTube link sits in the title row, so it shows while collapsed.
+  await expect(page.getByRole('link', { name: 'Open video on YouTube' })).toBeVisible()
   const more = page.getByRole('button', { name: 'More', exact: true })
   await expect(more).toHaveAttribute('aria-expanded', 'false')
-  await expect(page.getByRole('link', { name: 'Open on YouTube' })).toHaveCount(0)
+  const location = page.locator('main').getByText(seeded.path, { exact: false })
+  await expect(location).toHaveCount(0)
 
   await more.tap()
 
   await expect(page.getByRole('button', { name: 'Less', exact: true })).toHaveAttribute('aria-expanded', 'true')
-  await expect(page.getByRole('link', { name: 'Open on YouTube' })).toBeVisible()
+  await expect(location).toBeVisible()
 })

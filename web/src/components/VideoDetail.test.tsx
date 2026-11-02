@@ -24,7 +24,7 @@ describe('VideoDetail', () => {
     expect(screen.getByRole('button', { name: /More/ })).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('expands to the description, storage location and YouTube link', async () => {
+  it('expands to the description and storage location', async () => {
     const video = aVideo({
       id: 'abc',
       title: 'My Video',
@@ -44,10 +44,22 @@ describe('VideoDetail', () => {
 
     expect(screen.getByText('The description.')).toBeInTheDocument()
     expect(screen.getByText('playlists/mix')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open on YouTube' })).toHaveAttribute(
-      'href',
-      'https://www.youtube.com/watch?v=abc',
+  })
+
+  it('links the video on YouTube from the title row, in a new tab, while collapsed', () => {
+    const video = aVideo({ id: 'abc' })
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
     )
+
+    const link = screen.getByRole('link', { name: 'Open video on YouTube' })
+    expect(link).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abc')
+    expect(link).toHaveAttribute('target', '_blank')
   })
 
   it('shows the season folder as the storage location', async () => {
@@ -161,7 +173,25 @@ describe('VideoDetail', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Mark watched' }))
 
     expect(markWatched).toHaveBeenCalledOnce()
-    expect(screen.queryByRole('button', { name: 'Actions for My Video' })).not.toBeInTheDocument()
+  })
+
+  it('says a watched video is watched first on the meta line, with no mark button', () => {
+    const video = aVideo({
+      watched: true,
+      published_at: '2026-01-02T00:00:00Z',
+      synced_at: null,
+    })
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/Published/).parentElement).toHaveTextContent(/^Watched · Published/)
+    expect(screen.queryByRole('button', { name: 'Mark watched' })).not.toBeInTheDocument()
   })
 
   it('disables the speed control until the video is downloaded', () => {

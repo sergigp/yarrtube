@@ -4,6 +4,7 @@ import {
   BellOff,
   CheckCheck,
   EllipsisVertical,
+  ExternalLink,
   Eye,
   EyeOff,
   RotateCw,
@@ -52,7 +53,10 @@ function summaryFor(
 export interface HeaderAction {
   label: string
   icon: ReactNode
-  onSelect: () => void
+  /** Runs on select; ignored when `href` is set. */
+  onSelect?: () => void
+  /** Makes the action a link opening `href` in a new tab instead. */
+  href?: string
   disabled?: boolean
   /** On desktop, offered in the "⋮" menu rather than as an icon button. */
   menuOnDesktop?: boolean
@@ -72,15 +76,23 @@ function IconAction({ action }: { action: HeaderAction }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label={action.label}
-          disabled={action.disabled}
-          onClick={action.onSelect}
-        >
-          {action.icon}
-        </Button>
+        {action.href ? (
+          <Button variant="outline" size="icon" asChild>
+            <a href={action.href} target="_blank" rel="noopener" aria-label={action.label}>
+              {action.icon}
+            </a>
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={action.label}
+            disabled={action.disabled}
+            onClick={action.onSelect}
+          >
+            {action.icon}
+          </Button>
+        )}
       </TooltipTrigger>
       <TooltipContent>{action.label}</TooltipContent>
     </Tooltip>
@@ -122,16 +134,25 @@ function MoreActionsMenu({
         </DropdownMenuTrigger>
       )}
       <DropdownMenuContent align="end" className="w-auto min-w-44">
-        {actions.map((action) => (
-          <DropdownMenuItem
-            key={action.label}
-            disabled={action.disabled}
-            onSelect={action.onSelect}
-          >
-            {action.icon}
-            {action.label}
-          </DropdownMenuItem>
-        ))}
+        {actions.map((action) =>
+          action.href ? (
+            <DropdownMenuItem key={action.label} asChild>
+              <a href={action.href} target="_blank" rel="noopener">
+                {action.icon}
+                {action.label}
+              </a>
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              key={action.label}
+              disabled={action.disabled}
+              onSelect={action.onSelect}
+            >
+              {action.icon}
+              {action.label}
+            </DropdownMenuItem>
+          ),
+        )}
         {actions.length > 0 && <DropdownMenuSeparator />}
         <DropdownMenuItem variant="destructive" onSelect={onDelete}>
           <Trash2 />
@@ -167,6 +188,11 @@ interface DetailHeaderProps {
   onSetUnwatchedCountHidden?: (hidden: boolean) => Promise<void>
   /** Opens the edit channel or playlist dialog, which the caller owns. */
   onEditRequest?: () => void
+  /**
+   * Shows a link to the source's YouTube page, labelled to name the source
+   * (e.g. "Open channel on YouTube") apart from the selected video's link.
+   */
+  youtubeLink?: { href: string; label: string }
   onDelete: () => Promise<void>
   deleteDescription: string
 }
@@ -196,6 +222,7 @@ export function DetailHeader({
   unwatchedCountHidden,
   onSetUnwatchedCountHidden,
   onEditRequest,
+  youtubeLink,
   onDelete,
   deleteDescription,
 }: DetailHeaderProps) {
@@ -263,6 +290,9 @@ export function DetailHeader({
   }
   if (onEditRequest) {
     actions.push({ label: 'Edit settings', icon: <SlidersHorizontal />, onSelect: onEditRequest })
+  }
+  if (youtubeLink) {
+    actions.push({ label: youtubeLink.label, icon: <ExternalLink />, href: youtubeLink.href })
   }
   const requestDelete = () => setConfirmingDelete(true)
 

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
 
-interface VideoWatchedControlProps {
+interface MarkWatchedButtonProps {
   videoId: string
   /** Names the video in the failure alert. */
   title: string
@@ -15,44 +15,31 @@ interface VideoWatchedControlProps {
 }
 
 /**
- * The selected video's labelled watched control, on a line of its own in the
- * video detail pane: "Mark watched" while unwatched, a "Watched" status once
- * watched, and nothing until the video has downloaded.
+ * The selected video's "Mark watched" button in the video detail pane's
+ * title row: labelled from the desktop breakpoint, a bare tick below it so
+ * the title keeps room. Shown only while the video is downloaded and
+ * unwatched; the meta line says when it is watched.
  */
-export function VideoWatchedControl({
+export function MarkWatchedButton({
   videoId,
   title,
   watched,
   downloaded,
   className,
-}: VideoWatchedControlProps) {
+}: MarkWatchedButtonProps) {
   const markVideoWatched = useMarkVideoWatched()
   const [marking, setMarking] = useState(false)
 
-  if (!downloaded) {
+  if (!downloaded || watched) {
     return null
-  }
-  if (watched) {
-    // Not a button: watched comes back off only by rewatching, as the hint says.
-    return (
-      <span
-        className={cn(
-          'flex h-7 w-fit items-center gap-1 text-[0.8rem] font-medium text-muted-foreground',
-          className,
-        )}
-        title="Rewatch past 10% to mark it unwatched"
-      >
-        <Check className="size-3.5" />
-        Watched
-      </span>
-    )
   }
 
   return (
     <Button
       variant="outline"
       size="sm"
-      className={cn('flex w-fit', className)}
+      aria-label="Mark watched"
+      className={cn('max-md:w-7 max-md:px-0', className)}
       disabled={marking}
       onClick={async () => {
         setMarking(true)
@@ -66,7 +53,7 @@ export function VideoWatchedControl({
       }}
     >
       <Check />
-      Mark watched
+      <span className="max-md:hidden">Mark watched</span>
     </Button>
   )
 }

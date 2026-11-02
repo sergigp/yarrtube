@@ -128,14 +128,11 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
   })
 
   await test.step('rewatching it marks it unwatched again', async () => {
-    // The detail pane's "Watched" status turns back into "Mark watched" once a
+    // The meta line's "Watched" turns back into a "Mark watched" button once a
     // rewatch passes 10% (halfway stays below the 90% that marks it watched),
     // and the channel's badge comes back, without a reload.
     const main = page.locator('main')
-    await expect(main.getByText('Watched', { exact: true })).toHaveAttribute(
-      'title',
-      'Rewatch past 10% to mark it unwatched',
-    )
+    await expect(main.getByRole('button', { name: 'Mark watched', exact: true })).toHaveCount(0)
     const progressReported = page.waitForResponse(
       (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
     )
