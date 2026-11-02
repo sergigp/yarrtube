@@ -80,6 +80,8 @@ impl QualityUpgraderApi for QualityUpgrader {
         let published_at = probe.published_at.unwrap_or(video.created_at);
         if probe.height > video.downloaded_height {
             self.redownload(&video, quality, output_dir, published_at)?;
+        } else {
+            self.record_check(&video, quality, probe.height, published_at)?;
         }
         self.discard_staging(&video);
         Ok(())
@@ -133,6 +135,24 @@ impl QualityUpgrader {
         self.video_repository.update_quality(&upgraded)?;
         self.publish_downloaded(&upgraded, output_dir);
         Ok(())
+    }
+
+    /// Records a quality check that found nothing better (`probed_height`)
+    /// or failed (`None`).
+    fn record_check(
+        &self,
+        video: &Video,
+        quality: Quality,
+        probed_height: Option<u32>,
+        published_at: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        self.video_repository
+            .update_quality(&video.clone().record_quality_check(
+                quality,
+                probed_height,
+                published_at,
+                self.clock.now(),
+            ))
     }
 
     /// Best effort, like `VideoDownloader`'s: the upgrade is already

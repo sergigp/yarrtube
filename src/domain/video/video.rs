@@ -472,10 +472,17 @@ impl Video {
         self,
         _quality: Quality,
         _probed_height: Option<u32>,
-        _published_at: DateTime<Utc>,
-        _now: DateTime<Utc>,
+        published_at: DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Self {
-        self
+        let outcome = LateDataOutcome::Incomplete;
+        let quality_checks = self.quality_checks.record(outcome, now);
+        Self {
+            quality_settled: quality_checks.settles(outcome, published_at, now),
+            quality_checks,
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Whether a quality check is worth attempting: Downloaded and its
