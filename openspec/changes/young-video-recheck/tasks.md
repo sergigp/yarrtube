@@ -29,7 +29,7 @@
 - [x] 2.11 `it_should_settle_chapters_as_none_after_three_failed_checks_of_an_old_video` — bounded chapters failures (test passes)
 - [x] 2.12 `it_should_skip_settled_chapters` — no downloader call for settled chapters (test passes)
 - [x] 2.12a `it_should_recheck_unsettled_empty_chapters` — a young video's empty, unsettled chapters are fetched again and become the newly reported ones (spec scenario "Young video gains chapters later"; fetch_chapters_task test passes)
-- [ ] 2.13 `it_should_record_the_downloaded_height` — a download records its height (download_video_task test passes)
+- [x] 2.13 `it_should_record_the_downloaded_height` — a download records its height (download_video_task test passes)
 - [ ] 2.14 `it_should_leave_quality_unsettled_for_a_young_video_below_its_cap` — young + below cap stays unsettled (test passes)
 - [ ] 2.15 `it_should_settle_quality_at_the_tier_cap` — reaching the mid/low cap settles (test passes)
 - [ ] 2.16 `it_should_settle_quality_of_an_old_video` — an old download settles (test passes)

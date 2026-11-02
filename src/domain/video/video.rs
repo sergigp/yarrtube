@@ -445,12 +445,24 @@ impl Video {
     /// is reached. Touches only the quality fields and `updated_at`.
     pub fn record_downloaded_quality(
         self,
-        _quality: Quality,
-        _height: Option<u32>,
-        _published_at: DateTime<Utc>,
-        _now: DateTime<Utc>,
+        quality: Quality,
+        height: Option<u32>,
+        published_at: DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Self {
-        self
+        let outcome = match (quality.height_cap(), height) {
+            (Some(cap), Some(height)) if height >= cap => LateDataOutcome::Complete,
+            _ => LateDataOutcome::Incomplete,
+        };
+        let quality_checks = self.quality_checks.record(outcome, now);
+        Self {
+            quality: Some(quality),
+            downloaded_height: height,
+            quality_settled: quality_checks.settles(outcome, published_at, now),
+            quality_checks,
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Records a quality check that found nothing better (`probed_height`

@@ -41,6 +41,7 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::services::MetadataGenerator;
     use crate::domain::video::EpisodeNumber;
+    use crate::domain::video::LateDataChecks;
     use crate::domain::video::PlaybackPosition;
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
@@ -128,6 +129,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             ]
         );
@@ -181,6 +183,63 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_the_downloaded_height() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    height: Some(1080),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                downloaded_height: Some(1080),
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(fixed_timestamp()),
+                    failed_attempts: 0,
+                },
+                ..video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031501 - My Video.mp4",
+                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_record_the_chapters_of_a_downloaded_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -228,6 +287,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             }]
         );
@@ -281,6 +341,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             }]
         );
@@ -334,6 +395,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             }]
         );
@@ -458,6 +520,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(
                         EpisodeNumber::from_columns(2026, 31502).unwrap(),
                         fixed_timestamp()
@@ -505,6 +568,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
             ]
         );
         assert_eq!(
@@ -560,8 +624,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                quality_settled: true,
+                ..video
                     .clone()
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -571,7 +636,8 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
-            ]
+                    .quality_checked_at(fixed_timestamp())
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -636,6 +702,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(
                         EpisodeNumber::from_columns(2026, 31601).unwrap(),
                         fixed_timestamp()
@@ -688,6 +755,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             ]
         );
@@ -915,6 +983,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             ]
         );
@@ -1408,6 +1477,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             )]
         );
@@ -1580,6 +1650,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             ]
         );
@@ -1648,6 +1719,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             ]
         );
@@ -1706,6 +1778,7 @@ mod tests {
                         Some(223),
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
             ]
         );
@@ -1959,6 +2032,7 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
+                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(
                         EpisodeNumber::from_columns(2023, 111401).unwrap(),
                         fixed_timestamp()
@@ -2026,6 +2100,24 @@ mod tests {
         crate::infrastructure::shared::sqlite_connection::Database::single(
             Connection::open_in_memory().unwrap(),
         )
+    }
+
+    /// `quality_checked_at` for an expected video: its downloaded quality
+    /// checked at `at` by the download.
+    trait QualityCheckedAt {
+        fn quality_checked_at(self, at: DateTime<Utc>) -> Video;
+    }
+
+    impl QualityCheckedAt for Video {
+        fn quality_checked_at(self, at: DateTime<Utc>) -> Video {
+            Video {
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(at),
+                    failed_attempts: 0,
+                },
+                ..self
+            }
+        }
     }
 
     fn my_channel_id() -> ChannelHandle {
