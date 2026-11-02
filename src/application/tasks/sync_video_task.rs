@@ -555,6 +555,75 @@ mod tests {
     }
 
     #[test]
+    fn it_should_schedule_a_quality_check_when_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = Video {
+            quality_checks: LateDataChecks {
+                last_checked_at: Some(fixed_timestamp() - Duration::hours(25)),
+                failed_attempts: 0,
+            },
+            quality_settled: false,
+            ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
+        };
+        save_channel_video(
+            &video_repository,
+            &channel_repository,
+            &channel_video_repository,
+            &video,
+        );
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                channel_video_repository,
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                channel_repository,
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                DOWNLOADED_FILENAME.to_string(),
+            ])),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            video_category_assigner(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::UpgradeQuality {
+                    video_id: video.id.as_str().to_string(),
+                    quality: "high".to_string(),
+                    output_dir: "/videos/creators/somechannel".to_string(),
+                },
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_not_schedule_chapters_checked_less_than_a_day_ago() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2105,6 +2174,7 @@ mod tests {
     fn downloaded_video() -> Video {
         Video {
             chapters_settled: true,
+            quality_settled: true,
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(

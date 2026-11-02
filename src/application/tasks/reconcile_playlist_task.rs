@@ -1884,6 +1884,7 @@ mod tests {
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
             chapters_settled: true,
+            quality_settled: true,
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(
@@ -1925,6 +1926,7 @@ mod tests {
         let base = format!("Season 1/S01E{episode:03} - {title}");
         Video {
             chapters_settled: true,
+            quality_settled: true,
             ..playlist_episode(youtube_id, title, episode)
                 .start_download(fixed_timestamp())
                 .mark_downloaded(

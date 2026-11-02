@@ -32,6 +32,10 @@ impl VideoSyncPlan {
                 VideoSyncStep::FetchChapters,
                 video.is_chapters_fetchable() && video.chapters_checks.is_due(now),
             ),
+            (
+                VideoSyncStep::UpgradeQuality,
+                video.is_quality_checkable() && video.quality_checks.is_due(now),
+            ),
         ]
         .into_iter()
         .filter(|(_, needed)| *needed)

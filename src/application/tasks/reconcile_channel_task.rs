@@ -2049,6 +2049,7 @@ mod tests {
                 updated_at: fixed_timestamp(),
                 synced_at: None,
                 chapters_settled: false,
+                quality_settled: false,
                 ..video.clone()
             }]
         );
@@ -2943,6 +2944,7 @@ mod tests {
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
             chapters_settled: true,
+            quality_settled: true,
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(

@@ -46,7 +46,7 @@
 - [x] 2.27 `it_should_schedule_chapters_of_a_young_video_checked_a_day_ago` — due unsettled chapters are scheduled (test passes)
 - [x] 2.27a `it_should_not_schedule_chapters_checked_less_than_a_day_ago` — 24h throttle on unsettled chapters (sync_video_task test passes)
 - [x] 2.28 `it_should_not_schedule_settled_chapters` — settled empty chapters aren't rechecked (test passes)
-- [ ] 2.29 `it_should_schedule_a_quality_check_when_due` — the `UpgradeQuality` task is scheduled with the owner's quality and output dir (test passes)
+- [x] 2.29 `it_should_schedule_a_quality_check_when_due` — the `UpgradeQuality` task is scheduled with the owner's quality and output dir (test passes)
 - [ ] 2.30 `it_should_not_schedule_a_quality_check_right_after_download` — throttle after download (test passes)
 - [ ] 2.31 `it_should_reset_every_check_on_redownload` — a broken-file reset clears the checks and height (test passes)
 - [ ] 2.32 `it_should_list_an_upgrade_quality_task_with_its_video_context` — task listing resolves the title and owner (http tasks test passes)
