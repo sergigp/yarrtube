@@ -239,10 +239,10 @@ pub fn download_video(
     }))
 }
 
-/// Reads the video's chapters via `yt-dlp --print %(chapters)j`,
-/// downloading nothing; `vec![]` when the video has none. `Err` on any
-/// failure, clean or systemic, including a printed line that can't be read
-/// as chapters.
+/// Reads the video's chapters and publish time via `yt-dlp --print
+/// %(chapters)j --print %(timestamp)s --print %(upload_date)s`, downloading
+/// nothing; `vec![]` when the video has none. `Err` on any failure, clean or
+/// systemic, including a printed line that can't be read as chapters.
 pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProbe> {
     let mut cmd = Command::new(ytdlp_path);
     cmd.args([
@@ -251,6 +251,10 @@ pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProb
         "--no-warnings",
         "--print",
         "%(chapters)j",
+        "--print",
+        "%(timestamp)s",
+        "--print",
+        "%(upload_date)s",
     ])
     .arg(video_url)
     .stdout(Stdio::piped())
@@ -262,11 +266,15 @@ pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProb
     )? {
         RunOutcome::Success(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let line = stdout.lines().last().unwrap_or_default();
-            parse_chapters(line)
+            let lines: Vec<&str> = stdout.lines().collect();
+            line_before_last(&lines, 2)
+                .and_then(parse_chapters)
                 .map(|chapters| ChaptersProbe {
                     chapters,
-                    published_at: None,
+                    published_at: parse_published_at(
+                        line_before_last(&lines, 1),
+                        lines.last().copied(),
+                    ),
                 })
                 .ok_or_else(|| anyhow!("yt-dlp printed unreadable chapters for {video_url}"))
         }
@@ -1561,9 +1569,35 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_report_the_chapters_publish_time() {
+        let fake = test_support::FakeYtDlp::with_stdout(
+            "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}]\n1773568800\n20260315\n",
+        );
+
+        let result = fetch_chapters(&fake.path, "https://example.com/video");
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(ChaptersProbe {
+                chapters: vec![VideoChapter {
+                    start_seconds: 0,
+                    end_seconds: 61,
+                    title: "Intro".to_string(),
+                }],
+                published_at: Some(
+                    DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+            })
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_fetch_the_chapters_without_downloading() {
         let fake = test_support::FakeYtDlp::with_stdout(
-            "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}, {\"start_time\": 61.5, \"title\": \"Main\", \"end_time\": 600.9}]\n",
+            "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}, {\"start_time\": 61.5, \"title\": \"Main\", \"end_time\": 600.9}]\nNA\nNA\n",
         );
 
         let chapters = fetch_chapters(&fake.path, "https://example.com/video")
@@ -1593,6 +1627,10 @@ mod tests {
                 "--no-warnings",
                 "--print",
                 "%(chapters)j",
+                "--print",
+                "%(timestamp)s",
+                "--print",
+                "%(upload_date)s",
                 "https://example.com/video",
             ]
         );

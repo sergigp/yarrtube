@@ -58,7 +58,7 @@
 - [x] 3.3 sqlite_video_repository: `it_should_round_trip_late_data_checks` — every new column maps both ways (test passes)
 - [x] 3.4 sqlite_video_repository: `it_should_update_only_quality_fields` — `update_quality` touches only its fields (test passes)
 - [x] 3.5 ytdlp: `it_should_report_the_downloaded_height` — the download prints and parses the height (test passes)
-- [ ] 3.6 ytdlp: `it_should_report_the_chapters_publish_time` — `fetch_chapters` returns `ChaptersProbe` with the publish time (test passes)
+- [x] 3.6 ytdlp: `it_should_report_the_chapters_publish_time` — `fetch_chapters` returns `ChaptersProbe` with the publish time (test passes)
 - [ ] 3.7 ytdlp: `it_should_probe_the_height_for_a_quality` — the tier selector runs with `--skip-download`, and the height and publish time are parsed (test passes)
 - [ ] 3.8 ytdlp: `it_should_fail_a_quality_probe_on_a_clean_failure` — a non-zero exit returns `Err` (test passes)
 - [ ] 3.9 web `tasks.test.ts`: `upgrade_quality` is described as a quality check under downloads, with a placeholder when unresolved (`npm run test` passes)
