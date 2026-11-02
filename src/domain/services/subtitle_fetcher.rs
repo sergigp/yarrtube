@@ -1,5 +1,7 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::video::{EpisodePaths, Video, VideoSubtitlesFetched, subtitle_staging_dir};
+use crate::domain::video::{
+    EpisodePaths, LateDataChecks, Video, VideoSubtitlesFetched, subtitle_staging_dir,
+};
 use crate::domain::video_transcript::{CaptionTrack, TranscriptText, VideoTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -127,10 +129,21 @@ impl SubtitleFetcher {
         probe: &CaptionProbe,
     ) -> anyhow::Result<()> {
         let now = self.clock.now();
-        let video = video.clone().mark_subtitles_first_missing(now);
+        let first_missing_at = video.subtitle_checks.last_checked_at.unwrap_or(now);
+        let video = Video {
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(first_missing_at),
+                ..video.subtitle_checks
+            },
+            updated_at: if video.subtitle_checks.last_checked_at.is_some() {
+                video.updated_at
+            } else {
+                now
+            },
+            ..video.clone()
+        };
         let cutoff = now - UNAVAILABLE_AFTER;
         let published_at = probe.published_at.unwrap_or(video.created_at);
-        let first_missing_at = video.subtitles_first_missing_at.unwrap_or(now);
         if published_at > cutoff || first_missing_at > cutoff {
             return self.video_repository.update_subtitles(&video);
         }

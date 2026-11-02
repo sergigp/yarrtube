@@ -1,6 +1,6 @@
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every file, type and signature in design.md (## Files, ## Types & Signatures):
+- [x] 1.1 Create every file, type and signature in design.md (## Files, ## Types & Signatures):
   - migration 0021 and its registration
   - `LateDataOutcome`, `LateDataChecks`
   - the new `Video` fields and transitions; remove `subtitles_first_missing_at` / `mark_subtitles_first_missing` and update their callers and tests

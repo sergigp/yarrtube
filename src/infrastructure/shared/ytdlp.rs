@@ -84,6 +84,23 @@ pub struct DownloadedVideo {
     /// The chapters `yt-dlp` reported (`Some(vec![])` for none); `None` when
     /// the printed chapters could not be read.
     pub chapters: Option<Vec<VideoChapter>>,
+    /// The downloaded file's height in pixels, when `yt-dlp` printed one.
+    pub height: Option<u32>,
+}
+
+/// A video's chapters (`vec![]` for none) and its publish time, when known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChaptersProbe {
+    pub chapters: Vec<VideoChapter>,
+    pub published_at: Option<DateTime<Utc>>,
+}
+
+/// The height a quality tier would download now, and the video's publish
+/// time, when known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QualityProbe {
+    pub height: Option<u32>,
+    pub published_at: Option<DateTime<Utc>>,
 }
 
 /// The outcome of a `download_video` attempt: either a `DownloadedVideo`, or
@@ -209,6 +226,7 @@ pub fn download_video(
 
     let media_path = staging_dir.join(filename);
     Ok(DownloadAttempt::Succeeded(DownloadedVideo {
+        height: None,
         thumbnail_path: staged_thumbnail(&media_path),
         media_path,
         duration_seconds,
@@ -222,7 +240,7 @@ pub fn download_video(
 /// downloading nothing; `vec![]` when the video has none. `Err` on any
 /// failure, clean or systemic, including a printed line that can't be read
 /// as chapters.
-pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<Vec<VideoChapter>> {
+pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProbe> {
     let mut cmd = Command::new(ytdlp_path);
     cmd.args([
         "--skip-download",
@@ -243,6 +261,10 @@ pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<Vec<VideoCha
             let stdout = String::from_utf8_lossy(&output.stdout);
             let line = stdout.lines().last().unwrap_or_default();
             parse_chapters(line)
+                .map(|chapters| ChaptersProbe {
+                    chapters,
+                    published_at: None,
+                })
                 .ok_or_else(|| anyhow!("yt-dlp printed unreadable chapters for {video_url}"))
         }
         RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
@@ -396,6 +418,20 @@ pub struct CaptionProbe {
 pub struct FetchedSubtitles {
     pub path: PathBuf,
     pub srt: String,
+}
+
+/// The height `quality`'s format selector picks for the video now, and its
+/// publish time, downloading nothing. `Err` on any failure, clean or
+/// systemic.
+pub fn probe_quality(
+    _ytdlp_path: &Path,
+    _video_url: &str,
+    _quality: Quality,
+) -> Result<QualityProbe> {
+    Ok(QualityProbe {
+        height: None,
+        published_at: None,
+    })
 }
 
 /// `-J --skip-download --write-subs` without `--no-warnings`: subtitle
@@ -1123,6 +1159,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Succeeded(DownloadedVideo {
+                height: None,
                 media_path: output_dir.join(DEFAULT_PRINTED_FILENAME),
                 thumbnail_path: None,
                 duration_seconds: None,
@@ -1285,6 +1322,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadedVideo {
+                height: None,
                 media_path: output_dir.join("My Video.mp4"),
                 thumbnail_path: None,
                 duration_seconds: Some(223),
@@ -1315,6 +1353,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadedVideo {
+                height: None,
                 media_path: staging_dir.join("yt1.mp4"),
                 thumbnail_path: None,
                 duration_seconds: Some(223),
@@ -1356,6 +1395,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadedVideo {
+                height: None,
                 media_path: staging_dir.join("yt1.mp4"),
                 thumbnail_path: None,
                 duration_seconds: Some(223),
@@ -1406,6 +1446,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadedVideo {
+                height: None,
                 media_path: staging_dir.join("yt1.mp4"),
                 thumbnail_path: None,
                 duration_seconds: Some(223),
@@ -1442,6 +1483,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadedVideo {
+                height: None,
                 media_path: staging_dir.join("yt1.mp4"),
                 thumbnail_path: None,
                 duration_seconds: Some(223),
@@ -1485,7 +1527,9 @@ mod tests {
             "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}, {\"start_time\": 61.5, \"title\": \"Main\", \"end_time\": 600.9}]\n",
         );
 
-        let chapters = fetch_chapters(&fake.path, "https://example.com/video").unwrap();
+        let chapters = fetch_chapters(&fake.path, "https://example.com/video")
+            .unwrap()
+            .chapters;
 
         assert_eq!(
             chapters,
@@ -2217,6 +2261,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Succeeded(DownloadedVideo {
+                height: None,
                 media_path: output_dir.join("My Video.mp4"),
                 thumbnail_path: None,
                 duration_seconds: None,

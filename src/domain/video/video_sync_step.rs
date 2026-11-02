@@ -11,6 +11,7 @@ pub enum VideoSyncStep {
     FetchThumbnail,
     FetchSubtitles,
     FetchChapters,
+    UpgradeQuality,
 }
 
 impl VideoSyncStep {
@@ -33,6 +34,11 @@ impl VideoSyncStep {
                 output_dir,
             },
             Self::FetchChapters => Task::FetchChapters { video_id },
+            Self::UpgradeQuality => Task::UpgradeQuality {
+                video_id,
+                quality: target.quality.as_str().to_string(),
+                output_dir,
+            },
         }
     }
 }

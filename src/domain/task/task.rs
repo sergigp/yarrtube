@@ -46,6 +46,11 @@ pub enum Task {
     FetchChapters {
         video_id: String,
     },
+    UpgradeQuality {
+        video_id: String,
+        quality: String,
+        output_dir: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -130,6 +135,7 @@ impl Task {
             Self::SyncVideo { .. } => "sync_video",
             Self::SyncPlexLabels => "sync_plex_labels",
             Self::FetchChapters { .. } => "fetch_chapters",
+            Self::UpgradeQuality { .. } => "upgrade_quality",
         }
     }
 
@@ -173,6 +179,11 @@ impl Task {
             Self::SyncVideo { video_id } => json!({ "video_id": video_id }),
             Self::SyncPlexLabels => json!({}),
             Self::FetchChapters { video_id } => json!({ "video_id": video_id }),
+            Self::UpgradeQuality {
+                video_id,
+                quality,
+                output_dir,
+            } => json!({ "video_id": video_id, "quality": quality, "output_dir": output_dir }),
         }
     }
 
@@ -200,6 +211,17 @@ impl Task {
     ) -> Result<(String, String, String), TaskError> {
         let parsed: DownloadVideoPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid download_video payload: {e}")))?;
+        Ok((parsed.video_id, parsed.quality, parsed.output_dir))
+    }
+
+    /// Decodes an `upgrade_quality` task's raw JSON payload, as handed to a
+    /// `TaskHandler`, back into the video's surrogate ID, quality, and
+    /// output directory it targets.
+    pub fn decode_upgrade_quality_payload(
+        payload: &str,
+    ) -> Result<(String, String, String), TaskError> {
+        let parsed: DownloadVideoPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid upgrade_quality payload: {e}")))?;
         Ok((parsed.video_id, parsed.quality, parsed.output_dir))
     }
 
@@ -292,7 +314,7 @@ impl Task {
     /// into `Light`.
     pub fn lane_for(task_type: &str) -> TaskLane {
         match task_type {
-            "download_video" => TaskLane::Download,
+            "download_video" | "upgrade_quality" => TaskLane::Download,
             "fetch_thumbnail" => TaskLane::Thumbnail,
             "fetch_subtitles" | "fetch_chapters" => TaskLane::Subtitles,
             "sync_video" => TaskLane::VideoSync,
@@ -303,7 +325,7 @@ impl Task {
     }
 
     /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail`,
-    /// `fetch_subtitles`, `fetch_chapters` and `sync_video`: two tasks sharing a key never run
+    /// `fetch_subtitles`, `fetch_chapters`, `upgrade_quality` and `sync_video`: two tasks sharing a key never run
     /// at the same time, and a task with a key is not scheduled twice while
     /// one is pending (or running, see `dedupes_running`).
     pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
@@ -319,6 +341,9 @@ impl Task {
                 .map(|(video_id, _)| video_id),
             "sync_video" => Self::decode_sync_video_payload(payload).ok(),
             "fetch_chapters" => Self::decode_fetch_chapters_payload(payload).ok(),
+            "upgrade_quality" => Self::decode_upgrade_quality_payload(payload)
+                .ok()
+                .map(|(video_id, _, _)| video_id),
             _ => None,
         }?;
         Some(format!("video:{video_id}"))
@@ -332,7 +357,8 @@ impl Task {
     }
 
     /// The show directory a per-video task (`download_video`,
-    /// `fetch_thumbnail`, `fetch_subtitles`, `delete_video_file`) writes to
+    /// `fetch_thumbnail`, `fetch_subtitles`, `upgrade_quality`,
+    /// `delete_video_file`) writes to
     /// or deletes from; `None` for any other task type.
     pub fn output_dir_of(task_type: &str, payload: &str) -> Option<String> {
         match task_type {
@@ -348,6 +374,9 @@ impl Task {
             "delete_video_file" => Self::decode_delete_video_file_payload(payload)
                 .ok()
                 .map(|payload| payload.output_dir),
+            "upgrade_quality" => Self::decode_upgrade_quality_payload(payload)
+                .ok()
+                .map(|(_, _, output_dir)| output_dir),
             _ => None,
         }
     }

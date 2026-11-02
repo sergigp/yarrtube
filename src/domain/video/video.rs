@@ -1,4 +1,6 @@
 use super::episode_number::EpisodeNumber;
+use super::late_data_checks::LateDataChecks;
+use super::late_data_outcome::LateDataOutcome;
 use super::playback_position::PlaybackPosition;
 use super::subtitle_state::SubtitleState;
 use super::video_chapter::VideoChapter;
@@ -52,12 +54,20 @@ pub struct Video {
     pub subtitle_state: SubtitleState,
     /// The episode's subtitle file, recorded once its subtitles are fetched.
     pub subtitle_filename: Option<String>,
-    /// When a conclusive subtitle fetch first found no selectable track:
-    /// starts the 7-day window before the subtitles are given up on.
-    pub subtitles_first_missing_at: Option<DateTime<Utc>>,
+    /// The checks of the video's subtitles while Missing — see the
+    /// `late-video-data` capability.
+    pub subtitle_checks: LateDataChecks,
     /// The video's YouTube chapters: `None` while never checked,
     /// `Some(vec![])` once checked and found to have none.
     pub chapters: Option<Vec<VideoChapter>>,
+    pub chapters_checks: LateDataChecks,
+    /// Whether the chapters are final: never checked again.
+    pub chapters_settled: bool,
+    /// The height in pixels of the downloaded file, when reported.
+    pub downloaded_height: Option<u32>,
+    pub quality_checks: LateDataChecks,
+    /// Whether the downloaded quality is final: never checked again.
+    pub quality_settled: bool,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -84,8 +94,13 @@ impl Video {
             episode_number: None,
             subtitle_state: SubtitleState::Missing,
             subtitle_filename: None,
-            subtitles_first_missing_at: None,
+            subtitle_checks: LateDataChecks::default(),
             chapters: None,
+            chapters_checks: LateDataChecks::default(),
+            chapters_settled: false,
+            downloaded_height: None,
+            quality_checks: LateDataChecks::default(),
+            quality_settled: false,
         }
     }
 
@@ -179,7 +194,12 @@ impl Video {
             synced_at: None,
             subtitle_state: SubtitleState::Missing,
             subtitle_filename: None,
-            subtitles_first_missing_at: None,
+            subtitle_checks: LateDataChecks::default(),
+            chapters_checks: LateDataChecks::default(),
+            chapters_settled: false,
+            downloaded_height: None,
+            quality_checks: LateDataChecks::default(),
+            quality_settled: false,
             ..self
         }
     }
@@ -367,17 +387,61 @@ impl Video {
         }
     }
 
-    /// Records `now` as the first check without captions, unless one is
-    /// already recorded.
-    pub fn mark_subtitles_first_missing(self, now: DateTime<Utc>) -> Self {
-        match self.subtitles_first_missing_at {
-            Some(_) => self,
-            None => Self {
-                subtitles_first_missing_at: Some(now),
-                updated_at: now,
-                ..self
-            },
-        }
+    /// Records a subtitle check that found no subtitles (`Incomplete`) or
+    /// failed: Unavailable once the `late-video-data` policy settles them.
+    /// Touches only the subtitle fields and `updated_at`.
+    pub fn record_subtitles_check(
+        self,
+        _outcome: LateDataOutcome,
+        _published_at: DateTime<Utc>,
+        _now: DateTime<Utc>,
+    ) -> Self {
+        self
+    }
+
+    /// Records a chapters check: `Some` non-empty chapters are `Complete`,
+    /// `Some(vec![])` `Incomplete`, `None` a failed check (keeping the
+    /// chapters already recorded, or none once settled while unchecked).
+    /// Touches only the chapters fields and `updated_at`.
+    pub fn record_chapters_check(
+        self,
+        _chapters: Option<Vec<VideoChapter>>,
+        _published_at: DateTime<Utc>,
+        _now: DateTime<Utc>,
+    ) -> Self {
+        self
+    }
+
+    /// Records the tier and height a download or quality upgrade landed at,
+    /// settling the quality when the video is old or the tier's height cap
+    /// is reached. Touches only the quality fields and `updated_at`.
+    pub fn record_downloaded_quality(
+        self,
+        _quality: Quality,
+        _height: Option<u32>,
+        _published_at: DateTime<Utc>,
+        _now: DateTime<Utc>,
+    ) -> Self {
+        self
+    }
+
+    /// Records a quality check that found nothing better (`probed_height`
+    /// the height the tier would get now) or failed (`None`). Touches only
+    /// the quality fields and `updated_at`.
+    pub fn record_quality_check(
+        self,
+        _quality: Quality,
+        _probed_height: Option<u32>,
+        _published_at: DateTime<Utc>,
+        _now: DateTime<Utc>,
+    ) -> Self {
+        self
+    }
+
+    /// Whether a quality check is worth attempting: Downloaded and its
+    /// quality unsettled.
+    pub fn is_quality_checkable(&self) -> bool {
+        false
     }
 
     /// Records the episode number assigned to this video.
@@ -723,18 +787,22 @@ mod tests {
     }
 
     #[test]
-    fn it_should_clear_the_first_check_without_captions_when_reset_for_redownload() {
+    fn it_should_clear_the_subtitle_checks_when_reset_for_redownload() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
-        let checked = video()
-            .mark_downloaded(
+        let checked = Video {
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now),
+                failed_attempts: 2,
+            },
+            ..video().mark_downloaded(
                 Quality::High,
                 "Season 1/S01E003 - My Video.mp4",
                 None,
                 None,
                 now,
             )
-            .mark_subtitles_first_missing(now);
+        };
 
         let reset = checked.clone().reset_for_redownload(later);
 
@@ -744,7 +812,7 @@ mod tests {
                 status: VideoStatus::Pending,
                 quality: None,
                 filename: None,
-                subtitles_first_missing_at: None,
+                subtitle_checks: LateDataChecks::default(),
                 updated_at: later,
                 synced_at: None,
                 ..checked

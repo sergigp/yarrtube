@@ -230,7 +230,7 @@ impl VideoReconciler {
     }
 
     fn schedule_steps(&self, video: &Video, target: &VideoTarget) -> anyhow::Result<()> {
-        VideoSyncPlan::for_video(video)
+        VideoSyncPlan::for_video(video, self.clock.now())
             .steps
             .iter()
             .try_for_each(|step| {

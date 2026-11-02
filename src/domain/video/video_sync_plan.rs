@@ -1,4 +1,5 @@
 use super::{Video, VideoStatus, VideoSyncStep};
+use chrono::{DateTime, Utc};
 
 /// The steps a video's stored state still needs, decided from that state
 /// alone: a thumbnail fetch while it has none and is neither being
@@ -13,7 +14,7 @@ pub struct VideoSyncPlan {
 }
 
 impl VideoSyncPlan {
-    pub fn for_video(video: &Video) -> Self {
+    pub fn for_video(video: &Video, _now: DateTime<Utc>) -> Self {
         let steps = [
             (
                 VideoSyncStep::FetchThumbnail,

@@ -1,7 +1,7 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    ChannelEpisodeNumber, EpisodeNumber, PlaybackPosition, SubtitleState, Video, VideoChapter,
-    VideoStatus,
+    ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, SubtitleState, Video,
+    VideoChapter, VideoStatus,
 };
 use crate::domain::video::{VideoId, VideoRecordId};
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_first_missing_at, chapters";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -33,8 +33,16 @@ struct VideoRow {
     episode: Option<u32>,
     subtitle_state: String,
     subtitle_filename: Option<String>,
-    subtitles_first_missing_at: Option<String>,
+    subtitles_last_checked_at: Option<String>,
+    subtitles_failed_attempts: u32,
     chapters: Option<String>,
+    chapters_last_checked_at: Option<String>,
+    chapters_failed_attempts: u32,
+    chapters_settled: bool,
+    downloaded_height: Option<u32>,
+    quality_last_checked_at: Option<String>,
+    quality_failed_attempts: u32,
+    quality_settled: bool,
 }
 
 pub trait VideoRepository: Send + Sync {
@@ -57,8 +65,8 @@ pub trait VideoRepository: Send + Sync {
         title: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()>;
-    /// Writes only `subtitle_state`, `subtitle_filename`,
-    /// `subtitles_first_missing_at` and `updated_at`,
+    /// Writes only `subtitle_state`, `subtitle_filename`, the subtitle
+    /// checks and `updated_at`,
     /// leaving the download's fields untouched even if they changed since
     /// the caller read the video.
     fn update_subtitles(&self, video: &Video) -> anyhow::Result<()>;
@@ -74,6 +82,10 @@ pub trait VideoRepository: Send + Sync {
     /// Writes only `chapters` (and `updated_at`), leaving every other field
     /// untouched even if it changed since the caller read the video.
     fn update_chapters(&self, video: &Video) -> anyhow::Result<()>;
+    /// Writes only `quality`, `downloaded_height`, the quality checks and
+    /// settlement (and `updated_at`), leaving every other field untouched
+    /// even if it changed since the caller read the video.
+    fn update_quality(&self, video: &Video) -> anyhow::Result<()>;
     fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>>;
@@ -130,8 +142,8 @@ impl VideoRepository for SqliteVideoRepository {
     fn save(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_first_missing_at, chapters)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
@@ -151,8 +163,16 @@ impl VideoRepository for SqliteVideoRepository {
                 episode = excluded.episode,
                 subtitle_state = excluded.subtitle_state,
                 subtitle_filename = excluded.subtitle_filename,
-                subtitles_first_missing_at = excluded.subtitles_first_missing_at,
-                chapters = excluded.chapters",
+                subtitles_last_checked_at = excluded.subtitles_last_checked_at,
+                subtitles_failed_attempts = excluded.subtitles_failed_attempts,
+                chapters = excluded.chapters,
+                chapters_last_checked_at = excluded.chapters_last_checked_at,
+                chapters_failed_attempts = excluded.chapters_failed_attempts,
+                chapters_settled = excluded.chapters_settled,
+                downloaded_height = excluded.downloaded_height,
+                quality_last_checked_at = excluded.quality_last_checked_at,
+                quality_failed_attempts = excluded.quality_failed_attempts,
+                quality_settled = excluded.quality_settled",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -173,8 +193,16 @@ impl VideoRepository for SqliteVideoRepository {
                 video.episode_number.map(|n| n.episode()),
                 video.subtitle_state.as_str(),
                 video.subtitle_filename,
-                video.subtitles_first_missing_at.map(|t| t.to_rfc3339()),
+                video.subtitle_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.subtitle_checks.failed_attempts,
                 Self::encode_chapters(&video.chapters)?,
+                video.chapters_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.chapters_checks.failed_attempts,
+                video.chapters_settled,
+                video.downloaded_height,
+                video.quality_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.quality_checks.failed_attempts,
+                video.quality_settled,
             ],
         )
         .inspect_err(|e| {
@@ -226,7 +254,7 @@ impl VideoRepository for SqliteVideoRepository {
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18, subtitles_first_missing_at = ?19, chapters = ?20
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_settled = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_settled = ?28
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -247,8 +275,16 @@ impl VideoRepository for SqliteVideoRepository {
                 video.episode_number.map(|n| n.episode()),
                 video.subtitle_state.as_str(),
                 video.subtitle_filename,
-                video.subtitles_first_missing_at.map(|t| t.to_rfc3339()),
+                video.subtitle_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.subtitle_checks.failed_attempts,
                 Self::encode_chapters(&video.chapters)?,
+                video.chapters_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.chapters_checks.failed_attempts,
+                video.chapters_settled,
+                video.downloaded_height,
+                video.quality_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.quality_checks.failed_attempts,
+                video.quality_settled,
             ],
         )
         .inspect_err(|e| {
@@ -279,12 +315,13 @@ impl VideoRepository for SqliteVideoRepository {
     fn update_subtitles(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE videos SET subtitle_state = ?2, subtitle_filename = ?3, subtitles_first_missing_at = ?4, updated_at = ?5 WHERE id = ?1",
+            "UPDATE videos SET subtitle_state = ?2, subtitle_filename = ?3, subtitles_last_checked_at = ?4, subtitles_failed_attempts = ?5, updated_at = ?6 WHERE id = ?1",
             params![
                 video.id.as_str(),
                 video.subtitle_state.as_str(),
                 video.subtitle_filename,
-                video.subtitles_first_missing_at.map(|t| t.to_rfc3339()),
+                video.subtitle_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.subtitle_checks.failed_attempts,
                 video.updated_at.to_rfc3339(),
             ],
         )
@@ -327,6 +364,10 @@ impl VideoRepository for SqliteVideoRepository {
             tracing::error!(video_id = %video.id, error = %e, "failed to update video chapters")
         })
         .context("failed to update video chapters")?;
+        Ok(())
+    }
+
+    fn update_quality(&self, _video: &Video) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -533,8 +574,16 @@ impl SqliteVideoRepository {
             episode: row.get(16)?,
             subtitle_state: row.get(17)?,
             subtitle_filename: row.get(18)?,
-            subtitles_first_missing_at: row.get(19)?,
-            chapters: row.get(20)?,
+            subtitles_last_checked_at: row.get(19)?,
+            subtitles_failed_attempts: row.get(20)?,
+            chapters: row.get(21)?,
+            chapters_last_checked_at: row.get(22)?,
+            chapters_failed_attempts: row.get(23)?,
+            chapters_settled: row.get(24)?,
+            downloaded_height: row.get(25)?,
+            quality_last_checked_at: row.get(26)?,
+            quality_failed_attempts: row.get(27)?,
+            quality_settled: row.get(28)?,
         })
     }
 
@@ -570,14 +619,28 @@ impl SqliteVideoRepository {
             episode_number: Self::decode_episode_number(row.season, row.episode)?,
             subtitle_state: SubtitleState::parse(&row.subtitle_state)?,
             subtitle_filename: row.subtitle_filename,
-            subtitles_first_missing_at: row
-                .subtitles_first_missing_at
-                .map(|t| Self::parse_timestamp(&t, "subtitles_first_missing_at"))
-                .transpose()?,
+            subtitle_checks: Self::decode_checks(
+                row.subtitles_last_checked_at,
+                row.subtitles_failed_attempts,
+                "subtitles_last_checked_at",
+            )?,
             chapters: row
                 .chapters
                 .map(|chapters| Self::decode_chapters(&chapters))
                 .transpose()?,
+            chapters_checks: Self::decode_checks(
+                row.chapters_last_checked_at,
+                row.chapters_failed_attempts,
+                "chapters_last_checked_at",
+            )?,
+            chapters_settled: row.chapters_settled,
+            downloaded_height: row.downloaded_height,
+            quality_checks: Self::decode_checks(
+                row.quality_last_checked_at,
+                row.quality_failed_attempts,
+                "quality_last_checked_at",
+            )?,
+            quality_settled: row.quality_settled,
         })
     }
 
@@ -589,6 +652,19 @@ impl SqliteVideoRepository {
                 serde_json::to_string(chapters).context("failed to serialize video chapters")
             })
             .transpose()
+    }
+
+    fn decode_checks(
+        last_checked_at: Option<String>,
+        failed_attempts: u32,
+        column: &str,
+    ) -> anyhow::Result<LateDataChecks> {
+        Ok(LateDataChecks {
+            last_checked_at: last_checked_at
+                .map(|t| Self::parse_timestamp(&t, column))
+                .transpose()?,
+            failed_attempts,
+        })
     }
 
     fn decode_chapters(value: &str) -> anyhow::Result<Vec<VideoChapter>> {
@@ -973,14 +1049,17 @@ mod tests {
     }
 
     #[test]
-    fn it_should_round_trip_the_first_check_without_captions() {
+    fn it_should_round_trip_the_subtitle_checks() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let checked_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let original = video("First", now);
         repo.save(&original).unwrap();
         let checked = Video {
-            subtitles_first_missing_at: Some(checked_at),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(checked_at),
+                failed_attempts: 2,
+            },
             updated_at: checked_at,
             ..original.clone()
         };

@@ -7,10 +7,10 @@ use crate::domain::services::{
     ChapterFetcher, DirectorySearcher, InternalVideoReconciler, LayoutMigrator, MetadataGenerator,
     PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
     PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer, PlexLabelSyncerApi,
-    PreferencesSearcher, PreferencesUpdater, ShowFileWriter, ShowMover, SubtitleFetcher,
-    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategoryAssigner, VideoDownloader,
-    VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoSearcher,
-    VideoWatchStateUpdater,
+    PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover,
+    SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategoryAssigner,
+    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
+    VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -649,6 +649,7 @@ fn task_handlers(
         thumbnail_fetcher(infrastructure),
         subtitle_fetcher(infrastructure),
         chapter_fetcher(infrastructure),
+        quality_upgrader(infrastructure),
         video_reconciler(infrastructure),
         infrastructure.video_repository.clone(),
         VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
@@ -800,6 +801,17 @@ fn chapter_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ChapterFetch
         infrastructure.video_repository.clone(),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.clock.clone(),
+    ))
+}
+
+fn quality_upgrader(infrastructure: &InfrastructureContainer) -> Arc<QualityUpgrader> {
+    Arc::new(QualityUpgrader::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.video_downloader_repository.clone(),
+        infrastructure.video_file_repository.clone(),
+        infrastructure.event_publisher.clone(),
+        infrastructure.clock.clone(),
+        videos_path(),
     ))
 }
 
@@ -1193,6 +1205,7 @@ mod tests {
                 "reconcile_playlist",
                 "sync_video",
                 "update_ytdlp",
+                "upgrade_quality",
             ])
         );
     }

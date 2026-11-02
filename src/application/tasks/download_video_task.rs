@@ -2071,6 +2071,7 @@ mod tests {
     /// 2026-03-15, with its converted thumbnail.
     fn staged_download() -> DownloadedVideo {
         DownloadedVideo {
+            height: None,
             media_path: PathBuf::from("yt1.mp4"),
             thumbnail_path: Some(PathBuf::from("yt1.jpg")),
             duration_seconds: None,

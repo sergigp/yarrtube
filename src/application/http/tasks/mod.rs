@@ -27,8 +27,8 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
+    use crate::domain::video::{LateDataChecks, VideoId, VideoRecordId};
     use crate::domain::video::{PlaybackPosition, SubtitleState, Video, VideoStatus};
-    use crate::domain::video::{VideoId, VideoRecordId};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -865,8 +865,13 @@ mod tests {
             episode_number: None,
             subtitle_state: SubtitleState::Missing,
             subtitle_filename: None,
-            subtitles_first_missing_at: None,
+            subtitle_checks: LateDataChecks::default(),
             chapters: None,
+            chapters_checks: LateDataChecks::default(),
+            chapters_settled: false,
+            downloaded_height: None,
+            quality_checks: LateDataChecks::default(),
+            quality_settled: false,
         }
     }
 

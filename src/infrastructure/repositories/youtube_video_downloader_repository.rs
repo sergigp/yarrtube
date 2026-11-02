@@ -3,8 +3,8 @@ use crate::domain::video::VideoChapter;
 use crate::domain::video_transcript::CaptionTrack;
 use crate::infrastructure::shared::ytdlp;
 pub use crate::infrastructure::shared::ytdlp::{
-    CaptionProbe, DownloadAttempt, DownloadedVideo, FetchedSubtitles, FetchedThumbnail,
-    ThumbnailFetch,
+    CaptionProbe, ChaptersProbe, DownloadAttempt, DownloadedVideo, FetchedSubtitles,
+    FetchedThumbnail, QualityProbe, ThumbnailFetch,
 };
 use std::path::{Path, PathBuf};
 
@@ -60,9 +60,12 @@ pub trait VideoDownloaderRepository: Send + Sync {
         track: &CaptionTrack,
         staging_dir: &Path,
     ) -> anyhow::Result<FetchedSubtitles>;
-    /// The video's chapters (`vec![]` when it has none), downloading
-    /// nothing. `Err` on any failure, clean or systemic.
-    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<Vec<VideoChapter>>;
+    /// The video's chapters (`vec![]` when it has none) and publish time,
+    /// downloading nothing. `Err` on any failure, clean or systemic.
+    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<ChaptersProbe>;
+    /// The height `quality` would download now, and the video's publish
+    /// time, downloading nothing. `Err` on any failure, clean or systemic.
+    fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe>;
 }
 
 /// Invokes `yt-dlp` at `ytdlp_path`, the same configured path `update-ytdlp`
@@ -112,8 +115,12 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         ytdlp::fetch_subtitles(&self.ytdlp_path, probe, track, staging_dir)
     }
 
-    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<Vec<VideoChapter>> {
+    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<ChaptersProbe> {
         ytdlp::fetch_chapters(&self.ytdlp_path, video_url)
+    }
+
+    fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe> {
+        ytdlp::probe_quality(&self.ytdlp_path, video_url, quality)
     }
 }
 
@@ -151,13 +158,15 @@ pub struct FakeVideoDownloaderRepository {
     /// download.
     pub(crate) caption_calls: std::sync::Mutex<usize>,
     #[allow(clippy::type_complexity)]
-    pub(crate) chapters_result: std::sync::Mutex<Option<anyhow::Result<Vec<VideoChapter>>>>,
+    pub(crate) chapters_result: std::sync::Mutex<Option<anyhow::Result<ChaptersProbe>>>,
     /// The video URLs `fetch_chapters` was called with.
     pub(crate) chapters_calls: std::sync::Mutex<Vec<String>>,
     /// Runs while `fetch_chapters` is in flight, e.g. to record watch
     /// progress mid-fetch.
     #[allow(clippy::type_complexity)]
     pub(crate) on_fetch_chapters: Option<Box<dyn Fn() + Send + Sync>>,
+    pub(crate) quality_probe: std::sync::Mutex<Option<anyhow::Result<QualityProbe>>>,
+    pub(crate) quality_calls: std::sync::Mutex<Vec<(String, Quality)>>,
 }
 
 #[cfg(test)]
@@ -175,6 +184,7 @@ impl FakeVideoDownloaderRepository {
     pub fn new(succeeds: bool) -> Self {
         if succeeds {
             Self::with_result(DownloadAttempt::Succeeded(DownloadedVideo {
+                height: None,
                 media_path: PathBuf::from("fake-output.mp4"),
                 thumbnail_path: None,
                 duration_seconds: None,
@@ -209,6 +219,7 @@ impl FakeVideoDownloaderRepository {
     /// SABR-on-success behavior.
     pub fn succeeding_with_sabr(reason: &str) -> Self {
         Self::with_result(DownloadAttempt::Succeeded(DownloadedVideo {
+            height: None,
             media_path: PathBuf::from("fake-output.mp4"),
             thumbnail_path: None,
             duration_seconds: None,
@@ -268,8 +279,22 @@ impl FakeVideoDownloaderRepository {
 
     /// Configures what `fetch_chapters` returns; unconfigured, it fails.
     pub fn with_chapters_result(self, result: anyhow::Result<Vec<VideoChapter>>) -> Self {
+        self.with_chapters_probe(result.map(|chapters| ChaptersProbe {
+            chapters,
+            published_at: None,
+        }))
+    }
+
+    pub fn with_chapters_probe(self, result: anyhow::Result<ChaptersProbe>) -> Self {
         Self {
             chapters_result: std::sync::Mutex::new(Some(result)),
+            ..self
+        }
+    }
+
+    pub fn with_quality_probe(self, result: anyhow::Result<QualityProbe>) -> Self {
+        Self {
+            quality_probe: std::sync::Mutex::new(Some(result)),
             ..self
         }
     }
@@ -333,6 +358,8 @@ impl FakeVideoDownloaderRepository {
             chapters_result: Default::default(),
             chapters_calls: Default::default(),
             on_fetch_chapters: None,
+            quality_probe: Default::default(),
+            quality_calls: Default::default(),
         }
     }
 }
@@ -427,7 +454,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
             })
     }
 
-    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<Vec<VideoChapter>> {
+    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<ChaptersProbe> {
         self.chapters_calls
             .lock()
             .unwrap()
@@ -440,6 +467,18 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
             .unwrap()
             .take()
             .unwrap_or_else(|| Err(anyhow::anyhow!("no fake chapters configured")))
+    }
+
+    fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe> {
+        self.quality_calls
+            .lock()
+            .unwrap()
+            .push((video_url.to_string(), quality));
+        self.quality_probe
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or_else(|| Err(anyhow::anyhow!("no fake quality probe configured")))
     }
 }
 
@@ -461,6 +500,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Succeeded(DownloadedVideo {
+                height: None,
                 media_path: output_dir.join(test_support::DEFAULT_PRINTED_FILENAME),
                 thumbnail_path: None,
                 duration_seconds: None,
@@ -532,7 +572,8 @@ mod tests {
 
         let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
             .fetch_chapters("https://example.com/video")
-            .unwrap();
+            .unwrap()
+            .chapters;
 
         assert_eq!(
             result,
@@ -589,6 +630,7 @@ mod youtube_contract_tests {
         assert_eq!(
             attempt,
             DownloadAttempt::Succeeded(DownloadedVideo {
+                height: None,
                 media_path: media_path.clone(),
                 thumbnail_path: Some(staging_dir.join(format!("{SHORT_VIDEO_ID}.jpg"))),
                 duration_seconds: Some(14),
@@ -617,7 +659,8 @@ mod youtube_contract_tests {
 
         let chapters = repository
             .fetch_chapters(&video_url(CHAPTERED_VIDEO_ID))
-            .unwrap();
+            .unwrap()
+            .chapters;
 
         assert_eq!(chapters, flamenco_chapters());
     }

@@ -45,7 +45,7 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::shared::Quality;
     use crate::domain::video::{
-        EpisodeNumber, SubtitleState, Video, VideoId, VideoSubtitlesFetched,
+        EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoId, VideoSubtitlesFetched,
     };
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, CaptionTracks, TranscriptText, VideoTranscript,
@@ -323,7 +323,10 @@ mod tests {
                 .with_caption_probe(Ok(caption_probe(translations_only()))),
         );
         let video = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(8)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(8)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         video_repository.save(&video).unwrap();
@@ -368,7 +371,10 @@ mod tests {
             })),
         );
         let video = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(1)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(1)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         video_repository.save(&video).unwrap();
@@ -431,7 +437,10 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
-                subtitles_first_missing_at: Some(now()),
+                subtitle_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 0,
+                },
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -448,11 +457,17 @@ mod tests {
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let checked_8_days_ago = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(8)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(8)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         let checked_2_days_ago = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(2)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(2)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         video_repository.save(&checked_8_days_ago).unwrap();
@@ -515,7 +530,10 @@ mod tests {
             })),
         );
         let video = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(8)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(8)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         video_repository.save(&video).unwrap();
@@ -1098,7 +1116,10 @@ mod tests {
             })),
         );
         let video = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(8)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(8)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         video_repository.save(&video).unwrap();
@@ -1145,7 +1166,10 @@ mod tests {
                 .with_caption_probe(Ok(caption_probe(translations_only()))),
         );
         let video = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(7)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(7)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         video_repository.save(&video).unwrap();
@@ -1190,7 +1214,10 @@ mod tests {
                 .with_caption_probe(Ok(caption_probe(translations_only()))),
         );
         let video = Video {
-            subtitles_first_missing_at: Some(now() - Duration::days(8)),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(8)),
+                failed_attempts: 0,
+            },
             ..downloaded_video()
         };
         video_repository.save(&video).unwrap();

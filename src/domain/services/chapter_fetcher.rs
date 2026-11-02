@@ -54,7 +54,10 @@ impl ChapterFetcher {
         let chapters = self
             .video_downloader_repository
             .fetch_chapters(&video.youtube_id.to_url())?;
-        self.video_repository
-            .update_chapters(&video.clone().with_chapters(chapters, self.clock.now()))
+        self.video_repository.update_chapters(
+            &video
+                .clone()
+                .with_chapters(chapters.chapters, self.clock.now()),
+        )
     }
 }
