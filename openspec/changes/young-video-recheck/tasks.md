@@ -24,7 +24,7 @@
 - [x] 2.6 `it_should_keep_retrying_failed_checks_of_a_young_video` — failures on a young video never settle it (test passes)
 - [x] 2.7 `it_should_settle_chapters_found` — fetched chapters are settled (fetch_chapters_task test passes)
 - [x] 2.8 `it_should_keep_empty_chapters_unsettled_for_a_young_video` — a young video with no chapters stays unsettled (test passes)
-- [ ] 2.9 `it_should_settle_empty_chapters_of_an_old_video` — an old video with no chapters is settled (test passes)
+- [x] 2.9 `it_should_settle_empty_chapters_of_an_old_video` — an old video with no chapters is settled (test passes)
 - [ ] 2.10 `it_should_count_a_failed_chapters_attempt` — a failed chapters fetch keeps the chapters and counts an attempt (test passes)
 - [ ] 2.11 `it_should_settle_chapters_as_none_after_three_failed_checks_of_an_old_video` — bounded chapters failures (test passes)
 - [ ] 2.12 `it_should_skip_settled_chapters` — no downloader call for settled chapters (test passes)

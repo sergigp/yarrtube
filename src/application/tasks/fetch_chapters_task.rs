@@ -42,10 +42,12 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::video::{LateDataChecks, PlaybackPosition, Video, VideoChapter, VideoId};
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
+        ChaptersProbe, FakeVideoDownloaderRepository,
+    };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, Duration, Utc};
 
     #[test]
     fn it_should_settle_chapters_found() {
@@ -115,6 +117,45 @@ mod tests {
                     last_checked_at: Some(later()),
                     failed_attempts: 0,
                 },
+                updated_at: later(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_settle_empty_chapters_of_an_old_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default().with_chapters_probe(Ok(ChaptersProbe {
+                chapters: vec![],
+                published_at: Some(later() - Duration::days(30)),
+            })),
+        );
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: Some(vec![]),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 0,
+                },
+                chapters_settled: true,
                 updated_at: later(),
                 ..video
             }]
