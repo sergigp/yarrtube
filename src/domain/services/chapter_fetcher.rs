@@ -51,13 +51,14 @@ impl ChapterFetcherApi for ChapterFetcher {
 
 impl ChapterFetcher {
     fn fetch_and_record(&self, video: &Video) -> anyhow::Result<()> {
-        let chapters = self
+        let probe = self
             .video_downloader_repository
             .fetch_chapters(&video.youtube_id.to_url())?;
-        self.video_repository.update_chapters(
-            &video
-                .clone()
-                .with_chapters(chapters.chapters, self.clock.now()),
-        )
+        self.video_repository
+            .update_chapters(&video.clone().record_chapters_check(
+                Some(probe.chapters),
+                probe.published_at.unwrap_or(video.created_at),
+                self.clock.now(),
+            ))
     }
 }

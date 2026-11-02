@@ -416,11 +416,23 @@ impl Video {
     /// Touches only the chapters fields and `updated_at`.
     pub fn record_chapters_check(
         self,
-        _chapters: Option<Vec<VideoChapter>>,
-        _published_at: DateTime<Utc>,
-        _now: DateTime<Utc>,
+        chapters: Option<Vec<VideoChapter>>,
+        published_at: DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Self {
-        self
+        let outcome = match &chapters {
+            Some(found) if !found.is_empty() => LateDataOutcome::Complete,
+            Some(_) => LateDataOutcome::Incomplete,
+            None => LateDataOutcome::Failed,
+        };
+        let chapters_checks = self.chapters_checks.record(outcome, now);
+        Self {
+            chapters: chapters.or(self.chapters),
+            chapters_settled: chapters_checks.settles(outcome, published_at, now),
+            chapters_checks,
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Records the tier and height a download or quality upgrade landed at,

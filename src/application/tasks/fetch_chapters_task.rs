@@ -40,7 +40,7 @@ impl TaskHandler for FetchChaptersTask {
 mod tests {
     use super::*;
     use crate::domain::shared::Quality;
-    use crate::domain::video::{PlaybackPosition, Video, VideoChapter, VideoId};
+    use crate::domain::video::{LateDataChecks, PlaybackPosition, Video, VideoChapter, VideoId};
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
@@ -48,7 +48,7 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     #[test]
-    fn it_should_record_the_fetched_chapters() {
+    fn it_should_settle_chapters_found() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_downloader_repository = Arc::new(
@@ -72,6 +72,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 chapters: Some(intro_chapters()),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 0,
+                },
+                chapters_settled: true,
                 updated_at: later(),
                 ..video
             }]
@@ -83,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_no_chapters_if_the_video_has_none() {
+    fn it_should_keep_empty_chapters_unsettled_for_a_young_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_downloader_repository =
@@ -106,6 +111,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 chapters: Some(vec![]),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 0,
+                },
                 updated_at: later(),
                 ..video
             }]
@@ -230,6 +239,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 chapters: Some(intro_chapters()),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 0,
+                },
+                chapters_settled: true,
                 updated_at: later(),
                 ..played
             }]
