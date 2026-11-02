@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "language-trees-zipping", "verdict": "missing", "reason": "The summary only names 'Language Trees and Zipping' (2002) as a starting point and says nothing about gzip, clustering by language, or the language tree."},
+{"id": "cross-entropy-definition", "verdict": "stated", "reason": "It says cross-entropy quantifies 'how well a compression scheme performs in a different context', matching a code optimized for one distribution used on another."},
+{"id": "minimum-at-p-equals-q", "verdict": "missing", "reason": "KL divergence is mentioned as 'wastefulness of suboptimal codes', but the summary never says cross-entropy is minimized when Q equals P or that the minimum is the entropy."},
+{"id": "llm-pretraining-loss", "verdict": "stated", "reason": "It says pre-training involves models 'trained to minimize this cross-entropy loss'."},
+{"id": "distillation", "verdict": "missing", "reason": "Distillation is only named as another place cross-entropy is minimized; the summary does not say a small model trains against a larger model's full distribution."}
+]}

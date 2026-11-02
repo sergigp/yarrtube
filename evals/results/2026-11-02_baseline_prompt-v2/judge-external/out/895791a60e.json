@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "topic-claude-duet", "verdict": "missing", "reason": "The summary calls Claude Duet 'a new personal agent from Anthropic' but never says it is a phone app synced with Claude or aimed at small business owners; the main claim about its form is not stated."},
+{"id": "liked-design", "verdict": "stated", "reason": "The summary says the creator acknowledges 'its impressive design and polished user experience' and appreciates 'task lists and artifact support'."},
+{"id": "not-proactive-and-slow", "verdict": "stated", "reason": "The summary says the creator finds it 'lacking in proactive engagement and speed' and cites its 'sluggish performance'."},
+{"id": "no-desktop-no-multiplayer", "verdict": "stated", "reason": "The summary mentions the 'inability to create a desktop app, coupled with its single-player focus'."},
+{"id": "verdict", "verdict": "stated", "reason": "The summary says the agent fails to compete for attention and does not become 'a core part of their workflow', matching the doubt that it will join his agent stack."}
+]}

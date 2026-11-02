@@ -1,2 +1,3 @@
 # Subtitles are third-party captions: kept locally, never committed.
 cases/*/subtitles.srt
+__pycache__/

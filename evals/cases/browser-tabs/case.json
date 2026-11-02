@@ -13,7 +13,7 @@
         "fact": "The speaker presents browser-tabs (browser tabs CLI), an open-source command-line tool he built to open and organize browser tabs into named groups, to prepare Codely's weekly news livestream (\"el café con Codely\").",
         "critical": true,
         "trap": "Describes it as a browser extension, an MCP server, or a review of someone else's tool.",
-        "note": "Captions write \"codely\"; the company is Codely. The speaker is Javi (Codely).",
+        "note": "Captions write \"codely\"; the company is Codely. The speaker is Javi (Codely). Saying Codely built it is acceptable.",
         "evidence": {
           "at": "2:17",
           "quote": "os presento aquí ni más ni menos que browser tabs CLI, una utilidad de CLI"
@@ -22,7 +22,7 @@
       {
         "id": "vivaldi-api-not-computer-use",
         "fact": "It talks directly to Vivaldi's API (the browser he uses for the show) to batch-open tabs from a JSON file in about a second, naming tabs and groups and setting colors, instead of slow AI computer use that clicks through the browser and blocks it.",
-        "critical": true,
+        "critical": false,
         "trap": "Says it works with Firefox or Chrome, or that it uses AI/computer use to open the tabs.",
         "evidence": {
           "at": "3:16",
@@ -43,7 +43,7 @@
         "fact": "The tool is open source (MIT, on npm and GitHub), vibe-coded, and uses semantic-release (instead of release-please, which Codely used before) to publish releases automatically from conventional commits.",
         "critical": false,
         "trap": "Says it uses release-please, or that it is paid/closed source.",
-        "note": "\"by codeado\" in captions is \"vibe codeado\".",
+        "note": "\"by codeado\" in captions is \"vibe codeado\". Paraphrases like \"releases semánticos\" count as semantic-release.",
         "evidence": {
           "at": "4:40",
           "quote": "veníamos usando tradicionalmente para las distintas librerías release please y es curioso porque simplifica bastante el tinglado esto"
@@ -59,6 +59,18 @@
           "quote": "ahora esto nos va a servir de base para ahorrarme mucho tiempo cada semana"
         }
       }
-    ]
+    ],
+    "review": {
+      "reviewed_on": "2026-11-02",
+      "note": "Facts confirmed by a viewer. Vivaldi API is true but not a must-have. Both baseline summaries judged good; viewer slightly prefers qwen3:4b's.",
+      "human_verdicts": {
+        "run": "2026-11-02_baseline_prompt-v2",
+        "qwen3:4b": {
+          "built-browser-tabs-cli": "stated",
+          "open-source-semantic-release": "stated",
+          "worth-it-saves-time": "stated"
+        }
+      }
+    }
   }
 }

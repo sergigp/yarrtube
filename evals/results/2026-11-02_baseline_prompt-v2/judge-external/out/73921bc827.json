@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "white-vs-black-stonewall-knight", "verdict": "missing", "reason": "The summary mentions a query about a knight on e4 in the Stonewall but never says whose Stonewall or whose knight, nor that it is a viewer's tweet about the Dutch with Black's knight."},
+{"id": "dont-take-on-d5", "verdict": "stated", "reason": "Summary says the two critical errors are capturing on d5 and placing a bishop on g5, and that one should never take d5 due to trading center space."},
+{"id": "f3-is-the-answer", "verdict": "stated", "reason": "Summary says 'using F3 to either kick the knight or trade into it before resolving the position' and that the knight is a non-issue when F3 is played."},
+{"id": "model-games-karpov", "verdict": "missing", "reason": "Summary mentions Karpov's game as an example but gives none of the details (kicking the knight, dark squares, knight on e5, bad light-squared bishop, strategically winning)."},
+{"id": "c1-bishop-no-hurry", "verdict": "missing", "reason": "The summary says nothing about where the c1 bishop should go or developing it last with queenside play."}
+]}

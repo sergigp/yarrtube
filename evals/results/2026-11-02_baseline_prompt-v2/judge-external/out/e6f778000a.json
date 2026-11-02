@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "language-trees-zipping", "verdict": "stated", "reason": "Summary says it begins with a 2002 paper that used file compression to discover language relationships."},
+{"id": "cross-entropy-definition", "verdict": "stated", "reason": "Summary defines it as how well a compression scheme optimized for one context performs in another, matching the main claim."},
+{"id": "minimum-at-p-equals-q", "verdict": "missing", "reason": "Summary says nothing about the minimum at Q=P, entropy, or KL divergence."},
+{"id": "llm-pretraining-loss", "verdict": "stated", "reason": "Summary says cross-entropy is the loss function used in pre-training, where minimizing it trains the model."},
+{"id": "distillation", "verdict": "missing", "reason": "Summary only mentions 'distilling' in passing, not training a small model against a larger model's full distribution."}
+]}

@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "not-the-next-revolution", "verdict": "stated", "reason": "Summary says the video is critical of immediate viability, utility limited to very specific problems, and AI quantum could 'complementar la IA clásica' rather than replace it."},
+{"id": "hybrid-quantum-classical", "verdict": "missing", "reason": "Summary mentions combining neural networks with quantum computing, qubits and variational circuits, but never says a classical computer tunes parameters or a classical SVM finds the boundary."},
+{"id": "advantage-only-on-artificial-problem", "verdict": "missing", "reason": "Summary does not mention the roulette example or that the proven advantage is on an artificial problem with no practical application."},
+{"id": "practical-obstacles", "verdict": "stated", "reason": "Summary cites 'la necesidad de ordenadores cuánticos potentes' as a significant challenge, matching the main claim that the advantage needs powerful quantum computers."},
+{"id": "promise-in-quantum-data-and-niches", "verdict": "stated", "reason": "Summary says AI quantum 'podría complementar la IA clásica, impulsando la innovación en campos como la ciencia avanzada' and utility limited to specific problems."}
+]}
