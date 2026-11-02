@@ -163,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_leave_chapters_unchecked_if_the_fetch_fails() {
+    fn it_should_count_a_failed_chapters_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_downloader_repository = Arc::new(
@@ -184,7 +184,17 @@ mod tests {
         let result = run(&task, &payload_for(&video));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 1,
+                },
+                updated_at: later(),
+                ..video
+            }]
+        );
         assert_eq!(
             *video_downloader_repository.chapters_calls.lock().unwrap(),
             vec![YT1_URL.to_string()]

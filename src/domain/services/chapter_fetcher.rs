@@ -45,11 +45,27 @@ impl ChapterFetcherApi for ChapterFetcher {
         }
         if let Err(e) = self.fetch_and_record(video) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video chapters");
+            self.record_failed_fetch(video);
         }
     }
 }
 
 impl ChapterFetcher {
+    /// Best effort, like the fetch itself: a failure to record the failed
+    /// fetch is only logged.
+    fn record_failed_fetch(&self, video: &Video) {
+        let recorded = self
+            .video_repository
+            .update_chapters(&video.clone().record_chapters_check(
+                None,
+                video.created_at,
+                self.clock.now(),
+            ));
+        if let Err(e) = recorded {
+            warn!(video_id = %video.id, error = %e, "failed to record a failed chapters fetch");
+        }
+    }
+
     fn fetch_and_record(&self, video: &Video) -> anyhow::Result<()> {
         let probe = self
             .video_downloader_repository
