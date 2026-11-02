@@ -8,6 +8,7 @@ use crate::infrastructure::repositories::youtube_video_downloader_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use std::path::Path;
 use std::sync::Arc;
@@ -121,7 +122,10 @@ impl QualityUpgrader {
             DownloadAttempt::Succeeded(downloaded) => {
                 self.replace(video, &downloaded, quality, output_dir, published_at)
             }
-            DownloadAttempt::Failed { .. } => Ok(()),
+            DownloadAttempt::Failed { stderr, .. } => Err(anyhow!(
+                "yt-dlp failed to download a higher quality: {}",
+                stderr.as_deref().unwrap_or("no reason given")
+            )),
         }
     }
 
