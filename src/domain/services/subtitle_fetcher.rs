@@ -74,6 +74,7 @@ impl SubtitleFetcherApi for SubtitleFetcher {
         }
         if let Err(e) = self.fetch_and_place(video, output_dir) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video subtitles");
+            self.record_failed_fetch(video);
         }
         self.discard_staging(video);
     }
@@ -129,6 +130,14 @@ impl SubtitleFetcher {
                 published_at.unwrap_or(video.created_at),
                 self.clock.now(),
             ))
+    }
+
+    /// Best effort, like the fetch itself: a failure to record the failed
+    /// fetch is only logged.
+    fn record_failed_fetch(&self, video: &Video) {
+        if let Err(e) = self.record_check(video, LateDataOutcome::Failed, None) {
+            warn!(video_id = %video.id, error = %e, "failed to record a failed subtitle fetch");
+        }
     }
 
     /// Downloads `track`, moves it next to the episode, stores its

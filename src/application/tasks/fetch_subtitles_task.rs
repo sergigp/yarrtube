@@ -573,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_leave_subtitles_missing_when_the_probe_fails() {
+    fn it_should_count_a_failed_attempt_if_the_probe_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
@@ -604,13 +604,23 @@ mod tests {
         let result = run(&task, &payload_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                subtitle_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 1,
+                },
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
     }
 
     #[test]
-    fn it_should_leave_subtitles_missing_when_the_download_fails() {
+    fn it_should_count_a_failed_attempt_if_the_subtitles_download_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
@@ -642,7 +652,17 @@ mod tests {
         let result = run(&task, &payload_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                subtitle_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 1,
+                },
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
     }
