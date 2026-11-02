@@ -37,7 +37,7 @@
 - [x] 2.18 `it_should_replace_the_file_with_a_higher_quality_download` — in-place upgrade keeps subtitles, chapters and watch state, and publishes `VideoDownloaded` (upgrade_quality_task test passes)
 - [x] 2.19 `it_should_record_the_check_if_nothing_better_is_available` — no download, check recorded (test passes)
 - [x] 2.20 `it_should_settle_quality_once_the_video_is_old` — quality settles once the video is old (test passes)
-- [ ] 2.21 `it_should_count_a_failed_attempt_if_the_probe_fails` (upgrade) — a probe error counts an attempt (test passes)
+- [x] 2.21 `it_should_count_a_failed_attempt_if_the_probe_fails` (upgrade) — a probe error counts an attempt (test passes)
 - [ ] 2.22 `it_should_keep_the_file_if_the_redownload_fails` — a failed re-download leaves the file and fields, task `Ok` (test passes)
 - [ ] 2.23 `it_should_place_nothing_if_the_video_was_reset_meanwhile` — a reset during the upgrade places nothing (test passes)
 - [ ] 2.24 `it_should_skip_a_video_with_settled_quality` — no probe for settled quality (test passes)

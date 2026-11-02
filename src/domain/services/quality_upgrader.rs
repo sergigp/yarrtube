@@ -74,14 +74,9 @@ impl QualityUpgraderApi for QualityUpgrader {
         let Some(video) = self.video_repository.find(video_id)? else {
             return Ok(());
         };
-        let probe = self
-            .video_downloader_repository
-            .probe_quality(&video.youtube_id.to_url(), quality)?;
-        let published_at = probe.published_at.unwrap_or(video.created_at);
-        if probe.height > video.downloaded_height {
-            self.redownload(&video, quality, output_dir, published_at)?;
-        } else {
-            self.record_check(&video, quality, probe.height, published_at)?;
+        if let Err(e) = self.check_and_upgrade(&video, quality, output_dir) {
+            warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
+            self.record_failed_check(&video);
         }
         self.discard_staging(&video);
         Ok(())
@@ -89,6 +84,25 @@ impl QualityUpgraderApi for QualityUpgrader {
 }
 
 impl QualityUpgrader {
+    /// Probes the height `quality` would download now: re-downloads when
+    /// it is above the recorded one, else records the check.
+    fn check_and_upgrade(
+        &self,
+        video: &Video,
+        quality: Quality,
+        output_dir: &Path,
+    ) -> anyhow::Result<()> {
+        let probe = self
+            .video_downloader_repository
+            .probe_quality(&video.youtube_id.to_url(), quality)?;
+        let published_at = probe.published_at.unwrap_or(video.created_at);
+        if probe.height > video.downloaded_height {
+            self.redownload(video, quality, output_dir, published_at)
+        } else {
+            self.record_check(video, probe.height, published_at)
+        }
+    }
+
     /// Downloads `video` again at `quality` into its staging dir and
     /// replaces its episode file with it.
     fn redownload(
@@ -142,17 +156,23 @@ impl QualityUpgrader {
     fn record_check(
         &self,
         video: &Video,
-        quality: Quality,
         probed_height: Option<u32>,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         self.video_repository
             .update_quality(&video.clone().record_quality_check(
-                quality,
                 probed_height,
                 published_at,
                 self.clock.now(),
             ))
+    }
+
+    /// Best effort, like the check itself: a failure to record the failed
+    /// check is only logged.
+    fn record_failed_check(&self, video: &Video) {
+        if let Err(e) = self.record_check(video, None, video.created_at) {
+            warn!(video_id = %video.id, error = %e, "failed to record a failed quality check");
+        }
     }
 
     /// Best effort, like `VideoDownloader`'s: the upgrade is already

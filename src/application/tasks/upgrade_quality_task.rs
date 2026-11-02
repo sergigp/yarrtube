@@ -180,6 +180,49 @@ mod tests {
     }
 
     #[test]
+    fn it_should_count_a_failed_attempt_if_the_probe_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::new(true)
+                .with_quality_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+        );
+        let video = sd_video();
+        video_repository.save(&video).unwrap();
+        let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+            video_repository.clone(),
+            video_downloader_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            "/videos",
+        )));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 1,
+                },
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
+        assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_settle_quality_once_the_video_is_old() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

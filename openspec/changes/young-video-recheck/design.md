@@ -127,7 +127,7 @@ impl Video {
     /// Download or upgrade landed: tier, height, settled if old or cap reached.
     pub fn record_downloaded_quality(self, quality: Quality, height: Option<u32>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
     /// Quality probe found nothing better, or failed (`probed_height` None).
-    pub fn record_quality_check(self, quality: Quality, probed_height: Option<u32>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
+    pub fn record_quality_check(self, probed_height: Option<u32>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
     pub fn is_quality_checkable(&self) -> bool; // Downloaded && !quality_settled
     // removed: mark_subtitles_first_missing
 }
@@ -211,11 +211,11 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
 - `UpgradeQualityTask::handle(payload)` → `QualityUpgrader::upgrade(&id, quality, output_dir)`
   - `video_repository.find(id)` → guard `is_quality_checkable`
   - `video_downloader_repository.probe_quality(url, quality)`
-    - `Err` → `video.record_quality_check(quality, None, created_at, now)` → `update_quality`
-    - `probe.height <= downloaded_height` → `record_quality_check(quality, probe.height, published_at, now)` → `update_quality`
+    - `Err` → `video.record_quality_check(None, created_at, now)` → `update_quality`
+    - `probe.height <= downloaded_height` → `record_quality_check(probe.height, published_at, now)` → `update_quality`
     - Higher → `video_downloader_repository.download(url, quality, staging)`
       - `Succeeded` + still downloaded under the same filename → `video_file_repository.move_file(media, output_dir/filename)` → `video.record_downloaded_quality(quality, downloaded.height, published_at, now)` → `update_quality` → `event_publisher.publish(VideoDownloaded)`
-      - `Failed`/`Err` → `record_quality_check(quality, None, ..)` → `update_quality`
+      - `Failed`/`Err` → `record_quality_check(None, ..)` → `update_quality`
   - Discard staging.
 
 **Sync**

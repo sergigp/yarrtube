@@ -470,12 +470,14 @@ impl Video {
     /// the quality fields and `updated_at`.
     pub fn record_quality_check(
         self,
-        _quality: Quality,
-        _probed_height: Option<u32>,
+        probed_height: Option<u32>,
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = LateDataOutcome::Incomplete;
+        let outcome = match probed_height {
+            Some(_) => LateDataOutcome::Incomplete,
+            None => LateDataOutcome::Failed,
+        };
         let quality_checks = self.quality_checks.record(outcome, now);
         Self {
             quality_settled: quality_checks.settles(outcome, published_at, now),
