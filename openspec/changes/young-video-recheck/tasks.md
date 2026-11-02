@@ -49,7 +49,7 @@
 - [x] 2.29 `it_should_schedule_a_quality_check_when_due` — the `UpgradeQuality` task is scheduled with the owner's quality and output dir (test passes)
 - [x] 2.30 `it_should_not_schedule_a_quality_check_right_after_download` — throttle after download (test passes)
 - [x] 2.31 `it_should_reset_every_check_on_redownload` — a broken-file reset clears the checks and height (test passes)
-- [ ] 2.32 `it_should_list_an_upgrade_quality_task_with_its_video_context` — task listing resolves the title and owner (http tasks test passes)
+- [x] 2.32 `it_should_list_an_upgrade_quality_task_with_its_video_context` — task listing resolves the title and owner (http tasks test passes)
 
 ## 3. Infrastructure adapters (TDD)
 
