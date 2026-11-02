@@ -21,8 +21,9 @@ pub struct LateDataChecks {
 impl LateDataChecks {
     /// Whether unsettled data is due for another check: never checked, or
     /// last checked at least `RECHECK_AFTER` ago.
-    pub fn is_due(&self, _now: DateTime<Utc>) -> bool {
-        true
+    pub fn is_due(&self, now: DateTime<Utc>) -> bool {
+        self.last_checked_at
+            .is_none_or(|checked_at| now - checked_at >= RECHECK_AFTER)
     }
 
     /// Records a check that ran `now`, counting a failed attempt for a
