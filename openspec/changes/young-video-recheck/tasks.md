@@ -55,8 +55,8 @@
 
 - [x] 3.1 sqlite_migrations: `it_should_settle_checked_chapters_and_downloaded_quality` — backfill of the settled flags (test passes)
 - [x] 3.2 sqlite_migrations: `it_should_keep_the_first_missing_time_as_the_last_subtitles_check` — the renamed column keeps its value (test passes)
-- [ ] 3.3 sqlite_video_repository: `it_should_round_trip_late_data_checks` — every new column maps both ways (test passes)
-- [ ] 3.4 sqlite_video_repository: `it_should_update_only_quality_fields` — `update_quality` touches only its fields (test passes)
+- [x] 3.3 sqlite_video_repository: `it_should_round_trip_late_data_checks` — every new column maps both ways (test passes)
+- [x] 3.4 sqlite_video_repository: `it_should_update_only_quality_fields` — `update_quality` touches only its fields (test passes)
 - [ ] 3.5 ytdlp: `it_should_report_the_downloaded_height` — the download prints and parses the height (test passes)
 - [ ] 3.6 ytdlp: `it_should_report_the_chapters_publish_time` — `fetch_chapters` returns `ChaptersProbe` with the publish time (test passes)
 - [ ] 3.7 ytdlp: `it_should_probe_the_height_for_a_quality` — the tier selector runs with `--skip-download`, and the height and publish time are parsed (test passes)

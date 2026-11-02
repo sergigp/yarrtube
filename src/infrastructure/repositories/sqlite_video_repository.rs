@@ -1069,6 +1069,75 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_late_data_checks() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let checked_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let checks = LateDataChecks {
+            last_checked_at: Some(checked_at),
+            failed_attempts: 2,
+        };
+        let video = Video {
+            subtitle_checks: checks,
+            chapters: Some(vec![]),
+            chapters_checks: checks,
+            chapters_settled: true,
+            downloaded_height: Some(1080),
+            quality_checks: checks,
+            quality_settled: true,
+            ..video("Checked", now)
+        };
+
+        repo.save(&video).unwrap();
+
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
+
+    #[test]
+    fn it_should_update_only_quality_fields() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let original = video("Original", now);
+        repo.save(&original).unwrap();
+        let watched = original.clone().update_watch_state(
+            PlaybackPosition::new(120).unwrap(),
+            None,
+            false,
+            now,
+        );
+        repo.update(&watched).unwrap();
+
+        repo.update_quality(&Video {
+            quality: Some(Quality::Mid),
+            downloaded_height: Some(720),
+            quality_checks: LateDataChecks {
+                last_checked_at: Some(later),
+                failed_attempts: 1,
+            },
+            quality_settled: true,
+            updated_at: later,
+            ..original.mark_subtitles_unavailable(later)
+        })
+        .unwrap();
+
+        assert_eq!(
+            repo.find(&watched.id).unwrap(),
+            Some(Video {
+                quality: Some(Quality::Mid),
+                downloaded_height: Some(720),
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(later),
+                    failed_attempts: 1,
+                },
+                quality_settled: true,
+                updated_at: later,
+                ..watched
+            })
+        );
+    }
+
+    #[test]
     fn it_should_round_trip_the_subtitle_checks() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
