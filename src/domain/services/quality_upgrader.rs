@@ -75,6 +75,9 @@ impl QualityUpgraderApi for QualityUpgrader {
         let Some(video) = self.video_repository.find(video_id)? else {
             return Ok(());
         };
+        if !video.is_quality_checkable() {
+            return Ok(());
+        }
         if let Err(e) = self.check_and_upgrade(&video, quality, output_dir) {
             warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
             self.record_failed_check(&video);

@@ -40,7 +40,7 @@
 - [x] 2.21 `it_should_count_a_failed_attempt_if_the_probe_fails` (upgrade) — a probe error counts an attempt (test passes)
 - [x] 2.22 `it_should_keep_the_file_if_the_redownload_fails` — a failed re-download leaves the file and fields, task `Ok` (test passes)
 - [x] 2.23 `it_should_place_nothing_if_the_video_was_reset_meanwhile` — a reset during the upgrade places nothing (test passes)
-- [ ] 2.24 `it_should_skip_a_video_with_settled_quality` — no probe for settled quality (test passes)
+- [x] 2.24 `it_should_skip_a_video_with_settled_quality` — no probe for settled quality (test passes)
 - [ ] 2.25 `it_should_not_schedule_subtitles_checked_less_than_a_day_ago` — 24h throttle on subtitles (sync_video_task test passes)
 - [ ] 2.26 `it_should_schedule_subtitles_checked_more_than_a_day_ago` — due subtitles are scheduled (test passes)
 - [ ] 2.27 `it_should_schedule_chapters_of_a_young_video_checked_a_day_ago` — due unsettled chapters are scheduled (test passes)

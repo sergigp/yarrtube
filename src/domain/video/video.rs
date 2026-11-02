@@ -490,7 +490,7 @@ impl Video {
     /// Whether a quality check is worth attempting: Downloaded and its
     /// quality unsettled.
     pub fn is_quality_checkable(&self) -> bool {
-        false
+        self.is_downloaded() && !self.quality_settled
     }
 
     /// Records the episode number assigned to this video.
