@@ -30,3 +30,187 @@ impl TaskHandler for UpgradeQualityTask {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::video::{
+        EpisodeNumber, LateDataChecks, PlaybackPosition, Video, VideoDownloaded, VideoId,
+    };
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
+        DownloadedVideo, FakeVideoDownloaderRepository, QualityProbe,
+    };
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Duration, Utc};
+    use std::path::PathBuf;
+
+    #[test]
+    fn it_should_replace_the_file_with_a_higher_quality_download() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+                height: Some(1080),
+                ..staged_download()
+            })
+            .with_quality_probe(Ok(QualityProbe {
+                height: Some(1080),
+                published_at: Some(published_yesterday()),
+            })),
+        );
+        let video = sd_video();
+        video_repository.save(&video).unwrap();
+        let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+            video_repository.clone(),
+            video_downloader_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            "/videos",
+        )));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                downloaded_height: Some(1080),
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 0,
+                },
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                staging(&video).join("yt1.mp4"),
+                PathBuf::from(OUTPUT_DIR).join(FILENAME),
+            )]
+        );
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![staging(&video)]
+        );
+        assert_eq!(
+            *video_downloader_repository.quality_calls.lock().unwrap(),
+            vec![(YT1_URL.to_string(), Quality::High)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![ScheduledEvent {
+                id: 1,
+                event_type: "video_downloaded".to_string(),
+                payload: DomainEvent::VideoDownloaded(VideoDownloaded {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: OUTPUT_DIR.to_string(),
+                    folder: "Season 2026".to_string(),
+                })
+                .payload()
+                .to_string(),
+                retries: 0,
+                created_at: now(),
+                updated_at: now(),
+                last_error: None,
+            }]
+        );
+    }
+
+    const YT1_URL: &str = "https://www.youtube.com/watch?v=yt1";
+    const OUTPUT_DIR: &str = "/videos/My Channel";
+    const FILENAME: &str = "Season 2026/S2026E031501 - My Video.mp4";
+
+    /// `yt1`, published yesterday, downloaded at 360p a day ago as episode
+    /// `2026`/`031501` with its subtitles and chapters settled and half
+    /// watched; its `high` quality unsettled.
+    fn sd_video() -> Video {
+        let downloaded_at = now() - Duration::days(1);
+        Video {
+            downloaded_height: Some(360),
+            quality_checks: LateDataChecks {
+                last_checked_at: Some(downloaded_at),
+                failed_attempts: 0,
+            },
+            chapters_settled: true,
+            ..Video::create(VideoId::new("yt1").unwrap(), "My Video", downloaded_at)
+                .with_episode_number(
+                    EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                    downloaded_at,
+                )
+                .mark_downloaded(
+                    Quality::High,
+                    FILENAME,
+                    Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                    Some(600),
+                    downloaded_at,
+                )
+                .with_subtitles("Season 2026/S2026E031501 - My Video.en.srt", downloaded_at)
+                .with_chapters(vec![], downloaded_at)
+                .update_watch_state(
+                    PlaybackPosition::new(300).unwrap(),
+                    None,
+                    false,
+                    downloaded_at,
+                )
+        }
+    }
+
+    /// The re-download `yt-dlp` staged for `yt1`.
+    fn staged_download() -> DownloadedVideo {
+        DownloadedVideo {
+            media_path: PathBuf::from("yt1.mp4"),
+            thumbnail_path: Some(PathBuf::from("yt1.jpg")),
+            duration_seconds: Some(600),
+            published_at: Some(published_yesterday()),
+            sabr_notice: None,
+            chapters: Some(vec![]),
+            height: None,
+        }
+    }
+
+    fn staging(video: &Video) -> PathBuf {
+        PathBuf::from(format!("/videos/.downloads/{}", video.id.as_str()))
+    }
+
+    fn payload_for(video: &Video) -> String {
+        Task::UpgradeQuality {
+            video_id: video.id.as_str().to_string(),
+            quality: "high".to_string(),
+            output_dir: OUTPUT_DIR.to_string(),
+        }
+        .payload()
+        .to_string()
+    }
+
+    fn published_yesterday() -> DateTime<Utc> {
+        now() - Duration::days(1)
+    }
+
+    fn now() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-03-16T10:00:00Z")
+            .unwrap()
+            .to_utc()
+    }
+
+    fn run(task: &UpgradeQualityTask, payload: &str) -> Result<(), String> {
+        task.handle(payload, false).map_err(|e| e.to_string())
+    }
+}

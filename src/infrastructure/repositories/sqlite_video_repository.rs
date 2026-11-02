@@ -370,7 +370,24 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn update_quality(&self, _video: &Video) -> anyhow::Result<()> {
+    fn update_quality(&self, video: &Video) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE videos SET quality = ?2, downloaded_height = ?3, quality_last_checked_at = ?4, quality_failed_attempts = ?5, quality_settled = ?6, updated_at = ?7 WHERE id = ?1",
+            params![
+                video.id.as_str(),
+                video.quality.map(|q| q.as_str()),
+                video.downloaded_height,
+                video.quality_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.quality_checks.failed_attempts,
+                video.quality_settled,
+                video.updated_at.to_rfc3339(),
+            ],
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %video.id, error = %e, "failed to update video quality")
+        })
+        .context("failed to update video quality")?;
         Ok(())
     }
 
