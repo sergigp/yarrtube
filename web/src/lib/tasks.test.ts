@@ -97,6 +97,22 @@ describe('describeTask', () => {
     expect(taskKind(aTask({ task_type: 'fetch_chapters' }))).toBe('download')
   })
 
+  it('describes a quality check under downloads', () => {
+    expect(
+      describeTask(
+        aTask({
+          task_type: 'upgrade_quality',
+          payload: { video_title: 'Intro', playlist_name: 'Kids' },
+        }),
+      ),
+    ).toBe('Checking the quality of Intro in Kids')
+    expect(describeTask(aTask({ task_type: 'upgrade_quality', payload: {} }))).toBe(
+      'Checking the quality of a video in an unknown playlist or channel',
+    )
+    expect(taskFamily(aTask({ task_type: 'upgrade_quality' }))).toBe('downloads')
+    expect(taskKind(aTask({ task_type: 'upgrade_quality' }))).toBe('download')
+  })
+
   it('describes file removals', () => {
     expect(
       describeTask(aTask({ task_type: 'delete_video_file', payload: { filename: 'a.mp4' } })),
