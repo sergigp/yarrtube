@@ -27,10 +27,13 @@ impl LateDataChecks {
 
     /// Records a check that ran `now`, counting a failed attempt for a
     /// `Failed` outcome.
-    pub fn record(self, _outcome: LateDataOutcome, now: DateTime<Utc>) -> Self {
+    pub fn record(self, outcome: LateDataOutcome, now: DateTime<Utc>) -> Self {
         Self {
             last_checked_at: Some(now),
-            ..self
+            failed_attempts: match outcome {
+                LateDataOutcome::Failed => self.failed_attempts + 1,
+                _ => self.failed_attempts,
+            },
         }
     }
 

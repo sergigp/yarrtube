@@ -11,6 +11,7 @@ use crate::infrastructure::repositories::youtube_video_downloader_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::{DateTime, Utc};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
@@ -94,9 +95,9 @@ impl SubtitleFetcher {
             }
             None if !probe.warnings.is_empty() => {
                 Self::log_inconclusive(video, &probe);
-                Ok(())
+                self.record_check(video, LateDataOutcome::Failed, probe.published_at)
             }
-            None => self.record_no_captions(video, &probe),
+            None => self.record_check(video, LateDataOutcome::Incomplete, probe.published_at),
         }
     }
 
@@ -112,15 +113,20 @@ impl SubtitleFetcher {
         );
     }
 
-    /// Records a conclusive check without captions: Unavailable once the
-    /// video is old (its record's creation time when no publish time is
-    /// reported), Missing otherwise — see the `late-video-data` capability.
-    fn record_no_captions(&self, video: &Video, probe: &CaptionProbe) -> anyhow::Result<()> {
-        let published_at = probe.published_at.unwrap_or(video.created_at);
+    /// Records a check that found no selectable track (`Incomplete`) or was
+    /// inconclusive (`Failed`), dated by the video's publish time (its
+    /// record's creation time when none is known): Unavailable once the
+    /// `late-video-data` policy settles it, Missing otherwise.
+    fn record_check(
+        &self,
+        video: &Video,
+        outcome: LateDataOutcome,
+        published_at: Option<DateTime<Utc>>,
+    ) -> anyhow::Result<()> {
         self.video_repository
             .update_subtitles(&video.clone().record_subtitles_check(
-                LateDataOutcome::Incomplete,
-                published_at,
+                outcome,
+                published_at.unwrap_or(video.created_at),
                 self.clock.now(),
             ))
     }
