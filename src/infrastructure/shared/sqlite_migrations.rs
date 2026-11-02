@@ -905,6 +905,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_keep_the_first_missing_time_as_the_last_subtitles_check() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_video_chapters(&mut conn);
+        conn.execute(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, subtitles_first_missing_at)
+             VALUES ('rec1', 'yt1', 'My Video', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00', '2026-10-31T12:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let checks = conn.query_row(
+            "SELECT subtitles_last_checked_at, subtitles_failed_attempts FROM videos WHERE id = 'rec1'",
+            [],
+            |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, u32>(1)?)),
+        );
+        assert_eq!(
+            checks,
+            Ok((Some("2026-10-31T12:00:00+00:00".to_string()), 0))
+        );
+    }
+
     fn migrate_to_video_chapters(conn: &mut Connection) {
         Migrations::new(vec![
             M::up(BASELINE_SQL),
