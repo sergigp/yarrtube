@@ -721,6 +721,59 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_retrying_failed_checks_of_a_young_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+        );
+        let video = Video {
+            created_at: now() - Duration::days(2),
+            subtitle_checks: LateDataChecks {
+                last_checked_at: Some(now() - Duration::days(1)),
+                failed_attempts: 5,
+            },
+            ..downloaded_video()
+        };
+        video_repository.save(&video).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                subtitle_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 6,
+                },
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[test]
     fn it_should_skip_if_video_no_longer_exists() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
