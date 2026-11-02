@@ -1,6 +1,6 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::video::{
-    EpisodePaths, LateDataChecks, Video, VideoSubtitlesFetched, subtitle_staging_dir,
+    EpisodePaths, LateDataOutcome, Video, VideoSubtitlesFetched, subtitle_staging_dir,
 };
 use crate::domain::video_transcript::{CaptionTrack, TranscriptText, VideoTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -11,15 +11,9 @@ use crate::infrastructure::repositories::youtube_video_downloader_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
-use chrono::Duration;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
-
-/// How long both since its publish time and since its first check without
-/// captions a video with no original-language captions waits before its
-/// subtitles are recorded Unavailable.
-const UNAVAILABLE_AFTER: Duration = Duration::days(7);
 
 /// Best-effort fetch of a downloaded video's original-language subtitles —
 /// see the `video-subtitles` capability. The fetch itself runs from the
@@ -102,7 +96,7 @@ impl SubtitleFetcher {
                 Self::log_inconclusive(video, &probe);
                 Ok(())
             }
-            None => self.mark_unavailable_if_long_missing(video, &probe),
+            None => self.record_no_captions(video, &probe),
         }
     }
 
@@ -118,37 +112,17 @@ impl SubtitleFetcher {
         );
     }
 
-    /// Records the first check without captions, if none is recorded yet.
-    /// Captions often appear days after an upload, and a playlist added
-    /// today may hold old videos: only a video published and first checked
-    /// without captions at least `UNAVAILABLE_AFTER` ago is given up on,
-    /// any other stays Missing for a later reconcile pass to try again.
-    fn mark_unavailable_if_long_missing(
-        &self,
-        video: &Video,
-        probe: &CaptionProbe,
-    ) -> anyhow::Result<()> {
-        let now = self.clock.now();
-        let first_missing_at = video.subtitle_checks.last_checked_at.unwrap_or(now);
-        let video = Video {
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(first_missing_at),
-                ..video.subtitle_checks
-            },
-            updated_at: if video.subtitle_checks.last_checked_at.is_some() {
-                video.updated_at
-            } else {
-                now
-            },
-            ..video.clone()
-        };
-        let cutoff = now - UNAVAILABLE_AFTER;
+    /// Records a conclusive check without captions: Unavailable once the
+    /// video is old (its record's creation time when no publish time is
+    /// reported), Missing otherwise — see the `late-video-data` capability.
+    fn record_no_captions(&self, video: &Video, probe: &CaptionProbe) -> anyhow::Result<()> {
         let published_at = probe.published_at.unwrap_or(video.created_at);
-        if published_at > cutoff || first_missing_at > cutoff {
-            return self.video_repository.update_subtitles(&video);
-        }
         self.video_repository
-            .update_subtitles(&video.mark_subtitles_unavailable(now))
+            .update_subtitles(&video.clone().record_subtitles_check(
+                LateDataOutcome::Incomplete,
+                published_at,
+                self.clock.now(),
+            ))
     }
 
     /// Downloads `track`, moves it next to the episode, stores its

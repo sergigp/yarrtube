@@ -16,8 +16,8 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_mark_subtitles_unavailable_on_first_check_of_an_old_video` — an old video with no captions is Unavailable after one check (fetch_subtitles_task test passes)
-- [ ] 2.2 `it_should_keep_subtitles_missing_for_a_young_video_without_captions` — Missing, last check recorded, no failed attempts (test passes)
+- [x] 2.1 `it_should_mark_subtitles_unavailable_on_first_check_of_an_old_video` — an old video with no captions is Unavailable after one check (fetch_subtitles_task test passes)
+- [x] 2.2 `it_should_keep_subtitles_missing_for_a_young_video_without_captions` — Missing, last check recorded, no failed attempts (test passes)
 - [ ] 2.3 `it_should_count_a_failed_attempt_if_the_probe_warns` — an inconclusive probe counts a failed attempt (test passes)
 - [ ] 2.4 `it_should_count_a_failed_attempt_if_the_probe_fails` — a downloader error counts a failed attempt (test passes)
 - [ ] 2.5 `it_should_mark_subtitles_unavailable_after_three_failed_checks_of_an_old_video` — failures on an old video are bounded (test passes)

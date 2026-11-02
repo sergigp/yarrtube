@@ -27,8 +27,11 @@ impl LateDataChecks {
 
     /// Records a check that ran `now`, counting a failed attempt for a
     /// `Failed` outcome.
-    pub fn record(self, _outcome: LateDataOutcome, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn record(self, _outcome: LateDataOutcome, now: DateTime<Utc>) -> Self {
+        Self {
+            last_checked_at: Some(now),
+            ..self
+        }
     }
 
     /// Whether the data is final after a check with `outcome` (already
@@ -36,10 +39,14 @@ impl LateDataChecks {
     /// once `MAX_FAILED_ATTEMPTS` are reached).
     pub fn settles(
         &self,
-        _outcome: LateDataOutcome,
-        _published_at: DateTime<Utc>,
-        _now: DateTime<Utc>,
+        outcome: LateDataOutcome,
+        published_at: DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> bool {
-        false
+        match outcome {
+            LateDataOutcome::Complete => true,
+            LateDataOutcome::Incomplete => now - published_at >= YOUNG_FOR,
+            LateDataOutcome::Failed => false,
+        }
     }
 }

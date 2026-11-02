@@ -392,11 +392,22 @@ impl Video {
     /// Touches only the subtitle fields and `updated_at`.
     pub fn record_subtitles_check(
         self,
-        _outcome: LateDataOutcome,
-        _published_at: DateTime<Utc>,
-        _now: DateTime<Utc>,
+        outcome: LateDataOutcome,
+        published_at: DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Self {
-        self
+        let subtitle_checks = self.subtitle_checks.record(outcome, now);
+        let subtitle_state = if subtitle_checks.settles(outcome, published_at, now) {
+            SubtitleState::Unavailable
+        } else {
+            self.subtitle_state
+        };
+        Self {
+            subtitle_state,
+            subtitle_checks,
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Records a chapters check: `Some` non-empty chapters are `Complete`,
