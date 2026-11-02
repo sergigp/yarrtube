@@ -46,10 +46,11 @@ impl LateDataChecks {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> bool {
+        let is_old = now - published_at >= YOUNG_FOR;
         match outcome {
             LateDataOutcome::Complete => true,
-            LateDataOutcome::Incomplete => now - published_at >= YOUNG_FOR,
-            LateDataOutcome::Failed => false,
+            LateDataOutcome::Incomplete => is_old,
+            LateDataOutcome::Failed => is_old && self.failed_attempts >= MAX_FAILED_ATTEMPTS,
         }
     }
 }
