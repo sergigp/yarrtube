@@ -250,13 +250,16 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_if_chapters_already_checked() {
+    fn it_should_skip_settled_chapters() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
         );
-        let video = downloaded_video().with_chapters(vec![], fixed_timestamp());
+        let video = Video {
+            chapters_settled: true,
+            ..downloaded_video().with_chapters(vec![], fixed_timestamp())
+        };
         video_repository.save(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
