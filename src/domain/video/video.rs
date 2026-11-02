@@ -426,9 +426,14 @@ impl Video {
             None => LateDataOutcome::Failed,
         };
         let chapters_checks = self.chapters_checks.record(outcome, now);
+        let chapters_settled = chapters_checks.settles(outcome, published_at, now);
+        let chapters = match chapters.or(self.chapters) {
+            None if chapters_settled => Some(vec![]),
+            kept => kept,
+        };
         Self {
-            chapters: chapters.or(self.chapters),
-            chapters_settled: chapters_checks.settles(outcome, published_at, now),
+            chapters,
+            chapters_settled,
             chapters_checks,
             updated_at: now,
             ..self

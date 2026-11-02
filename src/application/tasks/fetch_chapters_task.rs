@@ -202,6 +202,54 @@ mod tests {
     }
 
     #[test]
+    fn it_should_settle_chapters_as_none_after_three_failed_checks_of_an_old_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_chapters_result(Err(anyhow::anyhow!("Video unavailable"))),
+        );
+        let video = Video {
+            created_at: later() - Duration::days(30),
+            chapters_checks: LateDataChecks {
+                last_checked_at: Some(later() - Duration::days(1)),
+                failed_attempts: 2,
+            },
+            ..downloaded_video()
+        };
+        video_repository.save(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: Some(vec![]),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 3,
+                },
+                chapters_settled: true,
+                updated_at: later(),
+                ..video
+            }]
+        );
+        assert_eq!(
+            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            vec![YT1_URL.to_string()]
+        );
+    }
+
+    #[test]
     fn it_should_skip_if_chapters_already_checked() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
