@@ -633,7 +633,7 @@ mod youtube_contract_tests {
         assert_eq!(
             attempt,
             DownloadAttempt::Succeeded(DownloadedVideo {
-                height: None,
+                height: Some(480),
                 media_path: media_path.clone(),
                 thumbnail_path: Some(staging_dir.join(format!("{SHORT_VIDEO_ID}.jpg"))),
                 duration_seconds: Some(14),
@@ -709,6 +709,24 @@ mod youtube_contract_tests {
     #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_download_at_480p_for_low_quality() {
         assert_eq!(downloaded_height(Quality::Low), 480);
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_probe_the_height_a_quality_would_download() {
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let probe = repository
+            .probe_quality(&video_url(SHORT_VIDEO_ID), Quality::Mid)
+            .unwrap();
+
+        assert_eq!(
+            probe,
+            QualityProbe {
+                height: Some(720),
+                published_at: DateTime::from_timestamp(1_550_518_860, 0),
+            }
+        );
     }
 
     #[test]
@@ -885,6 +903,11 @@ mod youtube_contract_tests {
         };
         let height = video_height(&video.media_path);
         std::fs::remove_dir_all(&staging_dir).unwrap();
+        assert_eq!(
+            video.height,
+            Some(height),
+            "reported height matches the file"
+        );
         height
     }
 }
