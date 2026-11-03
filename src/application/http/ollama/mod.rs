@@ -125,6 +125,25 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_with_bad_gateway_if_ollama_is_unreachable() {
+        let llm_server_searcher =
+            LlmServerSearcher::new(Arc::new(FakeLlmServerRepository::failing()));
+        let query = OllamaQuery {
+            url: Some("http://mac.local:11434".to_string()),
+        };
+
+        let response = get(llm_server_searcher, query).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "Could not reach Ollama at http://mac.local:11434: connection refused"
+            ))
+        );
+    }
+
     async fn get(
         llm_server_searcher: LlmServerSearcher,
         query: OllamaQuery,

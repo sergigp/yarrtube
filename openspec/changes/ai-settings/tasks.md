@@ -28,7 +28,7 @@ Ollama handler (acceptance, mockito Ollama)
 - [x] 2.17 `it_should_return_no_models_if_none_installed`.
 - [x] 2.18 `it_should_fail_if_the_url_is_missing` — 400 `Ollama URL must be stated (missing)`.
 - [x] 2.19 `it_should_fail_if_the_url_is_not_http` — 400 `Ollama URL must be an http(s) URL (got "…")`.
-- [ ] 2.20 `it_should_fail_with_bad_gateway_if_ollama_is_unreachable` — 502, `Could not reach Ollama at <url>: …`.
+- [x] 2.20 `it_should_fail_with_bad_gateway_if_ollama_is_unreachable` — 502, `Could not reach Ollama at <url>: …`.
 
 Value objects
 - [ ] 2.21 `OllamaUrl` tests: http/https accepted, trailing slash stripped, schemeless/ftp/empty rejected with the spec message.
