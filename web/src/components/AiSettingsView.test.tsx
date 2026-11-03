@@ -5,7 +5,7 @@ import { AiSettingsView } from './AiSettingsView'
 import { aPreferences, anOllamaServer, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('AiSettingsView', () => {
-  it('shows the defaults, with summaries off and their settings hidden', async () => {
+  it('shows the defaults, with the model disabled and the advanced settings hidden', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)
 
@@ -13,8 +13,23 @@ describe('AiSettingsView', () => {
     expect(screen.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
     expect(screen.getByRole('switch', { name: 'Summaries enabled' })).not.toBeChecked()
     expect(screen.getByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
-    expect(screen.queryByRole('textbox', { name: 'Model' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Prompt' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
+    expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the model disabled while summaries are off', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ ai_enabled: true }) })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    const model = await screen.findByRole('textbox', { name: 'Model' })
+    expect(model).toBeDisabled()
+
+    await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
+
+    expect(model).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Advanced' })).toBeInTheDocument()
   })
 
   it('shows the summary settings once summaries are on', async () => {

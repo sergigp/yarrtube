@@ -7,11 +7,11 @@ The web UI page where the user turns AI features on, points Yarrtube at an Ollam
 ## ADDED Requirements
 
 ### Requirement: AI Page
-The web UI SHALL show, at `/ai`, a page headed "AI" with an "Ollama" section (an "Enable AI" switch, an "Ollama URL" field and a "Test connection" button) and a "Summaries" section: a switch labelled "Enabled" (accessible name "Summaries enabled") and, only while it is on, "Model" and the advanced summary settings, filled with the saved preferences. The whole Summaries section SHALL be disabled while "Enable AI" is off.
+The web UI SHALL show, at `/ai`, a page headed "AI" with an "Ollama" section (an "Enable AI" switch, an "Ollama URL" field and a "Test connection" button) and a "Summaries" section: a switch labelled "Enabled" (accessible name "Summaries enabled"), "Model", disabled while summaries are off, and, only while summaries are on, the advanced summary settings, all filled with the saved preferences. The whole Summaries section SHALL be disabled while "Enable AI" is off.
 
 #### Scenario: Fresh install
 - **WHEN** a user opens `/ai` and nothing has been saved
-- **THEN** "Enable AI" is off, the URL is empty, "Summaries enabled" is off and disabled, and the other summary settings are hidden
+- **THEN** "Enable AI" is off, the URL is empty, "Summaries enabled" is off and disabled, "Model" shows `qwen3:4b` disabled, and "Advanced" is not shown
 
 #### Scenario: Summaries turned on
 - **WHEN** a user turns "Enable AI" on and then "Summaries enabled" on

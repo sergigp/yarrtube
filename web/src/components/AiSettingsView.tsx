@@ -47,6 +47,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const set = <K extends keyof AiSettingsForm>(key: K, value: AiSettingsForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
   const summariesDisabled = !form.ai_enabled
+  // Always shown, so turning summaries on doesn't reshape the page.
+  const modelDisabled = summariesDisabled || !form.summaries_enabled
   // Context length, temperature, thinking and the prompt: their defaults come
   // from the evals, so they stay out of the way until asked for.
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -161,32 +163,32 @@ function AiSettings({ saved }: { saved: Preferences }) {
           disabled={summariesDisabled}
           onChange={(value) => set('summaries_enabled', value)}
         />
+        <Field id="summaries-model" label="Model">
+          {server ? (
+            <select
+              id="summaries-model"
+              value={form.summaries_model}
+              disabled={modelDisabled}
+              onChange={(event) => set('summaries_model', event.target.value)}
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+            >
+              {modelOptions(server.models, form.summaries_model).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              id="summaries-model"
+              value={form.summaries_model}
+              disabled={modelDisabled}
+              onChange={(event) => set('summaries_model', event.target.value)}
+            />
+          )}
+        </Field>
         {form.summaries_enabled && (
           <>
-            <Field id="summaries-model" label="Model">
-              {server ? (
-                <select
-                  id="summaries-model"
-                  value={form.summaries_model}
-                  disabled={summariesDisabled}
-                  onChange={(event) => set('summaries_model', event.target.value)}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                >
-                  {modelOptions(server.models, form.summaries_model).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  id="summaries-model"
-                  value={form.summaries_model}
-                  disabled={summariesDisabled}
-                  onChange={(event) => set('summaries_model', event.target.value)}
-                />
-              )}
-            </Field>
             <button
               type="button"
               aria-expanded={advancedOpen}
