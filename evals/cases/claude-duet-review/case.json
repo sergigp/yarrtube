@@ -1,7 +1,10 @@
 {
   "youtube_id": "HYb5w4PfPZM",
-  "title": "Claude Duet review- Great design, but...",
-  "youtube_title": "I tested Claude Duet. Is it worth switching from Grok Bot?",
+  "url": "https://www.youtube.com/watch?v=HYb5w4PfPZM",
+  "title": "I tested Claude Duet. Is it worth switching from Grok Bot?",
+  "yarrtube_title": "Claude Duet review- Great design, but...",
+  "channel": "How I AI",
+  "published": "2026-10-21",
   "lang": "en",
   "duration_s": 982,
   "chapters": [
@@ -128,6 +131,7 @@
     ],
     "review": {
       "reviewed_on": "2026-11-03",
+      "by": "viewer",
       "note": "Facts confirmed by a viewer. gemma3:4b's baseline summary is good; qwen3:4b's is wrong: it calls OpenAI's Dots 'Claude Dots' (and opens by repeating the title). 'Inability to create a desktop app' is odd wording: there is simply no desktop app yet.",
       "human_verdicts": {
         "run": "2026-11-02_baseline_prompt-v2",

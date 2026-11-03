@@ -1,6 +1,9 @@
 {
   "youtube_id": "Aos-S3dulns",
+  "url": "https://www.youtube.com/watch?v=Aos-S3dulns",
   "title": "¿Hay futuro en el capitalismo?",
+  "channel": "Alba Lafarga",
+  "published": "2026-02-01",
   "lang": "es",
   "duration_s": 992,
   "chapters": [
@@ -91,6 +94,7 @@
     ],
     "review": {
       "reviewed_on": "2026-11-01",
+      "by": "viewer",
       "note": "Facts confirmed by a viewer. Preferred summaries: qwen3:4b (thinking) and qwen3:4b-instruct over gemma3:4b; all three judged acceptable."
     }
   }

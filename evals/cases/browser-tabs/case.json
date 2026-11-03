@@ -1,7 +1,10 @@
 {
   "youtube_id": "my5hHTVZ_NI",
-  "title": "browser tabs",
-  "youtube_title": "De 20 minutos a 1 segundo: Controla tu navegador desde terminal",
+  "url": "https://www.youtube.com/watch?v=my5hHTVZ_NI",
+  "title": "De 20 minutos a 1 segundo: Controla tu navegador desde terminal",
+  "yarrtube_title": "browser tabs",
+  "channel": "CodelyTV - Redescubre la programación",
+  "published": "2026-10-06",
   "lang": "es",
   "duration_s": 472,
   "chapters": [],
@@ -62,6 +65,7 @@
     ],
     "review": {
       "reviewed_on": "2026-11-02",
+      "by": "viewer",
       "note": "Facts confirmed by a viewer. Vivaldi API is true but not a must-have. Both baseline summaries judged good; viewer slightly prefers qwen3:4b's.",
       "human_verdicts": {
         "run": "2026-11-02_baseline_prompt-v2",

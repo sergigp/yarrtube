@@ -1,7 +1,10 @@
 {
   "youtube_id": "K36Eq6eXh6E",
-  "title": "I Built My Own Claude Code (To Learn)",
-  "youtube_title": "Creé mi propio Claude Code (para aprender)",
+  "url": "https://www.youtube.com/watch?v=K36Eq6eXh6E",
+  "title": "Creé mi propio Claude Code (para aprender)",
+  "yarrtube_title": "I Built My Own Claude Code (To Learn)",
+  "channel": "BettaTech",
+  "published": "2026-10-22",
   "lang": "es",
   "duration_s": 823,
   "chapters": [],
@@ -62,6 +65,7 @@
     ],
     "review": {
       "reviewed_on": "2026-11-02",
+      "by": "viewer",
       "note": "Facts confirmed by a viewer. Viewer prefers gemma3:4b's baseline summary by far: qwen3:4b's mixes up the Build Your Own Harness site (a separate site he promotes) with the harness project the video shows.",
       "human_verdicts": {
         "run": "2026-11-02_baseline_prompt-v2",

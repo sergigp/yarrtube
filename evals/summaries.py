@@ -11,14 +11,15 @@ Steps, all cached in evals/results/<run-id>/ so an interrupted run resumes:
   3. judge:    an LLM marks each fact stated / contradicted / missing
   4. report:   per-model table + every failed critical fact
 
-Needs Ollama (OLLAMA_URL, default http://localhost:11434) and each case's
-local subtitles.srt (gitignored).
+Prompts come from prompts/summaries/<version>.md. Needs Ollama (OLLAMA_URL,
+default http://localhost:11434) and each case's local subtitles.srt
+(gitignored). Formats: evals/README.md.
 """
 import argparse, datetime, glob, hashlib, json, os, re, sys, time, unicodedata, urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OLLAMA = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v3"  # prompts/summaries/<version>.md; the one in use
 NUM_CTX = 12288
 INPUT_BUDGET_TOKENS = 9000  # leaves room in NUM_CTX for thinking + answer
 CHARS_PER_TOKEN = {"en": 4.3}  # measured on the golden set; other languages ~3.4
@@ -115,28 +116,22 @@ def chat(model, system, user, fmt=None, think=False, ctx=NUM_CTX, max_out=None, 
                   "out": r.get("eval_count"), "truncated": truncated}
 
 
-# --- generation (prompt v2) --------------------------------------------------
+# --- generation ----------------------------------------------------------------
 
-RULES = (
-    "- Write in {lang}, the language of the video.\n"
-    "- Plain prose, no lists or headings. Start directly with the subject, "
-    "e.g. \"Three online games where…\" or \"La edad de oro del anarquismo…\". "
-    "Do not repeat the title, and do not start with \"The video\", \"In this video\" or \"El vídeo\".\n"
-    "- Say what the video is about and its main points. For an argument, give the reasoning "
-    "behind the conclusion, not just the conclusion.\n"
-    "- Say how it ends: the result or verdict as the speaker states it (who won, what was decided). "
-    "If the video draws no conclusion, do not invent one.\n"
-    "- Keep the speaker's certainty: \"I'm not sure it will\" is not \"it won't\".\n"
-    "- If the video has several parts (several games, places, stories), say how many and cover each "
-    "with its own result.\n"
-    "- Keep the video's own view apart from views it presents or criticizes.\n"
-    "- Keep the main subject apart from things the speaker only mentions or promotes "
-    "(other projects, courses, websites, other products).\n"
-    "- Use only what the transcript says. Include a number only if the transcript states it, and "
-    "give it exactly. Do not add names, numbers or comparisons of your own.\n"
-    "- The transcript is auto-generated and may misspell names; use the title to correct them.\n"
-    "- Ignore sponsors, ads and requests to like or subscribe."
-)
+PROMPTS = os.path.join(os.path.dirname(ROOT), "prompts", "summaries")
+PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def load_prompt(version):
+    """Sections of prompts/summaries/<version>.md: '## name' heading -> template."""
+    text = open(os.path.join(PROMPTS, f"{version}.md"), encoding="utf-8").read()
+    parts = re.split(r"^## (.+)$", text, flags=re.M)
+    return {name.strip(): body.strip("\n") for name, body in zip(parts[1::2], parts[2::2])}
+
+
+def fill(template, **values):
+    """Fills {name} placeholders in one pass, so braces inside values are left alone."""
+    return PLACEHOLDER.sub(lambda m: str(values[m.group(1)]), template)
 
 
 def chapter_lines(chapters, start=None, end=None):
@@ -144,42 +139,33 @@ def chapter_lines(chapters, start=None, end=None):
     return "\n".join(f"{clock(c['start_seconds'])} {c['title']}" for c in sel)
 
 
-def summarize(model, case, lines):
+def summarize(model, case, lines, prompt):
     lang = LANG.get(case["lang"], case["lang"])
     chapters = case.get("chapters", [])
-    head = f"Title: {case['title']}\nDuration: {case['duration_s'] // 60} minutes\n"
-    ch_note = ("Chapters (set by the uploader; use them to see the video's structure, "
-               "but summarize what is said, not the chapter titles):\n")
+    head = {"title": case["title"], "minutes": case["duration_s"] // 60, "lang": lang}
+
+    def chapter_block(section, start=None, end=None):
+        listed = chapter_lines(chapters, start, end) if chapters else ""
+        return f"\n{fill(prompt[section], chapter_list=listed)}\n" if listed else ""
+
     pieces = chunks(lines, chapters, case["lang"])
-    calls = []
     if len(pieces) == 1:
-        system = "You summarize YouTube videos from their transcript.\nRules:\n" + RULES.format(lang=lang)
-        user = head + (f"\n{ch_note}{chapter_lines(chapters)}\n" if chapters else "")
-        user += f"\nTranscript:\n" + "\n".join(t for _, t in lines)
-        user += f"\n\nNow write the summary in {lang}, 3 to 5 sentences."
-        text, st = chat(model, system, user)
+        user = fill(prompt["user"], **head, chapters=chapter_block("chapters"),
+                    transcript="\n".join(t for _, t in lines))
+        text, st = chat(model, fill(prompt["system"], lang=lang), user)
         return text, [st]
-    parts = []
-    map_system = ("You summarize one part of a long YouTube video transcript.\n"
-                  f"Write in {lang}, 4 to 6 sentences of plain prose. Keep this part's key facts, names, "
-                  "numbers and conclusions exactly as stated. Use only what this part says. "
-                  "Ignore sponsors and requests to subscribe.")
+    parts, calls = [], []
     for n, p in enumerate(pieces, 1):
         span = f"{clock(p[0][0])}–{clock(p[-1][0])}"
-        chs = chapter_lines(chapters, p[0][0], p[-1][0]) if chapters else ""
-        user = (head + f"Part {n} of {len(pieces)} ({span})\n"
-                + (f"\nChapters in this part:\n{chs}\n" if chs else "")
-                + "\nTranscript part:\n" + "\n".join(t for _, t in p)
-                + f"\n\nNow summarize this part in {lang}, 4 to 6 sentences.")
-        text, st = chat(model, map_system, user)
-        parts.append(f"Part {n} ({span}):\n{text}")
+        user = fill(prompt["map user"], **head, part=n, parts=len(pieces), span=span,
+                    chapters=chapter_block("map chapters", p[0][0], p[-1][0]),
+                    transcript="\n".join(t for _, t in p))
+        text, st = chat(model, fill(prompt["map system"], lang=lang), user)
+        parts.append(fill(prompt["reduce part"], part=n, span=span, summary=text))
         calls.append(st)
-    reduce_system = ("You write the final summary of a YouTube video from summaries of its consecutive parts.\n"
-                     "Rules:\n" + RULES.format(lang=lang).replace("transcript", "part summaries"))
-    user = (head + (f"\n{ch_note}{chapter_lines(chapters)}\n" if chapters else "")
-            + "\nPart summaries, in order:\n\n" + "\n\n".join(parts)
-            + f"\n\nNow write the final summary of the whole video in {lang}, 3 to 5 sentences.")
-    text, st = chat(model, reduce_system, user)
+    user = fill(prompt["reduce user"], **head, chapters=chapter_block("chapters"),
+                part_summaries="\n\n".join(parts))
+    text, st = chat(model, fill(prompt["reduce system"], lang=lang), user)
     return text, calls + [st]
 
 
@@ -365,6 +351,56 @@ def external_faithfulness(out, summaries, cases, f_path):
 
 # --- run ---------------------------------------------------------------------
 
+CASE_FIELDS = {"youtube_id": str, "url": str, "title": str, "channel": str, "published": str,
+               "lang": str, "duration_s": int, "chapters": list, "description": str, "summary": dict}
+FACT_FIELDS = {"id": str, "fact": str, "critical": bool}
+REVIEW_FIELDS = {"reviewed_on": str, "by": str, "note": str}
+
+
+def validate_case(slug, case):
+    """Problems with a case.json against the format in evals/README.md."""
+    errs = []
+
+    def typed(obj, fields, where):
+        for k, t in fields.items():
+            if not isinstance(obj.get(k), t):
+                errs.append(f"{where}{k}: missing or not {t.__name__}")
+
+    typed(case, CASE_FIELDS, "")
+    if errs:
+        return errs
+    if case["url"] != f"https://www.youtube.com/watch?v={case['youtube_id']}":
+        errs.append("url doesn't match youtube_id")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", case["published"]):
+        errs.append("published: not YYYY-MM-DD")
+    for c in case["chapters"]:
+        typed(c, {"title": str, "start_seconds": (int, float), "end_seconds": (int, float)}, "chapters[].")
+    facts = case["summary"].get("facts", [])
+    if not facts:
+        errs.append("summary.facts: empty")
+    ids = [f.get("id") for f in facts]
+    if len(ids) != len(set(ids)):
+        errs.append("summary.facts: duplicate ids")
+    for f in facts:
+        typed(f, FACT_FIELDS, f"facts[{f.get('id')}].")
+    if not any(f.get("critical") for f in facts):
+        errs.append("summary.facts: no critical fact")
+    review = case["summary"].get("review")
+    if review is not None:
+        typed(review, REVIEW_FIELDS, "review.")
+        hv = review.get("human_verdicts")
+        if hv is not None:
+            if not isinstance(hv.get("run"), str):
+                errs.append("review.human_verdicts.run: missing")
+            for model, verdicts in hv.items():
+                if model == "run":
+                    continue
+                for fid, v in verdicts.items():
+                    if fid not in ids or v not in ("stated", "contradicted", "missing"):
+                        errs.append(f"review.human_verdicts.{model}.{fid}: unknown fact or verdict")
+    return errs
+
+
 def load_cases(only=None):
     cases = []
     for d in sorted(glob.glob(os.path.join(ROOT, "cases", "*"))):
@@ -372,6 +408,9 @@ def load_cases(only=None):
         if only and slug not in only:
             continue
         case = json.load(open(os.path.join(d, "case.json")))
+        errs = validate_case(slug, case)
+        if errs:
+            sys.exit(f"{slug}/case.json: " + "; ".join(errs))
         case["title"] = unicodedata.normalize("NFC", case["title"])
         srt = os.path.join(d, "subtitles.srt")
         if not os.path.exists(srt):
@@ -394,24 +433,31 @@ def main():
     ap.add_argument("--model", action="append", default=[], help="model to evaluate (repeatable)")
     ap.add_argument("--run", help="existing run id to resume / re-report")
     ap.add_argument("--case", action="append", help="limit to these case slugs")
+    ap.add_argument("--prompt", default=PROMPT_VERSION, help="prompts/summaries/<version>.md for a new run")
+    ap.add_argument("--check", action="store_true", help="only validate the cases and exit")
     ap.add_argument("--judge", default="local",
                     help=f"'local' ({JUDGE_MODEL} via Ollama) or a name for an external judge, e.g. "
                          "'claude-sonnet': writes blind inputs, ingests answers on the next run")
     a = ap.parse_args()
     judge_name = JUDGE_MODEL if a.judge == "local" else a.judge
+    if a.check:
+        for slug, case, _ in load_cases(a.case):
+            print(f"ok {slug}")
+        return
 
-    run_id = a.run or datetime.datetime.now().strftime("%Y-%m-%d_%H%M") + f"_prompt-{PROMPT_VERSION}"
+    run_id = a.run or datetime.datetime.now().strftime("%Y-%m-%d_%H%M") + f"_prompt-{a.prompt}"
     out = os.path.join(ROOT, "results", run_id)
     os.makedirs(out, exist_ok=True)
     meta_path = os.path.join(out, "run.json")
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {
-        "models": a.model, "prompt_version": PROMPT_VERSION, "num_ctx": NUM_CTX}
+        "models": a.model, "prompt_version": a.prompt, "num_ctx": NUM_CTX}
     meta.pop("judge", None)  # judges are per report now
     meta["models"] = list(dict.fromkeys(meta["models"] + a.model))
     if not meta["models"]:
         sys.exit("give at least one --model")
     json.dump(meta, open(meta_path, "w"), indent=2)
     cases = load_cases(a.case)
+    prompt = load_prompt(meta["prompt_version"])  # a resumed run keeps its own prompt
     slug_judge = judge_name.replace(":", "_")
     s_path = os.path.join(out, "summaries.jsonl")
     j_path = os.path.join(out, f"judgments-{slug_judge}.jsonl")
@@ -421,7 +467,7 @@ def main():
         for slug, case, lines in cases:
             if (slug, model) in done:
                 continue
-            text, calls = summarize(model, case, lines)
+            text, calls = summarize(model, case, lines, prompt)
             append(s_path, {"case": slug, "model": model, "summary": text, "calls": calls,
                             "seconds": round(sum(c["s"] for c in calls), 1), "checks": checks(text, case)})
             print(f"generated {model:18} {slug:22} {sum(c['s'] for c in calls):6.0f}s  {len(calls)} call(s)", flush=True)

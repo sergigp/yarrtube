@@ -1,6 +1,9 @@
 {
   "youtube_id": "NklJAUizpZs",
+  "url": "https://www.youtube.com/watch?v=NklJAUizpZs",
   "title": "I Tried the Accelerated Dragon... Not What I Expected",
+  "channel": "IM Alex Banzea",
+  "published": "2026-10-20",
   "lang": "en",
   "duration_s": 3522,
   "chapters": [
@@ -76,6 +79,7 @@
     ],
     "review": {
       "reviewed_on": "2026-11-01",
+      "by": "viewer",
       "note": "Facts confirmed by a viewer. All three summaries judged bad: they describe a single game, while the video is essentially '3 games playing the Accelerated Dragon'. YouTube chapters for this video are the three games.",
       "human_verdicts": {
         "run": "2026-11-02_baseline_prompt-v2",

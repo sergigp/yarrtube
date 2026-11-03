@@ -16,12 +16,20 @@ spec: decisions here feed OpenSpec changes later.
 
 ## Decisions
 
-- Ollama runs on a MacBook Air M1, 8GB RAM, always plugged in, used as a home
+- Ollama runs on a MacBook Air M2, 8GB RAM, always plugged in, used as a home
   lab server. yarrtube (Docker, NAS) talks to it over the LAN.
 - Summaries are written in the **video's own language**.
 - Categorization is **automatic** (assigned, not suggested).
 - Build order: summary → categorization → ask the video. Each step reuses
   the previous one.
+- **Summary model and prompt in use: `qwen3:4b` (thinking) with prompt
+  [`prompts/summaries/v3.md`](../prompts/summaries/v3.md)**, temperature 0.3,
+  `num_ctx` 12288, map-reduce above ~9k input tokens. Chosen on the
+  2026-11-03 eval, see [Findings: summary eval](#findings-summary-eval-2026-11-03).
+  A change of model or prompt version goes through the eval first.
+- Prompts live in `prompts/<feature>/<version>.md`, one file per version, never
+  edited once evaluated: a change is a new version. The evals and (later) the
+  app read the same file.
 
 ## Starting point in the codebase
 
@@ -94,6 +102,10 @@ spec: decisions here feed OpenSpec changes later.
 - Stored in the DB with **model name + prompt version**, so changing either
   can trigger regeneration.
 - Long transcripts: summarize chunks, then summarize the summaries.
+- Use the video's **original YouTube title**: the prompt uses it to fix
+  caption misspellings, so a translated or renamed title misleads the model.
+- Strip a leading "The video…"/"El vídeo…" in code: small models ignore that
+  rule however it's phrased.
 - Videos with no subtitles (Unavailable): no summary. Title-only summaries are
   junk.
 - The summary is also the cheap input for feature B.
@@ -157,6 +169,10 @@ measurable.
 
 Evals run on demand (CLI command or dedicated suite), not in CI: slow and
 they need Ollama.
+
+Built so far: the summary eval in [`evals/`](../evals/README.md), a golden
+set of 10 videos with reviewed facts, scored for fact coverage and for
+faithfulness against the transcript by blind Claude Sonnet judges.
 
 ## Findings: first summary benchmark (2026-10-30)
 
@@ -259,15 +275,61 @@ Actual segments: Greenland 0–34 min, Switzerland 34–60, Saudi Arabia (NEOM)
 - 9 videos read by eye can't pick a winner; it shows why evals matter. Next
   step: a fact-check eval (a few verifiable facts per video, e.g. who won)
   and LLM-as-judge for faithfulness.
+- Superseded by the [summary eval](#findings-summary-eval-2026-11-03).
 - After the long-video test, leaning **qwen3:4b with thinking**: the only
   model with no factual slips found so far (though it also missed that the
   chess stream had three games), and faithful across long inputs.
   gemma3:4b is 2× faster but drops the start of long inputs. Confirm with
   evals.
 
+## Findings: summary eval (2026-11-03)
+
+Golden set: 10 videos (8 min–3 h, es/en: chess, history, programming, AI,
+economics, travel), each with 3–6 reference facts, the must-haves marked
+critical, and the usual mistake per fact. 5 cases reviewed by a viewer, 5
+fact-checked by Claude Sonnet against the transcript. One summary per video
+and model, so differences of 1–2 points are noise.
+
+| Prompt | Model | Must-haves stated | Facts stated | Major / minor unfaithful claims | Fully faithful | Avg time |
+|---|---|---|---|---|---|---|
+| v2 | qwen3:4b | 19/23 | 32/50 | 5 / 13 | 3/10 | 328 s |
+| v2 | gemma3:4b | 14/23 | 22/50 | 2 / 10 | 1/10 | 92 s |
+| v3 | **qwen3:4b** | **19/23** | **33/50** | **4 / 14** | 3/10 | 287 s |
+| v3 | gemma3:4b | 12/23 | 20/50 | 10 / 12 | 2/10 | 87 s |
+
+Judged by Claude Sonnet subagents that don't see which model wrote the
+summary. They agreed with the viewer on 4 of 6 checked verdicts; the local
+qwen3:8b judge agreed on 0 of 4 and was dropped.
+
+- **Decision: qwen3:4b + prompt v3.** Most must-haves, fewest major errors;
+  ~5 min per video is fine for background work.
+- **Fact coverage alone misleads**: it doesn't penalize wrong additions. The
+  faithfulness check (judge reads the whole transcript and lists unsupported
+  claims) is what caught invented numbers, invented conclusions and side
+  mentions presented as the subject. The viewer prefers a summary that says
+  less over one with a wrong detail.
+- **Prompt rules hit diminishing returns at 4B.** v3 added rules for each v2
+  error type; qwen improved slightly, gemma got worse (5× the major errors:
+  it made up an overall message and reversed a presenter's advice). Stop
+  tuning the prompt; fix what code can fix (the "The video…" opening).
+- **Known weakness: videos with several parts.** Both models still get the
+  chess stream wrong (three games, two wins and a draw). It fits in one call
+  with chapters marking each game, so this is the model, not the chunking.
+- **Bundled facts confuse judges**: one fact per claim, with the main claim
+  first.
+- The v2/v3 runs gave the model the title stored when the case was created;
+  for 4 Spanish/renamed videos it was not the original YouTube title (e.g. an
+  English translation for a Spanish video). Cases now carry the original
+  title; the next run uses it.
+- Overfitting risk: v3's rules come from errors on these 10 videos. Add cases
+  from new videos before trusting further prompt gains.
+
 ## Open questions
 
 - Backlog: summarize and categorize every stored video, or only new or
   unwatched ones?
 - Categorization precedence vs source categories (see Feature B).
-- Which model: pick from a first eval round on real transcripts.
+- Translated titles: does yarrtube store a localized title instead of the
+  original? Check before the summary feature relies on it.
+- Next prompt version: the reduce rules say "the part summaries is
+  auto-generated", a leftover of rewriting "transcript"; fix in v4.
