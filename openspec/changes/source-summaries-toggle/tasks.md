@@ -12,7 +12,7 @@ Channels handler (acceptance, real SQLite)
 - [x] 2.3 `it_should_fail_to_create_a_channel_with_summaries_if_ai_is_off` — 409 `Turn on AI summaries before enabling them for a channel`, nothing stored, YouTube fake not called.
 - [x] 2.4 `it_should_enable_summaries_on_a_channel` — AI + summaries on; only `summaries_enabled: true` → 200, stored `true`, other fields unchanged.
 - [x] 2.5 `it_should_fail_to_enable_summaries_on_a_channel_if_summaries_are_off` — AI on, summaries off, with a new quality → 409, channel unchanged.
-- [ ] 2.6 `it_should_disable_summaries_on_a_channel_while_ai_is_off` — stored `false`.
+- [x] 2.6 `it_should_disable_summaries_on_a_channel_while_ai_is_off` — stored `false`.
 - [ ] 2.7 `it_should_list_channels_with_their_summaries_setting`.
 
 Playlists handler (acceptance, real SQLite)

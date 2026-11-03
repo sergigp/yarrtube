@@ -1486,6 +1486,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_disable_summaries_on_a_channel_while_ai_is_off() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel").with_summaries_enabled(true))
+            .unwrap();
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let request = UpdateChannelRequest {
+            summaries_enabled: Some(false),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(response, Ok(some_channel_response()));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_update_a_channels_video_limit() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
