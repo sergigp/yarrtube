@@ -1,6 +1,7 @@
-# Subtitles are third-party captions: kept locally, never committed.
-cases/*/subtitles.srt
+# One folder per feature: <feature>/{cases,results}.
+# Subtitles are third-party captions: kept locally, never committed (public repo).
+*/cases/*/subtitles.srt
 __pycache__/
-# judge scratch: answers are copied into the run's .jsonl, inputs are rebuilt from summaries
-results/*/judge-external/
-results/*/faithfulness-external/
+# Judge scratch: answers are copied into the run's .jsonl, inputs are rebuilt from summaries.
+*/results/*/judge-external/
+*/results/*/faithfulness-external/

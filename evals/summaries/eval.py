@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Summary eval: generate summaries for the golden set, grade them, report.
 
-    python3 evals/summaries.py --model qwen3:4b --model gemma3:4b
-    python3 evals/summaries.py --run <run-id>          # re-grade / re-report
+    python3 -I evals/summaries/eval.py --model qwen3:4b --model gemma3:4b
+    python3 -I evals/summaries/eval.py --run <run-id>          # re-grade / re-report
 
-Steps, all cached in evals/results/<run-id>/ so an interrupted run resumes:
+Steps, all cached in evals/summaries/results/<run-id>/ so an interrupted run resumes:
   1. generate: one summary per case and model (map-reduce for long videos,
      split at chapter boundaries when the video has chapters)
   2. checks:   cheap code checks on every summary (language, length, leftovers)
@@ -13,7 +13,7 @@ Steps, all cached in evals/results/<run-id>/ so an interrupted run resumes:
 
 Prompts come from prompts/summaries/<version>.md. Needs Ollama (OLLAMA_URL,
 default http://localhost:11434) and each case's local subtitles.srt
-(gitignored). Formats: evals/README.md.
+(gitignored). Docs: evals/summaries/README.md.
 """
 import argparse, datetime, glob, hashlib, json, os, re, sys, time, unicodedata, urllib.request
 
@@ -118,7 +118,7 @@ def chat(model, system, user, fmt=None, think=False, ctx=NUM_CTX, max_out=None, 
 
 # --- generation ----------------------------------------------------------------
 
-PROMPTS = os.path.join(os.path.dirname(ROOT), "prompts", "summaries")
+PROMPTS = os.path.join(os.path.dirname(os.path.dirname(ROOT)), "prompts", "summaries")
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 

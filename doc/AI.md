@@ -22,11 +22,7 @@ spec: decisions here feed OpenSpec changes later.
 - Categorization is **automatic** (assigned, not suggested).
 - Build order: summary → categorization → ask the video. Each step reuses
   the previous one.
-- **Summary model and prompt in use: `qwen3:4b` (thinking) with prompt
-  [`prompts/summaries/v3.md`](../prompts/summaries/v3.md)**, temperature 0.3,
-  `num_ctx` 12288, map-reduce above ~9k input tokens. Chosen on the
-  2026-11-03 eval, see [Findings: summary eval](#findings-summary-eval-2026-11-03).
-  A change of model or prompt version goes through the eval first.
+- Summary model, prompt and the evidence behind them: [`evals/summaries/decisions.md`](../evals/summaries/decisions.md).
 - Prompts live in `prompts/<feature>/<version>.md`, one file per version, never
   edited once evaluated: a change is a new version. The evals and (later) the
   app read the same file.
@@ -157,12 +153,7 @@ measurable.
   - **Recall**: of the real Chess videos, how many it found.
 
   Compare models (Qwen vs Gemma) and prompt versions with real numbers.
-- **Summaries** (no single right answer):
-  - a side-by-side page to rate them by eye;
-  - **LLM-as-judge**: a stronger model scores each summary against a rubric
-    (faithful? no spam? right language? length?), possibly a cloud model only
-    during evals;
-  - cheap automatic checks: length, language, no URLs or "subscribe".
+- **Summaries**: built, see [`evals/summaries/`](../evals/summaries/README.md).
 - **Q&A**: ~20 questions with known answers and expected timestamps. Check
   retrieval (did it find the right chunk?) and answer quality separately; a
   key RAG lesson.
@@ -170,159 +161,7 @@ measurable.
 Evals run on demand (CLI command or dedicated suite), not in CI: slow and
 they need Ollama.
 
-Built so far: the summary eval in [`evals/`](../evals/README.md), a golden
-set of 10 videos with reviewed facts, scored for fact coverage and for
-faithfulness against the transcript by blind Claude Sonnet judges.
-
-## Findings: first summary benchmark (2026-10-30)
-
-Setup: MacBook Air M2 8GB (fanless), Ollama 0.40.13, 9 real transcripts
-(7–58 min, es/en, mostly auto-generated captions), parsed like
-`TranscriptText::from_srt`. One prompt (3–5 sentences, video's language,
-facts only, no spam), temperature 0.3, `num_ctx` 12288. A 10th, 3 h
-transcript (~40k tokens) was left out: it needs chunking.
-
-### Memory / context
-
-| Model | num_ctx | RAM | Placement |
-|---|---|---|---|
-| qwen3:4b | 8k | 3.8GB | 100% GPU |
-| qwen3:4b | 12k | 4.5GB | 100% GPU |
-| qwen3:4b | 16k | 5.4GB | 16% CPU (slow) |
-| gemma3:4b | 4k–16k | ~2.4GB | ~10% CPU always |
-
-- qwen3 ceiling is ~12k tokens per call: videos up to ~45–60 min fit; longer
-  ones need map-reduce.
-- Transcripts run ~1.3–1.6 tokens per word. 30 min ≈ 8k tokens.
-- Ollama's default context is small and it truncates silently: always set
-  `num_ctx`, and compare `prompt_eval_count` with the expected size.
-
-### Speed per video
-
-| Model | Input tok/s | Output tok/s | Output tokens | Wall time |
-|---|---|---|---|---|
-| gemma3:4b | 155–187 | 14–17 | 100–180 | 23–60 s |
-| qwen3:4b-instruct | 112–203 | 8–13 | 160–290 | 38–110 s |
-| qwen3:4b (thinking) | 136–203 | 11–19 | 600–2,560 | 73–243 s |
-
-- Reading the transcript dominates; time grows with length.
-- `qwen3:4b` defaults to thinking mode and **ignored `think: false`**,
-  writing its reasoning inside the answer. Either strip `<think>…</think>`
-  or use `qwen3:4b-instruct` (no thinking).
-- The qwen3-instruct run came last, after ~40 min of continuous load, and
-  was slower across the board. Suspected thermal throttling (fanless Air),
-  not confirmed. Matters for backlog runs.
-- Rough backlog throughput: gemma3 ~80 videos/hour, qwen3-instruct ~50,
-  qwen3 thinking ~25.
-
-### Quality (read by hand)
-
-- All three wrote in the video's language every time, including a video
-  with an English title and Spanish audio. Use the transcript's language,
-  not the title's.
-- None followed "do not start with 'The video'". Small models ignore
-  negative style rules; fix in post-processing or with an example.
-- **Chess stream misread by all three**: the video has three games (two
-  wins, then a draw). Every model summarized it as a single game:
-  qwen3-instruct described game 2 (a win), the others game 3 (a draw).
-  First read as a qwen3-instruct hallucination; drafting the eval facts
-  showed otherwise. Lesson: checking by eye against one quote misleads.
-- qwen3-instruct turned "almost 100 unions" into "more than 100"; thinking
-  qwen3 kept "casi 100".
-- gemma3: shortest, most consistent, slightly generic; carried a caption
-  error ("Cloud Code" for "Claude Code").
-- qwen3-instruct: richest and most specific, always at the 5-sentence
-  upper bound, but inflated a number (above).
-- qwen3 (thinking): most accurate, but 3–5× slower.
-- Chess commentary is the hardest content: moves read out loud, several
-  games in one video, the result buried in speech.
-
-### Long video: map-reduce (3 h, ~40k tokens)
-
-Split into chunks of ~30k chars (~7.5k tokens) with 10 lines of overlap
-(6 chunks, the last one tiny), each summarized in 4–6 sentences with its time
-span, then a final summary from the ordered part summaries.
-
-Actual segments: Greenland 0–34 min, Switzerland 34–60, Saudi Arabia (NEOM)
-62–94, Finland 94–146, Cyprus 146–180.
-
-| Chunk | qwen3:4b (thinking) | gemma3:4b |
-|---|---|---|
-| 0:00–0:39 | Greenland ✓ | Switzerland ✗ (last 5 min only) |
-| 0:38–1:15 | Switzerland ✓ | NEOM ✗ (last 13 min only) |
-| 1:15–1:52 | Saudi Arabia ✓ | Finland ✗ (last 18 min only) |
-| 1:52–2:25 | Finland ✓ | Finland ✓ |
-| 2:25–2:58 | Finland + Cyprus ✓ | Cyprus ✓ |
-| Final | all 5 places ✓ | **Greenland missing** |
-| Total time | 8.8 min | 4.8 min |
-
-- **gemma3 summarizes the end of long inputs**: on ~8k-token chunks it
-  described mostly the last minutes and ignored the rest, losing Greenland (a
-  third of the first chunk's hour) entirely. Likely related to its
-  sliding-window attention (most layers only see nearby tokens); not
-  confirmed. The 9 single-call videos were 2–9k tokens, so their gemma
-  summaries may share this bias.
-- gemma3 also prefixed 3 of 6 part summaries with "Okay, here's a summary…";
-  the reduce step hid it.
-- qwen3 (thinking) covered every segment in order and the final summary
-  named all five places.
-- The reduce step works: ~1.2k tokens in, 15–35 s.
-- Map-reduce makes long videos predictable: ~1.5 min per 35 min of video
-  with qwen3.
-
-### Takeaways
-
-- 9 videos read by eye can't pick a winner; it shows why evals matter. Next
-  step: a fact-check eval (a few verifiable facts per video, e.g. who won)
-  and LLM-as-judge for faithfulness.
-- Superseded by the [summary eval](#findings-summary-eval-2026-11-03).
-- After the long-video test, leaning **qwen3:4b with thinking**: the only
-  model with no factual slips found so far (though it also missed that the
-  chess stream had three games), and faithful across long inputs.
-  gemma3:4b is 2× faster but drops the start of long inputs. Confirm with
-  evals.
-
-## Findings: summary eval (2026-11-03)
-
-Golden set: 10 videos (8 min–3 h, es/en: chess, history, programming, AI,
-economics, travel), each with 3–6 reference facts, the must-haves marked
-critical, and the usual mistake per fact. 5 cases reviewed by a viewer, 5
-fact-checked by Claude Sonnet against the transcript. One summary per video
-and model, so differences of 1–2 points are noise.
-
-| Prompt | Model | Must-haves stated | Facts stated | Major / minor unfaithful claims | Fully faithful | Avg time |
-|---|---|---|---|---|---|---|
-| v2 | qwen3:4b | 19/23 | 32/50 | 5 / 13 | 3/10 | 328 s |
-| v2 | gemma3:4b | 14/23 | 22/50 | 2 / 10 | 1/10 | 92 s |
-| v3 | **qwen3:4b** | **19/23** | **33/50** | **4 / 14** | 3/10 | 287 s |
-| v3 | gemma3:4b | 12/23 | 20/50 | 10 / 12 | 2/10 | 87 s |
-
-Judged by Claude Sonnet subagents that don't see which model wrote the
-summary. They agreed with the viewer on 4 of 6 checked verdicts; the local
-qwen3:8b judge agreed on 0 of 4 and was dropped.
-
-- **Decision: qwen3:4b + prompt v3.** Most must-haves, fewest major errors;
-  ~5 min per video is fine for background work.
-- **Fact coverage alone misleads**: it doesn't penalize wrong additions. The
-  faithfulness check (judge reads the whole transcript and lists unsupported
-  claims) is what caught invented numbers, invented conclusions and side
-  mentions presented as the subject. The viewer prefers a summary that says
-  less over one with a wrong detail.
-- **Prompt rules hit diminishing returns at 4B.** v3 added rules for each v2
-  error type; qwen improved slightly, gemma got worse (5× the major errors:
-  it made up an overall message and reversed a presenter's advice). Stop
-  tuning the prompt; fix what code can fix (the "The video…" opening).
-- **Known weakness: videos with several parts.** Both models still get the
-  chess stream wrong (three games, two wins and a draw). It fits in one call
-  with chapters marking each game, so this is the model, not the chunking.
-- **Bundled facts confuse judges**: one fact per claim, with the main claim
-  first.
-- The v2/v3 runs gave the model the title stored when the case was created;
-  for 4 Spanish/renamed videos it was not the original YouTube title (e.g. an
-  English translation for a Spanish video). Cases now carry the original
-  title; the next run uses it.
-- Overfitting risk: v3's rules come from errors on these 10 videos. Add cases
-  from new videos before trusting further prompt gains.
+How evals work here, for every feature: [`evals/README.md`](../evals/README.md).
 
 ## Open questions
 
@@ -331,5 +170,3 @@ qwen3:8b judge agreed on 0 of 4 and was dropped.
 - Categorization precedence vs source categories (see Feature B).
 - Translated titles: does yarrtube store a localized title instead of the
   original? Check before the summary feature relies on it.
-- Next prompt version: the reduce rules say "the part summaries is
-  auto-generated", a leftover of rewriting "transcript"; fix in v4.
