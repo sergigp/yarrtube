@@ -297,15 +297,13 @@ mod tests {
     async fn it_should_create_a_channel_with_summaries_disabled_by_default() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        preferences_repository.save(&summaries_on()).unwrap();
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
-            preferences_repository,
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = CreateChannelRequest {
@@ -3072,17 +3070,14 @@ mod tests {
 
     /// Preferences with AI and summaries on, so sources can enable summaries.
     fn summaries_on() -> Preferences {
-        let preferences = Preferences {
+        Preferences {
             ai_enabled: true,
             ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
-            ..Preferences::default()
-        };
-        Preferences {
             summaries: SummarySettings {
                 enabled: true,
-                ..preferences.summaries.clone()
+                ..SummarySettings::default()
             },
-            ..preferences
+            ..Preferences::default()
         }
     }
 

@@ -274,8 +274,6 @@ mod tests {
     async fn it_should_create_a_playlist_with_summaries_disabled_by_default() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        preferences_repository.save(&summaries_on()).unwrap();
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -283,7 +281,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
-            preferences_repository,
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = CreatePlaylistRequest {
@@ -3915,17 +3913,14 @@ mod tests {
 
     /// Preferences with AI and summaries on, so sources can enable summaries.
     fn summaries_on() -> Preferences {
-        let preferences = Preferences {
+        Preferences {
             ai_enabled: true,
             ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
-            ..Preferences::default()
-        };
-        Preferences {
             summaries: SummarySettings {
                 enabled: true,
-                ..preferences.summaries.clone()
+                ..SummarySettings::default()
             },
-            ..preferences
+            ..Preferences::default()
         }
     }
 

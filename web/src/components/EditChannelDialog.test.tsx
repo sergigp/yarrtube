@@ -56,6 +56,7 @@ describe('EditChannelDialog', () => {
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ reconcile_interval_minutes: 30 })
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
+
   it('sends only the changed summaries setting', async () => {
     const { onSave, onOpenChange } = renderDialog(aChannel({ summaries_enabled: true }), undefined, {
       'GET /api/categories': aCategoryList(),
