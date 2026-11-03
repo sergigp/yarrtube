@@ -52,6 +52,7 @@ impl ChannelUpdaterApi for ChannelUpdater {
         id: ChannelHandle,
         change: ChannelSettingsChange,
     ) -> Result<Channel, UpdateChannelError> {
+        self.ensure_summaries_available(change.summaries_enabled)?;
         let channel = Self::apply_settings(self.find_channel(&id)?, change);
         self.update_channel(&channel)?;
         if let Some(reconcile_interval) = change.reconcile_interval {
@@ -70,6 +71,26 @@ impl ChannelUpdaterApi for ChannelUpdater {
 }
 
 impl ChannelUpdater {
+    /// Enabling summaries needs AI and summaries on in the preferences.
+    fn ensure_summaries_available(
+        &self,
+        summaries_enabled: Option<bool>,
+    ) -> Result<(), UpdateChannelError> {
+        if summaries_enabled != Some(true) {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(UpdateChannelError::Repository)?
+            .unwrap_or_default();
+        if preferences.summaries_available() {
+            Ok(())
+        } else {
+            Err(UpdateChannelError::SummariesUnavailable)
+        }
+    }
+
     fn find_channel(&self, id: &ChannelHandle) -> Result<Channel, UpdateChannelError> {
         match self.repository.find(id) {
             Ok(Some(channel)) => Ok(channel),
