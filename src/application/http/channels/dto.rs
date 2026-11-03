@@ -96,7 +96,7 @@ impl From<ChannelView> for ChannelListItemResponse {
             quality: channel.quality.as_str().to_string(),
             video_limit: channel.video_limit.value(),
             reconcile_interval_minutes: channel.reconcile_interval.minutes(),
-            summaries_enabled: false,
+            summaries_enabled: channel.summaries_enabled,
             avatar_filename: channel.avatar_filename,
             unwatched_count: channel.unwatched_count,
             work_in_progress: channel.work_in_progress,

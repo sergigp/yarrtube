@@ -13,7 +13,7 @@ Channels handler (acceptance, real SQLite)
 - [x] 2.4 `it_should_enable_summaries_on_a_channel` — AI + summaries on; only `summaries_enabled: true` → 200, stored `true`, other fields unchanged.
 - [x] 2.5 `it_should_fail_to_enable_summaries_on_a_channel_if_summaries_are_off` — AI on, summaries off, with a new quality → 409, channel unchanged.
 - [x] 2.6 `it_should_disable_summaries_on_a_channel_while_ai_is_off` — stored `false`.
-- [ ] 2.7 `it_should_list_channels_with_their_summaries_setting`.
+- [x] 2.7 `it_should_list_channels_with_their_summaries_setting`.
 
 Playlists handler (acceptance, real SQLite)
 - [ ] 2.8 `it_should_create_a_playlist_with_summaries_disabled_by_default`.

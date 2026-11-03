@@ -1963,6 +1963,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_channels_with_their_summaries_setting() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let summarized = Channel {
+            name: "Summarized Channel".to_string(),
+            path: PlaylistPath::new("creators/summarized").unwrap(),
+            ..channel("@summarized").with_summaries_enabled(true)
+        };
+        channel_repository.insert(&summarized).unwrap();
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteEventRepository::new(db.database())),
+            "/videos",
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                some_channel_list_item_response(),
+                ChannelListItemResponse {
+                    id: "@summarized".to_string(),
+                    name: "Summarized Channel".to_string(),
+                    path: "creators/summarized".to_string(),
+                    summaries_enabled: true,
+                    ..some_channel_list_item_response()
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_all_channels() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
