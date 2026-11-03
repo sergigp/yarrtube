@@ -12,6 +12,7 @@ import { useWatchProgress } from '@/hooks/useWatchProgress'
 import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
+import { youtubeChannelUrl } from '@/lib/sourcePath'
 import { VideoPlayer } from './VideoPlayer'
 import { VideoDetail } from './VideoDetail'
 import { VideoListPane } from './VideoListPane'
@@ -60,6 +61,7 @@ export function ChannelDetail() {
         onSync={refreshing(() => reconcileChannel(id))}
         onMarkWatched={refreshing(() => markChannelWatched(id))}
         onEditRequest={() => setEditing(true)}
+        youtubeLink={{ href: youtubeChannelUrl(id), label: 'Open channel on YouTube' }}
         onDelete={refreshing(async () => {
           await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
           navigate('/')

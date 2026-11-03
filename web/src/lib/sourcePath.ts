@@ -11,3 +11,12 @@ export function channelPath(id: string): string {
 export function playlistPath(id: string): string {
   return `/playlists/${encodeURIComponent(id)}`
 }
+
+/** The YouTube page of a tracked channel, whose id is its `@handle`. */
+export function youtubeChannelUrl(id: string): string {
+  return `https://www.youtube.com/${encodeURIComponent(id).replace(/^%40/, '@')}`
+}
+
+export function youtubePlaylistUrl(id: string): string {
+  return `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`
+}

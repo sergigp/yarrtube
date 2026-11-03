@@ -143,7 +143,7 @@ The suite SHALL verify on the iPhone browser that:
 
 #### Scenario: Collapsed video details
 - **WHEN** a user opens a video on a phone
-- **THEN** its description and "Open on YouTube" link are hidden until the user taps "More"
+- **THEN** its description and storage location are hidden until the user taps "More", while the title row's "Open video on YouTube" link is visible throughout
 
 #### Scenario: Dialogs fit the phone screen
 - **WHEN** a user opens the Add playlist dialog (with the folder browser), the Edit settings dialog or the Delete confirmation on a phone

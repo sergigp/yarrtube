@@ -135,6 +135,7 @@ describe('PlaylistDetail', () => {
       'Exclude from home',
       'Hide unwatched count',
       'Edit settings',
+      'Open playlist on YouTube',
       'Delete',
     ])
     expect(screen.queryByRole('button', { name: 'Sync' })).not.toBeInTheDocument()
@@ -161,6 +162,10 @@ describe('PlaylistDetail', () => {
       ]) {
         expect(screen.getByRole('button', { name })).toBeInTheDocument()
       }
+      expect(screen.getByRole('link', { name: 'Open playlist on YouTube' })).toHaveAttribute(
+        'href',
+        'https://www.youtube.com/playlist?list=PL1',
+      )
       expect(screen.queryByRole('button', { name: 'Mark all watched' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
       await userEvent

@@ -47,8 +47,7 @@ interface VideoListPaneProps<T extends Video> {
  * The scrollable video list beside a detail view's player: one row per
  * video with its thumbnail, watch state, duration, download status and
  * actions menu, highlighting the selected one. The menu sits beside the
- * row's select button, not inside it, so opening it never selects the video;
- * the selected row has none, since its detail pane shows one.
+ * row's select button, not inside it, so opening it never selects the video.
  */
 export function VideoListPane<T extends Video>({
   noun,
@@ -120,18 +119,12 @@ export function VideoListPane<T extends Video>({
                   </span>
                   <VideoStatusIndicator status={video.status} />
                 </button>
-                {active ? (
-                  // The detail pane holds the selected video's menu; the
-                  // placeholder keeps the row's title from re-wrapping.
-                  <span aria-hidden className="mt-2 size-7 shrink-0" />
-                ) : (
-                  <VideoActionsMenu
-                    videoId={video.id}
-                    title={video.title}
-                    markable={!video.watched && video.status === 'DOWNLOADED'}
-                    className="mt-2"
-                  />
-                )}
+                <VideoActionsMenu
+                  videoId={video.id}
+                  title={video.title}
+                  markable={!video.watched && video.status === 'DOWNLOADED'}
+                  className="mt-2"
+                />
               </li>
             )
           })}

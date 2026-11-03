@@ -72,6 +72,26 @@ describe('DetailHeader', () => {
     expect(onSync).toHaveBeenCalledOnce()
   })
 
+  it('links the source on YouTube from the ⋮ menu on mobile, in a new tab', async () => {
+    render(
+      <DetailHeader
+        name="The Channel"
+        videos={[]}
+        youtubeLink={{ href: 'https://www.youtube.com/@thechannel', label: 'Open channel on YouTube' }}
+        onDelete={noop}
+        deleteDescription="desc"
+      />,
+    )
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'More actions for The Channel' }))
+    const item = await screen.findByRole('menuitem', { name: 'Open channel on YouTube' })
+
+    expect(item).toHaveAttribute('href', 'https://www.youtube.com/@thechannel')
+    expect(item).toHaveAttribute('target', '_blank')
+  })
+
   it('offers mark-all-watched in its menu only when supported', async () => {
     const user = userEvent.setup()
     const { rerender } = render(
@@ -261,6 +281,22 @@ describe('DetailHeader', () => {
 
   describe('on desktop', () => {
     useDesktopViewport()
+
+    it('links the source on YouTube as an icon, in a new tab', () => {
+      render(
+        <DetailHeader
+          name="The Playlist"
+          videos={[]}
+          youtubeLink={{ href: 'https://www.youtube.com/playlist?list=PL1', label: 'Open playlist on YouTube' }}
+          onDelete={noop}
+          deleteDescription="desc"
+        />,
+      )
+
+      const link = screen.getByRole('link', { name: 'Open playlist on YouTube' })
+      expect(link).toHaveAttribute('href', 'https://www.youtube.com/playlist?list=PL1')
+      expect(link).toHaveAttribute('target', '_blank')
+    })
 
     it('runs the sync action and disables the button meanwhile', async () => {
       let resolveSync = () => {}

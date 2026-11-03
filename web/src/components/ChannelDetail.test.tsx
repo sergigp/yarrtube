@@ -196,7 +196,7 @@ describe('ChannelDetail', () => {
     expect(within(fresh).getByText('2:00')).toBeInTheDocument()
   })
 
-  it('shows no menu for the selected video, only its watched control', async () => {
+  it('shows the menu on every row, the selected one included', async () => {
     const channel = aChannel({ id: 'chan' })
     renderChannel(
       {
@@ -210,11 +210,8 @@ describe('ChannelDetail', () => {
     )
 
     const list = await screen.findByRole('list')
-    expect(
-      within(list).queryByRole('button', { name: 'Actions for First Video' }),
-    ).not.toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'Actions for First Video' })).toBeInTheDocument()
     expect(within(list).getByRole('button', { name: 'Actions for Second Video' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Actions for First Video' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mark watched' })).toBeInTheDocument()
   })
 
@@ -306,7 +303,7 @@ describe('ChannelDetail', () => {
 
     expect(
       (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
-    ).toEqual(['Sync', 'Mark all watched', 'Edit settings', 'Delete'])
+    ).toEqual(['Sync', 'Mark all watched', 'Edit settings', 'Open channel on YouTube', 'Delete'])
   })
 
   it('marks the channel watched from its page header menu', async () => {
