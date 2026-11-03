@@ -132,7 +132,7 @@ mod tests {
         let preferences_updater = PreferencesUpdater::new(repository.clone());
         let request = UpdatePreferencesRequest {
             categories_enabled: Some(false),
-            ..all_on_request()
+            ..UpdatePreferencesRequest::default()
         };
 
         let response = update(preferences_updater, request).await;
@@ -521,7 +521,7 @@ mod tests {
         let preferences_updater = PreferencesUpdater::new(repository.clone());
         let request = UpdatePreferencesRequest {
             theme: Some("dark".to_string()),
-            ..all_on_request()
+            ..UpdatePreferencesRequest::default()
         };
 
         let response = update(preferences_updater, request).await;
@@ -543,10 +543,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_save_if_theme_invalid() {
+    async fn it_should_fail_on_an_unknown_theme() {
         let request = UpdatePreferencesRequest {
             theme: Some("sepia".to_string()),
-            ..all_on_request()
+            ..UpdatePreferencesRequest::default()
         };
 
         let response = update(any_preferences_updater(), request).await;
@@ -621,18 +621,6 @@ mod tests {
         let start = shipped.find("## map user").unwrap();
         let end = shipped.find("## map chapters").unwrap();
         format!("{}{}", &shipped[..start], &shipped[end..])
-    }
-
-    fn all_on_request() -> UpdatePreferencesRequest {
-        UpdatePreferencesRequest {
-            categories_enabled: Some(true),
-            home_show_continue_watching: Some(true),
-            home_show_categories: Some(true),
-            home_show_quick_watches: Some(true),
-            home_show_latest: Some(true),
-            theme: Some("light".to_string()),
-            ..UpdatePreferencesRequest::default()
-        }
     }
 
     fn all_on_response() -> PreferencesResponse {

@@ -21,7 +21,7 @@ Preferences handler (acceptance, real SQLite)
 - [x] 2.12 `it_should_not_store_the_prompt_when_saving_other_preferences`.
 - [x] 2.13 `it_should_return_to_the_shipped_prompt_on_null`.
 - [x] 2.14 `it_should_fail_on_an_invalid_prompt` — `Prompt is missing the "map user" section`.
-- [ ] 2.15 `it_should_save_the_theme` and `it_should_fail_on_an_unknown_theme` ported to PATCH.
+- [x] 2.15 `it_should_save_the_theme` and `it_should_fail_on_an_unknown_theme` ported to PATCH.
 
 Ollama handler (acceptance, mockito Ollama)
 - [ ] 2.16 `it_should_return_the_server_version_and_models_sorted_by_name` — each with its `thinking` capability.
