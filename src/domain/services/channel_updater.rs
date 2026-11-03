@@ -87,8 +87,12 @@ impl ChannelUpdater {
             Some(video_limit) => channel.with_video_limit(video_limit),
             None => channel,
         };
-        match change.reconcile_interval {
+        let channel = match change.reconcile_interval {
             Some(reconcile_interval) => channel.with_reconcile_interval(reconcile_interval),
+            None => channel,
+        };
+        match change.summaries_enabled {
+            Some(summaries_enabled) => channel.with_summaries_enabled(summaries_enabled),
             None => channel,
         }
     }
