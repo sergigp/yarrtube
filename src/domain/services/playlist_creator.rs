@@ -68,6 +68,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
         reconcile_interval: ReconcileInterval,
         summaries_enabled: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
+        self.ensure_summaries_available(summaries_enabled)?;
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreatePlaylistOutcome::AlreadyExisted(existing));
         }
@@ -94,6 +95,26 @@ impl PlaylistCreatorApi for PlaylistCreator {
 }
 
 impl PlaylistCreator {
+    /// Enabling summaries needs AI and summaries on in the preferences.
+    fn ensure_summaries_available(
+        &self,
+        summaries_enabled: bool,
+    ) -> Result<(), CreatePlaylistError> {
+        if !summaries_enabled {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(CreatePlaylistError::Repository)?
+            .unwrap_or_default();
+        if preferences.summaries_available() {
+            Ok(())
+        } else {
+            Err(CreatePlaylistError::SummariesUnavailable)
+        }
+    }
+
     fn find_existing(&self, id: &PlaylistId) -> Result<Option<Playlist>, CreatePlaylistError> {
         self.repository
             .find(id)

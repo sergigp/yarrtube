@@ -18,7 +18,7 @@ Channels handler (acceptance, real SQLite)
 Playlists handler (acceptance, real SQLite)
 - [x] 2.8 `it_should_create_a_playlist_with_summaries_disabled_by_default`.
 - [x] 2.9 `it_should_create_a_playlist_with_summaries_enabled` — AI + summaries on.
-- [ ] 2.10 `it_should_fail_to_create_a_playlist_with_summaries_if_ai_is_off` — 409 `…for a playlist`, nothing stored, YouTube fake not called.
+- [x] 2.10 `it_should_fail_to_create_a_playlist_with_summaries_if_ai_is_off` — 409 `…for a playlist`, nothing stored, YouTube fake not called.
 - [ ] 2.11 `it_should_enable_summaries_on_a_playlist` — AI + summaries on; only `summaries_enabled: true` → 200, stored `true`, others unchanged.
 - [ ] 2.12 `it_should_fail_to_enable_summaries_on_a_playlist_if_summaries_are_off` — with a new interval → 409, playlist unchanged.
 - [ ] 2.13 `it_should_disable_summaries_on_a_playlist_while_ai_is_off`.
