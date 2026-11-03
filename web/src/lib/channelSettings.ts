@@ -25,6 +25,9 @@ export function channelSettingsChanges(
     ...(videoLimit !== current.video_limit && { video_limit: videoLimit }),
     ...(interval !== null &&
       interval !== current.reconcile_interval_minutes && { reconcile_interval_minutes: interval }),
+    ...(form.summaries_enabled !== current.summaries_enabled && {
+      summaries_enabled: form.summaries_enabled,
+    }),
   }
 }
 

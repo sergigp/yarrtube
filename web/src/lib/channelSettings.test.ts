@@ -32,6 +32,17 @@ describe('channelSettingsChanges', () => {
       video_limit: 3,
     })
   })
+
+  it('returns only a changed summaries setting', () => {
+    expect(
+      channelSettingsChanges(current, {
+        quality: 'high',
+        video_limit: '10',
+        interval,
+        summaries_enabled: true,
+      }),
+    ).toEqual({ summaries_enabled: true })
+  })
 })
 
 describe('lowersVideoLimit', () => {
