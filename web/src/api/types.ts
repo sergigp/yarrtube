@@ -19,6 +19,8 @@ export interface ChannelListItem {
   video_limit: number
   reconcile_interval_minutes: number
   avatar_filename: string | null
+  /** Whether the channel's videos get an AI summary. */
+  summaries_enabled: boolean
   unwatched_count: number
   /** Still downloading or fetching something: it can't be moved yet. */
   work_in_progress: boolean
@@ -34,6 +36,8 @@ export interface PlaylistListItem {
   exclude_from_home: boolean
   hide_unwatched_count: boolean
   reconcile_interval_minutes: number
+  /** Whether the playlist's videos get an AI summary. */
+  summaries_enabled: boolean
   created_at: string
   unwatched_count: number
   /** Still downloading or fetching something: it can't be moved yet. */
@@ -160,6 +164,7 @@ export interface CreatedChannel {
   reconcile_interval_minutes: number
   path: string
   avatar_filename: string | null
+  summaries_enabled: boolean
   created_at: string
 }
 

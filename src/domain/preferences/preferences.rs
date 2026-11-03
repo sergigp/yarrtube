@@ -39,6 +39,11 @@ impl Preferences {
         self.categories_enabled && self.home_show_categories
     }
 
+    /// Whether sources can have their videos summarized: AI and summaries on.
+    pub fn summaries_available(&self) -> bool {
+        true
+    }
+
     /// These preferences with `change` applied, as long as the result is
     /// consistent: AI can't be on without an Ollama URL.
     pub fn apply(self, change: PreferencesChange) -> Result<Self, ValidationError> {

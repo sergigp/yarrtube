@@ -6,6 +6,7 @@ pub struct PlaylistSettingsChange {
     pub exclude_from_home: Option<bool>,
     pub hide_unwatched_count: Option<bool>,
     pub reconcile_interval: Option<ReconcileInterval>,
+    pub summaries_enabled: Option<bool>,
 }
 
 impl PlaylistSettingsChange {
@@ -13,5 +14,6 @@ impl PlaylistSettingsChange {
         self.exclude_from_home.is_none()
             && self.hide_unwatched_count.is_none()
             && self.reconcile_interval.is_none()
+            && self.summaries_enabled.is_none()
     }
 }

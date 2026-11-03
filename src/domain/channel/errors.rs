@@ -6,6 +6,7 @@ pub enum CreateChannelError {
     YoutubeChannelNotFound(ChannelHandle),
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
+    SummariesUnavailable,
 }
 
 impl fmt::Display for CreateChannelError {
@@ -19,6 +20,9 @@ impl fmt::Display for CreateChannelError {
             }
             Self::Lookup(e) => write!(f, "{e}"),
             Self::Repository(e) => write!(f, "{e}"),
+            Self::SummariesUnavailable => {
+                write!(f, "Turn on AI summaries before enabling them for a channel")
+            }
         }
     }
 }
@@ -46,6 +50,7 @@ impl std::error::Error for DeleteChannelError {}
 pub enum UpdateChannelError {
     NotFound(ChannelHandle),
     Repository(anyhow::Error),
+    SummariesUnavailable,
 }
 
 impl fmt::Display for UpdateChannelError {
@@ -53,6 +58,9 @@ impl fmt::Display for UpdateChannelError {
         match self {
             Self::NotFound(handle) => write!(f, "channel {handle} not found"),
             Self::Repository(e) => write!(f, "{e}"),
+            Self::SummariesUnavailable => {
+                write!(f, "Turn on AI summaries before enabling them for a channel")
+            }
         }
     }
 }

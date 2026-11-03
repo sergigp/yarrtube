@@ -2,6 +2,7 @@
 pub mod channel;
 pub mod channel_handle;
 pub mod channel_preview;
+pub mod channel_settings_change;
 pub mod channel_view;
 pub mod errors;
 pub mod events;
@@ -10,6 +11,7 @@ pub mod video_limit;
 pub use channel::Channel;
 pub use channel_handle::ChannelHandle;
 pub use channel_preview::ChannelPreview;
+pub use channel_settings_change::ChannelSettingsChange;
 pub use channel_view::ChannelView;
 pub use errors::{CreateChannelError, DeleteChannelError, PreviewChannelError, UpdateChannelError};
 pub use events::{ChannelCreated, ChannelDeleted};

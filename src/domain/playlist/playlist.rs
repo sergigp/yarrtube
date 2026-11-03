@@ -19,6 +19,7 @@ pub struct Playlist {
     pub created_at: DateTime<Utc>,
     /// The highest episode number the playlist has ever assigned.
     pub last_episode: Option<PlaylistEpisodeNumber>,
+    pub summaries_enabled: bool,
 }
 
 impl Playlist {
@@ -44,6 +45,7 @@ impl Playlist {
             reconcile_interval,
             created_at,
             last_episode: None,
+            summaries_enabled: false,
         }
     }
 
@@ -68,6 +70,13 @@ impl Playlist {
     pub fn with_reconcile_interval(self, reconcile_interval: ReconcileInterval) -> Self {
         Self {
             reconcile_interval,
+            ..self
+        }
+    }
+
+    pub fn with_summaries_enabled(self, summaries_enabled: bool) -> Self {
+        Self {
+            summaries_enabled,
             ..self
         }
     }

@@ -140,6 +140,7 @@ describe('AddChannelDialog', () => {
       video_limit: 3,
       path: 'channels/chan',
       reconcile_interval_minutes: 180,
+      summaries_enabled: false,
     })
   })
 
@@ -218,6 +219,7 @@ describe('AddChannelDialog', () => {
       video_limit: 3,
       path: 'channels/chan',
       reconcile_interval_minutes: 30,
+      summaries_enabled: false,
     })
   })
 

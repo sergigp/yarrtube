@@ -5,6 +5,7 @@ use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::youtube_channel_repository::{
     ResolvedChannel, YoutubeChannelRepository,
 };
@@ -28,6 +29,7 @@ pub struct ChannelCreator {
     avatar_repository: Arc<dyn ChannelAvatarRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
+    preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
 impl ChannelCreator {
@@ -37,6 +39,7 @@ impl ChannelCreator {
         avatar_repository: Arc<dyn ChannelAvatarRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
+        preferences_repository: Arc<dyn PreferencesRepository>,
     ) -> Self {
         Self {
             repository,
@@ -44,6 +47,7 @@ impl ChannelCreator {
             avatar_repository,
             event_publisher,
             clock,
+            preferences_repository,
         }
     }
 }
@@ -56,6 +60,7 @@ pub trait ChannelCreatorApi: Send + Sync {
         video_limit: VideoLimit,
         reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
+        summaries_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError>;
 }
 
@@ -67,6 +72,7 @@ impl ChannelCreatorApi for ChannelCreator {
         video_limit: VideoLimit,
         reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
+        summaries_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreateChannelOutcome::AlreadyExisted(existing));

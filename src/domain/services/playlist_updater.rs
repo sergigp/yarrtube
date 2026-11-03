@@ -5,6 +5,7 @@ use crate::domain::playlist::errors::UpdatePlaylistError;
 use crate::domain::shared::ReconcileInterval;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
@@ -16,6 +17,7 @@ pub struct PlaylistUpdater {
     repository: Arc<dyn PlaylistRepository>,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
+    preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
 impl PlaylistUpdater {
@@ -23,11 +25,13 @@ impl PlaylistUpdater {
         repository: Arc<dyn PlaylistRepository>,
         task_repository: Arc<dyn TaskRepository>,
         clock: Arc<dyn Clock>,
+        preferences_repository: Arc<dyn PreferencesRepository>,
     ) -> Self {
         Self {
             repository,
             task_repository,
             clock,
+            preferences_repository,
         }
     }
 }

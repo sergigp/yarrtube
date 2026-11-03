@@ -5,6 +5,7 @@ use crate::domain::playlist::errors::CreatePlaylistError;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -24,6 +25,7 @@ pub struct PlaylistCreator {
     lookup: Arc<dyn YoutubePlaylistRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
+    preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
 impl PlaylistCreator {
@@ -32,12 +34,14 @@ impl PlaylistCreator {
         lookup: Arc<dyn YoutubePlaylistRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
+        preferences_repository: Arc<dyn PreferencesRepository>,
     ) -> Self {
         Self {
             repository,
             lookup,
             event_publisher,
             clock,
+            preferences_repository,
         }
     }
 }
@@ -50,6 +54,7 @@ pub trait PlaylistCreatorApi: Send + Sync {
         quality: Quality,
         exclude_from_home: bool,
         reconcile_interval: ReconcileInterval,
+        summaries_enabled: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError>;
 }
 
@@ -61,6 +66,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
         quality: Quality,
         exclude_from_home: bool,
         reconcile_interval: ReconcileInterval,
+        summaries_enabled: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreatePlaylistOutcome::AlreadyExisted(existing));

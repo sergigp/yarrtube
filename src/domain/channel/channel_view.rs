@@ -14,6 +14,7 @@ pub struct ChannelView {
     pub video_limit: VideoLimit,
     pub reconcile_interval: ReconcileInterval,
     pub avatar_filename: Option<String>,
+    pub summaries_enabled: bool,
     pub unwatched_count: usize,
     pub work_in_progress: bool,
 }

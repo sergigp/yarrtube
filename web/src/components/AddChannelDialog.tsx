@@ -134,6 +134,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         video_limit: Number(form.video_limit),
         path: location.value.path,
         reconcile_interval_minutes: reconcileIntervalMinutes,
+        summaries_enabled: false,
       })
       location.remember()
       invalidateLibrary()

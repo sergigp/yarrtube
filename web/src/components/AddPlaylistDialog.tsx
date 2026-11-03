@@ -125,6 +125,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
         quality: form.quality,
         exclude_from_home: excludeFromHome,
         reconcile_interval_minutes: reconcileIntervalMinutes,
+        summaries_enabled: false,
       })
       location.remember()
       invalidateLibrary()

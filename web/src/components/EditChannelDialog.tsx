@@ -83,6 +83,7 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
     quality: channel.quality,
     video_limit: String(channel.video_limit),
     interval: intervalForm(channel.reconcile_interval_minutes),
+    summaries_enabled: channel.summaries_enabled,
   })
 
   const setField =

@@ -5,8 +5,8 @@ use super::error::{ApiError, move_show_error};
 use super::validation::{MISSING_QUALITY, required};
 use super::videos::update_watch_state_error;
 use crate::domain::channel::{
-    ChannelHandle, CreateChannelError, DeleteChannelError, PreviewChannelError, UpdateChannelError,
-    VideoLimit,
+    ChannelHandle, ChannelSettingsChange, CreateChannelError, DeleteChannelError,
+    PreviewChannelError, UpdateChannelError, VideoLimit,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::services::{
@@ -27,7 +27,7 @@ use dto::{
 const MISSING_VIDEO_LIMIT: &str = "Video limit must be a positive integer (missing)";
 const MISSING_PATH: &str = "Channel path must not be empty";
 const NOTHING_TO_UPDATE: &str =
-    "Request must change the quality, the video limit or the reconcile interval";
+    "Request must change the quality, the video limit, the reconcile interval or summaries";
 
 pub async fn create_channel(
     State(channel_creator): State<ChannelCreator>,
@@ -42,9 +42,17 @@ pub async fn create_channel(
         .map(ReconcileInterval::new)
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
+    let summaries_enabled = request.summaries_enabled.unwrap_or(false);
 
     let outcome = run_blocking(move || {
-        channel_creator.create(id, quality, video_limit, reconcile_interval, path)
+        channel_creator.create(
+            id,
+            quality,
+            video_limit,
+            reconcile_interval,
+            path,
+            summaries_enabled,
+        )
     })
     .await?;
 
@@ -57,6 +65,9 @@ pub async fn create_channel(
         }
         Err(e @ CreateChannelError::YoutubeChannelNotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
+        Err(e @ CreateChannelError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
         Err(e @ CreateChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -95,23 +106,25 @@ pub async fn update_channel(
     Json(request): Json<UpdateChannelRequest>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
     let id = ChannelHandle::new(handle)?;
-    let quality = request.quality.map(Quality::new).transpose()?;
-    let video_limit = request.video_limit.map(VideoLimit::new).transpose()?;
-    let reconcile_interval = request
-        .reconcile_interval_minutes
-        .map(ReconcileInterval::new)
-        .transpose()?;
-    if quality.is_none() && video_limit.is_none() && reconcile_interval.is_none() {
+    let change = ChannelSettingsChange {
+        quality: request.quality.map(Quality::new).transpose()?,
+        video_limit: request.video_limit.map(VideoLimit::new).transpose()?,
+        reconcile_interval: request
+            .reconcile_interval_minutes
+            .map(ReconcileInterval::new)
+            .transpose()?,
+        summaries_enabled: request.summaries_enabled,
+    };
+    if change.is_empty() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
     }
 
-    match run_blocking(move || {
-        channel_updater.update_settings(id, quality, video_limit, reconcile_interval)
-    })
-    .await?
-    {
+    match run_blocking(move || channel_updater.update_settings(id, change)).await? {
         Ok(channel) => Ok(Json(ChannelResponse::from(channel))),
         Err(e @ UpdateChannelError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
+        Err(e @ UpdateChannelError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
         Err(e @ UpdateChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -212,6 +225,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -259,6 +273,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@somechannel")).await;
@@ -285,6 +300,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = CreateChannelRequest {
@@ -327,6 +343,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = CreateChannelRequest {
@@ -369,6 +386,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(
@@ -400,6 +418,7 @@ mod tests {
             avatar_repository.clone(),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@somechannel")).await;
@@ -442,6 +461,7 @@ mod tests {
             avatar_repository.clone(),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@somechannel")).await;
@@ -465,6 +485,7 @@ mod tests {
             avatar_repository.clone(),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@somechannel")).await;
@@ -489,6 +510,7 @@ mod tests {
             avatar_repository.clone(),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@somechannel")).await;
@@ -517,6 +539,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreateChannelRequest {
             quality: Some("low".to_string()),
@@ -549,6 +572,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreateChannelRequest {
             reconcile_interval_minutes: Some(30),
@@ -583,6 +607,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@SomeChannel")).await;
@@ -606,6 +631,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let repeated_request = CreateChannelRequest {
             quality: Some("low".to_string()),
@@ -734,6 +760,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@missing")).await;
@@ -759,6 +786,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(channel_creator, create_request("@somechannel")).await;
@@ -1256,6 +1284,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1289,6 +1318,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1323,6 +1353,7 @@ mod tests {
             channel_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1367,6 +1398,7 @@ mod tests {
             channel_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1411,6 +1443,7 @@ mod tests {
             channel_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1458,6 +1491,7 @@ mod tests {
             channel_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1495,6 +1529,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1534,6 +1569,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1562,6 +1598,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdateChannelRequest {
@@ -1590,7 +1627,7 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Request must change the quality, the video limit or the reconcile interval"
+                "Request must change the quality, the video limit, the reconcile interval or summaries"
             ))
         );
     }
@@ -2490,6 +2527,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             unused_event_publisher(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(unused_connection())),
         )
     }
 
@@ -2525,6 +2563,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(unused_connection())),
         )
     }
 
@@ -2909,6 +2948,7 @@ mod tests {
             video_limit: Some(10),
             path: Some("creators/somechannel".to_string()),
             reconcile_interval_minutes: None,
+            summaries_enabled: None,
         }
     }
 
@@ -2931,6 +2971,7 @@ mod tests {
             quality: None,
             video_limit: None,
             reconcile_interval_minutes: None,
+            summaries_enabled: None,
         }
     }
 
@@ -2945,6 +2986,7 @@ mod tests {
             path: "creators/somechannel".to_string(),
             avatar_filename: None,
             created_at: fixed_timestamp(),
+            summaries_enabled: false,
         }
     }
 
@@ -2959,6 +3001,7 @@ mod tests {
             avatar_filename: None,
             unwatched_count: 0,
             work_in_progress: false,
+            summaries_enabled: false,
         }
     }
 

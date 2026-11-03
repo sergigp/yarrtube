@@ -254,6 +254,7 @@ describe('AddPlaylistDialog', () => {
       quality: 'high',
       exclude_from_home: false,
       reconcile_interval_minutes: 180,
+      summaries_enabled: false,
     })
   })
 
@@ -305,6 +306,7 @@ describe('AddPlaylistDialog', () => {
       quality: 'high',
       exclude_from_home: false,
       reconcile_interval_minutes: 30,
+      summaries_enabled: false,
     })
   })
 
