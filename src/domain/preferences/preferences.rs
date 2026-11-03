@@ -42,6 +42,18 @@ impl Preferences {
     /// These preferences with `change` applied, as long as the result is
     /// consistent: AI can't be on without an Ollama URL.
     pub fn apply(self, change: PreferencesChange) -> Result<Self, ValidationError> {
+        let summaries = SummarySettings {
+            enabled: change.summaries_enabled.unwrap_or(self.summaries.enabled),
+            model: change.summaries_model.unwrap_or(self.summaries.model),
+            context_length: change
+                .summaries_context_length
+                .unwrap_or(self.summaries.context_length),
+            temperature: change
+                .summaries_temperature
+                .unwrap_or(self.summaries.temperature),
+            thinking: change.summaries_thinking.unwrap_or(self.summaries.thinking),
+            ..self.summaries
+        };
         Self {
             categories_enabled: change.categories_enabled.unwrap_or(self.categories_enabled),
             home_show_continue_watching: change
@@ -57,6 +69,7 @@ impl Preferences {
             theme: change.theme.unwrap_or(self.theme),
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
+            summaries,
             ..self
         }
         .ensure_ai_has_url()

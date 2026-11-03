@@ -81,7 +81,7 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::preferences::Preferences;
+    use crate::domain::preferences::{Preferences, SummarySettings};
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
     };
@@ -342,6 +342,49 @@ mod tests {
             Err(ApiError::bad_request("Ollama URL must be set to enable AI"))
         );
         assert_eq!(repository.find().unwrap(), Some(saved));
+    }
+
+    #[tokio::test]
+    async fn it_should_save_the_summary_settings() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            summaries_enabled: Some(true),
+            summaries_model: Some("gemma3:4b".to_string()),
+            summaries_context_length: Some(8192),
+            summaries_temperature: Some(0.0),
+            summaries_thinking: Some(false),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                summaries_enabled: true,
+                summaries_model: "gemma3:4b".to_string(),
+                summaries_context_length: 8192,
+                summaries_temperature: 0.0,
+                summaries_thinking: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                summaries: SummarySettings {
+                    enabled: true,
+                    model: SummaryModel::new("gemma3:4b").unwrap(),
+                    context_length: ContextLength::new(8192).unwrap(),
+                    temperature: Temperature::new(0.0).unwrap(),
+                    thinking: false,
+                    prompt: None,
+                },
+                ..Preferences::default()
+            })
+        );
     }
 
     #[tokio::test]

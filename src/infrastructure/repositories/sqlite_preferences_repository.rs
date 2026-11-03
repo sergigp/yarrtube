@@ -1,5 +1,7 @@
 use crate::domain::llm_server::OllamaUrl;
-use crate::domain::preferences::{Preferences, Theme};
+use crate::domain::preferences::{
+    ContextLength, Preferences, SummaryModel, SummarySettings, Temperature, Theme,
+};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use rusqlite::{OptionalExtension, params};
@@ -70,6 +72,11 @@ struct StoredPreferences {
     theme: Option<String>,
     ai_enabled: Option<bool>,
     ollama_url: Option<String>,
+    summaries_enabled: Option<bool>,
+    summaries_model: Option<String>,
+    summaries_context_length: Option<i64>,
+    summaries_temperature: Option<f64>,
+    summaries_thinking: Option<bool>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -83,6 +90,11 @@ impl From<&Preferences> for StoredPreferences {
             theme: Some(preferences.theme.as_str().to_string()),
             ai_enabled: Some(preferences.ai_enabled),
             ollama_url: preferences.ollama_url.as_ref().map(|url| url.to_string()),
+            summaries_enabled: Some(preferences.summaries.enabled),
+            summaries_model: Some(preferences.summaries.model.as_str().to_string()),
+            summaries_context_length: Some(preferences.summaries.context_length.value().into()),
+            summaries_temperature: Some(preferences.summaries.temperature.value()),
+            summaries_thinking: Some(preferences.summaries.thinking),
         }
     }
 }
@@ -112,6 +124,29 @@ impl From<StoredPreferences> for Preferences {
                 .unwrap_or(defaults.theme),
             ai_enabled: stored.ai_enabled.unwrap_or(defaults.ai_enabled),
             ollama_url: stored.ollama_url.and_then(|url| OllamaUrl::new(url).ok()),
+            // Like the theme, a stored value no longer valid reads as the
+            // default.
+            summaries: SummarySettings {
+                enabled: stored
+                    .summaries_enabled
+                    .unwrap_or(defaults.summaries.enabled),
+                model: stored
+                    .summaries_model
+                    .and_then(|model| SummaryModel::new(model).ok())
+                    .unwrap_or(defaults.summaries.model),
+                context_length: stored
+                    .summaries_context_length
+                    .and_then(|length| ContextLength::new(length).ok())
+                    .unwrap_or(defaults.summaries.context_length),
+                temperature: stored
+                    .summaries_temperature
+                    .and_then(|temperature| Temperature::new(temperature).ok())
+                    .unwrap_or(defaults.summaries.temperature),
+                thinking: stored
+                    .summaries_thinking
+                    .unwrap_or(defaults.summaries.thinking),
+                ..defaults.summaries
+            },
             ..defaults
         }
     }
