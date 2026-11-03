@@ -722,12 +722,20 @@ mod youtube_contract_tests {
             .probe_quality(&video_url(SHORT_VIDEO_ID), Quality::Mid)
             .unwrap();
 
+        // Whether YouTube runs its SABR streaming experiment varies run to
+        // run, so `degraded` is taken as reported; the height only holds
+        // when it didn't.
+        let expected_height = if probe.degraded {
+            probe.height
+        } else {
+            Some(720)
+        };
         assert_eq!(
             probe,
             QualityProbe {
-                degraded: false,
-                height: Some(720),
+                height: expected_height,
                 published_at: DateTime::from_timestamp(1_550_518_860, 0),
+                degraded: probe.degraded,
             }
         );
     }

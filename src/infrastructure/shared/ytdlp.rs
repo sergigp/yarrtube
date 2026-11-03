@@ -421,15 +421,15 @@ pub struct FetchedSubtitles {
 }
 
 /// The height `quality`'s format selector picks for the video now, and its
-/// publish time, downloading nothing. `Err` on any failure, clean or
-/// systemic.
+/// publish time, downloading nothing. Keeps warnings on (no
+/// `--no-warnings`) so the SABR-only streaming signal reaches stderr and
+/// marks the probe degraded. `Err` on any failure, clean or systemic.
 pub fn probe_quality(ytdlp_path: &Path, video_url: &str, quality: Quality) -> Result<QualityProbe> {
     let mut cmd = Command::new(ytdlp_path);
     cmd.args(format_selection_args(quality))
         .args([
             "--skip-download",
             "--quiet",
-            "--no-warnings",
             "--print",
             "%(height)s",
             "--print",
@@ -449,9 +449,9 @@ pub fn probe_quality(ytdlp_path: &Path, video_url: &str, quality: Quality) -> Re
             let stdout = String::from_utf8_lossy(&output.stdout);
             let lines: Vec<&str> = stdout.lines().collect();
             Ok(QualityProbe {
-                degraded: false,
                 height: line_before_last(&lines, 2).and_then(|line| line.trim().parse().ok()),
                 published_at: published_at_from_tail(&lines),
+                degraded: sabr_reason(&String::from_utf8_lossy(&output.stderr)).is_some(),
             })
         }
         RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
@@ -1659,7 +1659,6 @@ mod tests {
                 "codec:h264:aac,ext:mp4:m4a",
                 "--skip-download",
                 "--quiet",
-                "--no-warnings",
                 "--print",
                 "%(height)s",
                 "--print",
@@ -1668,6 +1667,31 @@ mod tests {
                 "%(upload_date)s",
                 "https://example.com/video",
             ]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_report_a_degraded_quality_probe() {
+        let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
+            "ytdlp-quality-sabr",
+            "360\n1773568800\n20260315\n",
+            &format!("{SABR_WARNING}\n"),
+        );
+
+        let result = probe_quality(&ytdlp, "https://example.com/video", Quality::High);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(QualityProbe {
+                height: Some(360),
+                published_at: Some(
+                    DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+                degraded: true,
+            })
         );
     }
 

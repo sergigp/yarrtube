@@ -71,7 +71,7 @@
 - [x] 3.8 ytdlp: `it_should_fail_a_quality_probe_on_a_clean_failure` — a non-zero exit returns `Err` (test passes)
 - [x] 3.9 web `tasks.test.ts`: `upgrade_quality` is described as a quality check under downloads, with a placeholder when unresolved (`npm run test` passes)
 - [x] 3.10 (audit) task: `it_should_run_upgrade_quality_in_the_download_lane_exclusive_per_video`, `it_should_read_the_output_dir_of_an_upgrade_quality` — upgrade_quality lane/key/output dir (task tests pass)
-- [ ] 3.11 ytdlp: `it_should_report_a_degraded_quality_probe` — the probe keeps warnings and flags the SABR signal on stderr (test passes; `it_should_probe_the_height_for_a_quality` args updated)
+- [x] 3.11 ytdlp: `it_should_report_a_degraded_quality_probe` — the probe keeps warnings and flags the SABR signal on stderr (test passes; `it_should_probe_the_height_for_a_quality` args updated)
 
 ## 4. Verification
 
