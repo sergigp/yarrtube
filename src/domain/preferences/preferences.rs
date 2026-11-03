@@ -39,9 +39,10 @@ impl Preferences {
         self.categories_enabled && self.home_show_categories
     }
 
-    /// These preferences with `change` applied.
+    /// These preferences with `change` applied, as long as the result is
+    /// consistent: AI can't be on without an Ollama URL.
     pub fn apply(self, change: PreferencesChange) -> Result<Self, ValidationError> {
-        Ok(Self {
+        Self {
             categories_enabled: change.categories_enabled.unwrap_or(self.categories_enabled),
             home_show_continue_watching: change
                 .home_show_continue_watching
@@ -57,6 +58,16 @@ impl Preferences {
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             ..self
-        })
+        }
+        .ensure_ai_has_url()
+    }
+
+    fn ensure_ai_has_url(self) -> Result<Self, ValidationError> {
+        match (self.ai_enabled, &self.ollama_url) {
+            (true, None) => Err(ValidationError(
+                "Ollama URL must be set to enable AI".to_string(),
+            )),
+            _ => Ok(self),
+        }
     }
 }

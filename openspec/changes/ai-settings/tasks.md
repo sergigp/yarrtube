@@ -13,7 +13,7 @@ Preferences handler (acceptance, real SQLite)
 - [x] 2.4 `it_should_save_the_ollama_url_without_trailing_slash`.
 - [x] 2.5 `it_should_unset_the_ollama_url_on_an_empty_string`.
 - [x] 2.6 `it_should_enable_ai_with_a_url`.
-- [ ] 2.7 `it_should_fail_to_enable_ai_without_a_url` — 400 `Ollama URL must be set to enable AI`, stored unchanged.
+- [x] 2.7 `it_should_fail_to_enable_ai_without_a_url` — 400 `Ollama URL must be set to enable AI`, stored unchanged.
 - [ ] 2.8 `it_should_fail_to_unset_the_url_while_ai_is_on`.
 - [ ] 2.9 `it_should_save_the_summary_settings` — model, context length, temperature, thinking.
 - [ ] 2.10 `it_should_fail_on_an_out_of_range_temperature_and_save_nothing` — valid `categories_enabled` sent alongside stays unchanged.
