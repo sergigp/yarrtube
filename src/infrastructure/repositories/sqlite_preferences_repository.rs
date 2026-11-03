@@ -1,6 +1,6 @@
 use crate::domain::llm_server::OllamaUrl;
 use crate::domain::preferences::{
-    ContextLength, Preferences, SummaryModel, SummarySettings, Temperature, Theme,
+    ContextLength, Preferences, SummaryModel, SummaryPrompt, SummarySettings, Temperature, Theme,
 };
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -77,6 +77,8 @@ struct StoredPreferences {
     summaries_context_length: Option<i64>,
     summaries_temperature: Option<f64>,
     summaries_thinking: Option<bool>,
+    /// Only once the user saved one: missing reads as the shipped prompt.
+    summaries_prompt: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -95,6 +97,11 @@ impl From<&Preferences> for StoredPreferences {
             summaries_context_length: Some(preferences.summaries.context_length.value().into()),
             summaries_temperature: Some(preferences.summaries.temperature.value()),
             summaries_thinking: Some(preferences.summaries.thinking),
+            summaries_prompt: preferences
+                .summaries
+                .prompt
+                .as_ref()
+                .map(|prompt| prompt.as_str().to_string()),
         }
     }
 }
@@ -145,7 +152,9 @@ impl From<StoredPreferences> for Preferences {
                 thinking: stored
                     .summaries_thinking
                     .unwrap_or(defaults.summaries.thinking),
-                ..defaults.summaries
+                prompt: stored
+                    .summaries_prompt
+                    .and_then(|prompt| SummaryPrompt::new(prompt).ok()),
             },
             ..defaults
         }

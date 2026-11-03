@@ -52,7 +52,7 @@ impl Preferences {
                 .summaries_temperature
                 .unwrap_or(self.summaries.temperature),
             thinking: change.summaries_thinking.unwrap_or(self.summaries.thinking),
-            ..self.summaries
+            prompt: change.summaries_prompt.unwrap_or(self.summaries.prompt),
         };
         Self {
             categories_enabled: change.categories_enabled.unwrap_or(self.categories_enabled),

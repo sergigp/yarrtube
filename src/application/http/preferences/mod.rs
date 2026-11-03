@@ -410,6 +410,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_save_an_edited_prompt() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let prompt = edited_prompt();
+        let request = UpdatePreferencesRequest {
+            summaries_prompt: Some(Some(prompt.clone())),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                summaries_prompt: prompt.clone(),
+                summaries_prompt_is_default: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                summaries: SummarySettings {
+                    prompt: Some(SummaryPrompt::new(prompt).unwrap()),
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -501,6 +534,14 @@ mod tests {
         PreferencesUpdater::new(Arc::new(SqlitePreferencesRepository::new(
             Database::single(Connection::open_in_memory().unwrap()),
         )))
+    }
+
+    /// The shipped prompt with one rule added to its `system` section.
+    fn edited_prompt() -> String {
+        SummaryPrompt::shipped().as_str().replace(
+            "- Ignore sponsors, ads and requests to like or subscribe.\n\n## user",
+            "- Ignore sponsors, ads and requests to like or subscribe.\n- Be brief.\n\n## user",
+        )
     }
 
     fn all_on_request() -> UpdatePreferencesRequest {
