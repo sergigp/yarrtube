@@ -46,7 +46,7 @@ Web (Vitest)
 - [x] 2.31 `AiSettingsView.test.tsx` — model list from the saved URL, `(not installed)` entry, text field when the check fails.
 - [x] 2.32 `AiSettingsView.test.tsx` — Thinking switch shown for a thinking model and when models are unknown; for a non-thinking model replaced by `<model> doesn't support thinking` and `summaries_thinking` not sent; help text.
 - [x] 2.33 `AiSettingsView.test.tsx` — `Using the default prompt` note; Reset sends `summaries_prompt: null`; prompt guide shown.
-- [ ] 2.34 `SettingsMenu.test.tsx` — "AI" between "Preferences" and "Report a bug", navigates to `/ai`.
+- [x] 2.34 `SettingsMenu.test.tsx` — "AI" between "Preferences" and "Report a bug", navigates to `/ai`.
 - [x] 2.35 `PreferencesView.test.tsx`, `ThemeToggle.test.tsx` — expect `PATCH /api/preferences` with only the changed preference.
 
 ## 3. Infrastructure adapters (TDD)

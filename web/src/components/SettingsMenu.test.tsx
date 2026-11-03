@@ -25,6 +25,21 @@ describe('SettingsMenu', () => {
     )
   })
 
+  it('offers AI', async () => {
+    renderWithProviders(
+      <>
+        <SettingsMenu />
+        <RouteProbe />
+      </>,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'AI' }))
+
+    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(/^\/ai$/)
+  })
+
   it('offers Preferences', async () => {
     renderWithProviders(
       <>
