@@ -34,6 +34,14 @@ const DEFAULT_PREFERENCES = {
   home_show_quick_watches: true,
   home_show_latest: true,
   theme: 'light',
+  ai_enabled: false,
+  ollama_url: '',
+  summaries_enabled: false,
+  summaries_model: 'qwen3:4b',
+  summaries_context_length: 12288,
+  summaries_temperature: 0.3,
+  summaries_thinking: true,
+  summaries_prompt: null,
 }
 
 export const test = base.extend({
@@ -65,8 +73,8 @@ export const test = base.extend({
 
   defaultPreferences: [
     async ({ request }, use) => {
-      const response = await request.put('/api/preferences', { data: DEFAULT_PREFERENCES })
-      expect(response.ok(), 'PUT /api/preferences').toBeTruthy()
+      const response = await request.patch('/api/preferences', { data: DEFAULT_PREFERENCES })
+      expect(response.ok(), 'PATCH /api/preferences').toBeTruthy()
       await use()
     },
     { auto: true },

@@ -4,3 +4,4 @@ target
 .github
 openspec
 *.md
+!prompts/**/*.md

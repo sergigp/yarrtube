@@ -3,6 +3,7 @@ pub mod categories;
 pub mod channels;
 pub mod directories;
 pub mod error;
+pub mod ollama;
 pub mod playlists;
 pub mod preferences;
 pub mod tasks;
@@ -13,9 +14,10 @@ pub mod videos;
 use crate::domain::services::{
     CategoryCreator, CategoryDeleter, CategoryUpdater, CategoryViewSearcher, ChannelCreator,
     ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
-    DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
-    PlaylistVideoReconciler, PlaylistViewSearcher, PreferencesSearcher, PreferencesUpdater,
-    ShowMover, SubtitleReader, TaskViewSearcher, VideoSearcher, VideoWatchStateUpdater,
+    DirectorySearcher, LlmServerSearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
+    PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher, PreferencesSearcher,
+    PreferencesUpdater, ShowMover, SubtitleReader, TaskViewSearcher, VideoSearcher,
+    VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
@@ -62,6 +64,7 @@ pub struct ApiServices {
     pub running_version: RunningVersion,
     pub preferences_searcher: PreferencesSearcher,
     pub preferences_updater: PreferencesUpdater,
+    pub llm_server_searcher: LlmServerSearcher,
 }
 
 pub fn api_router(api_services: ApiServices) -> Router {
@@ -99,9 +102,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route("/videos/{id}/watched", post(videos::mark_video_watched))
         .route("/tasks", get(tasks::list_tasks))
         .route("/version", get(version::get_version))
+        .route("/ollama", get(ollama::get_ollama))
         .route(
             "/preferences",
-            get(preferences::get_preferences).put(preferences::update_preferences),
+            get(preferences::get_preferences).patch(preferences::update_preferences),
         )
         .route(
             "/channels",

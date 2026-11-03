@@ -26,6 +26,9 @@ export function SettingsMenu() {
           <Link to="/preferences">Preferences</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
+          <Link to="/ai">AI</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <a href={NEW_ISSUE_URL} target="_blank" rel="noreferrer">
             Report a bug
           </a>

@@ -13,7 +13,9 @@ import type {
   VideoSearchResults,
   PlaylistListItem,
   PlaylistPreview,
+  OllamaServer,
   Preferences,
+  PreferencesPatch,
   RecordProgressResponse,
   Task,
   Video,
@@ -85,9 +87,14 @@ export function fetchPreferences(): Promise<Preferences> {
   return request('/preferences')
 }
 
-/** Replaces every preference; resolves with the saved ones. */
-export function savePreferences(preferences: Preferences): Promise<Preferences> {
-  return request('/preferences', { method: 'PUT', body: preferences })
+/** Changes only the preferences in `patch`; resolves with every preference. */
+export function patchPreferences(patch: PreferencesPatch): Promise<Preferences> {
+  return request('/preferences', { method: 'PATCH', body: patch })
+}
+
+/** Checks the Ollama server at `url` (saved or not) and lists its models. */
+export function fetchOllama(url: string): Promise<OllamaServer> {
+  return request(`/ollama?url=${encodeURIComponent(url)}`)
 }
 
 /**

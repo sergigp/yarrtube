@@ -1,8 +1,8 @@
-use crate::domain::preferences::{Preferences, SavePreferencesError};
+use crate::domain::preferences::{Preferences, PreferencesChange, UpdatePreferencesError};
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use std::sync::Arc;
 
-/// Saves the user's preferences.
+/// Changes the user's preferences.
 #[derive(Clone)]
 pub struct PreferencesUpdater {
     repository: Arc<dyn PreferencesRepository>,
@@ -15,15 +15,29 @@ impl PreferencesUpdater {
 }
 
 pub trait PreferencesUpdaterApi: Send + Sync {
-    /// Replaces every preference with `preferences`.
-    fn save(&self, preferences: Preferences) -> Result<Preferences, SavePreferencesError>;
+    /// Applies `change` to the stored preferences (or the defaults) and
+    /// saves the result, or saves nothing when any of it is invalid.
+    fn update(&self, change: PreferencesChange) -> Result<Preferences, UpdatePreferencesError>;
 }
 
 impl PreferencesUpdaterApi for PreferencesUpdater {
-    fn save(&self, preferences: Preferences) -> Result<Preferences, SavePreferencesError> {
+    fn update(&self, change: PreferencesChange) -> Result<Preferences, UpdatePreferencesError> {
+        let updated = self
+            .stored()?
+            .apply(change)
+            .map_err(UpdatePreferencesError::Invalid)?;
         self.repository
-            .save(&preferences)
-            .map_err(SavePreferencesError::Repository)?;
-        Ok(preferences)
+            .save(&updated)
+            .map_err(UpdatePreferencesError::Repository)?;
+        Ok(updated)
+    }
+}
+
+impl PreferencesUpdater {
+    fn stored(&self) -> Result<Preferences, UpdatePreferencesError> {
+        self.repository
+            .find()
+            .map(Option::unwrap_or_default)
+            .map_err(UpdatePreferencesError::Repository)
     }
 }

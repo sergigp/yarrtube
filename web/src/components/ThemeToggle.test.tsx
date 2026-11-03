@@ -12,7 +12,7 @@ describe('ThemeToggle', () => {
   it('switches to dark mode and saves it as a preference', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences({ home_show_latest: false }),
-      'PUT /api/preferences': aPreferences({ home_show_latest: false, theme: 'dark' }),
+      'PATCH /api/preferences': aPreferences({ home_show_latest: false, theme: 'dark' }),
     })
     renderWithProviders(<ThemeToggle />)
     const user = userEvent.setup()
@@ -27,8 +27,8 @@ describe('ThemeToggle', () => {
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/preferences',
         expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify(aPreferences({ home_show_latest: false, theme: 'dark' })),
+          method: 'PATCH',
+          body: JSON.stringify({ theme: 'dark' }),
         }),
       ),
     )
@@ -38,7 +38,7 @@ describe('ThemeToggle', () => {
     document.documentElement.classList.add('dark')
     mockApi({
       'GET /api/preferences': aPreferences({ theme: 'dark' }),
-      'PUT /api/preferences': aPreferences({ theme: 'light' }),
+      'PATCH /api/preferences': aPreferences({ theme: 'light' }),
     })
     renderWithProviders(<ThemeToggle />)
     const user = userEvent.setup()
@@ -53,7 +53,7 @@ describe('ThemeToggle', () => {
   it('switches back if the theme fails to save', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'PUT /api/preferences': { status: 500, error: 'disk full' },
+      'PATCH /api/preferences': { status: 500, error: 'disk full' },
     })
     renderWithProviders(<ThemeToggle />)
     const user = userEvent.setup()

@@ -105,6 +105,7 @@ impl From<StoredPreferences> for Preferences {
                 .theme
                 .and_then(|theme| Theme::new(theme).ok())
                 .unwrap_or(defaults.theme),
+            ..defaults
         }
     }
 }
@@ -133,6 +134,7 @@ mod tests {
             home_show_quick_watches: true,
             home_show_latest: false,
             theme: Theme::Dark,
+            ..Preferences::default()
         };
 
         repository.save(&preferences).unwrap();

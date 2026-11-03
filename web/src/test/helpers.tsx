@@ -3,6 +3,7 @@ import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, type InitialEntry } from 'react-router-dom'
 import { vi } from 'vitest'
+import SHIPPED_PROMPT from '../../../prompts/summaries/v3.md?raw'
 import type {
   Announcement,
   AppVersion,
@@ -13,6 +14,7 @@ import type {
   CreatedCategory,
   HomeCategorySection,
   HomeVideo,
+  OllamaServer,
   PlaylistListItem,
   Preferences,
   Task,
@@ -300,6 +302,26 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     home_show_quick_watches: true,
     home_show_latest: true,
     theme: 'light',
+    ai_enabled: false,
+    ollama_url: null,
+    summaries_enabled: false,
+    summaries_model: 'qwen3:4b',
+    summaries_context_length: 12288,
+    summaries_temperature: 0.3,
+    summaries_thinking: true,
+    summaries_prompt: SHIPPED_PROMPT,
+    summaries_prompt_is_default: true,
+    ...overrides,
+  }
+}
+
+export function anOllamaServer(overrides: Partial<OllamaServer> = {}): OllamaServer {
+  return {
+    version: '0.40.13',
+    models: [
+      { name: 'gemma3:4b', size_bytes: 3_338_801_804, thinking: false },
+      { name: 'qwen3:4b', size_bytes: 2_497_293_918, thinking: true },
+    ],
     ...overrides,
   }
 }

@@ -11,6 +11,9 @@ use crate::infrastructure::repositories::filesystem_show_file_repository::{
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
     FilesystemVideoFileRepository, VideoFileRepository,
 };
+use crate::infrastructure::repositories::ollama_llm_server_repository::{
+    LlmServerRepository, OllamaLlmServerRepository,
+};
 use crate::infrastructure::repositories::sqlite_category_playlist_repository::{
     CategoryPlaylistRepository, SqliteCategoryPlaylistRepository,
 };
@@ -112,6 +115,7 @@ pub struct InfrastructureContainer {
     pub episode_labels_repository: Arc<dyn EpisodeLabelsRepository>,
     pub category_playlist_repository: Arc<dyn CategoryPlaylistRepository>,
     pub preferences_repository: Arc<dyn PreferencesRepository>,
+    pub llm_server_repository: Arc<dyn LlmServerRepository>,
     pub task_repository: Arc<dyn TaskRepository>,
     pub event_publisher: Arc<dyn EventPublisher>,
     pub event_repository: Arc<dyn EventRepository>,
@@ -161,6 +165,7 @@ impl InfrastructureContainer {
                 db.clone(),
             )),
             preferences_repository: Arc::new(SqlitePreferencesRepository::new(db.clone())),
+            llm_server_repository: Arc::new(OllamaLlmServerRepository::new()),
             task_repository: Arc::new(SqliteTaskRepository::new(db.clone(), clock.clone())),
             event_publisher: Arc::new(SqliteEventPublisher::new(db.clone(), clock.clone())),
             event_repository: Arc::new(SqliteEventRepository::new(db.clone())),

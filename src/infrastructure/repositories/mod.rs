@@ -4,6 +4,7 @@ pub mod filesystem_channel_avatar_repository;
 pub mod filesystem_directory_repository;
 pub mod filesystem_show_file_repository;
 pub mod filesystem_video_file_repository;
+pub mod ollama_llm_server_repository;
 pub mod plex_library_repository;
 pub mod sqlite_category_playlist_repository;
 pub mod sqlite_category_repository;

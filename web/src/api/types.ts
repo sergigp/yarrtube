@@ -246,7 +246,7 @@ export interface CreatedCategory {
   playlists: string[]
 }
 
-/** Response of `GET`/`PUT /api/preferences`, and body of the `PUT`: every preference. */
+/** Response of `GET`/`PATCH /api/preferences`: every preference. */
 export interface Preferences {
   categories_enabled: boolean
   home_show_continue_watching: boolean
@@ -254,4 +254,39 @@ export interface Preferences {
   home_show_quick_watches: boolean
   home_show_latest: boolean
   theme: 'light' | 'dark'
+  ai_enabled: boolean
+  ollama_url: string | null
+  summaries_enabled: boolean
+  summaries_model: string
+  summaries_context_length: number
+  summaries_temperature: number
+  summaries_thinking: boolean
+  /** The saved prompt, or the shipped one when none is saved. */
+  summaries_prompt: string
+  summaries_prompt_is_default: boolean
+}
+
+/**
+ * Body of `PATCH /api/preferences`: only the preferences to change.
+ * `ollama_url: ""` unsets the URL; `summaries_prompt: null` goes back to the
+ * shipped prompt.
+ */
+export type PreferencesPatch = Partial<
+  Omit<Preferences, 'ollama_url' | 'summaries_prompt' | 'summaries_prompt_is_default'>
+> & {
+  ollama_url?: string
+  summaries_prompt?: string | null
+}
+
+/** Response of `GET /api/ollama?url=`: an Ollama server and its models. */
+export interface OllamaServer {
+  version: string
+  models: OllamaModel[]
+}
+
+export interface OllamaModel {
+  name: string
+  size_bytes: number
+  /** Whether the model can think before answering. */
+  thinking: boolean
 }

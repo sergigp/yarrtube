@@ -15,6 +15,7 @@ pub mod chapter_fetcher;
 pub mod directory_searcher;
 pub mod internal_video_reconciler;
 pub mod layout_migrator;
+pub mod llm_server_searcher;
 pub mod metadata_generator;
 pub mod playlist_creator;
 pub mod playlist_deleter;
@@ -61,6 +62,7 @@ pub use internal_video_reconciler::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi,
 };
 pub use layout_migrator::{LayoutMigrator, LayoutMigratorApi, MigrationReport};
+pub use llm_server_searcher::{LlmServerSearcher, LlmServerSearcherApi};
 pub use metadata_generator::{MetadataGenerator, MetadataGeneratorApi};
 pub use playlist_creator::{CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi};
 pub use playlist_deleter::{PlaylistDeleter, PlaylistDeleterApi};

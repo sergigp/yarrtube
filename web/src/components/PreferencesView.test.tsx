@@ -27,10 +27,10 @@ describe('PreferencesView', () => {
     ])
   })
 
-  it('saves every preference with the toggled one changed', async () => {
+  it('saves only the toggled preference', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences(),
-      'PUT /api/preferences': aPreferences({ home_show_quick_watches: false }),
+      'PATCH /api/preferences': aPreferences({ home_show_quick_watches: false }),
     })
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup()
@@ -42,15 +42,15 @@ describe('PreferencesView', () => {
     )
     expect(
       fetchMock.mock.calls
-        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
         .map(([url, init]) => [url, JSON.parse((init as RequestInit).body as string)]),
-    ).toEqual([['/api/preferences', aPreferences({ home_show_quick_watches: false })]])
+    ).toEqual([['/api/preferences', { home_show_quick_watches: false }]])
   })
 
   it('reports a failed save and keeps the saved value', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'PUT /api/preferences': { status: 500, error: 'disk full' },
+      'PATCH /api/preferences': { status: 500, error: 'disk full' },
     })
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup()
@@ -120,7 +120,7 @@ describe('PreferencesView', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'PUT /api/preferences': aPreferences({ home_show_quick_watches: false }),
+      'PATCH /api/preferences': aPreferences({ home_show_quick_watches: false }),
     })
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
@@ -135,7 +135,7 @@ describe('PreferencesView', () => {
   it('does not say "Saved" when the save fails', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'PUT /api/preferences': { status: 500, error: 'disk full' },
+      'PATCH /api/preferences': { status: 500, error: 'disk full' },
     })
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup()
@@ -146,12 +146,12 @@ describe('PreferencesView', () => {
     expect(screen.queryByText('Saved')).not.toBeInTheDocument()
   })
 
-  it('keeps a second toggle from undoing one still being saved', async () => {
+  it('saves one toggle at a time', async () => {
     const firstSave = heldUntilReleased(aPreferences({ home_show_quick_watches: false }))
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences(),
-      'PUT /api/preferences': () =>
-        fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT').length === 1
+      'PATCH /api/preferences': () =>
+        fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH').length === 1
           ? (firstSave.route as () => Promise<unknown>)()
           : aPreferences({ home_show_quick_watches: false, home_show_latest: false }),
     })
@@ -172,19 +172,16 @@ describe('PreferencesView', () => {
     )
     expect(
       fetchMock.mock.calls
-        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
         .map(([, init]) => JSON.parse((init as RequestInit).body as string)),
-    ).toEqual([
-      aPreferences({ home_show_quick_watches: false }),
-      aPreferences({ home_show_quick_watches: false, home_show_latest: false }),
-    ])
+    ).toEqual([{ home_show_quick_watches: false }, { home_show_latest: false }])
   })
 
   it('reloads cached home videos as soon as a preference is saved', async () => {
     const emptyHome = { continue_watching: [], categories: [], quick_watches: [], latest: [] }
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences(),
-      'PUT /api/preferences': aPreferences({ home_show_quick_watches: false }),
+      'PATCH /api/preferences': aPreferences({ home_show_quick_watches: false }),
       'GET /api/videos/home': emptyHome,
     })
     const { queryClient } = renderWithProviders(<PreferencesView />)

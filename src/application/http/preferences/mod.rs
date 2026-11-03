@@ -2,25 +2,17 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use super::validation::required;
-use crate::domain::preferences::{Preferences, Theme};
+use crate::domain::llm_server::OllamaUrl;
+use crate::domain::preferences::{
+    ContextLength, PreferencesChange, SummaryModel, SummaryPrompt, Temperature, Theme,
+    UpdatePreferencesError,
+};
 use crate::domain::services::{
     PreferencesSearcher, PreferencesSearcherApi, PreferencesUpdater, PreferencesUpdaterApi,
 };
 use axum::Json;
 use axum::extract::State;
 use dto::{PreferencesResponse, UpdatePreferencesRequest};
-
-const MISSING_CATEGORIES_ENABLED: &str = "Whether categories are enabled must be stated (missing)";
-const MISSING_HOME_SHOW_CONTINUE_WATCHING: &str =
-    "Whether to show continue watching on home must be stated (missing)";
-const MISSING_HOME_SHOW_CATEGORIES: &str =
-    "Whether to show categories on home must be stated (missing)";
-const MISSING_HOME_SHOW_QUICK_WATCHES: &str =
-    "Whether to show quick watches on home must be stated (missing)";
-const MISSING_HOME_SHOW_LATEST: &str =
-    "Whether to show latest videos on home must be stated (missing)";
-const MISSING_THEME: &str = "Theme must be stated (missing)";
 
 pub async fn get_preferences(
     State(preferences_searcher): State<PreferencesSearcher>,
@@ -35,29 +27,61 @@ pub async fn update_preferences(
     State(preferences_updater): State<PreferencesUpdater>,
     Json(request): Json<UpdatePreferencesRequest>,
 ) -> Result<Json<PreferencesResponse>, ApiError> {
-    let preferences = Preferences {
-        categories_enabled: required(request.categories_enabled, MISSING_CATEGORIES_ENABLED)?,
-        home_show_continue_watching: required(
-            request.home_show_continue_watching,
-            MISSING_HOME_SHOW_CONTINUE_WATCHING,
-        )?,
-        home_show_categories: required(request.home_show_categories, MISSING_HOME_SHOW_CATEGORIES)?,
-        home_show_quick_watches: required(
-            request.home_show_quick_watches,
-            MISSING_HOME_SHOW_QUICK_WATCHES,
-        )?,
-        home_show_latest: required(request.home_show_latest, MISSING_HOME_SHOW_LATEST)?,
-        theme: Theme::new(required(request.theme, MISSING_THEME)?)?,
-    };
-    let saved = run_blocking(move || preferences_updater.save(preferences))
+    let change = preferences_change(request)?;
+    let updated = run_blocking(move || preferences_updater.update(change))
         .await?
-        .map_err(ApiError::internal)?;
-    Ok(Json(PreferencesResponse::from(saved)))
+        .map_err(update_preferences_error)?;
+    Ok(Json(PreferencesResponse::from(updated)))
+}
+
+/// The request's fields as value objects, rejecting the first invalid one.
+fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesChange, ApiError> {
+    Ok(PreferencesChange {
+        categories_enabled: request.categories_enabled,
+        home_show_continue_watching: request.home_show_continue_watching,
+        home_show_categories: request.home_show_categories,
+        home_show_quick_watches: request.home_show_quick_watches,
+        home_show_latest: request.home_show_latest,
+        theme: request.theme.map(Theme::new).transpose()?,
+        ai_enabled: request.ai_enabled,
+        ollama_url: request.ollama_url.map(ollama_url).transpose()?,
+        summaries_enabled: request.summaries_enabled,
+        summaries_model: request.summaries_model.map(SummaryModel::new).transpose()?,
+        summaries_context_length: request
+            .summaries_context_length
+            .map(ContextLength::new)
+            .transpose()?,
+        summaries_temperature: request
+            .summaries_temperature
+            .map(Temperature::new)
+            .transpose()?,
+        summaries_thinking: request.summaries_thinking,
+        summaries_prompt: request
+            .summaries_prompt
+            .map(|prompt| prompt.map(SummaryPrompt::new).transpose())
+            .transpose()?,
+    })
+}
+
+/// An empty URL unsets it.
+fn ollama_url(value: String) -> Result<Option<OllamaUrl>, ApiError> {
+    match value.as_str() {
+        "" => Ok(None),
+        _ => Ok(Some(OllamaUrl::new(value)?)),
+    }
+}
+
+fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
+    match error {
+        UpdatePreferencesError::Invalid(e) => ApiError::from(e),
+        e @ UpdatePreferencesError::Repository(_) => ApiError::internal(e),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::preferences::Preferences;
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
     };
@@ -139,23 +163,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_save_if_a_preference_missing() {
-        let request = UpdatePreferencesRequest {
-            home_show_latest: None,
-            ..all_on_request()
-        };
-
-        let response = update(any_preferences_updater(), request).await;
-
-        assert_eq!(
-            response,
-            Err(ApiError::bad_request(
-                "Whether to show latest videos on home must be stated (missing)"
-            ))
-        );
-    }
-
-    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -180,21 +187,6 @@ mod tests {
                 theme: Theme::Dark,
                 ..Preferences::default()
             })
-        );
-    }
-
-    #[tokio::test]
-    async fn it_should_fail_to_save_if_theme_missing() {
-        let request = UpdatePreferencesRequest {
-            theme: None,
-            ..all_on_request()
-        };
-
-        let response = update(any_preferences_updater(), request).await;
-
-        assert_eq!(
-            response,
-            Err(ApiError::bad_request("Theme must be stated (missing)"))
         );
     }
 
@@ -272,6 +264,7 @@ mod tests {
             home_show_quick_watches: Some(true),
             home_show_latest: Some(true),
             theme: Some("light".to_string()),
+            ..UpdatePreferencesRequest::default()
         }
     }
 
@@ -283,6 +276,7 @@ mod tests {
             home_show_quick_watches: true,
             home_show_latest: true,
             theme: "light".to_string(),
+            ..PreferencesResponse::from(Preferences::default())
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::domain::shared::ValidationError;
 use std::fmt;
 
 #[derive(Debug)]
@@ -16,16 +17,18 @@ impl fmt::Display for ReadPreferencesError {
 impl std::error::Error for ReadPreferencesError {}
 
 #[derive(Debug)]
-pub enum SavePreferencesError {
+pub enum UpdatePreferencesError {
+    Invalid(ValidationError),
     Repository(anyhow::Error),
 }
 
-impl fmt::Display for SavePreferencesError {
+impl fmt::Display for UpdatePreferencesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Invalid(e) => write!(f, "{e}"),
             Self::Repository(e) => write!(f, "{e}"),
         }
     }
 }
 
-impl std::error::Error for SavePreferencesError {}
+impl std::error::Error for UpdatePreferencesError {}

@@ -19,7 +19,7 @@ describe('SettingsMenu', () => {
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
     await user.click(screen.getByRole('menuitem', { name: 'Tasks' }))
 
-    expect(items).toEqual(['Tasks', 'Preferences', 'Report a bug'])
+    expect(items).toEqual(['Tasks', 'Preferences', 'AI', 'Report a bug'])
     expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
       /^\/tasks$/,
     )

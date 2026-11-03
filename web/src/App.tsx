@@ -11,6 +11,7 @@ import { AddPlaylistDialog } from './components/AddPlaylistDialog'
 import { AddCategoryDialog } from './components/AddCategoryDialog'
 import { SIDEBAR_ID, Sidebar } from './components/Sidebar'
 import { SettingsMenu } from './components/SettingsMenu'
+import { AiSettingsView } from './components/AiSettingsView'
 import { ThemeToggle } from './components/ThemeToggle'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { MobileNavToggle } from './components/MobileNavToggle'
@@ -152,6 +153,7 @@ export function AppShell() {
               <Route path="/channels/:id" element={<ChannelDetail />} />
               <Route path="/tasks" element={<TasksView />} />
               <Route path="/preferences" element={<PreferencesView />} />
+              <Route path="/ai" element={<AiSettingsView />} />
               <Route path="/categories/:id" element={<CategoryDetail />} />
             </Routes>
           </div>

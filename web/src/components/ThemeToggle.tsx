@@ -7,7 +7,7 @@ import { applyTheme, useTheme } from '@/hooks/useTheme'
  * The header's light/dark switch: a round knob that slides right into dark
  * mode, showing a sun in light mode and a moon in dark mode. The theme is
  * drawn at once and saved as a preference; a failed save draws the saved
- * one back. Disabled until the preferences load, since saving sends them all.
+ * one back. Disabled until the preferences load, the theme to fall back to.
  */
 export function ThemeToggle() {
   const theme = useTheme()
@@ -21,7 +21,7 @@ export function ThemeToggle() {
     }
     applyTheme(checked ? 'dark' : 'light')
     try {
-      await saveTheme(preferences, checked ? 'dark' : 'light')
+      await saveTheme(checked ? 'dark' : 'light')
     } catch {
       applyTheme(preferences.theme)
     }

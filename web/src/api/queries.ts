@@ -13,6 +13,7 @@ import {
   fetchChannels,
   fetchChannelVideos,
   fetchHomeVideos,
+  fetchOllama,
   searchVideos,
   fetchPlaylists,
   fetchPreferences,
@@ -25,7 +26,7 @@ import {
   markVideoWatched,
   previewChannel,
   previewPlaylist,
-  savePreferences,
+  patchPreferences,
   updateChannel,
   updatePlaylist,
   type UpdateChannelRequest,
@@ -39,10 +40,12 @@ import type {
   ChannelListItem,
   ChannelPreview,
   HomeVideos,
+  OllamaServer,
   VideoSearchResults,
   PlaylistListItem,
   PlaylistPreview,
   Preferences,
+  PreferencesPatch,
   Task,
   Video,
 } from './types'
@@ -76,6 +79,7 @@ export const queryKeys = {
   announcements: ['announcements'] as const,
   version: ['version'] as const,
   preferences: ['preferences'] as const,
+  ollama: (url: string) => ['ollama', url] as const,
   // Outside the `['playlists']` and `['channels']` prefixes so refetching the
   // library leaves them be.
   playlistPreview: (value: string) => ['playlist-preview', value] as const,
@@ -222,6 +226,37 @@ export function usePreferences(): UseQueryResult<Preferences, Error> {
   })
 }
 
+/**
+ * The Ollama server at `url` (none while `url` is null), checked once: a
+ * failed check isn't retried, the user tests the connection again instead.
+ */
+export function useOllama(url: string | null): UseQueryResult<OllamaServer, Error> {
+  return useQuery({
+    queryKey: queryKeys.ollama(url ?? ''),
+    queryFn: () => fetchOllama(url ?? ''),
+    enabled: url !== null,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+}
+
+/**
+ * Returns a function that checks the Ollama server at `url` now, keeping the
+ * answer as that URL's `useOllama` data.
+ */
+export function useCheckOllama(): (url: string) => Promise<OllamaServer> {
+  const queryClient = useQueryClient()
+  return useCallback(
+    async (url: string) => {
+      const server = await fetchOllama(url)
+      queryClient.setQueryData(queryKeys.ollama(url), server)
+      return server
+    },
+    [queryClient],
+  )
+}
+
 /** Whether category UI shows, as decided by `categoriesShown`. */
 export function useCategoriesShown(): boolean {
   const { data, isError } = usePreferences()
@@ -229,14 +264,15 @@ export function useCategoriesShown(): boolean {
 }
 
 /**
- * Returns a function that saves every preference, then shows the saved ones
- * everywhere and refetches the home videos, whose sections follow them.
+ * Returns a function that saves the preferences in `patch`, then shows the
+ * saved ones everywhere and refetches the home videos, whose sections follow
+ * them.
  */
-export function useSavePreferences(): (preferences: Preferences) => Promise<void> {
+export function useSavePreferences(): (patch: PreferencesPatch) => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(
-    async (preferences: Preferences) => {
-      const saved = await savePreferences(preferences)
+    async (patch: PreferencesPatch) => {
+      const saved = await patchPreferences(patch)
       queryClient.setQueryData(queryKeys.preferences, saved)
       // Refetched even while home isn't shown, so going back to it doesn't
       // first show sections from before the change.
@@ -247,18 +283,15 @@ export function useSavePreferences(): (preferences: Preferences) => Promise<void
 }
 
 /**
- * Returns a function that saves the preferences with only the theme changed,
- * then shows the saved ones everywhere. Unlike `useSavePreferences`, home
- * videos aren't refetched: the theme doesn't change them.
+ * Returns a function that saves the theme, then shows the saved preferences
+ * everywhere. Unlike `useSavePreferences`, home videos aren't refetched: the
+ * theme doesn't change them.
  */
-export function useSaveTheme(): (
-  preferences: Preferences,
-  theme: Preferences['theme'],
-) => Promise<void> {
+export function useSaveTheme(): (theme: Preferences['theme']) => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(
-    async (preferences: Preferences, theme: Preferences['theme']) => {
-      const saved = await savePreferences({ ...preferences, theme })
+    async (theme: Preferences['theme']) => {
+      const saved = await patchPreferences({ theme })
       queryClient.setQueryData(queryKeys.preferences, saved)
     },
     [queryClient],
