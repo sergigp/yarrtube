@@ -64,10 +64,10 @@ Web (Vitest)
 
 ## 4. Verification
 
-- [ ] 4.1 E2E: `e2e-tests/ollama-stub.js` (`/api/version`, `/api/tags`, `/api/show`) started like the Plex stub; `aiSettings.spec.js` covers Settings → AI, Test connection, enable AI + summaries, pick model, Save, reload shows saved values, Reset prompt. Passes in `scripts/run-tests.sh`.
-- [ ] 4.2 `docker build .` succeeds (prompt file reaches the build context).
-- [ ] 4.3 Update `doc/AI.md` (settings live in the app; prompt default = shipped v3, edits stored in preferences).
-- [ ] 4.4 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `scripts/run-tests.sh` (no flags) all pass.
+- [x] 4.1 E2E: `e2e-tests/ollama-stub.js` (`/api/version`, `/api/tags`, `/api/show`) started like the Plex stub; `aiSettings.spec.js` covers Settings → AI, Test connection, enable AI + summaries, pick model, Save, reload shows saved values, Reset prompt. Passes in `scripts/run-tests.sh`.
+- [x] 4.2 `docker build .` succeeds (prompt file reaches the build context).
+- [x] 4.3 Update `doc/AI.md` (settings live in the app; prompt default = shipped v3, edits stored in preferences).
+- [x] 4.4 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `scripts/run-tests.sh` (no flags) all pass.
 - [ ] 4.5 Manual (agent): `scripts/run-local.sh --port <free port> --fresh-videos`; with Playwright MCP open Settings → AI, test against the user's real Ollama (or a stub), enable AI + summaries, pick a model, edit a prompt rule, Save, reload and assert values persisted; break a section and assert the error; Reset and assert `Using the default prompt`; screenshot; stop server, delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.6 Manual (human): visual judgement of the AI page layout (light/dark, mobile width) and the prompt editor's usability with the full ~4 KB prompt.
 
