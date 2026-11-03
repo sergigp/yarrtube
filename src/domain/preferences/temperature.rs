@@ -6,7 +6,12 @@ pub struct Temperature(f64);
 
 impl Temperature {
     pub fn new(value: f64) -> Result<Self, ValidationError> {
-        Ok(Self(value))
+        match (0.0..=2.0).contains(&value) {
+            true => Ok(Self(value)),
+            false => Err(ValidationError(format!(
+                "Temperature must be between 0 and 2 (got {value})"
+            ))),
+        }
     }
 
     pub fn value(&self) -> f64 {

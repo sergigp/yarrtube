@@ -16,7 +16,7 @@ Preferences handler (acceptance, real SQLite)
 - [x] 2.7 `it_should_fail_to_enable_ai_without_a_url` — 400 `Ollama URL must be set to enable AI`, stored unchanged.
 - [x] 2.8 `it_should_fail_to_unset_the_url_while_ai_is_on`.
 - [x] 2.9 `it_should_save_the_summary_settings` — model, context length, temperature, thinking.
-- [ ] 2.10 `it_should_fail_on_an_out_of_range_temperature_and_save_nothing` — valid `categories_enabled` sent alongside stays unchanged.
+- [x] 2.10 `it_should_fail_on_an_out_of_range_temperature_and_save_nothing` — valid `categories_enabled` sent alongside stays unchanged.
 - [ ] 2.11 `it_should_save_an_edited_prompt` — `summaries_prompt_is_default` false.
 - [ ] 2.12 `it_should_not_store_the_prompt_when_saving_other_preferences`.
 - [ ] 2.13 `it_should_return_to_the_shipped_prompt_on_null`.

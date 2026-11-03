@@ -388,6 +388,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_on_an_out_of_range_temperature_and_save_nothing() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            categories_enabled: Some(false),
+            summaries_temperature: Some(5.0),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Temperature must be between 0 and 2 (got 5)"
+            ))
+        );
+        assert_eq!(repository.find().unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
