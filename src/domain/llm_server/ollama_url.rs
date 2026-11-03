@@ -9,7 +9,15 @@ pub struct OllamaUrl(String);
 impl OllamaUrl {
     pub fn new(value: impl Into<String>) -> Result<Self, ValidationError> {
         let value = value.into();
-        Ok(Self(value.trim_end_matches('/').to_string()))
+        match ["http://", "https://"]
+            .iter()
+            .any(|scheme| value.starts_with(scheme))
+        {
+            true => Ok(Self(value.trim_end_matches('/').to_string())),
+            false => Err(ValidationError(format!(
+                "Ollama URL must be an http(s) URL (got \"{value}\")"
+            ))),
+        }
     }
 
     pub fn as_str(&self) -> &str {

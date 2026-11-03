@@ -109,6 +109,22 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_if_the_url_is_not_http() {
+        let query = OllamaQuery {
+            url: Some("mac.local:11434".to_string()),
+        };
+
+        let response = get(any_llm_server_searcher(), query).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Ollama URL must be an http(s) URL (got \"mac.local:11434\")"
+            ))
+        );
+    }
+
     async fn get(
         llm_server_searcher: LlmServerSearcher,
         query: OllamaQuery,
