@@ -475,6 +475,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_to_the_shipped_prompt_on_null() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        repository
+            .save(&Preferences {
+                summaries: SummarySettings {
+                    prompt: Some(SummaryPrompt::new(edited_prompt()).unwrap()),
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            })
+            .unwrap();
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request: UpdatePreferencesRequest =
+            serde_json::from_str(r#"{"summaries_prompt": null}"#).unwrap();
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(response, Ok(all_on_response()));
+        assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
