@@ -90,7 +90,8 @@ impl ChannelCreatorApi for ChannelCreator {
             path,
             avatar_filename,
             self.clock.now(),
-        );
+        )
+        .with_summaries_enabled(summaries_enabled);
         self.insert_channel(&channel)?;
         self.publish_channel_created(&channel)?;
         info!(channel_id = %channel.id, name = %channel.name, "created channel");

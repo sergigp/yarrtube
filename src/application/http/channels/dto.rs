@@ -65,7 +65,7 @@ impl From<Channel> for ChannelResponse {
             quality: channel.quality.as_str().to_string(),
             video_limit: channel.video_limit.value(),
             reconcile_interval_minutes: channel.reconcile_interval.minutes(),
-            summaries_enabled: false,
+            summaries_enabled: channel.summaries_enabled,
             path: channel.path.as_str().to_string(),
             avatar_filename: channel.avatar_filename,
             created_at: channel.created_at,
