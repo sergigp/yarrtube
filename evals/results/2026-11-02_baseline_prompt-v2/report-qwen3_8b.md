@@ -23,8 +23,9 @@
 - **gemma3:4b** · future-of-capitalism · `decoupling-would-come-too-late` → missing: missing
 - **gemma3:4b** · quantum-ai · `advantage-only-on-artificial-problem` → missing: missing: The summary mentions examples like data classification but does not specify the roulette squares example or its artificial nature, so the fact's claim about the example is not addressed.
 
-## Judge vs human verdicts: 0/3 agree
+## Judge vs human verdicts: 0/4 agree
 
+- qwen3:4b · accelerated-dragon · `game3-draw-missed-win`: human stated, judge missing
 - qwen3:4b · browser-tabs · `built-browser-tabs-cli`: human stated, judge contradicted
 - qwen3:4b · browser-tabs · `open-source-semantic-release`: human stated, judge missing
 - qwen3:4b · browser-tabs · `worth-it-saves-time`: human stated, judge missing

@@ -1,0 +1,7 @@
+{"errors": [
+{"quote": "resulting in one loss and two draws", "kind": "wrong", "severity": "major", "reason": "Game 1 is described as an easy win with the cheeky king doing all the work (12:00-16:14), game 2 ends with his pawns promoting (35:41-35:49), and only game 3 is called a draw (56:59)."},
+{"quote": "later realized he lost (a \"minus 4\" result)", "kind": "wrong", "severity": "major", "reason": "He says 'I didn't understand this is minus4. I thought I was barely winning' (14:12-14:18) about an evaluation, and the game is then reviewed as a winning one, not a loss."},
+{"quote": "The second game ended in a draw after he made endgame mistakes", "kind": "wrong", "severity": "major", "reason": "In game 2 his opponent made the mistakes and his pawns promoted (28:20, 35:41-35:49); the speaker's mistake was the opening move (24:32-24:38), and the game was not a draw."},
+{"quote": "while the third game (against the Alapin variation) also concluded in a draw after a tense pawn race", "kind": "misleading", "severity": "minor", "reason": "The tense pawn race was game 2 (33:52); game 3 against the Alapin was a draw after a time scramble (54:34, 56:59)."},
+{"quote": "but precise endgame play is essential to avoid losses", "kind": "unsupported", "severity": "major", "reason": "The video draws no such conclusion; he calls it instructive technical chess (16:26-16:38), and no game is described as lost."}
+]}

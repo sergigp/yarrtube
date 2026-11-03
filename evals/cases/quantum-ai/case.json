@@ -54,6 +54,11 @@
           "quote": "No de sustituir a la IA clásica, sino complementarla en ciertas tareas específicas, tal vez de ciencia avanzada."
         }
       }
-    ]
+    ],
+    "review": {
+      "reviewed_on": "2026-11-03",
+      "by": "claude-sonnet against the transcript (not a viewer)",
+      "note": "All facts supported, critical flags sensible."
+    }
   }
 }

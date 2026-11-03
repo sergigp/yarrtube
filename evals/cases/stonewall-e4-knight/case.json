@@ -46,7 +46,8 @@
         "evidence": {
           "at": "0:46",
           "quote": "Chess players I need help on how to handle such positions as white. What am I to do against a bloodthirsty knight on E4?"
-        }
+        },
+        "note": "Main claim: the question is how White handles the opponent's knight on e4. Saying Black plays the Stonewall is a detail; fail only if the summary makes White the Stonewall player or the knight White's."
       },
       {
         "id": "dont-take-on-d5",
@@ -87,6 +88,11 @@
           "quote": "no good squares don't move it we want to play Rook B1. We want to play B4 B5."
         }
       }
-    ]
+    ],
+    "review": {
+      "reviewed_on": "2026-11-03",
+      "by": "claude-sonnet against the transcript (not a viewer)",
+      "note": "All facts supported, critical flags sensible."
+    }
   }
 }

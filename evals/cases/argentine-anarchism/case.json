@@ -73,7 +73,7 @@
       {
         "id": "state-responded-with-repression",
         "fact": "The state answered the growth of the labour movement with repression aimed at anarchists: the Residence Law (Ley 4144) after the 1902 general strike, states of siege, the 1909 'Red Week' massacre, and the 1910 Social Defence Law, which left the anarchist movement weakened.",
-        "critical": false,
+        "critical": true,
         "evidence": {
           "at": "30:52",
           "quote": "La respuesta que el Estado llevó adelante ante este panorama fue la aplicación de diferentes mecanismos represivos que pusieron el foco de atención en el movimiento libertario."
@@ -88,6 +88,11 @@
           "quote": "Producto de esta retroalimentación, se gestó la época de oro de la FORA y del anarquismo en Argentina."
         }
       }
-    ]
+    ],
+    "review": {
+      "reviewed_on": "2026-11-03",
+      "by": "claude-sonnet against the transcript (not a viewer)",
+      "note": "All facts supported. state-responded-with-repression made critical: repression is a main theme and chapter. Not covered: the FORA split at the 1910 9th congress and rival currents (UGT/CORA)."
+    }
   }
 }

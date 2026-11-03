@@ -81,7 +81,7 @@
       {
         "id": "minimum-at-p-equals-q",
         "fact": "The key property: with P fixed, cross-entropy is smallest exactly when Q equals P, and that minimum equals the entropy of P; the gap between them is the KL divergence (bits wasted by a poorly optimized code).",
-        "critical": false,
+        "critical": true,
         "note": "KL divergence is introduced at 31:35 as cross-entropy minus entropy.",
         "evidence": {
           "at": "12:08",
@@ -107,6 +107,11 @@
           "quote": "You define the loss at this token to be the cross-entropy of the small model's distribution relative to the big model's."
         }
       }
-    ]
+    ],
+    "review": {
+      "reviewed_on": "2026-11-03",
+      "by": "claude-sonnet against the transcript (not a viewer)",
+      "note": "All facts supported. minimum-at-p-equals-q made critical: the video calls it the one key point to remember. Not covered by a fact: the thesis that the LLM loss is average information per token, so training an LLM is training a compressor."
+    }
   }
 }

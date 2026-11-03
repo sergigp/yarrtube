@@ -56,8 +56,19 @@
         "evidence": {
           "at": "0:32",
           "quote": "realicé un repositorio y una página web que se llama Build your own harness o Build your own coding agent"
+        },
+        "trap": "Presents Build Your Own Harness as the project shown in the video or part of it; it is a separate learning site he promotes."
+      }
+    ],
+    "review": {
+      "reviewed_on": "2026-11-02",
+      "note": "Facts confirmed by a viewer. Viewer prefers gemma3:4b's baseline summary by far: qwen3:4b's mixes up the Build Your Own Harness site (a separate site he promotes) with the harness project the video shows.",
+      "human_verdicts": {
+        "run": "2026-11-02_baseline_prompt-v2",
+        "qwen3:4b": {
+          "build-your-own-harness": "contradicted"
         }
       }
-    ]
+    }
   }
 }

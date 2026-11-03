@@ -67,7 +67,7 @@
         "fact": "The third (final) game ended in a draw even though the streamer was dominating; he admits he missed a win (a knight f4 double attack).",
         "critical": true,
         "trap": "The streamer won the final game (or won all three games).",
-        "note": "Missed win noted at 42:57: 'I think I had missed win'.",
+        "note": "Missed win noted at 42:57: 'I think I had missed win'. Saying the third game was a draw is enough; the missed win is a detail.",
         "evidence": {
           "at": "57:00",
           "quote": "Only only made a draw, but I was dominating um this game."
@@ -76,7 +76,13 @@
     ],
     "review": {
       "reviewed_on": "2026-11-01",
-      "note": "Facts confirmed by a viewer. All three summaries judged bad: they describe a single game, while the video is essentially '3 games playing the Accelerated Dragon'. YouTube chapters for this video are the three games."
+      "note": "Facts confirmed by a viewer. All three summaries judged bad: they describe a single game, while the video is essentially '3 games playing the Accelerated Dragon'. YouTube chapters for this video are the three games.",
+      "human_verdicts": {
+        "run": "2026-11-02_baseline_prompt-v2",
+        "qwen3:4b": {
+          "game3-draw-missed-win": "stated"
+        }
+      }
     }
   }
 }

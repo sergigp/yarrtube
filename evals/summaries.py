@@ -293,6 +293,68 @@ def external_judge(out, summaries, facts, judged, j_path):
     return not pending
 
 
+# --- faithfulness (external judge with the transcript) ------------------------
+# Facts only measure coverage: a summary can state every fact and still add a
+# wrong claim ("Claude Dots"). This check gives the judge the full transcript
+# and asks for every claim in the summary that the video doesn't support.
+
+FAITH_INSTRUCTIONS = """# Faithfulness check
+
+You check whether a short video summary is faithful to the video. Your input file has
+the video title, the summary, and the path of the transcript (YouTube auto-captions:
+names may be misspelled, lines may repeat). Read the whole transcript, in parts if long.
+
+List every claim in the summary that is not faithful to the video:
+- "wrong": the video says something different (wrong name, number, result, attribution,
+  or the video's view confused with a view it criticizes).
+- "unsupported": the video doesn't say it (invented detail, overgeneralization).
+- "misleading": each part is true, but put together they give a wrong picture of the
+  video (e.g. a side mention presented as the main topic).
+Severity: "major" if it changes what a viewer would take away from the video; "minor" for
+a small detail. Do not flag omissions, style, translation, or captions' spelling mistakes
+the summary corrects. Do not use your own knowledge: only the transcript counts.
+
+Do not open any file other than your input file and the transcript it names.
+Write your answer to `out/<key>.json` (<key> = input file name without extension), JSON only:
+
+{{"errors": [{{"quote": "<exact words from the summary>", "kind": "wrong|unsupported|misleading",
+  "severity": "major|minor", "reason": "<one sentence, citing the transcript with a timestamp>"}}]}}
+
+An empty list means the summary is faithful.
+"""
+
+
+def external_faithfulness(out, summaries, cases, f_path):
+    d = os.path.join(out, "faithfulness-external")
+    for sub in ("in", "out", "transcripts"):
+        os.makedirs(os.path.join(d, sub), exist_ok=True)
+    open(os.path.join(d, "INSTRUCTIONS.md"), "w").write(FAITH_INSTRUCTIONS.format())
+    by_slug = {slug: (case, lines) for slug, case, lines in cases}
+    done = {(r["case"], r["model"]) for r in jsonl(f_path)}
+    pending = []
+    for r in summaries:
+        if (r["case"], r["model"]) in done or r["case"] not in by_slug:
+            continue
+        case, lines = by_slug[r["case"]]
+        key = external_key(r["case"], r["model"])
+        answer = os.path.join(d, "out", f"{key}.json")
+        if os.path.exists(answer):
+            errors = json.load(open(answer))["errors"]
+            append(f_path, {"case": r["case"], "model": r["model"], "errors": errors})
+            print(f"ingested  {r['model']:18} {r['case']:22} {len(errors)} error(s)", flush=True)
+            continue
+        transcript = os.path.join(d, "transcripts", f"{r['case']}.txt")  # gitignored
+        if not os.path.exists(transcript):
+            open(transcript, "w").write("\n".join(f"[{clock(t)}] {x}" for t, x in lines))
+        open(os.path.join(d, "in", f"{key}.md"), "w").write(
+            f"Title: {case['title']}\nTranscript: {os.path.abspath(transcript)}\n\nSummary:\n{r['summary']}\n")
+        pending.append(key)
+    if pending:
+        print(f"\n{len(pending)} summaries waiting for the faithfulness check in {d}:")
+        print("\n".join(f"  in/{k}.md" for k in pending))
+    return not pending
+
+
 # --- run ---------------------------------------------------------------------
 
 def load_cases(only=None):
@@ -358,8 +420,11 @@ def main():
 
     judged = {(r["case"], r["model"]) for r in jsonl(j_path)}
     facts = {slug: case["summary"]["facts"] for slug, case, _ in cases}
+    f_path = os.path.join(out, f"faithfulness-{slug_judge}.jsonl")
     if a.judge != "local":
-        if not external_judge(out, jsonl(s_path), facts, judged, j_path):
+        facts_done = external_judge(out, jsonl(s_path), facts, judged, j_path)
+        faith_done = external_faithfulness(out, jsonl(s_path), cases, f_path)
+        if not (facts_done and faith_done):
             return
     for r in jsonl(s_path) if a.judge == "local" else []:
         if (r["case"], r["model"]) in judged or r["case"] not in facts:
@@ -369,12 +434,12 @@ def main():
         print(f"judged    {r['model']:18} {r['case']:22} " +
               " ".join(v["verdict"][0] for v in verdicts.values()), flush=True)
 
-    report = render(run_id, meta, judge_name, cases, jsonl(s_path), jsonl(j_path))
+    report = render(run_id, meta, judge_name, cases, jsonl(s_path), jsonl(j_path), jsonl(f_path))
     open(os.path.join(out, f"report-{slug_judge}.md"), "w").write(report)
     print("\n" + report + f"\nResults in {out}")
 
 
-def render(run_id, meta, judge_name, cases, summaries, judgments):
+def render(run_id, meta, judge_name, cases, summaries, judgments, faith=()):
     facts = {slug: {f["id"]: f for f in case["summary"]["facts"]} for slug, case, _ in cases}
     J = {(j["case"], j["model"]): j["verdicts"] for j in judgments}
     S = {(s["case"], s["model"]): s for s in summaries}
@@ -408,6 +473,20 @@ def render(run_id, meta, judge_name, cases, summaries, judgments):
     out += ["", "## Failed critical facts and contradictions", ""]
     for model, slug, fid, v in fails:
         out.append(f"- **{model}** · {slug} · `{fid}` → {v['verdict']}: {v['reason']}")
+    if faith:
+        F = {(f["case"], f["model"]): f["errors"] for f in faith}
+        out += ["", "## Faithfulness: claims the video doesn't support", "",
+                "| model | major | minor | faithful summaries |", "|---|---|---|---|"]
+        for model in meta["models"]:
+            errs = [e for (slug, m), es in F.items() if m == model for e in es]
+            n = sum(1 for (slug, m) in F if m == model)
+            clean = sum(1 for (slug, m), es in F.items() if m == model and not es)
+            out.append(f"| {model} | {sum(e['severity'] == 'major' for e in errs)} | "
+                       f"{sum(e['severity'] == 'minor' for e in errs)} | {clean}/{n} |")
+        out.append("")
+        for (slug, m), es in sorted(F.items()):
+            for e in es:
+                out.append(f"- **{m}** · {slug} · {e['severity']} {e['kind']}: \"{e['quote']}\" → {e['reason']}")
     agree, disagree = human_agreement(run_id, cases, judgments)
     if agree + len(disagree):
         out += ["", f"## Judge vs human verdicts: {agree}/{agree + len(disagree)} agree", ""]
