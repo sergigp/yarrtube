@@ -46,15 +46,17 @@ npm run build       # produces dist/, embedded into the binary by cargo build
 
 ### Verifying a change
 
-Before calling a change done, run `scripts/run-tests.sh` with no flags: every
-suite, contract and end-to-end included. Locally nothing is excluded, so never
-pass `--ci` (it drops the contract tests) or `--only` to narrow the final run;
-the single-suite commands above are for iterating. It checks its
-dependencies first and lists anything missing (`web/node_modules`,
-`web/dist`, `e2e-tests/node_modules` and Playwright browsers, Docker running,
-`YOUTUBE_API_KEY`, `yt-dlp`, `ffprobe`): install or build what it names rather
-than skipping the suite. On failure it prints only the failing tests and the
-path of the full logs.
+Before calling a change done, run the fast suites:
+`scripts/run-tests.sh --only web --only rust` (about 40 s: web typecheck, lint
+and tests; Rust fmt, clippy and tests), or just the suite of the side you
+touched. The slow suites (contract, end-to-end) are not run per change: CI runs
+the end-to-end suite on every push (`--ci`), and `/audit-change` runs every
+suite, contract included, before auditing. Run the full `scripts/run-tests.sh`
+yourself only when asked or when a change touches what only those suites cover
+(the Docker image, the YouTube adapters, the e2e specs). The script checks its
+dependencies first and lists anything missing: install or build what it names
+rather than skipping the suite. On failure it prints only the failing tests and
+the path of the full logs.
 
 ## Frontend testing (web/)
 
