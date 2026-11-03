@@ -77,6 +77,28 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_return_no_models_if_none_installed() {
+        let repository = Arc::new(FakeLlmServerRepository::new(LlmServer {
+            version: "0.40.13".to_string(),
+            models: vec![],
+        }));
+        let llm_server_searcher = LlmServerSearcher::new(repository);
+        let query = OllamaQuery {
+            url: Some("http://mac.local:11434".to_string()),
+        };
+
+        let response = get(llm_server_searcher, query).await;
+
+        assert_eq!(
+            response,
+            Ok(OllamaResponse {
+                version: "0.40.13".to_string(),
+                models: vec![],
+            })
+        );
+    }
+
     async fn get(
         llm_server_searcher: LlmServerSearcher,
         query: OllamaQuery,

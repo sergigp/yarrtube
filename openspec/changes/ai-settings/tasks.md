@@ -25,7 +25,7 @@ Preferences handler (acceptance, real SQLite)
 
 Ollama handler (acceptance, mockito Ollama)
 - [x] 2.16 `it_should_return_the_server_version_and_models_sorted_by_name` — each with its `thinking` capability.
-- [ ] 2.17 `it_should_return_no_models_if_none_installed`.
+- [x] 2.17 `it_should_return_no_models_if_none_installed`.
 - [ ] 2.18 `it_should_fail_if_the_url_is_missing` — 400 `Ollama URL must be stated (missing)`.
 - [ ] 2.19 `it_should_fail_if_the_url_is_not_http` — 400 `Ollama URL must be an http(s) URL (got "…")`.
 - [ ] 2.20 `it_should_fail_with_bad_gateway_if_ollama_is_unreachable` — 502, `Could not reach Ollama at <url>: …`.
