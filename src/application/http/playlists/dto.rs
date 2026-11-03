@@ -99,7 +99,7 @@ impl From<PlaylistView> for PlaylistListItemResponse {
             exclude_from_home: playlist.exclude_from_home,
             hide_unwatched_count: playlist.hide_unwatched_count,
             reconcile_interval_minutes: playlist.reconcile_interval.minutes(),
-            summaries_enabled: false,
+            summaries_enabled: playlist.summaries_enabled,
             created_at: playlist.created_at,
             unwatched_count: playlist.unwatched_count,
             work_in_progress: playlist.work_in_progress,

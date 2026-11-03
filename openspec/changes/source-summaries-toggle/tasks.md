@@ -22,7 +22,7 @@ Playlists handler (acceptance, real SQLite)
 - [x] 2.11 `it_should_enable_summaries_on_a_playlist` — AI + summaries on; only `summaries_enabled: true` → 200, stored `true`, others unchanged.
 - [x] 2.12 `it_should_fail_to_enable_summaries_on_a_playlist_if_summaries_are_off` — with a new interval → 409, playlist unchanged.
 - [x] 2.13 `it_should_disable_summaries_on_a_playlist_while_ai_is_off`.
-- [ ] 2.14 `it_should_list_playlists_with_their_summaries_setting`.
+- [x] 2.14 `it_should_list_playlists_with_their_summaries_setting`.
 
 Preferences (domain unit)
 - [ ] 2.15 `it_should_have_summaries_available_only_with_ai_and_summaries_on` — all four combinations.
