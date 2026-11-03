@@ -211,4 +211,27 @@ mod tests {
             }))
         );
     }
+
+    #[test]
+    fn it_should_find_saved_ai_preferences() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+            summaries: SummarySettings {
+                enabled: true,
+                model: SummaryModel::new("gemma3:4b").unwrap(),
+                context_length: ContextLength::new(8192).unwrap(),
+                temperature: Temperature::new(0.7).unwrap(),
+                thinking: false,
+                prompt: Some(SummaryPrompt::shipped()),
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
 }

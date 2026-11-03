@@ -52,7 +52,7 @@ Web (Vitest)
 ## 3. Infrastructure adapters (TDD)
 
 `sqlite_preferences_repository`
-- [ ] 3.1 `it_should_find_saved_ai_preferences` — round trip with URL and prompt.
+- [x] 3.1 `it_should_find_saved_ai_preferences` — round trip with URL and prompt.
 - [ ] 3.2 `it_should_read_missing_ai_keys_as_defaults` — row in the pre-AI JSON shape.
 - [ ] 3.3 `it_should_find_no_prompt_if_saved_without_one`.
 
