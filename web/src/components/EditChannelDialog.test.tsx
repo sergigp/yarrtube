@@ -56,6 +56,23 @@ describe('EditChannelDialog', () => {
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ reconcile_interval_minutes: 30 })
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
+  it('sends only the changed summaries setting', async () => {
+    const { onSave, onOpenChange } = renderDialog(aChannel({ summaries_enabled: true }), undefined, {
+      'GET /api/categories': aCategoryList(),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }),
+    })
+    const user = userEvent.setup()
+    const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })
+
+    expect(summaries).toBeChecked()
+    await waitFor(() => expect(summaries).toBeEnabled())
+    await user.click(summaries)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ summaries_enabled: false })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('sends only the changed quality', async () => {
     const { onSave, onOpenChange } = renderDialog(aChannel({ quality: 'high', video_limit: 5 }))
     const user = userEvent.setup()
