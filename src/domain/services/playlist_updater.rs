@@ -56,6 +56,7 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
         id: PlaylistId,
         change: PlaylistSettingsChange,
     ) -> Result<Playlist, UpdatePlaylistError> {
+        self.ensure_summaries_available(change.summaries_enabled)?;
         let playlist = Self::apply_settings(self.find_playlist(&id)?, change);
         self.update_playlist(&playlist)?;
         if let Some(reconcile_interval) = change.reconcile_interval {
@@ -73,6 +74,26 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
 }
 
 impl PlaylistUpdater {
+    /// Enabling summaries needs AI and summaries on in the preferences.
+    fn ensure_summaries_available(
+        &self,
+        summaries_enabled: Option<bool>,
+    ) -> Result<(), UpdatePlaylistError> {
+        if summaries_enabled != Some(true) {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(UpdatePlaylistError::Repository)?
+            .unwrap_or_default();
+        if preferences.summaries_available() {
+            Ok(())
+        } else {
+            Err(UpdatePlaylistError::SummariesUnavailable)
+        }
+    }
+
     fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, UpdatePlaylistError> {
         match self.repository.find(id) {
             Ok(Some(playlist)) => Ok(playlist),
