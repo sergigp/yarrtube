@@ -156,7 +156,6 @@ impl From<StoredPreferences> for Preferences {
                     .summaries_prompt
                     .and_then(|prompt| SummaryPrompt::new(prompt).ok()),
             },
-            ..defaults
         }
     }
 }

@@ -70,7 +70,6 @@ impl Preferences {
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             summaries,
-            ..self
         }
         .ensure_ai_has_url()
     }

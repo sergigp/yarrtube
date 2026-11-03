@@ -35,7 +35,7 @@ Value objects
 - [x] 2.22 `SummaryModel` tests: blank and > 200 chars rejected with the spec message.
 - [x] 2.23 `ContextLength` tests: 1024 and 131072 accepted, 1023 and 131073 rejected with the spec message.
 - [x] 2.24 `Temperature` tests: 0 and 2 accepted, −0.1, 2.1 and NaN rejected with the spec message.
-- [ ] 2.25 `SummaryPrompt` tests, one cycle each: shipped prompt valid; missing section; unknown section; repeated section; empty section; disallowed variable message; note before first section ignored; non-variable braces ignored.
+- [x] 2.25 `SummaryPrompt` tests, one cycle each: shipped prompt valid; missing section; unknown section; repeated section; empty section; disallowed variable message; note before first section ignored; non-variable braces ignored.
 
 Web (Vitest)
 - [ ] 2.26 `aiSettingsForm.test.ts` — `changedFields` sends only changed keys, omits an untouched prompt, empty URL → `""`.

@@ -26,6 +26,12 @@ impl SummaryPromptSection {
         Self::ReducePart,
     ];
 
+    pub fn from_heading(heading: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|section| section.heading() == heading)
+    }
+
     pub fn heading(self) -> &'static str {
         match self {
             Self::System => "system",
