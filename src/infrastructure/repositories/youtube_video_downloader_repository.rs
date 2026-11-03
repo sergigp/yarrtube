@@ -725,6 +725,7 @@ mod youtube_contract_tests {
         assert_eq!(
             probe,
             QualityProbe {
+                degraded: false,
                 height: Some(720),
                 published_at: DateTime::from_timestamp(1_550_518_860, 0),
             }

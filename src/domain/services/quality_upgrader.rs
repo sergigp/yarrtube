@@ -89,7 +89,8 @@ impl QualityUpgraderApi for QualityUpgrader {
 
 impl QualityUpgrader {
     /// Probes the height `quality` would download now: re-downloads when
-    /// it is above the recorded one, else records the check.
+    /// it is above the recorded one, else records the check — a failed one
+    /// when the probe was degraded (SABR), since its height proves nothing.
     fn check_and_upgrade(
         &self,
         video: &Video,
@@ -103,7 +104,8 @@ impl QualityUpgrader {
         if probe.height > video.downloaded_height {
             self.redownload(video, quality, output_dir, published_at)
         } else {
-            self.record_check(video, probe.height, published_at)
+            let probed_height = probe.height.filter(|_| !probe.degraded);
+            self.record_check(video, probed_height, published_at)
         }
     }
 
