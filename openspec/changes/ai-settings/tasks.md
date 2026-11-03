@@ -24,7 +24,7 @@ Preferences handler (acceptance, real SQLite)
 - [x] 2.15 `it_should_save_the_theme` and `it_should_fail_on_an_unknown_theme` ported to PATCH.
 
 Ollama handler (acceptance, mockito Ollama)
-- [ ] 2.16 `it_should_return_the_server_version_and_models_sorted_by_name` — each with its `thinking` capability.
+- [x] 2.16 `it_should_return_the_server_version_and_models_sorted_by_name` — each with its `thinking` capability.
 - [ ] 2.17 `it_should_return_no_models_if_none_installed`.
 - [ ] 2.18 `it_should_fail_if_the_url_is_missing` — 400 `Ollama URL must be stated (missing)`.
 - [ ] 2.19 `it_should_fail_if_the_url_is_not_http` — 400 `Ollama URL must be an http(s) URL (got "…")`.

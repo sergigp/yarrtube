@@ -8,8 +8,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Port to an LLM server's HTTP API.
 pub trait LlmServerRepository: Send + Sync {
-    /// The server at `url`: its version and installed models, sorted by
-    /// name, each with whether it can think.
+    /// The server at `url`: its version and installed models, each with
+    /// whether it can think.
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer>;
 }
 

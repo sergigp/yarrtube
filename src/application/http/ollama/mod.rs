@@ -24,3 +24,65 @@ pub async fn get_ollama(
         })?;
     Ok(Json(OllamaResponse::from(server)))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::llm_server::{LlmModel, LlmServer};
+    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
+    use dto::OllamaModelResponse;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn it_should_return_the_server_version_and_models_sorted_by_name() {
+        let repository = Arc::new(FakeLlmServerRepository::new(LlmServer {
+            version: "0.40.13".to_string(),
+            models: vec![
+                LlmModel {
+                    name: "qwen3:4b".to_string(),
+                    size_bytes: 2_497_293_918,
+                    thinking: true,
+                },
+                LlmModel {
+                    name: "gemma3:4b".to_string(),
+                    size_bytes: 3_338_801_804,
+                    thinking: false,
+                },
+            ],
+        }));
+        let llm_server_searcher = LlmServerSearcher::new(repository);
+        let query = OllamaQuery {
+            url: Some("http://mac.local:11434".to_string()),
+        };
+
+        let response = get(llm_server_searcher, query).await;
+
+        assert_eq!(
+            response,
+            Ok(OllamaResponse {
+                version: "0.40.13".to_string(),
+                models: vec![
+                    OllamaModelResponse {
+                        name: "gemma3:4b".to_string(),
+                        size_bytes: 3_338_801_804,
+                        thinking: false,
+                    },
+                    OllamaModelResponse {
+                        name: "qwen3:4b".to_string(),
+                        size_bytes: 2_497_293_918,
+                        thinking: true,
+                    },
+                ],
+            })
+        );
+    }
+
+    async fn get(
+        llm_server_searcher: LlmServerSearcher,
+        query: OllamaQuery,
+    ) -> Result<OllamaResponse, ApiError> {
+        get_ollama(State(llm_server_searcher), Query(query))
+            .await
+            .map(|Json(response)| response)
+    }
+}

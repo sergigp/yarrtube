@@ -4,6 +4,5 @@ use super::LlmModel;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LlmServer {
     pub version: String,
-    /// Sorted by name.
     pub models: Vec<LlmModel>,
 }

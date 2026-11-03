@@ -15,17 +15,25 @@ impl LlmServerSearcher {
 }
 
 pub trait LlmServerSearcherApi: Send + Sync {
-    /// The server at `url`, or `Unreachable` when it doesn't answer as an
-    /// Ollama server.
+    /// The server at `url` with its models sorted by name, or `Unreachable`
+    /// when it doesn't answer as an Ollama server.
     fn get(&self, url: OllamaUrl) -> Result<LlmServer, ReadLlmServerError>;
 }
 
 impl LlmServerSearcherApi for LlmServerSearcher {
-    fn get(&self, _url: OllamaUrl) -> Result<LlmServer, ReadLlmServerError> {
-        let _ = &self.repository;
-        Ok(LlmServer {
-            version: String::new(),
-            models: vec![],
-        })
+    fn get(&self, url: OllamaUrl) -> Result<LlmServer, ReadLlmServerError> {
+        let server = self
+            .repository
+            .find(&url)
+            .map_err(|source| ReadLlmServerError::Unreachable { url, source })?;
+        Ok(Self::sorted_by_name(server))
+    }
+}
+
+impl LlmServerSearcher {
+    fn sorted_by_name(server: LlmServer) -> LlmServer {
+        let mut models = server.models;
+        models.sort_by(|a, b| a.name.cmp(&b.name));
+        LlmServer { models, ..server }
     }
 }
