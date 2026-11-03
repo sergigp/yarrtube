@@ -40,7 +40,7 @@ Value objects
 Web (Vitest)
 - [x] 2.26 `aiSettingsForm.test.ts` — `changedFields` sends only changed keys, omits an untouched prompt, empty URL → `""`.
 - [x] 2.27 `promptGuide.test.ts` — every section and every `{var}` of the shipped prompt (`?raw` import) is in the guide under its section, each with a description.
-- [ ] 2.28 `AiSettingsView.test.tsx` — fresh defaults with summary fields disabled; enabling AI enables them.
+- [x] 2.28 `AiSettingsView.test.tsx` — fresh defaults with summary fields disabled; enabling AI enables them.
 - [ ] 2.29 `AiSettingsView.test.tsx` — Save sends only changed fields and shows "Saved"; a 400 shows the daemon message and keeps the form.
 - [ ] 2.30 `AiSettingsView.test.tsx` — Test connection shows `Connected to Ollama 0.40.13, 2 models`, or the daemon error; disabled with an empty URL.
 - [ ] 2.31 `AiSettingsView.test.tsx` — model list from the saved URL, `(not installed)` entry, text field when the check fails.
