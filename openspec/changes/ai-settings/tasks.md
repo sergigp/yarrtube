@@ -7,8 +7,8 @@
 ## 2. Behaviour (TDD)
 
 Preferences handler (acceptance, real SQLite)
-- [ ] 2.1 `it_should_return_the_ai_defaults_if_nothing_saved` — GET returns AI off, URL null, qwen3:4b/12288/0.3/thinking on, shipped prompt, `summaries_prompt_is_default` true.
-- [ ] 2.2 `it_should_change_only_the_preferences_sent` — patch keeps unsent stored values (port/replace the old full-PUT tests).
+- [x] 2.1 `it_should_return_the_ai_defaults_if_nothing_saved` — GET returns AI off, URL null, qwen3:4b/12288/0.3/thinking on, shipped prompt, `summaries_prompt_is_default` true.
+- [x] 2.2 `it_should_change_only_the_preferences_sent` — patch keeps unsent stored values (port/replace the old full-PUT tests).
 - [ ] 2.3 `it_should_keep_everything_on_an_empty_patch`.
 - [ ] 2.4 `it_should_save_the_ollama_url_without_trailing_slash`.
 - [ ] 2.5 `it_should_unset_the_ollama_url_on_an_empty_string`.

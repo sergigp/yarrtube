@@ -101,6 +101,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_the_ai_defaults_if_nothing_saved() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_searcher = PreferencesSearcher::new(repository);
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                ai_enabled: false,
+                ollama_url: None,
+                summaries_enabled: false,
+                summaries_model: "qwen3:4b".to_string(),
+                summaries_context_length: 12288,
+                summaries_temperature: 0.3,
+                summaries_thinking: true,
+                summaries_prompt: include_str!("../../../../prompts/summaries/v3.md").to_string(),
+                summaries_prompt_is_default: true,
+                ..all_on_response()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -129,19 +154,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_replace_previously_saved_preferences() {
+    async fn it_should_change_only_the_preferences_sent() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         repository
             .save(&Preferences {
-                categories_enabled: false,
+                home_show_latest: false,
                 ..Preferences::default()
             })
             .unwrap();
         let preferences_updater = PreferencesUpdater::new(repository.clone());
         let request = UpdatePreferencesRequest {
-            home_show_latest: Some(false),
-            ..all_on_request()
+            categories_enabled: Some(false),
+            ..UpdatePreferencesRequest::default()
         };
 
         let response = update(preferences_updater, request).await;
@@ -149,6 +174,7 @@ mod tests {
         assert_eq!(
             response,
             Ok(PreferencesResponse {
+                categories_enabled: false,
                 home_show_latest: false,
                 ..all_on_response()
             })
@@ -156,6 +182,7 @@ mod tests {
         assert_eq!(
             repository.find().unwrap(),
             Some(Preferences {
+                categories_enabled: false,
                 home_show_latest: false,
                 ..Preferences::default()
             })
