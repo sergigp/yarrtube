@@ -272,4 +272,23 @@ mod tests {
             Ok(Some(Preferences::default()))
         );
     }
+
+    #[test]
+    fn it_should_find_no_prompt_if_saved_without_one() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        repository
+            .save(&Preferences {
+                summaries: SummarySettings {
+                    prompt: Some(SummaryPrompt::shipped()),
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            })
+            .unwrap();
+
+        repository.save(&Preferences::default()).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
 }
