@@ -66,7 +66,7 @@ impl From<Playlist> for PlaylistResponse {
             exclude_from_home: playlist.exclude_from_home,
             hide_unwatched_count: playlist.hide_unwatched_count,
             reconcile_interval_minutes: playlist.reconcile_interval.minutes(),
-            summaries_enabled: false,
+            summaries_enabled: playlist.summaries_enabled,
             created_at: playlist.created_at,
         }
     }

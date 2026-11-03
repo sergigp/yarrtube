@@ -84,7 +84,8 @@ impl PlaylistCreatorApi for PlaylistCreator {
             exclude_from_home,
             reconcile_interval,
             now,
-        );
+        )
+        .with_summaries_enabled(summaries_enabled);
         self.insert_playlist(&playlist)?;
         self.publish_playlist_created(&playlist)?;
         info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
