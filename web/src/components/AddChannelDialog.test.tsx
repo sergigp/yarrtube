@@ -12,6 +12,7 @@ import {
   renderWithProviders,
   type Routes,
 } from '@/test/helpers'
+import { RouteProbe } from '@/test/RouteProbe'
 
 const baseRoutes: Routes = {
   'GET /api/preferences': aPreferences(),
@@ -170,6 +171,32 @@ describe('AddChannelDialog', () => {
       ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
     ) as [string, RequestInit]
     expect(JSON.parse(createCall[1].body as string)).toMatchObject({ summaries_enabled: true })
+  })
+
+  it('disables summaries while AI is off and links to the AI settings', async () => {
+    const fetchMock = mockApi(baseRoutes)
+    const onOpenChange = vi.fn()
+    renderWithProviders(
+      <>
+        <AddChannelDialog open onOpenChange={onOpenChange} />
+        <RouteProbe />
+      </>,
+    )
+    const user = userEvent.setup()
+
+    const summaries = await screen.findByRole('checkbox', { name: 'Summarize videos' })
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/preferences', expect.anything()),
+    )
+    expect(summaries).toBeDisabled()
+    expect(summaries).not.toBeChecked()
+    expect(summaries).toHaveAccessibleDescription('Turn on AI summaries in AI settings.')
+    await user.click(screen.getByRole('link', { name: 'AI settings' }))
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
+      '/ai',
+    )
   })
 
   it('offers no categories and saves none while categories are off', async () => {
