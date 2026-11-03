@@ -25,7 +25,7 @@ Playlists handler (acceptance, real SQLite)
 - [x] 2.14 `it_should_list_playlists_with_their_summaries_setting`.
 
 Preferences (domain unit)
-- [ ] 2.15 `it_should_have_summaries_available_only_with_ai_and_summaries_on` — all four combinations.
+- [x] 2.15 `it_should_have_summaries_available_only_with_ai_and_summaries_on` — all four combinations.
 
 Web (Vitest)
 - [ ] 2.16 `preferences.test.ts` — `summariesAvailable` true only with `ai_enabled` and `summaries_enabled`; false for `undefined`.

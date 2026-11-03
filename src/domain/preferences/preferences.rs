@@ -88,3 +88,31 @@ impl Preferences {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_have_summaries_available_only_with_ai_and_summaries_on() {
+        let availability = [(false, false), (false, true), (true, false), (true, true)].map(
+            |(ai_enabled, summaries_enabled)| {
+                preferences(ai_enabled, summaries_enabled).summaries_available()
+            },
+        );
+
+        assert_eq!(availability, [false, false, false, true]);
+    }
+
+    fn preferences(ai_enabled: bool, summaries_enabled: bool) -> Preferences {
+        let preferences = Preferences::default();
+        Preferences {
+            ai_enabled,
+            summaries: SummarySettings {
+                enabled: summaries_enabled,
+                ..preferences.summaries.clone()
+            },
+            ..preferences
+        }
+    }
+}
