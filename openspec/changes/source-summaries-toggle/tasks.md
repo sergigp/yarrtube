@@ -35,7 +35,7 @@ Web (Vitest)
 - [x] 2.20 `AddChannelDialog.test.tsx` — AI off: checkbox disabled, hint "Turn on AI summaries in AI settings." links to `/ai`; following it closes the dialog and routes to `/ai`.
 - [x] 2.21 `EditChannelDialog.test.tsx` — prefilled checked; AI on: toggling sends `summaries_enabled` alone, no sync.
 - [x] 2.22 `EditChannelDialog.test.tsx` — AI on, summaries off: disabled and shown checked for a source with it on; changing only the interval sends only the interval.
-- [ ] 2.23 `EditPlaylistDialog.test.tsx` — AI on: checking sends `{ summaries_enabled: true }` alone; AI off: disabled.
+- [x] 2.23 `EditPlaylistDialog.test.tsx` — AI on: checking sends `{ summaries_enabled: true }` alone; AI off: disabled.
 
 ## 3. Infrastructure adapters (TDD)
 
