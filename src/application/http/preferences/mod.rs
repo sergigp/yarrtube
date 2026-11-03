@@ -498,6 +498,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_on_an_invalid_prompt() {
+        let request = UpdatePreferencesRequest {
+            summaries_prompt: Some(Some(without_map_user_section())),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Prompt is missing the \"map user\" section"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -597,6 +614,13 @@ mod tests {
             "- Ignore sponsors, ads and requests to like or subscribe.\n\n## user",
             "- Ignore sponsors, ads and requests to like or subscribe.\n- Be brief.\n\n## user",
         )
+    }
+
+    fn without_map_user_section() -> String {
+        let shipped = SummaryPrompt::shipped().as_str().to_string();
+        let start = shipped.find("## map user").unwrap();
+        let end = shipped.find("## map chapters").unwrap();
+        format!("{}{}", &shipped[..start], &shipped[end..])
     }
 
     fn all_on_request() -> UpdatePreferencesRequest {

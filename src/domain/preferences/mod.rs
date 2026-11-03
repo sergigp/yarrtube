@@ -16,6 +16,7 @@ pub use preferences::Preferences;
 pub use preferences_change::PreferencesChange;
 pub use summary_model::SummaryModel;
 pub use summary_prompt::SummaryPrompt;
+pub use summary_prompt_section::SummaryPromptSection;
 pub use summary_settings::SummarySettings;
 pub use temperature::Temperature;
 pub use theme::Theme;
