@@ -28,7 +28,7 @@ Preferences (domain unit)
 - [x] 2.15 `it_should_have_summaries_available_only_with_ai_and_summaries_on` — all four combinations.
 
 Web (Vitest)
-- [ ] 2.16 `preferences.test.ts` — `summariesAvailable` true only with `ai_enabled` and `summaries_enabled`; false for `undefined`.
+- [x] 2.16 `preferences.test.ts` — `summariesAvailable` true only with `ai_enabled` and `summaries_enabled`; false for `undefined`.
 - [ ] 2.17 `channelSettings.test.ts` — `channelSettingsChanges` includes `summaries_enabled` only when changed.
 - [ ] 2.18 `AddChannelDialog.test.tsx` — AI summaries on: "Summarize videos" (hint "Generate an AI summary of each new video.") visible without expanding "Advanced options"; checking sends `summaries_enabled: true`; untouched sends `false`.
 - [ ] 2.19 `AddPlaylistDialog.test.tsx` — same as 2.18.

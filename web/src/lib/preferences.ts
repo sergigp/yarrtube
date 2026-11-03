@@ -37,6 +37,6 @@ export function categoriesShown(preferences: Preferences | undefined, failed: bo
 }
 
 /** Whether sources can have their videos summarized: AI and summaries on. */
-export function summariesAvailable(_preferences: Preferences | undefined): boolean {
-  return false
+export function summariesAvailable(preferences: Preferences | undefined): boolean {
+  return (preferences?.ai_enabled ?? false) && (preferences?.summaries_enabled ?? false)
 }
