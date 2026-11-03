@@ -24,3 +24,48 @@ impl Default for Temperature {
         Self(0.3)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_accept_zero() {
+        assert_eq!(Temperature::new(0.0).map(|t| t.value()), Ok(0.0));
+    }
+
+    #[test]
+    fn it_should_accept_two() {
+        assert_eq!(Temperature::new(2.0).map(|t| t.value()), Ok(2.0));
+    }
+
+    #[test]
+    fn it_should_reject_a_negative_temperature() {
+        assert_eq!(
+            Temperature::new(-0.1),
+            Err(ValidationError(
+                "Temperature must be between 0 and 2 (got -0.1)".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_above_two() {
+        assert_eq!(
+            Temperature::new(2.1),
+            Err(ValidationError(
+                "Temperature must be between 0 and 2 (got 2.1)".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_not_a_number() {
+        assert_eq!(
+            Temperature::new(f64::NAN),
+            Err(ValidationError(
+                "Temperature must be between 0 and 2 (got NaN)".to_string()
+            ))
+        );
+    }
+}
