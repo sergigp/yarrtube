@@ -443,6 +443,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_store_the_prompt_when_saving_other_preferences() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            summaries_enabled: Some(true),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                summaries_enabled: true,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                summaries: SummarySettings {
+                    enabled: true,
+                    prompt: None,
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
