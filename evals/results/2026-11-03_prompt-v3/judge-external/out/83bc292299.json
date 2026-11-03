@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"built-browser-tabs-cli","verdict":"stated","reason":"Summary says it is a command-line utility 'browser tabs CLI' the creator developed to prepare the weekly 'café con codely' livestreams and opens tab groups."},
+{"id":"vivaldi-api-not-computer-use","verdict":"missing","reason":"Summary mentions Vivaldi and opening groups from a JSON file but never says it talks to Vivaldi's API instead of slow AI computer use."},
+{"id":"motivation-weekly-manual-work","verdict":"missing","reason":"Summary only says it optimizes preparation of weekly shows 'donde se analizan noticias y se trabaja con enlaces', without the tedious manual open/rename/group work or the computer-use slowness."},
+{"id":"open-source-semantic-release","verdict":"stated","reason":"Summary says 'el proyecto es de código abierto' and mentions 'automatización de releases con semantic release'."},
+{"id":"worth-it-saves-time","verdict":"missing","reason":"Summary only mentions 'el objetivo de ahorrar tiempo', not his conclusion that it was worth it or what he learned."}
+]}

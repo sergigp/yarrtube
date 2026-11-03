@@ -1,0 +1,5 @@
+{"errors": [
+{"quote": "Switzerland's bunker network successfully deterred Nazi aggression during WWII", "kind": "misleading", "severity": "minor", "reason": "The video says the bunkers were only part of the deterrent, alongside Swiss banking and trade with the Nazis (48:52-49:09)."},
+{"quote": "explains its eight-year ranking as the happiest country", "kind": "unsupported", "severity": "minor", "reason": "The video only says preparedness 'might actually explain' the happiness ranking and offers other theories (coffee, saunas, wealth, belonging) (1:36:55; 2:24:36-2:25:04)."},
+{"quote": "ghost towns abandoned for 47 years", "kind": "wrong", "severity": "minor", "reason": "The video says one resort town, Famagusta, has been abandoned for 47 years (2:33:21), not multiple ghost towns."}
+]}

@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "not-the-next-revolution", "verdict": "stated", "reason": "Summary says \"la IA cuántica no reemplazará a la clásica, sino que servirá como herramienta auxiliar\"."},
+{"id": "hybrid-quantum-classical", "verdict": "missing", "reason": "Summary never mentions the hybrid quantum/classical setup (qubits plus classical parameter tuning or classical SVM)."},
+{"id": "advantage-only-on-artificial-problem", "verdict": "stated", "reason": "Summary says the cases are \"teóricos y no aplicables en áreas cotidianas como la medicina\", conveying no practical application and not for medical diagnosis."},
+{"id": "practical-obstacles", "verdict": "stated", "reason": "Summary says current quantum computers \"tienen altos niveles de error y no son suficientemente potentes para implementar aplicaciones reales\"."},
+{"id": "promise-in-quantum-data-and-niches", "verdict": "stated", "reason": "Summary says quantum AI complements classical systems \"en áreas especializadas, como modelado cuántico\" and in \"nichos científicos\"."}
+]}

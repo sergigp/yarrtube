@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "topic-claude-duet", "verdict": "stated", "reason": "The summary calls it \"Anthropic's Claude Duet, a new personal agent for small business owners\", covering the main claim, though it omits the phone-app detail."},
+{"id": "liked-design", "verdict": "stated", "reason": "It says the reviewer finds Duet \"exceptionally well-designed and polished, particularly in its user interface and artifact handling\"."},
+{"id": "not-proactive-and-slow", "verdict": "stated", "reason": "It says Duet is \"lacking proactive engagement, failing to consistently prompt the user or create useful loops\" and cites \"slow performance\"."},
+{"id": "no-desktop-no-multiplayer", "verdict": "stated", "reason": "It cites the \"lack of a desktop app, combined with its single-player focus\" and the need for \"multi-player functionality\"."},
+{"id": "verdict", "verdict": "stated", "reason": "It says these issues \"prevent it from becoming a primary tool\" while it \"offers a promising foundation\", matching the verdict's main claim."}
+]}

@@ -1,0 +1,8 @@
+{"errors": [
+{"quote": "In this game against an opponent playing the Alapin Sicilian", "kind": "misleading", "severity": "major", "reason": "The video contains three separate games (starting 0:00, 17:12, 36:38) and only the third is against the Alapin (36:57), so presenting it as one game is wrong."},
+{"quote": "Black initially developed the knight to C6, aiming for a standard queen takes D4 line", "kind": "misleading", "severity": "minor", "reason": "The queen-takes-d4 transposition idea is from the first game (0:07-0:22), not the Alapin game, so details from different games are merged."},
+{"quote": "faced some tactical challenges and a slightly passive position", "kind": "unsupported", "severity": "major", "reason": "In the Alapin game the streamer says he was 'dominating this game' (57:03) and that he missed a win (42:57-43:17), never a passive position."},
+{"quote": "Black secured a draw through a series of exchanges and positional maneuvering, demonstrating a cautious approach", "kind": "misleading", "severity": "major", "reason": "The draw came after a missed win in a game the streamer dominated (57:00-57:15), and the other two games were won (13:51, 35:44), so the cautious-draw picture is wrong."},
+{"quote": "Black managed to hold onto an equal endgame", "kind": "wrong", "severity": "major", "reason": "The streamer was dominating the Alapin game (57:03) and aimed for a risk-free endgame (41:35), not just holding equality."},
+{"quote": "Despite a few moments of pressure", "kind": "unsupported", "severity": "minor", "reason": "The transcript shows Black applying the pressure on White, with no stretch of Black being under pressure."}
+]}

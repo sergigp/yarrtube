@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"language-trees-zipping","verdict":"missing","reason":"The summary only names the 2002 paper 'Language Trees and Zipping' and never says it used gzip to cluster languages or that this estimates cross-entropy."},
+{"id":"cross-entropy-definition","verdict":"missing","reason":"It calls cross-entropy 'a measure of the difference between two probability distributions' but does not give the bits-per-symbol definition with a code optimized for Q on data from P, or its asymmetry."},
+{"id":"minimum-at-p-equals-q","verdict":"missing","reason":"The summary never mentions that cross-entropy is minimized when Q equals P, that the minimum is the entropy of P, or KL divergence."},
+{"id":"llm-pretraining-loss","verdict":"missing","reason":"It only says cross-entropy is used 'to train models' and does not state the average negative log probability of the true next token or that the log is forced."},
+{"id":"distillation","verdict":"missing","reason":"The summary does not mention distillation or training a small model against a larger model's distribution."}
+]}

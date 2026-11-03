@@ -18,7 +18,7 @@ import argparse, datetime, glob, hashlib, json, os, re, sys, time, unicodedata, 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OLLAMA = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 NUM_CTX = 12288
 INPUT_BUDGET_TOKENS = 9000  # leaves room in NUM_CTX for thinking + answer
 CHARS_PER_TOKEN = {"en": 4.3}  # measured on the golden set; other languages ~3.4
@@ -120,12 +120,20 @@ def chat(model, system, user, fmt=None, think=False, ctx=NUM_CTX, max_out=None, 
 RULES = (
     "- Write in {lang}, the language of the video.\n"
     "- Plain prose, no lists or headings. Start directly with the subject, "
-    "e.g. \"Three online games where…\" or \"La edad de oro del anarquismo…\".\n"
-    "- Say what the video is about, its main points and how it ends: its conclusion, "
-    "verdict or result (who won, what was decided).\n"
-    "- If the video has several parts (several games, places, stories), say so and cover each.\n"
+    "e.g. \"Three online games where…\" or \"La edad de oro del anarquismo…\". "
+    "Do not repeat the title, and do not start with \"The video\", \"In this video\" or \"El vídeo\".\n"
+    "- Say what the video is about and its main points. For an argument, give the reasoning "
+    "behind the conclusion, not just the conclusion.\n"
+    "- Say how it ends: the result or verdict as the speaker states it (who won, what was decided). "
+    "If the video draws no conclusion, do not invent one.\n"
+    "- Keep the speaker's certainty: \"I'm not sure it will\" is not \"it won't\".\n"
+    "- If the video has several parts (several games, places, stories), say how many and cover each "
+    "with its own result.\n"
     "- Keep the video's own view apart from views it presents or criticizes.\n"
-    "- Use only what the transcript says. Give numbers exactly as stated.\n"
+    "- Keep the main subject apart from things the speaker only mentions or promotes "
+    "(other projects, courses, websites, other products).\n"
+    "- Use only what the transcript says. Include a number only if the transcript states it, and "
+    "give it exactly. Do not add names, numbers or comparisons of your own.\n"
     "- The transcript is auto-generated and may misspell names; use the title to correct them.\n"
     "- Ignore sponsors, ads and requests to like or subscribe."
 )

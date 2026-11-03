@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"paris-agreement-goals-and-weaknesses","verdict":"missing","reason":"The summary mentions Paris only as context and never states the 2 °C/1.5 °C goals or the non-binding, sanction-free commitments."},
+{"id":"climate-policy-adapts-capitalism","verdict":"stated","reason":"It says that according to Saito these attempts \"no cuestionan el sistema económico dominante\" and that the Green New Deal and Fit for 55 rely on decoupling growth from emissions."},
+{"id":"decoupling-would-come-too-late","verdict":"missing","reason":"The summary mentions reliance on decoupling but not that it might take about 100 years, too late for the 10-20 year window."},
+{"id":"north-externalizes-costs-to-south","verdict":"stated","reason":"It says these policies \"externalizan costes ambientales a países en desarrollo\"."},
+{"id":"conclusion-embrace-degrowth","verdict":"stated","reason":"It calls for alternatives such as \"el decrecimiento\" and says the transition is \"no es una cuestión técnica sino una disputa sobre qué tipo de sociedad queremos sostener\"."}
+]}

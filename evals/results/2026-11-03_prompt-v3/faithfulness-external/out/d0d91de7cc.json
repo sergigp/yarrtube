@@ -1,0 +1,5 @@
+{"errors": [
+{"quote":"El autor afirma que el tiempo invertido en su desarrollo no aumenta el costo operativo diario","kind":"wrong","severity":"minor","reason":"He says the utility itself should not increase Codely's baseline operating cost/workload day to day (3:50-4:15), not that the development time doesn't."},
+{"quote":"ayuda a ahorrar horas semanales en la preparación de los temas","kind":"unsupported","severity":"minor","reason":"He only says it will save him 'mucho tiempo cada semana' (7:39-7:45), never quantifying hours."},
+{"quote":"integra actualizaciones semánticas sin crear PRs adicionales","kind":"misleading","severity":"minor","reason":"He says semantic-release publishes releases automatically from conventional commits without a PR for the version bump (4:25-4:58), not 'semantic updates'."}
+]}

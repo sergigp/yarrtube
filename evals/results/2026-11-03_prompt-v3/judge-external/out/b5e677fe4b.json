@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "paris-agreement-goals-and-weaknesses", "verdict": "missing", "reason": "The summary never mentions the Paris Agreement, its temperature goals or its non-binding commitments."},
+{"id": "climate-policy-adapts-capitalism", "verdict": "stated", "reason": "It says Green New Deal and Fit for 55 'se basan en un modelo de crecimiento verde que confía excesivamente en la tecnología' and cites Saito's critical analysis."},
+{"id": "decoupling-would-come-too-late", "verdict": "missing", "reason": "The summary does not mention decoupling or the 100-year versus 10-20 year timing."},
+{"id": "north-externalizes-costs-to-south", "verdict": "missing", "reason": "The summary does not mention the Global North externalizing costs to the Global South."},
+{"id": "conclusion-embrace-degrowth", "verdict": "stated", "reason": "It says the video proposes 'un decrecimiento' and the need to 'repensar fundamentalmente nuestras ideas de futuro, adoptando enfoques que cuestionen el crecimiento económico infinito'."}
+]}

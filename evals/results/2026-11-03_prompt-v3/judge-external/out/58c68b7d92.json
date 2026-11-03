@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"topic-own-harness","verdict":"stated","reason":"Summary says the creator shares his project to build his own AI agent similar to Cloud Code in order to learn about AI \"harneses\" (Go/Anthropic details not mentioned, but main claim is there)."},
+{"id":"agentic-loop","verdict":"stated","reason":"Summary explains the agentic loop as a UI loop calling an AI, \"construyendo un contexto y llamando a herramientas para realizar acciones, como editar archivos\"."},
+{"id":"multi-agent-subagents","verdict":"stated","reason":"Summary says he adds \"múltiples agentes en paralelo, visualizando su estado y permitiendo la creación de subagentes\"."},
+{"id":"takeaway-demystify","verdict":"missing","reason":"Summary never states that agents are just wrappers around LLM calls, that products sell the UI, or that the harness is for learning not production."},
+{"id":"build-your-own-harness","verdict":"stated","reason":"Summary mentions additional resources including \"un repositorio con ejercicios para practicar el 'harness engineering'\", though the website is not named."}
+]}

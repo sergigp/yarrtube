@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"topic-own-harness","verdict":"stated","reason":"Summary says he built an AI agent in Go to understand harnesses (\"construyó un agente de inteligencia artificial en Go\"), the main claim, though the Anthropic API is not mentioned."},
+{"id":"agentic-loop","verdict":"missing","reason":"Summary only mentions understanding \"los bucles agénticos\" without explaining the model answer/tool call cycle or the outer REPL loop."},
+{"id":"multi-agent-subagents","verdict":"stated","reason":"Summary says he implemented subagents that handle tasks and whose progress is monitored (\"implementando subagentes que gestionen tareas como crear archivos y monitorear su progreso\"), though worktree/goroutine details are absent."},
+{"id":"takeaway-demystify","verdict":"stated","reason":"Summary says these are \"wrappers sencillos alrededor de llamadas a LLMs\", stresses learning by building step by step, and that they are not for production."},
+{"id":"build-your-own-harness","verdict":"stated","reason":"Summary says \"El repositorio Build Your Own Harness ofrece ejercicios\" as a separate resource, without presenting it as the project in the video."}
+]}

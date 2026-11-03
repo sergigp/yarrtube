@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "anarchist-golden-age-early-1900s", "verdict": "stated", "reason": "The summary says Argentina had its anarchist golden age in the early 20th century tied to FORA's growth (\"primer tercio del siglo XX\", \"crecimiento de la FORA\")."},
+{"id": "1880-1916-is-oligarchy-narrative", "verdict": "missing", "reason": "The summary never mentions the 1880-1916 conservative order or the oligarchy's golden-age narrative."},
+{"id": "fora-unions-27-to-almost-100", "verdict": "stated", "reason": "\"La organización logró cuadruplicar los sindicatos en poco tiempo\" states the quadrupling, though not the 27 and 100 figures."},
+{"id": "state-responded-with-repression", "verdict": "stated", "reason": "\"represiones estatales, incluyendo la Ley de Residencia y el massacre de mayo de 1909, interrumpieron su expansión\" covers the repression and its weakening effect."},
+{"id": "culture-and-press-fed-golden-age", "verdict": "stated", "reason": "The summary cites FORA's growth and cultural work (\"enfoque en educación y actividades artísticas para conectar con las necesidades populares\") as marking the golden age."}
+]}

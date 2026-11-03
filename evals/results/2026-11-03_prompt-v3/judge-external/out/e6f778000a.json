@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "language-trees-zipping", "verdict": "stated", "reason": "The summary says \"a 2002 paper used simple compression techniques to cluster languages and infer their evolutionary relationships without prior linguistic knowledge\", which paraphrases the main claim."},
+{"id": "cross-entropy-definition", "verdict": "stated", "reason": "It says cross-entropy measures \"how well a compression scheme optimized for one context performs in another\", which is the core definition, though asymmetry is not mentioned."},
+{"id": "minimum-at-p-equals-q", "verdict": "missing", "reason": "The summary says nothing about the minimum at P equals Q, the entropy, or KL divergence."},
+{"id": "llm-pretraining-loss", "verdict": "missing", "reason": "It only says it \"explains how cross-entropy loss functions in pre-training\", without stating the negative log probability of the true next token or why the log is forced."},
+{"id": "distillation", "verdict": "missing", "reason": "Distillation is only named in passing, with no claim that a small model is trained against a larger model's full distribution."}
+]}

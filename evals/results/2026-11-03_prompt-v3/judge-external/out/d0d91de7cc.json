@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"built-browser-tabs-cli","verdict":"stated","reason":"Summary says \"Una herramienta de CLI llamada browser tabs, creada por Codely, permite agrupar pestañas\" for the weekly cafés."},
+{"id":"vivaldi-api-not-computer-use","verdict":"missing","reason":"Summary mentions Vivaldi, names and colors but never says it uses Vivaldi's API directly instead of slow AI computer use or batch-opens from JSON."},
+{"id":"motivation-weekly-manual-work","verdict":"missing","reason":"Summary says it automates link management for weekly cafés but does not state the tedious manual work or that AI computer use was too slow and blocked the browser."},
+{"id":"open-source-semantic-release","verdict":"stated","reason":"Summary says \"open source y disponible en GitHub y NPM\" and \"integra actualizaciones semánticas sin crear PRs adicionales\", a paraphrase of semantic-release."},
+{"id":"worth-it-saves-time","verdict":"stated","reason":"Summary says the tool \"ayuda a ahorrar horas semanales\", conveying that it saves time every week."}
+]}

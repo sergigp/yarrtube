@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id": "white-vs-black-stonewall-knight", "verdict": "stated", "reason": "The summary says the video is about handling the \"e4 Knight\" in the Stonewall from a social media interaction, without making White the Stonewall player or the knight White's."},
+{"id": "dont-take-on-d5", "verdict": "contradicted", "reason": "It correctly says to avoid taking on d5 but also says the video \"advocates for developing the bishop to g5\", whereas the presenter says White should not play Bg5."},
+{"id": "f3-is-the-answer", "verdict": "missing", "reason": "The summary only mentions \"preparing to trade pieces\" and never mentions f3 or kicking the knight."},
+{"id": "model-games-karpov", "verdict": "missing", "reason": "The summary does not mention Karpov or any model games with the knight kicked and a knight planted on e5."},
+{"id": "c1-bishop-no-hurry", "verdict": "missing", "reason": "The summary does not address where the c1 bishop should go or that it is developed last."}
+]}

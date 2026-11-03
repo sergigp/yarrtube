@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"five-places-covered","verdict":"missing","reason":"The summary covers only Greenland, Switzerland, Neom and Finland, omits Cyprus, and never presents the video as a compilation of five documentaries."},
+{"id":"neom-fallen-apart","verdict":"stated","reason":"It mentions \"the stalled ambition of Saudi Arabia's Neom project\", conveying that the project did not succeed."},
+{"id":"finland-joined-nato","verdict":"missing","reason":"The summary mentions Finland's shelters and culture of defense but never says it abandoned non-alignment or joined NATO."},
+{"id":"cyprus-divided-in-four","verdict":"missing","reason":"Cyprus is not mentioned anywhere in the summary."},
+{"id":"human-element-announcement","verdict":"missing","reason":"The summary does not mention \"The Human Element\" or any upcoming project."}
+]}

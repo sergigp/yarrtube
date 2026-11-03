@@ -1,0 +1,7 @@
+{"verdicts": [
+{"id":"white-vs-black-stonewall-knight","verdict":"stated","reason":"Summary frames handling the e4 knight in the Stonewall and says \"white successfully neutralized black's knight\", so the knight is Black's and White is the one dealing with it."},
+{"id":"dont-take-on-d5","verdict":"stated","reason":"Summary says \"never take on d5 due to positional errors that weaken tension\", which covers the main claim that White should not have played cxd5 (Bg5 is not mentioned)."},
+{"id":"f3-is-the-answer","verdict":"stated","reason":"Summary says \"use F3 to either kick the knight or trade into it before resolving the position\"."},
+{"id":"model-games-karpov","verdict":"stated","reason":"Summary says Karpov demonstrates the solution and wins \"after white successfully neutralized black's knight with F3\", matching the Karpov model game where White kicks the knight, though the e5 knight and dark squares are not mentioned."},
+{"id":"c1-bishop-no-hurry","verdict":"missing","reason":"The summary never mentions the c1 bishop or the advice that there is no hurry to place it."}
+]}

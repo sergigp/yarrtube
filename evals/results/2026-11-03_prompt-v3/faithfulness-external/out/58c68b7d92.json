@@ -1,0 +1,4 @@
+{"errors": [
+{"quote":"el creador describe cómo implementa esto utilizando un nuevo tipo de agente","kind":"unsupported","severity":"minor","reason":"The video implements it via a spawn tool that creates a Git worktree and starts an agent in a goroutine with monitoring hooks (7:51-9:30), not a 'new type of agent'."},
+{"quote":"ofrece recursos adicionales, incluyendo un taller gratuito y un repositorio con ejercicios para practicar el “harness engineering”","kind":"misleading","severity":"minor","reason":"The free workshop is a separate Commit Academy RAG workshop (13:00-13:20), not a harness-engineering resource; only the repo/site has the exercises (10:36-10:43)."}
+]}

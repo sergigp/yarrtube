@@ -1,0 +1,22 @@
+Summary:
+Una herramienta de CLI llamada browser tabs, creada por Codely, permite agrupar pestañas en Vivaldi y automatizar la gestión de enlaces para los cafés semanales de discusión. Esta utilidad, open source y disponible en GitHub y NPM, asigna nombres y colores personalizados a los grupos de pestañas y integra actualizaciones semánticas sin crear PRs adicionales. El autor afirma que el tiempo invertido en su desarrollo no aumenta el costo operativo diario y ayuda a ahorrar horas semanales en la preparación de los temas.
+
+Facts:
+- id: built-browser-tabs-cli
+  fact: The speaker presents browser-tabs (browser tabs CLI), an open-source command-line tool he built to open and organize browser tabs into named groups, to prepare Codely's weekly news livestream ("el café con Codely").
+  common mistake: Describes it as a browser extension, an MCP server, or a review of someone else's tool.
+  note: Captions write "codely"; the company is Codely. The speaker is Javi (Codely). Saying Codely built it is acceptable.
+- id: vivaldi-api-not-computer-use
+  fact: It talks directly to Vivaldi's API (the browser he uses for the show) to batch-open tabs from a JSON file in about a second, naming tabs and groups and setting colors, instead of slow AI computer use that clicks through the browser and blocks it.
+  common mistake: Says it works with Firefox or Chrome, or that it uses AI/computer use to open the tabs.
+- id: motivation-weekly-manual-work
+  fact: The motivation is the tedious weekly work of opening all the news links, renaming and grouping them; automating it with AI computer use was too slow and blocked the browser.
+- id: open-source-semantic-release
+  fact: The tool is open source (MIT, on npm and GitHub), vibe-coded, and uses semantic-release (instead of release-please, which Codely used before) to publish releases automatically from conventional commits.
+  common mistake: Says it uses release-please, or that it is paid/closed source.
+  note: "by codeado" in captions is "vibe codeado". Paraphrases like "releases semánticos" count as semantic-release.
+- id: worth-it-saves-time
+  fact: He concludes the time was worth it: he learned things (badges, semantic-release, Agent Browser differences) and the tool will save him a lot of time every week.
+  common mistake: Says he concluded it wasn't worth the effort.
+
+Give one verdict per fact id.

@@ -1,0 +1,4 @@
+{"errors": [
+{"quote":"la dificultad de procesar datos cuánticos","kind":"wrong","severity":"major","reason":"The video says the difficulty is loading classical data into quantum states (19:00-19:23) and that processing data that is already quantum is especially promising and advantageous (19:26-20:21)."},
+{"quote":"el vídeo concluye que la IA cuántica se encuentra en una fase temprana de desarrollo, con un potencial prometedor pero aún lejano de ser una realidad generalizada","kind":"misleading","severity":"minor","reason":"The video's conclusion is that it is at an intermediate point, not hype and not the revolution replacing classical AI, with potential in complementing classical AI on specific tasks (20:24-21:04), not a general early-stage-but-coming framing."}
+]}
