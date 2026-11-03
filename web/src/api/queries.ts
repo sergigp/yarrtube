@@ -266,9 +266,9 @@ export function useCategoriesShown(): boolean {
 /**
  * Returns a function that saves the preferences in `patch`, then shows the
  * saved ones everywhere and refetches the home videos, whose sections follow
- * them.
+ * them. Resolves with every preference as saved.
  */
-export function useSavePreferences(): (patch: PreferencesPatch) => Promise<void> {
+export function useSavePreferences(): (patch: PreferencesPatch) => Promise<Preferences> {
   const queryClient = useQueryClient()
   return useCallback(
     async (patch: PreferencesPatch) => {
@@ -277,6 +277,7 @@ export function useSavePreferences(): (patch: PreferencesPatch) => Promise<void>
       // Refetched even while home isn't shown, so going back to it doesn't
       // first show sections from before the change.
       await queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos, refetchType: 'all' })
+      return saved
     },
     [queryClient],
   )

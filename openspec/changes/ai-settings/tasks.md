@@ -45,7 +45,7 @@ Web (Vitest)
 - [x] 2.30 `AiSettingsView.test.tsx` — Test connection shows `Connected to Ollama 0.40.13, 2 models`, or the daemon error; disabled with an empty URL.
 - [x] 2.31 `AiSettingsView.test.tsx` — model list from the saved URL, `(not installed)` entry, text field when the check fails.
 - [x] 2.32 `AiSettingsView.test.tsx` — Thinking switch shown for a thinking model and when models are unknown; for a non-thinking model replaced by `<model> doesn't support thinking` and `summaries_thinking` not sent; help text.
-- [ ] 2.33 `AiSettingsView.test.tsx` — `Using the default prompt` note; Reset sends `summaries_prompt: null`; prompt guide shown.
+- [x] 2.33 `AiSettingsView.test.tsx` — `Using the default prompt` note; Reset sends `summaries_prompt: null`; prompt guide shown.
 - [ ] 2.34 `SettingsMenu.test.tsx` — "AI" between "Preferences" and "Report a bug", navigates to `/ai`.
 - [x] 2.35 `PreferencesView.test.tsx`, `ThemeToggle.test.tsx` — expect `PATCH /api/preferences` with only the changed preference.
 

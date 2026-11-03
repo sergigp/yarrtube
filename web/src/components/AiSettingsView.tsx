@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { useCheckOllama, useOllama, usePreferences, useSavePreferences } from '@/api/queries'
-import type { OllamaServer, Preferences } from '@/api/types'
+import type { OllamaServer, Preferences, PreferencesPatch } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { PreferenceHelp } from '@/components/PreferenceHelp'
+import { PromptGuide } from '@/components/PromptGuide'
 import {
   changedFields,
   formFrom,
@@ -73,21 +74,36 @@ function AiSettings({ saved }: { saved: Preferences }) {
     }
   }
 
-  const save = async () => {
+  /** Saves `patch`, showing "Saved" or why it failed. */
+  const submit = async (patch: PreferencesPatch): Promise<Preferences | null> => {
     setSaveError(null)
     savedFlash.clear()
-    if (hasInvalidNumber(patch)) {
-      setSaveError('Context length and temperature must be numbers')
-      return
-    }
     setSaving(true)
     try {
-      await savePreferences(patch)
+      const updated = await savePreferences(patch)
       savedFlash.flash()
+      return updated
     } catch (err) {
       setSaveError(errorMessage(err))
+      return null
     } finally {
       setSaving(false)
+    }
+  }
+
+  const save = () => {
+    if (hasInvalidNumber(patch)) {
+      setSaveError('Context length and temperature must be numbers')
+      savedFlash.clear()
+      return
+    }
+    void submit(patch)
+  }
+
+  const resetPrompt = async () => {
+    const updated = await submit({ summaries_prompt: null })
+    if (updated) {
+      set('summaries_prompt', updated.summaries_prompt)
     }
   }
 
@@ -209,7 +225,25 @@ function AiSettings({ saved }: { saved: Preferences }) {
             onChange={(event) => set('summaries_prompt', event.target.value)}
             className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
           />
+          <div className="flex items-center justify-between gap-4">
+            {saved.summaries_prompt_is_default && form.summaries_prompt === saved.summaries_prompt ? (
+              <p className="text-sm text-muted-foreground">Using the default prompt</p>
+            ) : (
+              <span />
+            )}
+            {!saved.summaries_prompt_is_default && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving || summariesDisabled}
+                onClick={() => void resetPrompt()}
+              >
+                Reset to default
+              </Button>
+            )}
+          </div>
         </Field>
+        <PromptGuide />
       </Section>
       <div className="flex items-center justify-end gap-4">
         {saveError && (
@@ -225,7 +259,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
             </>
           )}
         </p>
-        <Button disabled={saving || Object.keys(patch).length === 0} onClick={() => void save()}>
+        <Button disabled={saving || Object.keys(patch).length === 0} onClick={save}>
           Save
         </Button>
       </div>

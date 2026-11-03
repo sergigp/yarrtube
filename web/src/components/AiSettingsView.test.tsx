@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AiSettingsView } from './AiSettingsView'
 import { aPreferences, anOllamaServer, mockApi, renderWithProviders } from '@/test/helpers'
@@ -237,6 +237,52 @@ describe('AiSettingsView', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Lets the model reason before answering: slower, but more accurate. Some models, such as qwen3:4b, think even when it is off.',
     )
+  })
+
+  it('says the default prompt is in use', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+
+    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument()
+  })
+
+  it('resets a saved prompt to the default', async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': aPreferences({
+        ai_enabled: true,
+        summaries_prompt: 'my prompt',
+        summaries_prompt_is_default: false,
+      }),
+      'PATCH /api/preferences': aPreferences({ ai_enabled: true }),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole('textbox', { name: 'Prompt' })).toHaveValue('my prompt')
+    expect(screen.queryByText('Using the default prompt')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Reset to default' }))
+
+    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(
+      aPreferences().summaries_prompt,
+    )
+    expect(patchBodies(fetchMock)).toEqual([{ summaries_prompt: null }])
+  })
+
+  it("explains each prompt section and the variables it can use", async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+
+    const guide = await screen.findByRole('region', { name: 'Prompt guide' })
+    const reducePart = within(guide).getByRole('group', { name: 'reduce part' })
+
+    expect(within(reducePart).getByText('How each part summary is written into {part_summaries}.')).toBeInTheDocument()
+    expect(within(reducePart).getAllByRole('term').map((term) => term.textContent)).toEqual([
+      '{part}',
+      '{span}',
+      '{summary}',
+    ])
   })
 })
 
