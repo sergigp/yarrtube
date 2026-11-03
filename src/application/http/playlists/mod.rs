@@ -190,10 +190,12 @@ mod tests {
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::llm_server::OllamaUrl;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName};
     use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
+    use crate::domain::preferences::{Preferences, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
@@ -228,7 +230,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
+    use crate::infrastructure::repositories::sqlite_preferences_repository::{
+        PreferencesRepository, SqlitePreferencesRepository,
+    };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -265,6 +269,38 @@ mod tests {
     use std::sync::Arc;
 
     const DEFAULT_PATH: &str = "music/chill";
+
+    #[tokio::test]
+    async fn it_should_create_a_playlist_with_summaries_disabled_by_default() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&summaries_on()).unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = CreatePlaylistRequest {
+            summaries_enabled: None,
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((StatusCode::CREATED, playlist_response("PL1", DEFAULT_PATH)))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+    }
 
     #[tokio::test]
     async fn it_should_create_a_playlist() {
@@ -3664,6 +3700,22 @@ mod tests {
                 PlaylistEpisodeNumber::new(episode).unwrap().into(),
                 fixed_timestamp(),
             )
+    }
+
+    /// Preferences with AI and summaries on, so sources can enable summaries.
+    fn summaries_on() -> Preferences {
+        let preferences = Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+            ..Preferences::default()
+        };
+        Preferences {
+            summaries: SummarySettings {
+                enabled: true,
+                ..preferences.summaries.clone()
+            },
+            ..preferences
+        }
     }
 
     fn playlist(id: &str, path: &str) -> Playlist {
