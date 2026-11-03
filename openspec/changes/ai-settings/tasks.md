@@ -38,7 +38,7 @@ Value objects
 - [x] 2.25 `SummaryPrompt` tests, one cycle each: shipped prompt valid; missing section; unknown section; repeated section; empty section; disallowed variable message; note before first section ignored; non-variable braces ignored.
 
 Web (Vitest)
-- [ ] 2.26 `aiSettingsForm.test.ts` — `changedFields` sends only changed keys, omits an untouched prompt, empty URL → `""`.
+- [x] 2.26 `aiSettingsForm.test.ts` — `changedFields` sends only changed keys, omits an untouched prompt, empty URL → `""`.
 - [ ] 2.27 `promptGuide.test.ts` — every section and every `{var}` of the shipped prompt (`?raw` import) is in the guide under its section, each with a description.
 - [ ] 2.28 `AiSettingsView.test.tsx` — fresh defaults with summary fields disabled; enabling AI enables them.
 - [ ] 2.29 `AiSettingsView.test.tsx` — Save sends only changed fields and shows "Saved"; a 400 shows the daemon message and keeps the form.
