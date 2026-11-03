@@ -24,7 +24,7 @@ Rust
 
 Web
 - `web/src/api/types.ts` — `summaries_enabled` on `ChannelListItem`, `PlaylistListItem`, `CreatedChannel`.
-- `web/src/api/client.ts` — `summaries_enabled?` on `Create/Update{Channel,Playlist}Request`.
+- `web/src/api/client.ts` — `summaries_enabled` on `Create{Channel,Playlist}Request`, `summaries_enabled?` on `Update{Channel,Playlist}Request`.
 - `web/src/test/helpers.tsx` — `aChannel`/`aPlaylist` default `summaries_enabled: false`.
 - `web/src/lib/preferences.ts` — `summariesAvailable(preferences)`.
 - `web/src/api/queries.ts` — `useSummariesAvailable()`.
@@ -100,6 +100,8 @@ interface SummariesFieldProps {
   id: string
   checked: boolean
   onChange: (checked: boolean) => void
+  /** The source's stored value: when true the box stays enabled so summaries can be turned off. */
+  enabledOnSource?: boolean
   /** Called when the "AI settings" link is followed, to close the dialog. */
   onNavigateAway: () => void
 }
@@ -113,7 +115,7 @@ Update: `PATCH /api/channels/:id {summaries_enabled}` → `update_channel` build
 
 List: `GET /api/channels` → `ChannelViewSearcher` → `ChannelView { summaries_enabled: channel.summaries_enabled, … }` → `ChannelListItemResponse`.
 
-UI: dialog → `useSummariesAvailable()` (`usePreferences` → `summariesAvailable(data)`) → `<SummariesField checked disabled={!available} …/>`; link `<Link to="/ai" onClick={onNavigateAway}>`. Add dialogs send `summaries_enabled` in `createChannel`/`createPlaylist`; edit dialogs send it only when it differs from the source's.
+UI: dialog → `<SummariesField checked enabledOnSource …/>` → `useSummariesAvailable()` (`usePreferences` → `summariesAvailable(data)`), disabled when `!available && !enabledOnSource`; edit dialogs pass the source's stored value; link `<Link to="/ai" onClick={onNavigateAway}>`. Add dialogs send `summaries_enabled` in `createChannel`/`createPlaylist`; edit dialogs send it only when it differs from the source's.
 
 ## Test Plan
 
@@ -147,8 +149,8 @@ Web (Vitest)
 19. `AddPlaylistDialog.test.tsx` — same as 18 for playlists.
 20. `AddChannelDialog.test.tsx` — AI off: checkbox disabled, hint "Turn on AI summaries in AI settings." with link to `/ai`; following it closes the dialog and routes to `/ai`.
 21. `EditChannelDialog.test.tsx` — prefilled checked; AI on: toggling sends `summaries_enabled` alone and triggers no sync.
-22. `EditChannelDialog.test.tsx` — AI on, summaries off: disabled, shown checked for a source with it on; changing only the interval sends only the interval.
-23. `EditPlaylistDialog.test.tsx` — AI on: checking sends `{ summaries_enabled: true }` alone; AI off: disabled.
+22. `EditChannelDialog.test.tsx` — AI on, summaries off: checked and enabled for a source with it on; unchecking sends `summaries_enabled: false` alone.
+23. `EditPlaylistDialog.test.tsx` — AI on: checking sends `{ summaries_enabled: true }` alone; AI off: disabled, and enabled for a source with summaries on.
 
 ### 2. Infrastructure tests
 

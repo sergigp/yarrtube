@@ -13,8 +13,8 @@ needs its own opt-in before generation is built, so the generator can just read 
 - The add and edit dialogs for both channels and playlists show a "Summarize
   videos" checkbox.
 - While AI summaries aren't on globally (the "Enable AI" switch or "Summaries
-  enabled" on `/ai` is off), the checkbox is disabled, keeps its stored value,
-  and its hint links to the AI settings page. In the add dialogs it is always
+  enabled" on `/ai` is off), the checkbox is disabled unless the source already
+  has summaries on (so they can still be switched off), and its hint links to the AI settings page. In the add dialogs it is always
   visible, not inside "Advanced options".
 - The daemon rejects enabling summaries on a source (create or update) unless
   both AI and summaries are on in the preferences; disabling is always allowed.

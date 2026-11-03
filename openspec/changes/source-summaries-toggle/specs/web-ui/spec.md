@@ -24,7 +24,7 @@ The add and edit dialogs for channels and playlists SHALL show a "Summarize vide
 - **THEN** the application sends `summaries_enabled` `true` alone, closes the dialog, and does not trigger a sync
 
 ### Requirement: Summarize Videos Needs AI Summaries
-"Summarize videos" SHALL be enabled only while the preferences have both AI and summaries on. Otherwise, including while preferences load or fail to load, it SHALL be disabled, keep the source's value, and its hint SHALL read "Turn on AI summaries in AI settings." with "AI settings" a link to `/ai` that closes the dialog.
+"Summarize videos" SHALL be enabled only while the preferences have both AI and summaries on. Otherwise, including while preferences load or fail to load, it SHALL be disabled unless the source already has summaries on, in which case it SHALL stay enabled so they can be turned off; its hint SHALL read "Turn on AI summaries in AI settings." with "AI settings" a link to `/ai` that closes the dialog.
 
 #### Scenario: AI off
 - **WHEN** AI is off and a user opens the add channel dialog
@@ -34,9 +34,9 @@ The add and edit dialogs for channels and playlists SHALL show a "Summarize vide
 - **WHEN** AI is on, summaries are off and a user opens "Edit settings" for a playlist
 - **THEN** "Summarize videos" is disabled
 
-#### Scenario: Setting kept while AI is off
-- **WHEN** AI is off and a user opens "Edit settings" for a channel whose summaries are enabled, changes the interval and saves
-- **THEN** "Summarize videos" shows checked and disabled, and only the interval is sent
+#### Scenario: Turning summaries off while AI is off
+- **WHEN** AI is off and a user opens "Edit settings" for a channel whose summaries are enabled, unchecks "Summarize videos" and saves
+- **THEN** "Summarize videos" was shown checked and enabled, and only `summaries_enabled` `false` is sent
 
 #### Scenario: Following the link
 - **WHEN** AI is off and a user activates "AI settings" in the hint
