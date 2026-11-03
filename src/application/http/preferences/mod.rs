@@ -248,6 +248,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_unset_the_ollama_url_on_an_empty_string() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        repository
+            .save(&Preferences {
+                ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+                ..Preferences::default()
+            })
+            .unwrap();
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            ollama_url: Some(String::new()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(response, Ok(all_on_response()));
+        assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
