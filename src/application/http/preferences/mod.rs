@@ -190,6 +190,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_everything_on_an_empty_patch() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        repository
+            .save(&Preferences {
+                theme: Theme::Dark,
+                ..Preferences::default()
+            })
+            .unwrap();
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+
+        let response = update(preferences_updater, UpdatePreferencesRequest::default()).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                theme: "dark".to_string(),
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                theme: Theme::Dark,
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
