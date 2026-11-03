@@ -7,7 +7,7 @@
 ## 2. Behaviour (TDD)
 
 Channels handler (acceptance, real SQLite)
-- [ ] 2.1 `it_should_create_a_channel_with_summaries_disabled_by_default` — omitted → stored and returned `false`.
+- [x] 2.1 `it_should_create_a_channel_with_summaries_disabled_by_default` — omitted → stored and returned `false`.
 - [ ] 2.2 `it_should_create_a_channel_with_summaries_enabled` — AI + summaries on; `true` → stored and returned `true`.
 - [ ] 2.3 `it_should_fail_to_create_a_channel_with_summaries_if_ai_is_off` — 409 `Turn on AI summaries before enabling them for a channel`, nothing stored, YouTube fake not called.
 - [ ] 2.4 `it_should_enable_summaries_on_a_channel` — AI + summaries on; only `summaries_enabled: true` → 200, stored `true`, other fields unchanged.
