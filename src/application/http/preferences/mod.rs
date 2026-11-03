@@ -320,6 +320,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_unset_the_url_while_ai_is_on() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let saved = Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+            ..Preferences::default()
+        };
+        repository.save(&saved).unwrap();
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            ollama_url: Some(String::new()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Ollama URL must be set to enable AI"))
+        );
+        assert_eq!(repository.find().unwrap(), Some(saved));
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
