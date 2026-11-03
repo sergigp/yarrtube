@@ -57,7 +57,7 @@ Web (Vitest)
 - [x] 3.3 `it_should_find_no_prompt_if_saved_without_one`.
 
 `ollama_llm_server_repository` (mockito)
-- [ ] 3.4 `it_should_read_the_version_and_models`.
+- [x] 3.4 `it_should_read_the_version_and_models`.
 - [ ] 3.5 `it_should_read_whether_each_model_can_think` — from `/api/show` `capabilities`.
 - [ ] 3.6 `it_should_fail_if_the_version_endpoint_is_not_json`.
 - [ ] 3.7 `it_should_fail_if_the_server_replies_with_an_error`.
