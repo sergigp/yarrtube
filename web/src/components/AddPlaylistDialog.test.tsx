@@ -258,6 +258,30 @@ describe('AddPlaylistDialog', () => {
     })
   })
 
+  it('creates the playlist with summaries checked without opening advanced options', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }),
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'POST /api/playlists': aPlaylist(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    const summaries = await screen.findByRole('checkbox', { name: 'Summarize videos' })
+    expect(summaries).toHaveAccessibleDescription('Generate an AI summary of each new video.')
+    await waitFor(() => expect(summaries).toBeEnabled())
+    await user.click(summaries)
+    const submit = screen.getByRole('button', { name: 'Create Playlist' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const createCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit]
+    expect(JSON.parse(createCall[1].body as string)).toMatchObject({ summaries_enabled: true })
+  })
+
   it('offers no categories and saves none while categories are off', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
       'GET /api/preferences': aPreferences({ categories_enabled: false }),
