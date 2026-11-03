@@ -8,7 +8,8 @@ pub struct OllamaUrl(String);
 
 impl OllamaUrl {
     pub fn new(value: impl Into<String>) -> Result<Self, ValidationError> {
-        Ok(Self(value.into()))
+        let value = value.into();
+        Ok(Self(value.trim_end_matches('/').to_string()))
     }
 
     pub fn as_str(&self) -> &str {

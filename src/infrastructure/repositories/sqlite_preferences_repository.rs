@@ -1,3 +1,4 @@
+use crate::domain::llm_server::OllamaUrl;
 use crate::domain::preferences::{Preferences, Theme};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -67,6 +68,7 @@ struct StoredPreferences {
     home_show_quick_watches: Option<bool>,
     home_show_latest: Option<bool>,
     theme: Option<String>,
+    ollama_url: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -78,6 +80,7 @@ impl From<&Preferences> for StoredPreferences {
             home_show_quick_watches: Some(preferences.home_show_quick_watches),
             home_show_latest: Some(preferences.home_show_latest),
             theme: Some(preferences.theme.as_str().to_string()),
+            ollama_url: preferences.ollama_url.as_ref().map(|url| url.to_string()),
         }
     }
 }
@@ -105,6 +108,7 @@ impl From<StoredPreferences> for Preferences {
                 .theme
                 .and_then(|theme| Theme::new(theme).ok())
                 .unwrap_or(defaults.theme),
+            ollama_url: stored.ollama_url.and_then(|url| OllamaUrl::new(url).ok()),
             ..defaults
         }
     }
