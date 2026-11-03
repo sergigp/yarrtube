@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { PreferenceHelp } from '@/components/PreferenceHelp'
 import {
   changedFields,
   formFrom,
@@ -23,16 +25,18 @@ export function AiSettingsView() {
   const { data: preferences, error } = usePreferences()
 
   return (
-    <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
-      <h1 className="font-heading text-xl font-semibold text-foreground">AI</h1>
-      {error && (
-        <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
-      )}
-      {!error && !preferences && (
-        <p className="text-sm text-muted-foreground">Loading preferences…</p>
-      )}
-      {preferences && <AiSettings saved={preferences} />}
-    </div>
+    <TooltipProvider>
+      <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
+        <h1 className="font-heading text-xl font-semibold text-foreground">AI</h1>
+        {error && (
+          <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
+        )}
+        {!error && !preferences && (
+          <p className="text-sm text-muted-foreground">Loading preferences…</p>
+        )}
+        {preferences && <AiSettings saved={preferences} />}
+      </div>
+    </TooltipProvider>
   )
 }
 
@@ -42,7 +46,6 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const set = <K extends keyof AiSettingsForm>(key: K, value: AiSettingsForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
   const summariesDisabled = !form.ai_enabled
-  const patch = changedFields(saved, form)
   const savePreferences = useSavePreferences()
   const savedFlash = useSavedFlash()
   const [saving, setSaving] = useState(false)
@@ -54,6 +57,10 @@ function AiSettings({ saved }: { saved: Preferences }) {
   // tested successfully.
   const [modelsUrl, setModelsUrl] = useState(saved.ollama_url)
   const { data: server } = useOllama(modelsUrl)
+  // Known only when the server lists the model; unknown, the switch shows.
+  const cannotThink =
+    server?.models.find((model) => model.name === form.summaries_model)?.thinking === false
+  const patch = changedFields(saved, form, { thinking: !cannotThink })
   const testConnection = async () => {
     const url = form.ollama_url.trim()
     setConnection({ ...NO_CHECK, checking: true })
@@ -178,13 +185,20 @@ function AiSettings({ saved }: { saved: Preferences }) {
             onChange={(event) => set('summaries_temperature', event.target.value)}
           />
         </Field>
-        <SwitchRow
-          id="summaries-thinking"
-          label="Thinking"
-          checked={form.summaries_thinking}
-          disabled={summariesDisabled}
-          onChange={(value) => set('summaries_thinking', value)}
-        />
+        {cannotThink ? (
+          <p className="text-sm text-muted-foreground">
+            {form.summaries_model} doesn't support thinking
+          </p>
+        ) : (
+          <SwitchRow
+            id="summaries-thinking"
+            label="Thinking"
+            help={THINKING_HELP}
+            checked={form.summaries_thinking}
+            disabled={summariesDisabled}
+            onChange={(value) => set('summaries_thinking', value)}
+          />
+        )}
         <Field id="summaries-prompt" label="Prompt">
           <textarea
             id="summaries-prompt"
@@ -218,6 +232,9 @@ function AiSettings({ saved }: { saved: Preferences }) {
     </>
   )
 }
+
+const THINKING_HELP =
+  'Lets the model reason before answering: slower, but more accurate. Some models, such as qwen3:4b, think even when it is off.'
 
 interface ConnectionCheck {
   checking: boolean
@@ -253,19 +270,24 @@ function Field({ id, label, children }: { id: string; label: string; children: R
 function SwitchRow({
   id,
   label,
+  help,
   checked,
   disabled,
   onChange,
 }: {
   id: string
   label: string
+  help?: string
   checked: boolean
   disabled?: boolean
   onChange: (value: boolean) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={id}>{label}</Label>
+        {help && <PreferenceHelp label={label} help={help} />}
+      </div>
       <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onChange} />
     </div>
   )

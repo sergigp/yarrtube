@@ -184,6 +184,60 @@ describe('AiSettingsView', () => {
       'qwen3:4b',
     ])
   })
+
+  it('offers thinking for a model that can think', async () => {
+    mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    await screen.findByRole('combobox', { name: 'Model' })
+
+    expect(screen.getByRole('switch', { name: 'Thinking' })).toBeChecked()
+  })
+
+  it("replaces thinking with a note for a model that can't think, and doesn't save it", async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'PATCH /api/preferences': aiOn(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: 'Thinking' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'gemma3:4b')
+
+    expect(screen.queryByRole('switch', { name: 'Thinking' })).not.toBeInTheDocument()
+    expect(screen.getByText("gemma3:4b doesn't support thinking")).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByText('Saved')
+    expect(patchBodies(fetchMock)).toEqual([{ summaries_model: 'gemma3:4b' }])
+  })
+
+  it('offers thinking while the models are unknown', async () => {
+    mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    await screen.findByRole('textbox', { name: 'Model' })
+
+    expect(screen.getByRole('switch', { name: 'Thinking' })).toBeInTheDocument()
+  })
+
+  it('explains thinking', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+
+    await userEvent.setup().hover(await screen.findByRole('button', { name: 'About Thinking' }))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Lets the model reason before answering: slower, but more accurate. Some models, such as qwen3:4b, think even when it is off.',
+    )
+  })
 })
 
 function aiOn() {

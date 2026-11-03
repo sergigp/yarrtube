@@ -27,11 +27,17 @@ export function formFrom(preferences: Preferences): AiSettingsForm {
 }
 
 /**
- * The fields of `form` that differ from `saved`, as a patch. A number field
- * that doesn't hold one (empty included) is `NaN`, for the caller to refuse:
- * JSON would send it as `null`, which the daemon reads as unchanged.
+ * The fields of `form` that differ from `saved`, as a patch; without
+ * `summaries_thinking` when the model can't think (`thinking: false`). A
+ * number field that doesn't hold one (empty included) is `NaN`, for the
+ * caller to refuse: JSON would send it as `null`, which the daemon reads as
+ * unchanged.
  */
-export function changedFields(saved: Preferences, form: AiSettingsForm): PreferencesPatch {
+export function changedFields(
+  saved: Preferences,
+  form: AiSettingsForm,
+  { thinking }: { thinking: boolean } = { thinking: true },
+): PreferencesPatch {
   const current: PreferencesPatch = {
     ai_enabled: form.ai_enabled,
     ollama_url: form.ollama_url,
@@ -39,7 +45,7 @@ export function changedFields(saved: Preferences, form: AiSettingsForm): Prefere
     summaries_model: form.summaries_model,
     summaries_context_length: toNumber(form.summaries_context_length),
     summaries_temperature: toNumber(form.summaries_temperature),
-    summaries_thinking: form.summaries_thinking,
+    summaries_thinking: thinking ? form.summaries_thinking : saved.summaries_thinking,
     summaries_prompt: form.summaries_prompt,
   }
   const before: PreferencesPatch = { ...saved, ollama_url: saved.ollama_url ?? '' }
