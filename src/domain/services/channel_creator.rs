@@ -74,6 +74,7 @@ impl ChannelCreatorApi for ChannelCreator {
         path: PlaylistPath,
         summaries_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
+        self.ensure_summaries_available(summaries_enabled)?;
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreateChannelOutcome::AlreadyExisted(existing));
         }
@@ -100,6 +101,26 @@ impl ChannelCreatorApi for ChannelCreator {
 }
 
 impl ChannelCreator {
+    /// Enabling summaries needs AI and summaries on in the preferences.
+    fn ensure_summaries_available(
+        &self,
+        summaries_enabled: bool,
+    ) -> Result<(), CreateChannelError> {
+        if !summaries_enabled {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(CreateChannelError::Repository)?
+            .unwrap_or_default();
+        if preferences.summaries_available() {
+            Ok(())
+        } else {
+            Err(CreateChannelError::SummariesUnavailable)
+        }
+    }
+
     /// Matches every stored channel rather than calling `find`, since the
     /// stored handle may differ from `id` in case.
     fn find_existing(&self, id: &ChannelHandle) -> Result<Option<Channel>, CreateChannelError> {

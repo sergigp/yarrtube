@@ -41,7 +41,7 @@ impl Preferences {
 
     /// Whether sources can have their videos summarized: AI and summaries on.
     pub fn summaries_available(&self) -> bool {
-        true
+        self.ai_enabled && self.summaries.enabled
     }
 
     /// These preferences with `change` applied, as long as the result is
