@@ -137,6 +137,90 @@ mod tests {
     }
 
     #[test]
+    fn it_should_count_a_degraded_upgrade_as_a_failed_check() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+                height: Some(720),
+                sabr_notice: Some(
+                    "YouTube may have enabled the SABR-only streaming experiment".to_string(),
+                ),
+                ..staged_download()
+            })
+            .with_quality_probe(Ok(QualityProbe {
+                degraded: false,
+                height: Some(1080),
+                published_at: Some(now() - Duration::days(8)),
+            })),
+        );
+        let video = sd_video();
+        video_repository.save(&video).unwrap();
+        let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+            video_repository.clone(),
+            video_downloader_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            "/videos",
+        )));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                downloaded_height: Some(720),
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 1,
+                },
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                staging(&video).join("yt1.mp4"),
+                PathBuf::from(OUTPUT_DIR).join(FILENAME),
+            )]
+        );
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![staging(&video)]
+        );
+        assert_eq!(
+            *video_downloader_repository.quality_calls.lock().unwrap(),
+            vec![(YT1_URL.to_string(), Quality::High)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![ScheduledEvent {
+                id: 1,
+                event_type: "video_downloaded".to_string(),
+                payload: DomainEvent::VideoDownloaded(VideoDownloaded {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: OUTPUT_DIR.to_string(),
+                    folder: "Season 2026".to_string(),
+                })
+                .payload()
+                .to_string(),
+                retries: 0,
+                created_at: now(),
+                updated_at: now(),
+                last_error: None,
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_record_the_check_if_nothing_better_is_available() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

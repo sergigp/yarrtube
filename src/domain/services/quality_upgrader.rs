@@ -164,7 +164,7 @@ impl QualityUpgrader {
         let upgraded = video.clone().record_downloaded_quality(
             quality,
             downloaded.height,
-            false,
+            downloaded.sabr_notice.is_some(),
             published_at,
             self.clock.now(),
         );

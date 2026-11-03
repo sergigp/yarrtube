@@ -57,7 +57,7 @@
 - [x] 2.35 `it_should_replace_the_file_with_a_higher_quality_download` expects the quality settled once the upgrade reaches 1080 on `high` (upgrade_quality_task test passes)
 - [x] 2.36 `it_should_count_a_degraded_download_as_a_failed_quality_check` — an old video's SABR-degraded download records tier and height but counts a failed check instead of settling (download_video_task test passes)
 - [x] 2.37 `it_should_count_a_degraded_probe_as_a_failed_check` — a SABR-degraded probe that finds nothing better counts a failed attempt (upgrade_quality_task test passes)
-- [ ] 2.38 `it_should_count_a_degraded_upgrade_as_a_failed_check` — a SABR-degraded but taller re-download replaces the file and counts a failed attempt (upgrade_quality_task test passes)
+- [x] 2.38 `it_should_count_a_degraded_upgrade_as_a_failed_check` — a SABR-degraded but taller re-download replaces the file and counts a failed attempt (upgrade_quality_task test passes)
 
 ## 3. Infrastructure adapters (TDD)
 
