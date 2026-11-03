@@ -270,6 +270,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_enable_ai_with_a_url() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            ai_enabled: Some(true),
+            ollama_url: Some("http://mac.local:11434".to_string()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                ai_enabled: true,
+                ollama_url: Some("http://mac.local:11434".to_string()),
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                ai_enabled: true,
+                ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));

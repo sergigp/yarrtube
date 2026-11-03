@@ -54,6 +54,7 @@ impl Preferences {
                 .unwrap_or(self.home_show_quick_watches),
             home_show_latest: change.home_show_latest.unwrap_or(self.home_show_latest),
             theme: change.theme.unwrap_or(self.theme),
+            ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             ..self
         })
