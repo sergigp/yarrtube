@@ -99,6 +99,16 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_if_the_url_is_missing() {
+        let response = get(any_llm_server_searcher(), OllamaQuery::default()).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Ollama URL must be stated (missing)"))
+        );
+    }
+
     async fn get(
         llm_server_searcher: LlmServerSearcher,
         query: OllamaQuery,
@@ -106,5 +116,12 @@ mod tests {
         get_ollama(State(llm_server_searcher), Query(query))
             .await
             .map(|Json(response)| response)
+    }
+
+    /// A searcher for tests whose request is rejected before reaching it: its
+    /// server is down, so a request that wrongly got through would fail with
+    /// another error instead of passing.
+    fn any_llm_server_searcher() -> LlmServerSearcher {
+        LlmServerSearcher::new(Arc::new(FakeLlmServerRepository::failing()))
     }
 }
