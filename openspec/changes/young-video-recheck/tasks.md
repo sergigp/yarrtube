@@ -72,7 +72,7 @@
 ## 4. Verification
 
 - [x] 4.1 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked` are all clean
-- [ ] 4.2 `scripts/run-tests.sh` (no flags) passes every suite
+- [x] 4.2 `scripts/run-tests.sh` (no flags) passes every suite
 - [ ] 4.3 Manual (agent):
   - Start `scripts/run-local.sh --port <free port> --fresh-videos`.
   - Add a playlist with an old video that has no captions.
