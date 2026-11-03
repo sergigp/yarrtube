@@ -7,7 +7,7 @@ The web UI page where the user turns AI features on, points Yarrtube at an Ollam
 ## ADDED Requirements
 
 ### Requirement: AI Page
-The web UI SHALL show, at `/ai`, a page headed "AI" with an "Ollama" section (an "Enable AI" switch, an "Ollama URL" field and a "Test connection" button) and a "Summaries" section: a switch labelled "Enabled" (accessible name "Summaries enabled") and, only while it is on, "Model", "Context length", "Temperature", a "Thinking" switch and "Prompt", filled with the saved preferences. The whole Summaries section SHALL be disabled while "Enable AI" is off.
+The web UI SHALL show, at `/ai`, a page headed "AI" with an "Ollama" section (an "Enable AI" switch, an "Ollama URL" field and a "Test connection" button) and a "Summaries" section: a switch labelled "Enabled" (accessible name "Summaries enabled") and, only while it is on, "Model" and the advanced summary settings, filled with the saved preferences. The whole Summaries section SHALL be disabled while "Enable AI" is off.
 
 #### Scenario: Fresh install
 - **WHEN** a user opens `/ai` and nothing has been saved
@@ -15,11 +15,18 @@ The web UI SHALL show, at `/ai`, a page headed "AI" with an "Ollama" section (an
 
 #### Scenario: Summaries turned on
 - **WHEN** a user turns "Enable AI" on and then "Summaries enabled" on
-- **THEN** the summary settings show `qwen3:4b`, `12288`, `0.3`, thinking on and the shipped prompt, editable
+- **THEN** "Model" shows `qwen3:4b` and "Advanced" is closed; opening it shows `12288`, `0.3`, thinking on and the shipped prompt, all editable
 
 #### Scenario: AI turned off with summaries on
 - **WHEN** summaries are on and "Enable AI" is off
 - **THEN** the summary settings show but are disabled
+
+### Requirement: Advanced Summary Settings
+"Context length", "Temperature", the "Thinking" switch and "Prompt" SHALL sit under an "Advanced" disclosure, closed each time the page opens, whatever their values.
+
+#### Scenario: Closed by default
+- **WHEN** a user opens `/ai` with summaries on and a saved custom prompt
+- **THEN** "Advanced" is closed and the prompt is not shown until it is opened
 
 ### Requirement: Save AI Settings
 The page SHALL have a "Save" button, enabled only when a field differs from the saved preferences, that saves only the changed fields. On success it SHALL show "Saved"; on failure it SHALL show the daemon's error message and keep the edited values.

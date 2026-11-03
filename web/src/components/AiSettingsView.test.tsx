@@ -24,6 +24,7 @@ describe('AiSettingsView', () => {
 
     await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
     await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
+    await openAdvanced()
 
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toHaveValue(12288)
@@ -34,9 +35,28 @@ describe('AiSettingsView', () => {
     )
   })
 
+  it('keeps the advanced summary settings closed until asked for', async () => {
+    mockApi({ 'GET /api/preferences': aiOn() })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    const advanced = await screen.findByRole('button', { name: 'Advanced' })
+    expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('textbox', { name: 'Model' })).toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: 'Context length' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Prompt' })).not.toBeInTheDocument()
+
+    await user.click(advanced)
+
+    expect(advanced).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('spinbutton', { name: 'Context length' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toBeInTheDocument()
+  })
+
   it('disables the summary settings while AI is off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
 
     expect(await screen.findByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
@@ -98,6 +118,7 @@ describe('AiSettingsView', () => {
       'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
     const user = userEvent.setup()
 
     await user.clear(await screen.findByRole('spinbutton', { name: 'Temperature' }))
@@ -231,6 +252,7 @@ describe('AiSettingsView', () => {
       'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
 
     await screen.findByRole('combobox', { name: 'Model' })
 
@@ -244,6 +266,7 @@ describe('AiSettingsView', () => {
       'PATCH /api/preferences': aiOn(),
     })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('switch', { name: 'Thinking' }))
@@ -262,6 +285,7 @@ describe('AiSettingsView', () => {
       'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
     })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
 
     await screen.findByRole('textbox', { name: 'Model' })
 
@@ -271,6 +295,7 @@ describe('AiSettingsView', () => {
   it('explains thinking', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
 
     await userEvent.setup().hover(await screen.findByRole('button', { name: 'About Thinking' }))
 
@@ -282,6 +307,7 @@ describe('AiSettingsView', () => {
   it('says the default prompt is in use', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
 
     expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument()
@@ -298,6 +324,7 @@ describe('AiSettingsView', () => {
       'PATCH /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
     const user = userEvent.setup()
 
     expect(await screen.findByRole('textbox', { name: 'Prompt' })).toHaveValue('my prompt')
@@ -314,6 +341,7 @@ describe('AiSettingsView', () => {
   it('explains each prompt section and its variables behind a "?" next to the prompt', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
     const user = userEvent.setup()
 
     expect(screen.queryByRole('region', { name: 'Prompt guide' })).not.toBeInTheDocument()
@@ -330,6 +358,11 @@ describe('AiSettingsView', () => {
     ])
   })
 })
+
+/** Opens the "Advanced" summary settings, once the page has loaded. */
+async function openAdvanced() {
+  await userEvent.setup().click(await screen.findByRole('button', { name: 'Advanced' }))
+}
 
 function aiOn() {
   return aPreferences({

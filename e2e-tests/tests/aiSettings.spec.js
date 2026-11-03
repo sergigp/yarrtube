@@ -27,6 +27,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
   await test.step('turning AI and summaries on with a model that can’t think is saved', async () => {
     await enableAi.click()
     await page.getByRole('switch', { name: 'Summaries enabled' }).click()
+    await page.getByRole('button', { name: 'Advanced' }).click()
     await expect(page.getByText('Using the default prompt')).toBeVisible()
     await model.selectOption('gemma3:4b')
     await expect(page.getByText("gemma3:4b doesn't support thinking")).toBeVisible()
@@ -36,6 +37,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     await expect(save).toBeDisabled()
 
     await page.reload()
+    await page.getByRole('button', { name: 'Advanced' }).click()
     await expect(enableAi).toBeChecked()
     await expect(page.getByRole('switch', { name: 'Summaries enabled' })).toBeChecked()
     await expect(model).toHaveValue('gemma3:4b')
@@ -49,6 +51,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     await expect(page.getByText('Saved')).toBeVisible()
 
     await page.reload()
+    await page.getByRole('button', { name: 'Advanced' }).click()
     await expect(prompt).toHaveValue(/- Be brief\./)
     await expect(page.getByText('Using the default prompt')).toHaveCount(0)
 
@@ -67,6 +70,7 @@ test.describe(() => {
     await page.getByRole('textbox', { name: 'Ollama URL' }).fill(daemon.ollamaUrl)
     await page.getByRole('switch', { name: 'Enable AI' }).click()
     await page.getByRole('switch', { name: 'Summaries enabled' }).click()
+    await page.getByRole('button', { name: 'Advanced' }).click()
     const prompt = page.getByRole('textbox', { name: 'Prompt' })
     const shipped = await prompt.inputValue()
     await prompt.fill(shipped.replace('## map user', '## map usr'))
