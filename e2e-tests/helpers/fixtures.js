@@ -44,6 +44,32 @@ const DEFAULT_PREFERENCES = {
   summaries_prompt: null,
 }
 
+/** The display preferences the released image (PUT only) takes. */
+const DISPLAY_PREFERENCES = [
+  'categories_enabled',
+  'home_show_continue_watching',
+  'home_show_categories',
+  'home_show_quick_watches',
+  'home_show_latest',
+  'theme',
+]
+
+/**
+ * Puts every preference back to its default. The upgrade check seeds a
+ * released image from before `PATCH /api/preferences`, which answers it
+ * with 405: that one takes every display preference through `PUT`.
+ */
+async function resetPreferences(request) {
+  const response = await request.patch('/api/preferences', { data: DEFAULT_PREFERENCES })
+  if (response.status() !== 405) {
+    return response
+  }
+  const display = Object.fromEntries(
+    DISPLAY_PREFERENCES.map((name) => [name, DEFAULT_PREFERENCES[name]]),
+  )
+  return request.put('/api/preferences', { data: display })
+}
+
 export const test = base.extend({
   // This worker's own daemon: tests talk only to it (through `baseURL`), and
   // the helpers that read the videos root and the Plex stub get its values.
@@ -73,8 +99,8 @@ export const test = base.extend({
 
   defaultPreferences: [
     async ({ request }, use) => {
-      const response = await request.patch('/api/preferences', { data: DEFAULT_PREFERENCES })
-      expect(response.ok(), 'PATCH /api/preferences').toBeTruthy()
+      const response = await resetPreferences(request)
+      expect(response.ok(), 'resetting the preferences').toBeTruthy()
       await use()
     },
     { auto: true },
