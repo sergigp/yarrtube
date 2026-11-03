@@ -58,7 +58,7 @@ Web (Vitest)
 
 `ollama_llm_server_repository` (mockito)
 - [x] 3.4 `it_should_read_the_version_and_models`.
-- [ ] 3.5 `it_should_read_whether_each_model_can_think` — from `/api/show` `capabilities`.
+- [x] 3.5 `it_should_read_whether_each_model_can_think` — from `/api/show` `capabilities`.
 - [ ] 3.6 `it_should_fail_if_the_version_endpoint_is_not_json`.
 - [ ] 3.7 `it_should_fail_if_the_server_replies_with_an_error`.
 
