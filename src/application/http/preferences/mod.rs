@@ -65,9 +65,10 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
 
 /// An empty URL unsets it.
 fn ollama_url(value: String) -> Result<Option<OllamaUrl>, ApiError> {
-    match value.as_str() {
-        "" => Ok(None),
-        _ => Ok(Some(OllamaUrl::new(value)?)),
+    if value.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(OllamaUrl::new(value)?))
     }
 }
 
@@ -388,7 +389,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_on_an_out_of_range_temperature_and_save_nothing() {
+    async fn it_should_fail_if_temperature_out_of_range() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let preferences_updater = PreferencesUpdater::new(repository.clone());
@@ -475,7 +476,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_to_the_shipped_prompt_on_null() {
+    async fn it_should_reset_the_prompt_to_the_shipped_one() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         repository
@@ -511,6 +512,44 @@ mod tests {
             Err(ApiError::bad_request(
                 "Prompt is missing the \"map user\" section"
             ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_a_saved_prompt_the_current_rules_reject() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let saved = Preferences {
+            summaries: SummarySettings {
+                prompt: Some(SummaryPrompt::from_stored("## system\nmy own words")),
+                ..SummarySettings::default()
+            },
+            ..Preferences::default()
+        };
+        repository.save(&saved).unwrap();
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            theme: Some("dark".to_string()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                theme: "dark".to_string(),
+                summaries_prompt: "## system\nmy own words".to_string(),
+                summaries_prompt_is_default: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                theme: Theme::Dark,
+                ..saved
+            })
         );
     }
 

@@ -44,6 +44,17 @@ describe('changedFields', () => {
     ).toEqual({ summaries_prompt: 'edited' })
   })
 
+  it('sends the URL without surrounding spaces', () => {
+    const saved = aPreferences({ ollama_url: 'http://mac.local:11434' })
+
+    expect(changedFields(saved, { ...formFrom(saved), ollama_url: '  http://nas:11434 ' })).toEqual({
+      ollama_url: 'http://nas:11434',
+    })
+    expect(
+      changedFields(saved, { ...formFrom(saved), ollama_url: ' http://mac.local:11434 ' }),
+    ).toEqual({})
+  })
+
   it('unsets a cleared URL', () => {
     const saved = aPreferences({ ollama_url: 'http://mac.local:11434' })
 

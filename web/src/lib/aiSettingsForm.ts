@@ -40,7 +40,7 @@ export function changedFields(
 ): PreferencesPatch {
   const current: PreferencesPatch = {
     ai_enabled: form.ai_enabled,
-    ollama_url: form.ollama_url,
+    ollama_url: form.ollama_url.trim(),
     summaries_enabled: form.summaries_enabled,
     summaries_model: form.summaries_model,
     summaries_context_length: toNumber(form.summaries_context_length),

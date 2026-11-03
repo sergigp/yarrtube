@@ -16,17 +16,12 @@ pub trait LlmServerRepository: Send + Sync {
 }
 
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
+#[derive(Default)]
 pub struct OllamaLlmServerRepository;
 
 impl OllamaLlmServerRepository {
     pub fn new() -> Self {
         Self
-    }
-}
-
-impl Default for OllamaLlmServerRepository {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -256,6 +251,23 @@ mod tests {
                 server.url()
             ))
         );
+    }
+
+    #[test]
+    fn it_should_fail_if_the_server_doesnt_answer_in_time() {
+        // Connections queue in the backlog but nobody ever answers.
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = OllamaUrl::new(format!("http://{}", silent.local_addr().unwrap())).unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let started = std::time::Instant::now();
+        std::thread::spawn(move || {
+            let _ = sender.send(OllamaLlmServerRepository::new().find(&url).is_err());
+        });
+
+        let failed = receiver.recv_timeout(Duration::from_secs(15));
+
+        assert_eq!(failed, Ok(true));
+        assert!(started.elapsed() < Duration::from_secs(10));
     }
 
     fn url(server: &mockito::Server) -> OllamaUrl {

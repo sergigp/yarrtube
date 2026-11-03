@@ -9,9 +9,10 @@ pub struct OllamaUrl(String);
 impl OllamaUrl {
     pub fn new(value: impl Into<String>) -> Result<Self, ValidationError> {
         let value = value.into();
-        match Self::host_and_path(&value) {
+        let trimmed = value.trim_end_matches('/');
+        match Self::host_and_path(trimmed) {
             Some(rest) if !rest.is_empty() && !rest.contains(char::is_whitespace) => {
-                Ok(Self(value.trim_end_matches('/').to_string()))
+                Ok(Self(trimmed.to_string()))
             }
             _ => Err(ValidationError(format!(
                 "Ollama URL must be an http(s) URL (got \"{value}\")"
@@ -19,13 +20,12 @@ impl OllamaUrl {
         }
     }
 
-    /// What follows an `http://` or `https://` scheme, without trailing
-    /// slashes; `None` for any other scheme.
+    /// What follows an `http://` or `https://` scheme; `None` for any other
+    /// scheme.
     fn host_and_path(value: &str) -> Option<&str> {
         ["http://", "https://"]
             .iter()
             .find_map(|scheme| value.strip_prefix(scheme))
-            .map(|rest| rest.trim_end_matches('/'))
     }
 }
 

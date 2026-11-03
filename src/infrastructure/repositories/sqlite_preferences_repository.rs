@@ -152,9 +152,9 @@ impl From<StoredPreferences> for Preferences {
                 thinking: stored
                     .summaries_thinking
                     .unwrap_or(defaults.summaries.thinking),
-                prompt: stored
-                    .summaries_prompt
-                    .and_then(|prompt| SummaryPrompt::new(prompt).ok()),
+                // Kept as saved, even when this version's rules reject it:
+                // reading it as the default would erase it on the next save.
+                prompt: stored.summaries_prompt.map(SummaryPrompt::from_stored),
             },
         }
     }
@@ -261,7 +261,7 @@ mod tests {
         let db = TestDatabase::new();
         db.connection()
             .execute(
-                "INSERT INTO preferences (id, data) VALUES (1, '{\"ollama_url\": \"nowhere\", \"summaries_model\": \"\", \"summaries_context_length\": 5, \"summaries_temperature\": 9.0, \"summaries_prompt\": \"## system\"}')",
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"ollama_url\": \"nowhere\", \"summaries_model\": \"\", \"summaries_context_length\": 5, \"summaries_temperature\": 9.0}')",
                 [],
             )
             .unwrap();
@@ -290,5 +290,28 @@ mod tests {
         repository.save(&Preferences::default()).unwrap();
 
         assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
+
+    #[test]
+    fn it_should_keep_a_stored_prompt_the_rules_reject() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"summaries_prompt\": \"## system\"}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences {
+                summaries: SummarySettings {
+                    prompt: Some(SummaryPrompt::from_stored("## system")),
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            }))
+        );
     }
 }

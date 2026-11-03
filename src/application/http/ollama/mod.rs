@@ -51,9 +51,7 @@ mod tests {
             ],
         }));
         let llm_server_searcher = LlmServerSearcher::new(repository);
-        let query = OllamaQuery {
-            url: Some("http://mac.local:11434".to_string()),
-        };
+        let query = ollama_query();
 
         let response = get(llm_server_searcher, query).await;
 
@@ -84,9 +82,7 @@ mod tests {
             models: vec![],
         }));
         let llm_server_searcher = LlmServerSearcher::new(repository);
-        let query = OllamaQuery {
-            url: Some("http://mac.local:11434".to_string()),
-        };
+        let query = ollama_query();
 
         let response = get(llm_server_searcher, query).await;
 
@@ -126,12 +122,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_with_bad_gateway_if_ollama_is_unreachable() {
+    async fn it_should_fail_if_ollama_is_unreachable() {
         let llm_server_searcher =
             LlmServerSearcher::new(Arc::new(FakeLlmServerRepository::failing()));
-        let query = OllamaQuery {
-            url: Some("http://mac.local:11434".to_string()),
-        };
+        let query = ollama_query();
 
         let response = get(llm_server_searcher, query).await;
 
@@ -158,5 +152,11 @@ mod tests {
     /// another error instead of passing.
     fn any_llm_server_searcher() -> LlmServerSearcher {
         LlmServerSearcher::new(Arc::new(FakeLlmServerRepository::failing()))
+    }
+
+    fn ollama_query() -> OllamaQuery {
+        OllamaQuery {
+            url: Some("http://mac.local:11434".to_string()),
+        }
     }
 }

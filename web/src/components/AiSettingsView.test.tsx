@@ -168,6 +168,32 @@ describe('AiSettingsView', () => {
     expect(await screen.findByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
   })
 
+  it('lists the models of a newly saved server', async () => {
+    mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'PATCH /api/preferences': aPreferences({ ai_enabled: true, ollama_url: 'http://nas:11434' }),
+      'GET /api/ollama?url=http%3A%2F%2Fnas%3A11434': anOllamaServer({
+        models: [{ name: 'llama3:8b', size_bytes: 1, thinking: false }],
+      }),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await screen.findByRole('combobox', { name: 'Model' })
+    const url = screen.getByRole('textbox', { name: 'Ollama URL' })
+    await user.clear(url)
+    await user.type(url, 'http://nas:11434')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(optionTexts(screen.getByRole('combobox', { name: 'Model' }))).toEqual([
+        'llama3:8b',
+        'qwen3:4b (not installed)',
+      ]),
+    )
+  })
+
   it('lists the models of the server just tested', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),

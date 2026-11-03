@@ -54,8 +54,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
   const checkOllama = useCheckOllama()
   const [connection, setConnection] = useState<ConnectionCheck>(NO_CHECK)
-  // The server whose models "Model" lists: the saved one, then the last one
-  // tested successfully.
+  // The server whose models "Model" lists: the saved one, or the last one
+  // tested successfully, whichever came last.
   const [modelsUrl, setModelsUrl] = useState(saved.ollama_url)
   const { data: server } = useOllama(modelsUrl)
   // Known only when the server lists the model; unknown, the switch shows.
@@ -82,6 +82,10 @@ function AiSettings({ saved }: { saved: Preferences }) {
     try {
       const updated = await savePreferences(patch)
       savedFlash.flash()
+      if (patch.ollama_url !== undefined) {
+        // "Model" lists the saved server's models.
+        setModelsUrl(updated.ollama_url)
+      }
       return updated
     } catch (err) {
       setSaveError(errorMessage(err))

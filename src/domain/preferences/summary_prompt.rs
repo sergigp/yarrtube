@@ -27,6 +27,12 @@ impl SummaryPrompt {
         Ok(Self(value))
     }
 
+    /// A prompt as it was saved, without checking it: rules that changed
+    /// since must not lose the user's text. Whoever uses it checks it then.
+    pub fn from_stored(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
     pub fn shipped() -> Self {
         Self(SHIPPED.to_string())
     }
