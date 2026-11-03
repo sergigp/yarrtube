@@ -222,6 +222,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_fail_if_the_version_endpoint_is_not_json() {
+        let mut server = mockito::Server::new();
+        let _version = server
+            .mock("GET", "/api/version")
+            .with_body("<html>Router login</html>")
+            .create();
+
+        let result = OllamaLlmServerRepository::new().find(&url(&server));
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err("/api/version didn't answer as Ollama does".to_string())
+        );
+    }
+
     fn url(server: &mockito::Server) -> OllamaUrl {
         OllamaUrl::new(server.url()).unwrap()
     }
