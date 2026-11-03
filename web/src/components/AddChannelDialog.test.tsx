@@ -144,6 +144,34 @@ describe('AddChannelDialog', () => {
     })
   })
 
+  it('creates the channel with summaries checked without opening advanced options', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }),
+      'GET /api/channels/preview?channel=%40chan': {
+        id: '@chan',
+        title: 'The Channel',
+        avatar_url: null,
+      },
+      'POST /api/channels': aChannel(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
+    const summaries = await screen.findByRole('checkbox', { name: 'Summarize videos' })
+    expect(summaries).toHaveAccessibleDescription('Generate an AI summary of each new video.')
+    await waitFor(() => expect(summaries).toBeEnabled())
+    await user.click(summaries)
+    const submit = screen.getByRole('button', { name: 'Create Channel' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const createCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit]
+    expect(JSON.parse(createCall[1].body as string)).toMatchObject({ summaries_enabled: true })
+  })
+
   it('offers no categories and saves none while categories are off', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
       'GET /api/preferences': aPreferences({ categories_enabled: false }),
