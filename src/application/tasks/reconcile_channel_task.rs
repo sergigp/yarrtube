@@ -2117,7 +2117,7 @@ mod tests {
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::with_listing(episode_files()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let fetched = downloaded_episode().with_subtitles(
+        let fetched = downloaded_episode().mark_subtitles_fetched(
             "Season 2023/S2023E111401 - My Video.en.srt",
             fixed_timestamp(),
         );
@@ -2327,7 +2327,7 @@ mod tests {
             .concat(),
         ));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let video = downloaded_episode().with_subtitles(
+        let video = downloaded_episode().mark_subtitles_fetched(
             "Season 2023/S2023E111401 - My Video.en.srt",
             fixed_timestamp(),
         );
@@ -2940,7 +2940,8 @@ mod tests {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
 
-    /// Its chapters already checked, so a sync schedules no chapters fetch.
+    /// Its chapters and quality settled, so a sync schedules no chapters fetch or
+    /// quality check.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
             chapters_settled: true,

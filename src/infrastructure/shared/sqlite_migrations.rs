@@ -867,6 +867,7 @@ mod tests {
             ))
         );
     }
+
     #[test]
     fn it_should_settle_checked_chapters_and_downloaded_quality() {
         let mut conn = Connection::open_in_memory().unwrap();

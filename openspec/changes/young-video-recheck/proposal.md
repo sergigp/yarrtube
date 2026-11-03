@@ -27,6 +27,7 @@ One shared policy fixes all of these.
 - **Download quality**:
   - Each download records the video height it actually got.
   - While a downloaded video is young and below its tier's target, a daily quality check asks YouTube which height its tier would get now. If that's higher, the video is downloaded again and its file replaced in place, keeping its episode, subtitles, chapters and watch state.
+  - Each tier has a settlement height: high 1080, mid 720, low 480. Reaching it ends the checks; high downloads themselves stay uncapped.
   - Once old, the quality is accepted.
 - Video sync schedules subtitle, chapters and quality checks only while their data is unsettled and the last check is at least 24h old. Reconcile passes stop re-queueing the same probes every 3h.
 - Migration rules, so the existing library isn't re-probed or re-downloaded:

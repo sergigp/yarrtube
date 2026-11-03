@@ -873,7 +873,7 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let video = downloaded_video().with_subtitles(
+        let video = downloaded_video().mark_subtitles_fetched(
             "Season 2026/S2026E031501 - My Video.en.srt",
             fixed_timestamp(),
         );
@@ -2322,8 +2322,8 @@ mod tests {
     }
 
     /// Downloaded and numbered in its season folder, with its thumbnail
-    /// recorded and its subtitles still Missing, with its chapters already
-    /// checked so a sync schedules no chapters fetch.
+    /// recorded and its subtitles still Missing, with its chapters and
+    /// quality settled, so a sync schedules no chapters fetch or quality check.
     fn downloaded_video() -> Video {
         Video {
             chapters_settled: true,

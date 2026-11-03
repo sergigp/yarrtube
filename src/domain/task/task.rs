@@ -209,9 +209,7 @@ impl Task {
     pub fn decode_download_video_payload(
         payload: &str,
     ) -> Result<(String, String, String), TaskError> {
-        let parsed: DownloadVideoPayload = serde_json::from_str(payload)
-            .map_err(|e| TaskError(format!("invalid download_video payload: {e}")))?;
-        Ok((parsed.video_id, parsed.quality, parsed.output_dir))
+        Self::decode_video_quality_payload(payload, "download_video")
     }
 
     /// Decodes an `upgrade_quality` task's raw JSON payload, as handed to a
@@ -220,9 +218,7 @@ impl Task {
     pub fn decode_upgrade_quality_payload(
         payload: &str,
     ) -> Result<(String, String, String), TaskError> {
-        let parsed: DownloadVideoPayload = serde_json::from_str(payload)
-            .map_err(|e| TaskError(format!("invalid upgrade_quality payload: {e}")))?;
-        Ok((parsed.video_id, parsed.quality, parsed.output_dir))
+        Self::decode_video_quality_payload(payload, "upgrade_quality")
     }
 
     /// Decodes a `delete_video_file` task's raw JSON payload, as handed to a
@@ -394,6 +390,15 @@ impl Task {
                 .map(|(_, path)| path),
             _ => None,
         }
+    }
+
+    fn decode_video_quality_payload(
+        payload: &str,
+        task_type: &str,
+    ) -> Result<(String, String, String), TaskError> {
+        let parsed: DownloadVideoPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid {task_type} payload: {e}")))?;
+        Ok((parsed.video_id, parsed.quality, parsed.output_dir))
     }
 }
 
@@ -733,6 +738,38 @@ mod tests {
                 Task::dedupes_running(task.task_type()),
             ),
             (TaskLane::Subtitles, Some("video:rec1".to_string()), true)
+        );
+    }
+
+    #[test]
+    fn it_should_run_upgrade_quality_in_the_download_lane_exclusive_per_video() {
+        let task = Task::UpgradeQuality {
+            video_id: "rec1".to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/music".to_string(),
+        };
+
+        assert_eq!(
+            (
+                Task::lane_for(task.task_type()),
+                Task::exclusivity_key(task.task_type(), &task.payload().to_string()),
+                Task::dedupes_running(task.task_type()),
+            ),
+            (TaskLane::Download, Some("video:rec1".to_string()), true)
+        );
+    }
+
+    #[test]
+    fn it_should_read_the_output_dir_of_an_upgrade_quality() {
+        let task = Task::UpgradeQuality {
+            video_id: "rec1".to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/music".to_string(),
+        };
+
+        assert_eq!(
+            Task::output_dir_of(task.task_type(), &task.payload().to_string()),
+            Some("/videos/music".to_string())
         );
     }
 

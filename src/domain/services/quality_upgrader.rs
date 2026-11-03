@@ -108,7 +108,9 @@ impl QualityUpgrader {
     }
 
     /// Downloads `video` again at `quality` into its staging dir and
-    /// replaces its episode file with it.
+    /// replaces its episode file with it, only when the download is taller
+    /// than the recorded one: probe and download are separate yt-dlp runs,
+    /// and YouTube may serve the second a worse format list (e.g. SABR).
     fn redownload(
         &self,
         video: &Video,
@@ -122,9 +124,16 @@ impl QualityUpgrader {
             &staging_dir(&self.videos_path, &video.id),
         )?;
         match attempt {
-            DownloadAttempt::Succeeded(downloaded) => {
+            DownloadAttempt::Succeeded(downloaded)
+                if downloaded.height > video.downloaded_height =>
+            {
                 self.replace(video, &downloaded, quality, output_dir, published_at)
             }
+            DownloadAttempt::Succeeded(downloaded) => Err(anyhow!(
+                "yt-dlp downloaded no higher quality ({:?}) than the recorded one ({:?})",
+                downloaded.height,
+                video.downloaded_height
+            )),
             DownloadAttempt::Failed { stderr, .. } => Err(anyhow!(
                 "yt-dlp failed to download a higher quality: {}",
                 stderr.as_deref().unwrap_or("no reason given")

@@ -79,8 +79,9 @@ pub trait VideoRepository: Send + Sync {
         thumbnail_filename: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()>;
-    /// Writes only `chapters` (and `updated_at`), leaving every other field
-    /// untouched even if it changed since the caller read the video.
+    /// Writes only `chapters`, the chapters checks and settlement (and
+    /// `updated_at`), leaving every other field untouched even if it changed
+    /// since the caller read the video.
     fn update_chapters(&self, video: &Video) -> anyhow::Result<()>;
     /// Writes only `quality`, `downloaded_height`, the quality checks and
     /// settlement (and `updated_at`), leaving every other field untouched

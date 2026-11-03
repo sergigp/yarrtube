@@ -51,7 +51,7 @@ There's no rollback beyond restoring the DB backup. After deploy, the NAS backlo
 - `src/domain/video/late_data_checks.rs` — `LateDataChecks`: the shared young/old, 24h, 3-attempt rule.
 - `src/domain/video/late_data_outcome.rs` — `LateDataOutcome`: what one check found.
 - `src/domain/video/mod.rs` — exports both.
-- `src/domain/shared/quality.rs` — `Quality::height_cap`.
+- `src/domain/shared/quality.rs` — `Quality::target_height`.
 - `src/domain/video/video.rs`:
   - New check fields and transitions.
   - `subtitles_first_missing_at` removed.
@@ -60,7 +60,7 @@ There's no rollback beyond restoring the DB backup. After deploy, the NAS backlo
 - `src/domain/video/video_sync_step.rs` — `UpgradeQuality` step and task.
 - `src/domain/task/task.rs` — `Task::UpgradeQuality`, `upgrade_quality` lane (Download) and key.
 - `src/domain/services/subtitle_fetcher.rs` — records every check through `Video::record_subtitles_check`.
-- `src/domain/services/chapter_fetcher.rs` — `record_chapters_check` from a `ChaptersProbe` or a failure.
+- `src/domain/services/chapter_fetcher.rs` — `record_chapters_check` from a `ChaptersProbe` or a failure. Private `record_check` (falls back to `created_at`), mirroring `SubtitleFetcher`.
 - `src/domain/services/video_downloader.rs` — records the height and quality settlement, and chapters through `record_chapters_check`.
 - `src/domain/services/quality_upgrader.rs` — new service: probe, re-download, replace, record.
 - `src/domain/services/mod.rs` — exports `QualityUpgrader`.
@@ -108,7 +108,8 @@ impl LateDataChecks {
 }
 
 // domain/shared/quality.rs
-impl Quality { pub fn height_cap(&self) -> Option<u32>; } // High None, Mid 720, Low 480
+/// The height that settles a tier's quality; downloads stay uncapped for High.
+impl Quality { pub fn target_height(&self) -> u32; } // High 1080, Mid 720, Low 480
 
 // domain/video/video.rs (new/changed fields)
 pub subtitle_checks: LateDataChecks,     // replaces subtitles_first_missing_at
@@ -124,12 +125,15 @@ impl Video {
     /// `Some(non-empty)` Complete, `Some([])` Incomplete, `None` Failed (keeps
     /// chapters; `Some([])` if settled while unchecked).
     pub fn record_chapters_check(self, chapters: Option<Vec<VideoChapter>>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
-    /// Download or upgrade landed: tier, height, settled if old or cap reached.
+    /// Fetched subtitles: state Fetched, check recorded Complete (was `with_subtitles`).
+    pub fn mark_subtitles_fetched(self, subtitle_filename: impl Into<String>, now: DateTime<Utc>) -> Self;
+    /// Download or upgrade landed: tier, height, settled if old or target height reached.
     pub fn record_downloaded_quality(self, quality: Quality, height: Option<u32>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
     /// Quality probe found nothing better, or failed (`probed_height` None).
     pub fn record_quality_check(self, probed_height: Option<u32>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
     pub fn is_quality_checkable(&self) -> bool; // Downloaded && !quality_settled
     // removed: mark_subtitles_first_missing
+    // now #[cfg(test)] fixtures only: with_chapters, mark_subtitles_unavailable
 }
 
 // domain/video/video_sync_plan.rs
@@ -140,7 +144,8 @@ pub enum VideoSyncStep { Download, FetchThumbnail, FetchSubtitles, FetchChapters
 
 // domain/task/task.rs
 Task::UpgradeQuality { video_id: String, quality: String, output_dir: String } // "upgrade_quality", TaskLane::Download, key video:<id>
-impl Task { pub fn decode_upgrade_quality_payload(payload: &str) -> anyhow::Result<(String, String, String)>; }
+impl Task { pub fn decode_upgrade_quality_payload(payload: &str) -> Result<(String, String, String), TaskError>; }
+// private: decode_video_quality_payload(payload, task_type), shared with decode_download_video_payload
 
 // infrastructure/shared/ytdlp.rs
 pub struct DownloadedVideo { /* ... */ pub height: Option<u32> }
@@ -189,7 +194,7 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
 **Subtitle fetch**
 - `FetchSubtitlesTask::handle(payload)` → `SubtitleFetcher::fetch(&video, output_dir)`
   - `video_downloader_repository.probe_captions(url, staging)`
-  - Track found → `place_subtitles` → `video.with_subtitles(..)` + `subtitle_checks.record(Complete)` → `update_subtitles`
+  - Track found → `place_subtitles` → `video.mark_subtitles_fetched(..)` (records Complete) → `update_subtitles`
   - No track, no warning → `video.record_subtitles_check(Incomplete, probe.published_at ∨ created_at, now)` → `update_subtitles`
   - Warning or `Err` → `video.record_subtitles_check(Failed, probe.published_at ∨ created_at, now)` → `update_subtitles`
 
@@ -210,12 +215,12 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
 **Quality upgrade**
 - `UpgradeQualityTask::handle(payload)` → `QualityUpgrader::upgrade(&id, quality, output_dir)`
   - `video_repository.find(id)` → guard `is_quality_checkable`
-  - `video_downloader_repository.probe_quality(url, quality)`
-    - `Err` → `video.record_quality_check(None, created_at, now)` → `update_quality`
+  - `check_and_upgrade`: `video_downloader_repository.probe_quality(url, quality)`
     - `probe.height <= downloaded_height` → `record_quality_check(probe.height, published_at, now)` → `update_quality`
     - Higher → `video_downloader_repository.download(url, quality, staging)`
-      - `Succeeded` + still downloaded under the same filename → `video_file_repository.move_file(media, output_dir/filename)` → `video.record_downloaded_quality(quality, downloaded.height, published_at, now)` → `update_quality` → `event_publisher.publish(VideoDownloaded)`
-      - `Failed`/`Err` → `record_quality_check(None, ..)` → `update_quality`
+      - `Succeeded` with `downloaded.height > downloaded_height` → `replace`: no recorded filename → nothing; `is_still_downloaded_as` (re-`find`: still Downloaded under the same filename) else nothing → `video_file_repository.move_file(media, output_dir/filename)` → `video.record_downloaded_quality(quality, downloaded.height, published_at, now)` → `update_quality` → `event_publisher.publish(VideoDownloaded)`
+      - `Succeeded` no taller, or `Failed` → `Err`
+  - Any `Err` of `check_and_upgrade` (probe, download, re-`find`, move, `update_quality`) → `record_failed_check` → `record_quality_check(None, created_at, now)` → `update_quality`, logged on failure.
   - Discard staging.
 
 **Sync**
@@ -235,6 +240,7 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
      - `it_should_count_a_failed_attempt_if_the_probe_fails` — downloader `Err` → Missing, 1 failed attempt.
      - `it_should_mark_subtitles_unavailable_after_three_failed_checks_of_an_old_video` — 2 prior failures + `Err`, created 30 days ago → Unavailable.
      - `it_should_keep_retrying_failed_checks_of_a_young_video` — 5 prior failures, young → Missing, 6 failed attempts.
+     - `it_should_fetch_the_original_language_subtitles` (existing) — now also asserts the Complete check (last check = now).
    - `fetch_chapters_task`:
      - `it_should_settle_chapters_found` — chapters reported → recorded, settled.
      - `it_should_keep_empty_chapters_unsettled_for_a_young_video` — `[]`, published 3 days ago → `Some([])`, unsettled, last check = now.
@@ -247,14 +253,17 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
      - `it_should_leave_quality_unsettled_for_a_young_video_below_its_cap` — mid, 360, published 1h ago → unsettled, last check = now.
      - `it_should_settle_quality_at_the_tier_cap` — mid, 720 → settled.
      - `it_should_settle_quality_of_an_old_video` — published 30 days ago → settled.
+     - `it_should_settle_high_quality_at_1080` — high, 1080, published 1h ago → settled.
      - `it_should_leave_empty_chapters_unsettled_for_a_young_video` — `[]` on download, young → unsettled.
    - `upgrade_quality_task`:
-     - `it_should_replace_the_file_with_a_higher_quality_download` — probe 1080 > 360 → file moved over the same name, height 1080, subtitles/chapters/watch unchanged, `VideoDownloaded` event in the outbox.
+     - `it_should_replace_the_file_with_a_higher_quality_download` — probe 1080 > 360 → file moved over the same name, height 1080, settled (High target reached), subtitles/chapters/watch unchanged, `VideoDownloaded` event in the outbox.
      - `it_should_record_the_check_if_nothing_better_is_available` — probe 360 = 360 → no download, last check = now, unsettled.
      - `it_should_settle_quality_once_the_video_is_old` — published 8 days ago, probe equal → settled.
      - `it_should_count_a_failed_attempt_if_the_probe_fails` — `Err` → 1 failed attempt, file unchanged.
      - `it_should_keep_the_file_if_the_redownload_fails` — download `Failed` → file and fields unchanged, 1 failed attempt, `Ok`.
+     - `it_should_keep_the_file_if_the_redownload_is_no_better` — probe 1080, download 240 < 360 → no move, 1 failed attempt, `Ok`.
      - `it_should_place_nothing_if_the_video_was_reset_meanwhile` — video reset during the download → no move, nothing recorded.
+     - `it_should_place_nothing_if_the_video_was_redownloaded_under_another_name_meanwhile` — still Downloaded, filename changed → no move, nothing recorded.
      - `it_should_skip_a_video_with_settled_quality` — no downloader call.
    - `sync_video_task`:
      - `it_should_not_schedule_subtitles_checked_less_than_a_day_ago` — Missing, last check 3h ago → nothing.
@@ -278,5 +287,9 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
      - `it_should_report_the_chapters_publish_time` — `fetch_chapters` → `ChaptersProbe.published_at`.
      - `it_should_probe_the_height_for_a_quality` — runs the tier's `-f` selector with `--skip-download`, parses height and publish time.
      - `it_should_fail_a_quality_probe_on_a_clean_failure` — non-zero exit → `Err`.
+     - (private `published_at_from_tail` shared by `fetch_chapters` and `probe_quality`.)
+   - `task`:
+     - `it_should_run_upgrade_quality_in_the_download_lane_exclusive_per_video` — lane Download, key `video:<id>`, dedupes running.
+     - `it_should_read_the_output_dir_of_an_upgrade_quality` — `output_dir_of` returns the payload's output dir.
    - `web/src/lib/tasks.test.ts`:
      - describes `upgrade_quality` as a quality check under downloads, with a placeholder when unresolved.

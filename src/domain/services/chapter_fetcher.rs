@@ -1,7 +1,8 @@
-use crate::domain::video::Video;
+use crate::domain::video::{Video, VideoChapter};
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use tracing::warn;
 
@@ -32,9 +33,9 @@ impl ChapterFetcher {
 
 pub trait ChapterFetcherApi: Send + Sync {
     /// No-ops unless `video.is_chapters_fetchable()`. Otherwise reads the
-    /// video's chapters from YouTube and records them, writing only the
-    /// chapters; any failure is logged and swallowed, leaving the chapters
-    /// unchecked so a later video sync tries again.
+    /// video's chapters from YouTube and records the check (chapters,
+    /// checks, settled) under the `late-video-data` policy; a failure is
+    /// logged, counted as a failed attempt and swallowed.
     fn fetch(&self, video: &Video);
 }
 
@@ -54,14 +55,7 @@ impl ChapterFetcher {
     /// Best effort, like the fetch itself: a failure to record the failed
     /// fetch is only logged.
     fn record_failed_fetch(&self, video: &Video) {
-        let recorded = self
-            .video_repository
-            .update_chapters(&video.clone().record_chapters_check(
-                None,
-                video.created_at,
-                self.clock.now(),
-            ));
-        if let Err(e) = recorded {
+        if let Err(e) = self.record_check(video, None, None) {
             warn!(video_id = %video.id, error = %e, "failed to record a failed chapters fetch");
         }
     }
@@ -70,10 +64,19 @@ impl ChapterFetcher {
         let probe = self
             .video_downloader_repository
             .fetch_chapters(&video.youtube_id.to_url())?;
+        self.record_check(video, Some(probe.chapters), probe.published_at)
+    }
+
+    fn record_check(
+        &self,
+        video: &Video,
+        chapters: Option<Vec<VideoChapter>>,
+        published_at: Option<DateTime<Utc>>,
+    ) -> anyhow::Result<()> {
         self.video_repository
             .update_chapters(&video.clone().record_chapters_check(
-                Some(probe.chapters),
-                probe.published_at.unwrap_or(video.created_at),
+                chapters,
+                published_at.unwrap_or(video.created_at),
                 self.clock.now(),
             ))
     }

@@ -177,8 +177,9 @@ impl Video {
     }
 
     /// Resets a video back to `Pending`, clearing its recorded filename,
-    /// thumbnail filename, quality and subtitles (back to `Missing` with no
-    /// first check without captions, so the redownload refetches them),
+    /// thumbnail filename, quality and subtitles (back to `Missing`), and
+    /// clearing the late-data checks, settled flags and downloaded height so
+    /// the redownload refetches them,
     /// used by filesystem reconciliation both when a `Downloaded` video's
     /// recorded file is missing from disk and when an `Errored` video is
     /// given another chance, in each case followed by scheduling a fresh
@@ -337,13 +338,18 @@ impl Video {
             && self.subtitle_state == SubtitleState::Missing
     }
 
-    /// Records the fetched subtitle file: subtitle state Fetched. Touches
-    /// only the subtitle fields and `updated_at`, stored through
-    /// `VideoRepository::update_subtitles` only.
-    pub fn with_subtitles(self, subtitle_filename: impl Into<String>, now: DateTime<Utc>) -> Self {
+    /// Records the fetched subtitle file: subtitle state Fetched, its check
+    /// recorded as complete. Touches only the subtitle fields and
+    /// `updated_at`, stored through `VideoRepository::update_subtitles` only.
+    pub fn mark_subtitles_fetched(
+        self,
+        subtitle_filename: impl Into<String>,
+        now: DateTime<Utc>,
+    ) -> Self {
         Self {
             subtitle_state: SubtitleState::Fetched,
             subtitle_filename: Some(subtitle_filename.into()),
+            subtitle_checks: self.subtitle_checks.record(LateDataOutcome::Complete, now),
             updated_at: now,
             ..self
         }
@@ -756,13 +762,17 @@ mod tests {
 
         let fetched = video
             .clone()
-            .with_subtitles("Season 1/S01E003 - My Video.en.srt", now);
+            .mark_subtitles_fetched("Season 1/S01E003 - My Video.en.srt", now);
 
         assert_eq!(
             fetched,
             Video {
                 subtitle_state: SubtitleState::Fetched,
                 subtitle_filename: Some("Season 1/S01E003 - My Video.en.srt".to_string()),
+                subtitle_checks: LateDataChecks {
+                    last_checked_at: Some(now),
+                    failed_attempts: 0,
+                },
                 updated_at: now,
                 ..video
             }
@@ -792,7 +802,7 @@ mod tests {
         let filename = "Season 1/S01E003 - My Video.en.srt";
 
         let languages = [
-            video().with_subtitles(filename, now),
+            video().mark_subtitles_fetched(filename, now),
             video(),
             Video {
                 subtitle_state: SubtitleState::Unavailable,
@@ -817,7 +827,7 @@ mod tests {
                 None,
                 now,
             )
-            .with_subtitles("Season 1/S01E003 - My Video.en.srt", now);
+            .mark_subtitles_fetched("Season 1/S01E003 - My Video.en.srt", now);
 
         let reset = fetched.clone().reset_for_redownload(later);
 
@@ -829,6 +839,7 @@ mod tests {
                 filename: None,
                 subtitle_state: SubtitleState::Missing,
                 subtitle_filename: None,
+                subtitle_checks: LateDataChecks::default(),
                 updated_at: later,
                 synced_at: None,
                 ..fetched

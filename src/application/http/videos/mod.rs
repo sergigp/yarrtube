@@ -6288,7 +6288,7 @@ mod tests {
     /// `SUBTITLE_FILENAME`.
     fn video_with_subtitles(youtube_id: &str) -> Video {
         downloaded_video(youtube_id, "My Video", None, 1_700_000_000)
-            .with_subtitles(SUBTITLE_FILENAME, fixed_timestamp())
+            .mark_subtitles_fetched(SUBTITLE_FILENAME, fixed_timestamp())
     }
 
     fn vtt_body(body: &str) -> VttResponse {

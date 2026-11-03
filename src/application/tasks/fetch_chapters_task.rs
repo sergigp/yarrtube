@@ -6,9 +6,9 @@ use crate::infrastructure::repositories::task_handler::TaskHandler;
 use std::sync::Arc;
 
 /// Fetches one downloaded video's chapters, scheduled by the video sync
-/// (`SyncVideoTask` via `VideoReconciler`) while its chapters are unchecked.
-/// Best-effort: always succeeds, so the queue never retries it; the next
-/// reconcile pass reschedules a fetch that failed.
+/// (`SyncVideoTask` via `VideoReconciler`) while its chapters are unsettled and
+/// due (see the `late-video-data` capability). Best-effort: always succeeds,
+/// so the queue never retries it.
 pub struct FetchChaptersTask {
     video_repository: Arc<dyn VideoRepository>,
     chapter_fetcher: Arc<ChapterFetcher>,

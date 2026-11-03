@@ -58,12 +58,11 @@ pub trait SubtitleFetcherApi: Send + Sync {
     /// No-op unless `video` is subtitle-fetchable
     /// (`Video::is_subtitle_fetchable`). Otherwise probes its caption tracks,
     /// downloads the original-language one as `<episode stem>.<lang>.srt` in
-    /// `output_dir`, stores its transcript and records it Fetched; with no
-    /// original-language track and no yt-dlp warning, records the first such
-    /// check and records it Unavailable once both its publish time and that
-    /// first check are at least 7 days old. Best effort: logs and swallows
-    /// every failure, leaving the video Missing. Publishes
-    /// `VideoSubtitlesFetched` once Fetched.
+    /// `output_dir`, stores its transcript and records it Fetched; otherwise
+    /// records the check under the `late-video-data` policy (no track =
+    /// Incomplete, warning or any failure = Failed): Unavailable once
+    /// settled, Missing otherwise. Best effort: failures are logged, counted
+    /// and swallowed. Publishes `VideoSubtitlesFetched` once Fetched.
     fn fetch(&self, video: &Video, output_dir: &Path);
 }
 
@@ -173,7 +172,7 @@ impl SubtitleFetcher {
                 now,
             ))?;
         self.video_repository
-            .update_subtitles(&video.clone().with_subtitles(subtitle_filename, now))?;
+            .update_subtitles(&video.clone().mark_subtitles_fetched(subtitle_filename, now))?;
         self.publish_fetched(video, output_dir);
         Ok(())
     }

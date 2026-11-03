@@ -106,11 +106,16 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
-                    .clone()
-                    .with_subtitles("Season 2026/S2026E031501 - Title.en.srt", now())
-            ]
+            vec![Video {
+                subtitle_state: SubtitleState::Fetched,
+                subtitle_filename: Some("Season 2026/S2026E031501 - Title.en.srt".to_string()),
+                subtitle_checks: LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 0,
+                },
+                updated_at: now(),
+                ..video.clone()
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -171,7 +176,7 @@ mod tests {
             vec![
                 video
                     .clone()
-                    .with_subtitles("Season 2026/S2026E031501 - Old Title.en.srt", now())
+                    .mark_subtitles_fetched("Season 2026/S2026E031501 - Old Title.en.srt", now())
             ]
         );
         assert_eq!(
@@ -225,7 +230,7 @@ mod tests {
             vec![
                 video
                     .clone()
-                    .with_subtitles("Season 2026/S2026E031501 - Title.es.srt", now())
+                    .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.es.srt", now())
             ]
         );
         assert_eq!(
@@ -289,7 +294,7 @@ mod tests {
             vec![
                 video
                     .clone()
-                    .with_subtitles("Season 2026/S2026E031501 - Title.es.srt", now())
+                    .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.es.srt", now())
             ]
         );
         assert_eq!(
@@ -920,7 +925,7 @@ mod tests {
                 .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let fetched = downloaded_video()
-            .with_subtitles("Season 2026/S2026E031501 - Title.en.srt", fixed_timestamp());
+            .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.en.srt", fixed_timestamp());
         let unavailable = downloaded_video().mark_subtitles_unavailable(fixed_timestamp());
         video_repository.save(&fetched).unwrap();
         video_repository.save(&unavailable).unwrap();
@@ -1106,7 +1111,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![redownloaded.with_subtitles("Season 2026/S2026E031501 - Title.en.srt", now())]
+            vec![
+                redownloaded
+                    .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.en.srt", now())
+            ]
         );
     }
 

@@ -334,13 +334,7 @@ mod tests {
 
         let result = run(
             &task,
-            &Task::DownloadVideo {
-                video_id: video.id.as_str().to_string(),
-                quality: "mid".to_string(),
-                output_dir: output_dir.path().to_string_lossy().to_string(),
-            }
-            .payload()
-            .to_string(),
+            &output_dir_payload_with_quality(&video, output_dir.path(), "mid"),
             false,
         );
 
@@ -401,13 +395,7 @@ mod tests {
 
         let result = run(
             &task,
-            &Task::DownloadVideo {
-                video_id: video.id.as_str().to_string(),
-                quality: "mid".to_string(),
-                output_dir: output_dir.path().to_string_lossy().to_string(),
-            }
-            .payload()
-            .to_string(),
+            &output_dir_payload_with_quality(&video, output_dir.path(), "mid"),
             false,
         );
 
@@ -2407,9 +2395,17 @@ mod tests {
     }
 
     fn output_dir_payload(video: &Video, output_dir: &std::path::Path) -> String {
+        output_dir_payload_with_quality(video, output_dir, "high")
+    }
+
+    fn output_dir_payload_with_quality(
+        video: &Video,
+        output_dir: &std::path::Path,
+        quality: &str,
+    ) -> String {
         Task::DownloadVideo {
             video_id: video.id.as_str().to_string(),
-            quality: "high".to_string(),
+            quality: quality.to_string(),
             output_dir: output_dir.to_string_lossy().to_string(),
         }
         .payload()

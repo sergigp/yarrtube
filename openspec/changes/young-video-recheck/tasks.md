@@ -39,7 +39,9 @@
 - [x] 2.20 `it_should_settle_quality_once_the_video_is_old` — quality settles once the video is old (test passes)
 - [x] 2.21 `it_should_count_a_failed_attempt_if_the_probe_fails` (upgrade) — a probe error counts an attempt (test passes)
 - [x] 2.22 `it_should_keep_the_file_if_the_redownload_fails` — a failed re-download leaves the file and fields, task `Ok` (test passes)
+- [x] 2.22a `it_should_keep_the_file_if_the_redownload_is_no_better` — (audit) a re-download no taller than the recorded height is discarded and counted as a failed attempt (upgrade_quality_task test passes)
 - [x] 2.23 `it_should_place_nothing_if_the_video_was_reset_meanwhile` — a reset during the upgrade places nothing (test passes)
+- [x] 2.23a `it_should_place_nothing_if_the_video_was_redownloaded_under_another_name_meanwhile` — (audit) still Downloaded but renamed meanwhile → nothing placed (upgrade_quality_task test passes)
 - [x] 2.24 `it_should_skip_a_video_with_settled_quality` — no probe for settled quality (test passes)
 - [x] 2.25 `it_should_not_schedule_subtitles_checked_less_than_a_day_ago` — 24h throttle on subtitles (sync_video_task test passes)
 - [x] 2.26 `it_should_schedule_subtitles_checked_more_than_a_day_ago` — due subtitles are scheduled (test passes)
@@ -50,6 +52,9 @@
 - [x] 2.30 `it_should_not_schedule_a_quality_check_right_after_download` — throttle after download (test passes)
 - [x] 2.31 `it_should_reset_every_check_on_redownload` — a broken-file reset clears the checks and height (test passes)
 - [x] 2.32 `it_should_list_an_upgrade_quality_task_with_its_video_context` — task listing resolves the title and owner (http tasks test passes)
+- [x] 2.33 (audit) `it_should_fetch_the_original_language_subtitles` asserts the Complete check; `Video::with_subtitles` renamed `mark_subtitles_fetched` and records it (fetch_subtitles_task test passes)
+- [ ] 2.34 `it_should_settle_high_quality_at_1080` — a young `high` video downloaded at 1080 settles; rename `Quality::height_cap` → `target_height` (High 1080, Mid 720, Low 480) (download_video_task test passes)
+- [ ] 2.35 `it_should_replace_the_file_with_a_higher_quality_download` expects the quality settled once the upgrade reaches 1080 on `high` (upgrade_quality_task test passes)
 
 ## 3. Infrastructure adapters (TDD)
 
@@ -62,6 +67,7 @@
 - [x] 3.7 ytdlp: `it_should_probe_the_height_for_a_quality` — the tier selector runs with `--skip-download`, and the height and publish time are parsed (test passes)
 - [x] 3.8 ytdlp: `it_should_fail_a_quality_probe_on_a_clean_failure` — a non-zero exit returns `Err` (test passes)
 - [x] 3.9 web `tasks.test.ts`: `upgrade_quality` is described as a quality check under downloads, with a placeholder when unresolved (`npm run test` passes)
+- [x] 3.10 (audit) task: `it_should_run_upgrade_quality_in_the_download_lane_exclusive_per_video`, `it_should_read_the_output_dir_of_an_upgrade_quality` — upgrade_quality lane/key/output dir (task tests pass)
 
 ## 4. Verification
 

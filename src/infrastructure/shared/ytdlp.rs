@@ -59,22 +59,6 @@ pub fn args_for_quality(quality: Quality) -> Vec<String> {
     args
 }
 
-/// The `-f`/`-S` format selection a quality tier downloads with: its
-/// resolution cap, preferring mp4/h264/aac.
-fn format_selection_args(quality: Quality) -> Vec<String> {
-    let format = match quality {
-        Quality::High => "bv+ba/b",
-        Quality::Mid => "bv[height<=720]+ba/b[height<=720]",
-        Quality::Low => "bv[height<=480]+ba/b[height<=480]",
-    };
-    vec![
-        "-f".to_string(),
-        format.to_string(),
-        "-S".to_string(),
-        "codec:h264:aac,ext:mp4:m4a".to_string(),
-    ]
-}
-
 /// A video's `yt-dlp`-reported download result, staged outside its show:
 /// the media file's path, the converted thumbnail's path when `yt-dlp` wrote
 /// one, its duration in whole seconds and its publish time, when known.
@@ -280,10 +264,7 @@ pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProb
                 .and_then(parse_chapters)
                 .map(|chapters| ChaptersProbe {
                     chapters,
-                    published_at: parse_published_at(
-                        line_before_last(&lines, 1),
-                        lines.last().copied(),
-                    ),
+                    published_at: published_at_from_tail(&lines),
                 })
                 .ok_or_else(|| anyhow!("yt-dlp printed unreadable chapters for {video_url}"))
         }
@@ -470,10 +451,7 @@ pub fn probe_quality(ytdlp_path: &Path, video_url: &str, quality: Quality) -> Re
             let lines: Vec<&str> = stdout.lines().collect();
             Ok(QualityProbe {
                 height: line_before_last(&lines, 2).and_then(|line| line.trim().parse().ok()),
-                published_at: parse_published_at(
-                    line_before_last(&lines, 1),
-                    lines.last().copied(),
-                ),
+                published_at: published_at_from_tail(&lines),
             })
         }
         RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
@@ -938,6 +916,28 @@ fn line_before_last<'a>(lines: &[&'a str], back: usize) -> Option<&'a str> {
         .checked_sub(back + 1)
         .and_then(|idx| lines.get(idx))
         .copied()
+}
+
+/// The `-f`/`-S` format selection a quality tier downloads with: its
+/// resolution cap, preferring mp4/h264/aac.
+fn format_selection_args(quality: Quality) -> Vec<String> {
+    let format = match quality {
+        Quality::High => "bv+ba/b",
+        Quality::Mid => "bv[height<=720]+ba/b[height<=720]",
+        Quality::Low => "bv[height<=480]+ba/b[height<=480]",
+    };
+    vec![
+        "-f".to_string(),
+        format.to_string(),
+        "-S".to_string(),
+        "codec:h264:aac,ext:mp4:m4a".to_string(),
+    ]
+}
+
+/// The publish time from the last two printed lines (timestamp, then
+/// upload date).
+fn published_at_from_tail(lines: &[&str]) -> Option<DateTime<Utc>> {
+    parse_published_at(line_before_last(lines, 1), lines.last().copied())
 }
 
 /// The publish time from `yt-dlp`'s printed timestamp, else from its

@@ -1880,7 +1880,8 @@ mod tests {
         Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
     }
 
-    /// Its chapters already checked, so a sync schedules no chapters fetch.
+    /// Its chapters and quality settled, so a sync schedules no chapters fetch or
+    /// quality check.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
             chapters_settled: true,
@@ -1921,7 +1922,8 @@ mod tests {
     }
 
     /// A playlist video numbered `episode`, downloaded in the TV-show layout,
-    /// with its chapters already checked so a sync schedules no chapters fetch.
+    /// with its chapters and quality settled so a sync schedules no chapters
+    /// fetch or quality check.
     fn downloaded_playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
         let base = format!("Season 1/S01E{episode:03} - {title}");
         Video {
