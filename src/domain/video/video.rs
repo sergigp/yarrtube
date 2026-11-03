@@ -452,16 +452,19 @@ impl Video {
     }
 
     /// Records the tier and height a download or quality upgrade landed at,
-    /// settling the quality when the video is old or the tier's height cap
-    /// is reached. Touches only the quality fields and `updated_at`.
+    /// settling the quality when the video is old or the tier's target
+    /// height is reached; a `degraded` one (SABR reported) counts as a failed
+    /// check instead. Touches only the quality fields and `updated_at`.
     pub fn record_downloaded_quality(
         self,
         quality: Quality,
         height: Option<u32>,
+        degraded: bool,
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
         let outcome = match height {
+            _ if degraded => LateDataOutcome::Failed,
             Some(height) if height >= quality.target_height() => LateDataOutcome::Complete,
             _ => LateDataOutcome::Incomplete,
         };

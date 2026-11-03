@@ -360,6 +360,70 @@ mod tests {
     }
 
     #[test]
+    fn it_should_count_a_degraded_download_as_a_failed_quality_check() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    height: Some(360),
+                    sabr_notice: Some(
+                        "YouTube may have enabled the SABR-only streaming experiment".to_string(),
+                    ),
+                    published_at: Some(fixed_timestamp() - Duration::days(30)),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                downloaded_height: Some(360),
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(fixed_timestamp()),
+                    failed_attempts: 1,
+                },
+                ..video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2023/S2023E101501 - My Video.mp4",
+                        Some("Season 2023/S2023E101501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(
+                        EpisodeNumber::from_columns(2023, 101501).unwrap(),
+                        fixed_timestamp(),
+                    )
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_leave_quality_unsettled_for_a_young_video_below_its_cap() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1225,8 +1289,12 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                quality_checks: LateDataChecks {
+                    last_checked_at: Some(fixed_timestamp()),
+                    failed_attempts: 1,
+                },
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
                         Quality::High,
@@ -1235,9 +1303,8 @@ mod tests {
                         None,
                         fixed_timestamp(),
                     )
-                    .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
     }
 

@@ -162,6 +162,7 @@ impl QualityUpgrader {
         let upgraded = video.clone().record_downloaded_quality(
             quality,
             downloaded.height,
+            false,
             published_at,
             self.clock.now(),
         );

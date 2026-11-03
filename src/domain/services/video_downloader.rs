@@ -269,7 +269,13 @@ impl VideoDownloader {
                 now,
             )
             .with_episode_number(number, now)
-            .record_downloaded_quality(quality, downloaded.height, published_at, now);
+            .record_downloaded_quality(
+                quality,
+                downloaded.height,
+                downloaded.sabr_notice.is_some(),
+                published_at,
+                now,
+            );
         let downloaded_video = match &downloaded.chapters {
             Some(chapters) => {
                 downloaded_video.record_chapters_check(Some(chapters.clone()), published_at, now)
