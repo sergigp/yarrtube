@@ -234,4 +234,42 @@ mod tests {
 
         assert_eq!(repository.find().unwrap(), Some(preferences));
     }
+
+    #[test]
+    fn it_should_read_missing_ai_keys_as_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"categories_enabled\": true, \"home_show_continue_watching\": true, \"home_show_categories\": true, \"home_show_quick_watches\": false, \"home_show_latest\": true, \"theme\": \"dark\"}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences {
+                home_show_quick_watches: false,
+                theme: Theme::Dark,
+                ..Preferences::default()
+            }))
+        );
+    }
+
+    #[test]
+    fn it_should_read_invalid_ai_values_as_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"ollama_url\": \"nowhere\", \"summaries_model\": \"\", \"summaries_context_length\": 5, \"summaries_temperature\": 9.0, \"summaries_prompt\": \"## system\"}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences::default()))
+        );
+    }
 }
