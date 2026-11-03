@@ -166,7 +166,9 @@ pub struct FakeVideoDownloaderRepository {
     /// progress mid-fetch.
     #[allow(clippy::type_complexity)]
     pub(crate) on_fetch_chapters: Option<Box<dyn Fn() + Send + Sync>>,
+    /// What `probe_quality` returns; unconfigured, it fails.
     pub(crate) quality_probe: std::sync::Mutex<Option<anyhow::Result<QualityProbe>>>,
+    /// The (url, quality) pairs `probe_quality` was called with.
     pub(crate) quality_calls: std::sync::Mutex<Vec<(String, Quality)>>,
 }
 

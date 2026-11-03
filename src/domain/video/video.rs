@@ -60,11 +60,15 @@ pub struct Video {
     /// The video's YouTube chapters: `None` while never checked,
     /// `Some(vec![])` once checked and found to have none.
     pub chapters: Option<Vec<VideoChapter>>,
+    /// The checks of the video's chapters — see the `late-video-data`
+    /// capability.
     pub chapters_checks: LateDataChecks,
     /// Whether the chapters are final: never checked again.
     pub chapters_settled: bool,
     /// The height in pixels of the downloaded file, when reported.
     pub downloaded_height: Option<u32>,
+    /// The checks of the downloaded quality — see the `late-video-data`
+    /// capability.
     pub quality_checks: LateDataChecks,
     /// Whether the downloaded quality is final: never checked again.
     pub quality_settled: bool,

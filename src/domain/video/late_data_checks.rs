@@ -55,3 +55,117 @@ impl LateDataChecks {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn it_should_be_due_if_never_checked() {
+        assert!(LateDataChecks::default().is_due(now()));
+    }
+
+    #[test]
+    fn it_should_be_due_once_a_day_has_passed_since_the_last_check() {
+        assert_eq!(
+            (
+                checked_at(now() - Duration::hours(24)).is_due(now()),
+                checked_at(now() - Duration::hours(24) + Duration::seconds(1)).is_due(now()),
+            ),
+            (true, false)
+        );
+    }
+
+    #[test]
+    fn it_should_settle_missing_data_once_the_video_is_a_week_old() {
+        let checks = LateDataChecks::default().record(LateDataOutcome::Incomplete, now());
+
+        assert_eq!(
+            (
+                checks.settles(
+                    LateDataOutcome::Incomplete,
+                    now() - Duration::days(7),
+                    now()
+                ),
+                checks.settles(
+                    LateDataOutcome::Incomplete,
+                    now() - Duration::days(7) + Duration::seconds(1),
+                    now()
+                ),
+            ),
+            (true, false)
+        );
+    }
+
+    #[test]
+    fn it_should_settle_failed_checks_of_an_old_video_on_the_third_failure() {
+        let published_at = now() - Duration::days(30);
+        let third = LateDataChecks {
+            last_checked_at: None,
+            failed_attempts: 2,
+        }
+        .record(LateDataOutcome::Failed, now());
+        let second = LateDataChecks {
+            last_checked_at: None,
+            failed_attempts: 1,
+        }
+        .record(LateDataOutcome::Failed, now());
+
+        assert_eq!(
+            (
+                third.settles(LateDataOutcome::Failed, published_at, now()),
+                second.settles(LateDataOutcome::Failed, published_at, now()),
+            ),
+            (true, false)
+        );
+    }
+
+    #[test]
+    fn it_should_settle_found_data_even_on_a_young_video() {
+        let checks = LateDataChecks::default().record(LateDataOutcome::Complete, now());
+
+        assert!(checks.settles(LateDataOutcome::Complete, now(), now()));
+    }
+
+    #[test]
+    fn it_should_count_a_failed_attempt_only_for_a_failed_check() {
+        let checks = LateDataChecks {
+            last_checked_at: None,
+            failed_attempts: 1,
+        };
+
+        assert_eq!(
+            [
+                checks.record(LateDataOutcome::Complete, now()),
+                checks.record(LateDataOutcome::Incomplete, now()),
+                checks.record(LateDataOutcome::Failed, now()),
+            ],
+            [
+                LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 1,
+                },
+                LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 1,
+                },
+                LateDataChecks {
+                    last_checked_at: Some(now()),
+                    failed_attempts: 2,
+                },
+            ]
+        );
+    }
+
+    fn now() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 3, 15, 12, 0, 0).unwrap()
+    }
+
+    fn checked_at(at: DateTime<Utc>) -> LateDataChecks {
+        LateDataChecks {
+            last_checked_at: Some(at),
+            failed_attempts: 0,
+        }
+    }
+}

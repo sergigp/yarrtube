@@ -128,7 +128,8 @@ impl Video {
     /// Fetched subtitles: state Fetched, check recorded Complete (was `with_subtitles`).
     pub fn mark_subtitles_fetched(self, subtitle_filename: impl Into<String>, now: DateTime<Utc>) -> Self;
     /// Download or upgrade landed: tier, height, settled if old or target height reached.
-    pub fn record_downloaded_quality(self, quality: Quality, height: Option<u32>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
+    /// `degraded` (SABR reported): a Failed check instead of Complete/Incomplete.
+    pub fn record_downloaded_quality(self, quality: Quality, height: Option<u32>, degraded: bool, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
     /// Quality probe found nothing better, or failed (`probed_height` None).
     pub fn record_quality_check(self, probed_height: Option<u32>, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
     pub fn is_quality_checkable(&self) -> bool; // Downloaded && !quality_settled
@@ -150,7 +151,7 @@ impl Task { pub fn decode_upgrade_quality_payload(payload: &str) -> Result<(Stri
 // infrastructure/shared/ytdlp.rs
 pub struct DownloadedVideo { /* ... */ pub height: Option<u32> }
 pub struct ChaptersProbe { pub chapters: Vec<VideoChapter>, pub published_at: Option<DateTime<Utc>> }
-pub struct QualityProbe { pub height: Option<u32>, pub published_at: Option<DateTime<Utc>> }
+pub struct QualityProbe { pub height: Option<u32>, pub published_at: Option<DateTime<Utc>>, pub degraded: bool } // degraded: SABR signal on stderr (probe runs without --no-warnings)
 pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProbe>;
 pub fn probe_quality(ytdlp_path: &Path, video_url: &str, quality: Quality) -> Result<QualityProbe>;
 
@@ -208,7 +209,7 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
 **Download**
 - `VideoDownloader::record_downloaded(video, &downloaded, files, quality, number)`
   - `mark_downloaded(..)`
-  - `.record_downloaded_quality(quality, downloaded.height, published_at, now)`
+  - `.record_downloaded_quality(quality, downloaded.height, downloaded.sabr_notice.is_some(), published_at, now)`
   - `.record_chapters_check(downloaded.chapters.clone(), published_at, now)` when the chapters were read
   - → `save`
 
@@ -216,9 +217,9 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
 - `UpgradeQualityTask::handle(payload)` → `QualityUpgrader::upgrade(&id, quality, output_dir)`
   - `video_repository.find(id)` → guard `is_quality_checkable`
   - `check_and_upgrade`: `video_downloader_repository.probe_quality(url, quality)`
-    - `probe.height <= downloaded_height` → `record_quality_check(probe.height, published_at, now)` → `update_quality`
+    - `probe.height <= downloaded_height` → `record_quality_check(probe.height unless probe.degraded (then None), published_at, now)` → `update_quality`
     - Higher → `video_downloader_repository.download(url, quality, staging)`
-      - `Succeeded` with `downloaded.height > downloaded_height` → `replace`: no recorded filename → nothing; `is_still_downloaded_as` (re-`find`: still Downloaded under the same filename) else nothing → `video_file_repository.move_file(media, output_dir/filename)` → `video.record_downloaded_quality(quality, downloaded.height, published_at, now)` → `update_quality` → `event_publisher.publish(VideoDownloaded)`
+      - `Succeeded` with `downloaded.height > downloaded_height` → `replace`: no recorded filename → nothing; `is_still_downloaded_as` (re-`find`: still Downloaded under the same filename) else nothing → `video_file_repository.move_file(media, output_dir/filename)` → `video.record_downloaded_quality(quality, downloaded.height, downloaded.sabr_notice.is_some(), published_at, now)` → `update_quality` → `event_publisher.publish(VideoDownloaded)`
       - `Succeeded` no taller, or `Failed` → `Err`
   - Any `Err` of `check_and_upgrade` (probe, download, re-`find`, move, `update_quality`) → `record_failed_check` → `record_quality_check(None, created_at, now)` → `update_quality`, logged on failure.
   - Discard staging.
@@ -254,6 +255,7 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
      - `it_should_settle_quality_at_the_tier_cap` — mid, 720 → settled.
      - `it_should_settle_quality_of_an_old_video` — published 30 days ago → settled.
      - `it_should_settle_high_quality_at_1080` — high, 1080, published 1h ago → settled.
+     - `it_should_count_a_degraded_download_as_a_failed_quality_check` — old video, SABR notice, 360 → unsettled, 1 failed attempt.
      - `it_should_leave_empty_chapters_unsettled_for_a_young_video` — `[]` on download, young → unsettled.
    - `upgrade_quality_task`:
      - `it_should_replace_the_file_with_a_higher_quality_download` — probe 1080 > 360 → file moved over the same name, height 1080, settled (High target reached), subtitles/chapters/watch unchanged, `VideoDownloaded` event in the outbox.
@@ -261,9 +263,11 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
      - `it_should_settle_quality_once_the_video_is_old` — published 8 days ago, probe equal → settled.
      - `it_should_count_a_failed_attempt_if_the_probe_fails` — `Err` → 1 failed attempt, file unchanged.
      - `it_should_keep_the_file_if_the_redownload_fails` — download `Failed` → file and fields unchanged, 1 failed attempt, `Ok`.
+     - `it_should_count_a_degraded_probe_as_a_failed_check` — old video, probe 360 degraded → nothing downloaded, 1 failed attempt, unsettled.
+     - `it_should_count_a_degraded_upgrade_as_a_failed_check` — 8 days old, probe 1080, re-download 720 with SABR → replaced, height 720, 1 failed attempt, unsettled.
      - `it_should_keep_the_file_if_the_redownload_is_no_better` — probe 1080, download 240 < 360 → no move, 1 failed attempt, `Ok`.
-     - `it_should_place_nothing_if_the_video_was_reset_meanwhile` — video reset during the download → no move, nothing recorded.
-     - `it_should_place_nothing_if_the_video_was_redownloaded_under_another_name_meanwhile` — still Downloaded, filename changed → no move, nothing recorded.
+     - `it_should_skip_the_upgrade_if_the_video_was_reset_meanwhile` — video reset during the download → no move, nothing recorded.
+     - `it_should_skip_the_upgrade_if_the_video_was_redownloaded_meanwhile` — still Downloaded, filename changed → no move, nothing recorded.
      - `it_should_skip_a_video_with_settled_quality` — no downloader call.
    - `sync_video_task`:
      - `it_should_not_schedule_subtitles_checked_less_than_a_day_ago` — Missing, last check 3h ago → nothing.
@@ -287,6 +291,7 @@ impl TaskHandler for UpgradeQualityTask { fn handle(&self, payload: &str, _is_la
      - `it_should_report_the_chapters_publish_time` — `fetch_chapters` → `ChaptersProbe.published_at`.
      - `it_should_probe_the_height_for_a_quality` — runs the tier's `-f` selector with `--skip-download`, parses height and publish time.
      - `it_should_fail_a_quality_probe_on_a_clean_failure` — non-zero exit → `Err`.
+     - `it_should_report_a_degraded_quality_probe` — SABR warning on stderr → `QualityProbe.degraded`.
      - (private `published_at_from_tail` shared by `fetch_chapters` and `probe_quality`.)
    - `task`:
      - `it_should_run_upgrade_quality_in_the_download_lane_exclusive_per_video` — lane Download, key `video:<id>`, dedupes running.

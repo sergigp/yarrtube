@@ -49,14 +49,10 @@ fn output_retrying_busy(cmd: &mut Command) -> io::Result<std::process::Output> {
 /// into mp4 whenever it isn't already, independent of whether a merge
 /// happened, so every download consistently lands as `.mp4`.
 pub fn args_for_quality(quality: Quality) -> Vec<String> {
-    let mut args = format_selection_args(quality);
-    args.extend([
-        "--merge-output-format".to_string(),
-        "mp4".to_string(),
-        "--remux-video".to_string(),
-        "mp4".to_string(),
-    ]);
-    args
+    format_selection_args(quality)
+        .into_iter()
+        .chain(["--merge-output-format", "mp4", "--remux-video", "mp4"].map(String::from))
+        .collect()
 }
 
 /// A video's `yt-dlp`-reported download result, staged outside its show:
