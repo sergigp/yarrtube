@@ -21,12 +21,14 @@ impl Quality {
         }
     }
 
-    /// The tier's resolution cap, in pixels of height: none for `high`.
-    pub fn height_cap(&self) -> Option<u32> {
+    /// The height in pixels that settles a tier's downloaded quality (see
+    /// the `late-video-data` capability). `high` downloads stay uncapped:
+    /// 1080 is only where its checks stop.
+    pub fn target_height(&self) -> u32 {
         match self {
-            Self::High => None,
-            Self::Mid => Some(720),
-            Self::Low => Some(480),
+            Self::High => 1080,
+            Self::Mid => 720,
+            Self::Low => 480,
         }
     }
 

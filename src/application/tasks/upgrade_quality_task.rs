@@ -95,6 +95,7 @@ mod tests {
                     last_checked_at: Some(now()),
                     failed_attempts: 0,
                 },
+                quality_settled: true,
                 updated_at: now(),
                 ..video.clone()
             }]

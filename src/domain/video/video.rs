@@ -457,8 +457,8 @@ impl Video {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = match (quality.height_cap(), height) {
-            (Some(cap), Some(height)) if height >= cap => LateDataOutcome::Complete,
+        let outcome = match height {
+            Some(height) if height >= quality.target_height() => LateDataOutcome::Complete,
             _ => LateDataOutcome::Incomplete,
         };
         let quality_checks = self.quality_checks.record(outcome, now);

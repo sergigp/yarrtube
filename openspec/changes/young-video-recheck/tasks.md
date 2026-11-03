@@ -53,8 +53,8 @@
 - [x] 2.31 `it_should_reset_every_check_on_redownload` — a broken-file reset clears the checks and height (test passes)
 - [x] 2.32 `it_should_list_an_upgrade_quality_task_with_its_video_context` — task listing resolves the title and owner (http tasks test passes)
 - [x] 2.33 (audit) `it_should_fetch_the_original_language_subtitles` asserts the Complete check; `Video::with_subtitles` renamed `mark_subtitles_fetched` and records it (fetch_subtitles_task test passes)
-- [ ] 2.34 `it_should_settle_high_quality_at_1080` — a young `high` video downloaded at 1080 settles; rename `Quality::height_cap` → `target_height` (High 1080, Mid 720, Low 480) (download_video_task test passes)
-- [ ] 2.35 `it_should_replace_the_file_with_a_higher_quality_download` expects the quality settled once the upgrade reaches 1080 on `high` (upgrade_quality_task test passes)
+- [x] 2.34 `it_should_settle_high_quality_at_1080` — a young `high` video downloaded at 1080 settles; rename `Quality::height_cap` → `target_height` (High 1080, Mid 720, Low 480) (download_video_task test passes)
+- [x] 2.35 `it_should_replace_the_file_with_a_higher_quality_download` expects the quality settled once the upgrade reaches 1080 on `high` (upgrade_quality_task test passes)
 
 ## 3. Infrastructure adapters (TDD)
 
