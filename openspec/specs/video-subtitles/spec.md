@@ -7,19 +7,19 @@ Fetches every downloaded video's original-language captions, writes them as an e
 ## Requirements
 
 ### Requirement: Subtitle State
-Every video SHALL record a subtitle state: Missing (no subtitles obtained yet), Fetched (subtitle file and transcript recorded) or Unavailable (checks spanning at least 7 days found no original-language captions; terminal). While Missing, a video SHALL also record when a subtitle fetch first found no selectable track for it, if one has. A new video, and every video already stored when this capability is introduced, SHALL start Missing with no such time recorded. A video reset for redownload SHALL return to Missing, with no subtitle filename and no such time recorded.
+Every video SHALL record a subtitle state: Missing (no subtitles obtained yet; unsettled), Fetched (subtitle file and transcript recorded; settled) or Unavailable (settled without captions under the `late-video-data` policy; terminal). While Missing, a video SHALL also record when its subtitles were last checked and how many checks failed or were inconclusive. A new video SHALL start Missing, never checked, with no failed attempts. A video stored before this policy with a recorded first check without captions SHALL keep that time as its last check, with no failed attempts. A video reset for redownload SHALL return to Missing, with no subtitle filename, never checked and no failed attempts.
 
 #### Scenario: New video
 - **WHEN** a video is newly added to a tracked playlist or channel
-- **THEN** its subtitle state is Missing and it has no recorded subtitle filename
+- **THEN** its subtitle state is Missing, it has no recorded subtitle filename, and its subtitles were never checked
 
 #### Scenario: Library upgraded
-- **WHEN** the system starts on a database whose videos were stored before subtitles existed
-- **THEN** every such video's subtitle state is Missing
+- **WHEN** the system starts on a database where a Missing video recorded its first check without captions at a given time
+- **THEN** that video's subtitles are recorded as last checked at that time, with no failed attempts
 
 #### Scenario: Video reset for redownload
 - **WHEN** a video whose subtitle state is Fetched or Unavailable is reset for redownload
-- **THEN** its subtitle state is Missing, it has no recorded subtitle filename, and no first check without captions is recorded
+- **THEN** its subtitle state is Missing, it has no recorded subtitle filename, its subtitles were never checked, and it has no failed attempts
 
 ### Requirement: Original-Language Caption Selection
 A subtitle fetch SHALL select a single caption track in the video's original language as reported by the downloader, trying that language and then its base language (e.g. `es-US`, then `es`): an uploaded caption track in that language or in a regional variant of it (e.g. `en-US` for `en`) when one exists, otherwise YouTube's auto-generated track marked as the original in that language, otherwise its plain auto-generated track in that language, but only when no auto-generated track is marked as the original in any language (YouTube lists machine translations of the original under plain language codes). When none of those exists and exactly one auto-generated track is marked as the original, in another language, that track SHALL be selected and its own language recorded (the reported language was wrong). It SHALL NOT select a translated track. When the downloader reports no original language, the auto-generated track marked as the original SHALL be selected when exactly one exists; otherwise, when every uploaded track shares one base language, the uploaded track in that language (preferring the base code itself) SHALL be selected; otherwise none.
@@ -80,7 +80,7 @@ A successful subtitle fetch SHALL write the selected captions in SubRip format t
 - **THEN** its show directory contains `Season 2026/S2026E031501 - Old Title.en.srt` and that is its recorded subtitle filename
 
 ### Requirement: Subtitle Fetch Scheduled After Download
-The system SHALL schedule a subtitle fetch to run immediately each time a video finishes downloading, without waiting for the next reconcile pass. It SHALL NOT schedule a second one for a video that already has a subtitle fetch pending or running. Reconcile passes keep scheduling fetches for videos whose subtitles are still Missing, through the video sync they run for every stored video (see `video-sync`).
+The system SHALL schedule a subtitle fetch to run immediately each time a video finishes downloading, without waiting for the next reconcile pass. It SHALL NOT schedule a second one for a video that already has a subtitle fetch pending or running. Reconcile passes keep scheduling fetches for videos whose subtitles are still Missing and due for a check under the `late-video-data` policy, through the video sync they run for every stored video (see `video-sync`).
 
 #### Scenario: Video finishes downloading
 - **WHEN** a video finishes downloading
@@ -125,35 +125,39 @@ A successful subtitle fetch SHALL store the video's transcript: the captions' pl
 - **THEN** the stored transcript contains those three lines unchanged
 
 ### Requirement: Subtitle Fetch Outcome
-A subtitle fetch SHALL set the video's subtitle state to Fetched when it writes the subtitle file and stores the transcript. A check is conclusive when the downloader successfully reports the video's caption tracks without reporting any warning that can affect them (it can silently withhold tracks, e.g. when YouTube requires a token it does not have, and only says so in a warning). Warnings that cannot affect caption tracks SHALL be ignored: the downloader failing to write its cache, and notices that some video formats were skipped. When a conclusive check finds no selectable track, the fetch SHALL record that time as the first check without captions if none is recorded yet, and SHALL set the state to Unavailable only when at least 7 days have passed both since the video was published (its record's creation time when no publish time is reported) and since that first check without captions. Otherwise the state SHALL stay Missing.
+A subtitle fetch SHALL set the video's subtitle state to Fetched when it writes the subtitle file and stores the transcript. A check is conclusive when the downloader successfully reports the video's caption tracks without reporting any warning that can affect them (it can silently withhold tracks, e.g. when YouTube requires a token it does not have, and only says so in a warning). Warnings that cannot affect caption tracks SHALL be ignored: the downloader failing to write its cache, and notices that some video formats were skipped. Every fetch that contacts the downloader SHALL record its time as the subtitles' last check. When a conclusive check finds no selectable track, the state SHALL become Unavailable when the video is old and stay Missing when it is young (see `late-video-data`). When the check is inconclusive or the downloader fails, the fetch SHALL count one failed attempt, and the state SHALL become Unavailable when the video is old and has at least 3 failed attempts; otherwise it SHALL stay Missing.
 
 #### Scenario: Captions fetched
 - **WHEN** a subtitle fetch selects a track and writes it
 - **THEN** the video's subtitle state is Fetched
 
 #### Scenario: Old video with no original-language captions
-- **WHEN** a conclusive check finds no selectable track for a video published 30 days ago whose first check without captions was recorded 8 days ago
+- **WHEN** a conclusive check finds no selectable track for a video published 30 days ago whose subtitles were last checked 2 days ago
 - **THEN** the video's subtitle state is Unavailable and no subtitle file is written
 
 #### Scenario: Old video checked for the first time
-- **WHEN** a conclusive check finds no selectable track for a video published 30 days ago (e.g. of a playlist added today) with no first check without captions recorded
-- **THEN** its subtitle state stays Missing and now is recorded as its first check without captions, so later reconcile passes keep trying for 7 days
+- **WHEN** a conclusive check finds no selectable track for a video published 30 days ago (e.g. of a playlist added today) that was never checked
+- **THEN** its subtitle state is Unavailable at once and no subtitle file is written
+
+#### Scenario: Recent video with no captions yet
+- **WHEN** a conclusive check finds no selectable track for a video published 2 days ago
+- **THEN** its subtitle state stays Missing and the check time is recorded, so a check at least 24 hours later tries again
 
 #### Scenario: Downloader warns while checking
-- **WHEN** the downloader reports the caption tracks with a warning that can affect them (e.g. `Some subtitles may be missing`) and none is selectable
-- **THEN** the video's subtitle state stays Missing, no first check without captions is recorded, and the warning is logged
+- **WHEN** the downloader reports the caption tracks with a warning that can affect them (e.g. `Some subtitles may be missing`), none is selectable, the video was published 30 days ago and has no failed attempts
+- **THEN** its subtitle state stays Missing with 1 failed attempt, and the warning is logged
+
+#### Scenario: Old video's third failed check
+- **WHEN** the downloader fails while probing captions for a video published 30 days ago whose subtitles have 2 failed attempts
+- **THEN** its subtitle state is Unavailable
 
 #### Scenario: Downloader only warns about its cache or skipped formats
 - **WHEN** the downloader reports the caption tracks with only a cache write failure warning and a `formats have been skipped` warning, and none is selectable
-- **THEN** the check is conclusive: the first check without captions is recorded (or the state becomes Unavailable once the 7-day conditions hold) and nothing is logged as inconclusive
-
-#### Scenario: Recent video with no captions yet
-- **WHEN** a subtitle fetch finds no selectable track for a video published 2 days ago
-- **THEN** the video's subtitle state stays Missing, so a later reconcile pass tries again
+- **THEN** the check is conclusive: no failed attempt is counted and nothing is logged as inconclusive
 
 #### Scenario: Downloader fails
-- **WHEN** the downloader fails while probing or downloading captions (e.g. rate limited, network error)
-- **THEN** the video's subtitle state stays Missing and no subtitle file or transcript is recorded
+- **WHEN** the downloader fails while probing or downloading captions (e.g. rate limited, network error) for a video published 2 days ago
+- **THEN** the video's subtitle state stays Missing, one failed attempt is counted, and no subtitle file or transcript is recorded
 
 ### Requirement: Subtitle Fetch Is Best Effort
 A subtitle fetch SHALL run as its own scheduled task, separately from the video download. Its failure SHALL NOT fail the task, SHALL NOT change the video's download status or any download field, and SHALL NOT be retried by the task queue; a later reconcile pass reschedules it. A subtitle fetch for a video that is not Downloaded, has no episode number, is still stored in the previous per-video-folder layout (it gets subtitles once `migrate-layout` has moved it into its season folder), or whose subtitle state is not Missing SHALL make no changes and SHALL NOT contact the downloader. A fetch SHALL place nothing when, by the time its subtitles are downloaded, the video is no longer Downloaded with the same recorded filename.
