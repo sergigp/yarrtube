@@ -152,101 +152,106 @@ function AiSettings({ saved }: { saved: Preferences }) {
       <Section title="Summaries">
         <SwitchRow
           id="summaries-enabled"
-          label="Enable summaries"
+          label="Enabled"
+          name="Summaries enabled"
           checked={form.summaries_enabled}
           disabled={summariesDisabled}
           onChange={(value) => set('summaries_enabled', value)}
         />
-        <Field id="summaries-model" label="Model">
-          {server ? (
-            <select
-              id="summaries-model"
-              value={form.summaries_model}
-              disabled={summariesDisabled}
-              onChange={(event) => set('summaries_model', event.target.value)}
-              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-            >
-              {modelOptions(server.models, form.summaries_model).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              id="summaries-model"
-              value={form.summaries_model}
-              disabled={summariesDisabled}
-              onChange={(event) => set('summaries_model', event.target.value)}
-            />
-          )}
-        </Field>
-        <Field id="summaries-context-length" label="Context length">
-          <Input
-            id="summaries-context-length"
-            type="number"
-            min={1024}
-            max={131072}
-            step={1024}
-            value={form.summaries_context_length}
-            disabled={summariesDisabled}
-            onChange={(event) => set('summaries_context_length', event.target.value)}
-          />
-        </Field>
-        <Field id="summaries-temperature" label="Temperature">
-          <Input
-            id="summaries-temperature"
-            type="number"
-            min={0}
-            max={2}
-            step={0.1}
-            value={form.summaries_temperature}
-            disabled={summariesDisabled}
-            onChange={(event) => set('summaries_temperature', event.target.value)}
-          />
-        </Field>
-        {cannotThink ? (
-          <p className="text-sm text-muted-foreground">
-            {form.summaries_model} doesn't support thinking
-          </p>
-        ) : (
-          <SwitchRow
-            id="summaries-thinking"
-            label="Thinking"
-            help={THINKING_HELP}
-            checked={form.summaries_thinking}
-            disabled={summariesDisabled}
-            onChange={(value) => set('summaries_thinking', value)}
-          />
-        )}
-        <Field id="summaries-prompt" label="Prompt" help={<PromptHelp />}>
-          <textarea
-            id="summaries-prompt"
-            rows={20}
-            spellCheck={false}
-            value={form.summaries_prompt}
-            disabled={summariesDisabled}
-            onChange={(event) => set('summaries_prompt', event.target.value)}
-            className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-          />
-          <div className="flex items-center justify-between gap-4">
-            {saved.summaries_prompt_is_default && form.summaries_prompt === saved.summaries_prompt ? (
-              <p className="text-sm text-muted-foreground">Using the default prompt</p>
+        {form.summaries_enabled && (
+          <>
+            <Field id="summaries-model" label="Model">
+              {server ? (
+                <select
+                  id="summaries-model"
+                  value={form.summaries_model}
+                  disabled={summariesDisabled}
+                  onChange={(event) => set('summaries_model', event.target.value)}
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                >
+                  {modelOptions(server.models, form.summaries_model).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  id="summaries-model"
+                  value={form.summaries_model}
+                  disabled={summariesDisabled}
+                  onChange={(event) => set('summaries_model', event.target.value)}
+                />
+              )}
+            </Field>
+            <Field id="summaries-context-length" label="Context length">
+              <Input
+                id="summaries-context-length"
+                type="number"
+                min={1024}
+                max={131072}
+                step={1024}
+                value={form.summaries_context_length}
+                disabled={summariesDisabled}
+                onChange={(event) => set('summaries_context_length', event.target.value)}
+              />
+            </Field>
+            <Field id="summaries-temperature" label="Temperature">
+              <Input
+                id="summaries-temperature"
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={form.summaries_temperature}
+                disabled={summariesDisabled}
+                onChange={(event) => set('summaries_temperature', event.target.value)}
+              />
+            </Field>
+            {cannotThink ? (
+              <p className="text-sm text-muted-foreground">
+                {form.summaries_model} doesn't support thinking
+              </p>
             ) : (
-              <span />
+              <SwitchRow
+                id="summaries-thinking"
+                label="Thinking"
+                help={THINKING_HELP}
+                checked={form.summaries_thinking}
+                disabled={summariesDisabled}
+                onChange={(value) => set('summaries_thinking', value)}
+              />
             )}
-            {!saved.summaries_prompt_is_default && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={saving || summariesDisabled}
-                onClick={() => void resetPrompt()}
-              >
-                Reset to default
-              </Button>
-            )}
-          </div>
-        </Field>
+            <Field id="summaries-prompt" label="Prompt" help={<PromptHelp />}>
+              <textarea
+                id="summaries-prompt"
+                rows={20}
+                spellCheck={false}
+                value={form.summaries_prompt}
+                disabled={summariesDisabled}
+                onChange={(event) => set('summaries_prompt', event.target.value)}
+                className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+              />
+              <div className="flex items-center justify-between gap-4">
+                {saved.summaries_prompt_is_default && form.summaries_prompt === saved.summaries_prompt ? (
+                  <p className="text-sm text-muted-foreground">Using the default prompt</p>
+                ) : (
+                  <span />
+                )}
+                {!saved.summaries_prompt_is_default && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={saving || summariesDisabled}
+                    onClick={() => void resetPrompt()}
+                  >
+                    Reset to default
+                  </Button>
+                )}
+              </div>
+            </Field>
+          </>
+        )}
       </Section>
       <div className="flex items-center justify-end gap-4">
         {saveError && (
@@ -320,6 +325,7 @@ function Field({
 function SwitchRow({
   id,
   label,
+  name,
   help,
   checked,
   disabled,
@@ -327,6 +333,8 @@ function SwitchRow({
 }: {
   id: string
   label: string
+  /** The switch's accessible name, when the label alone is ambiguous. */
+  name?: string
   help?: string
   checked: boolean
   disabled?: boolean
@@ -338,7 +346,13 @@ function SwitchRow({
         <Label htmlFor={id}>{label}</Label>
         {help && <PreferenceHelp label={label} help={help} />}
       </div>
-      <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onChange} />
+      <Switch
+        id={id}
+        aria-label={name}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onChange}
+      />
     </div>
   )
 }

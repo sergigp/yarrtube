@@ -14,7 +14,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     await page.getByRole('menuitem', { name: 'AI', exact: true }).click()
     await expect(page).toHaveURL(/\/ai$/)
     await expect(enableAi).not.toBeChecked()
-    await expect(page.getByText('Using the default prompt')).toBeVisible()
+    await expect(prompt).toHaveCount(0)
   })
 
   await test.step('testing the connection lists the server and its models', async () => {
@@ -26,7 +26,8 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
 
   await test.step('turning AI and summaries on with a model that can’t think is saved', async () => {
     await enableAi.click()
-    await page.getByRole('switch', { name: 'Enable summaries' }).click()
+    await page.getByRole('switch', { name: 'Summaries enabled' }).click()
+    await expect(page.getByText('Using the default prompt')).toBeVisible()
     await model.selectOption('gemma3:4b')
     await expect(page.getByText("gemma3:4b doesn't support thinking")).toBeVisible()
     await temperature.fill('0.5')
@@ -36,7 +37,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
 
     await page.reload()
     await expect(enableAi).toBeChecked()
-    await expect(page.getByRole('switch', { name: 'Enable summaries' })).toBeChecked()
+    await expect(page.getByRole('switch', { name: 'Summaries enabled' })).toBeChecked()
     await expect(model).toHaveValue('gemma3:4b')
     await expect(temperature).toHaveValue('0.5')
   })
@@ -65,6 +66,7 @@ test.describe(() => {
     await page.goto('/ai')
     await page.getByRole('textbox', { name: 'Ollama URL' }).fill(daemon.ollamaUrl)
     await page.getByRole('switch', { name: 'Enable AI' }).click()
+    await page.getByRole('switch', { name: 'Summaries enabled' }).click()
     const prompt = page.getByRole('textbox', { name: 'Prompt' })
     const shipped = await prompt.inputValue()
     await prompt.fill(shipped.replace('## map user', '## map usr'))

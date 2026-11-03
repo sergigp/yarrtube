@@ -5,32 +5,45 @@ import { AiSettingsView } from './AiSettingsView'
 import { aPreferences, anOllamaServer, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('AiSettingsView', () => {
-  it('shows the defaults with summary settings disabled until AI is on', async () => {
+  it('shows the defaults, with summaries off and their settings hidden', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+
+    expect(await screen.findByRole('switch', { name: 'Enable AI' })).not.toBeChecked()
+    expect(screen.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
+    expect(screen.getByRole('switch', { name: 'Summaries enabled' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
+    expect(screen.queryByRole('textbox', { name: 'Model' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Prompt' })).not.toBeInTheDocument()
+  })
+
+  it('shows the summary settings once summaries are on', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    const enableAi = await screen.findByRole('switch', { name: 'Enable AI' })
-    expect(enableAi).not.toBeChecked()
-    expect(screen.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
-    expect(screen.getByRole('switch', { name: 'Enable summaries' })).toBeDisabled()
+    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
+    await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
+
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
-    expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toHaveValue(12288)
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toHaveValue(0.3)
     expect(screen.getByRole('switch', { name: 'Thinking' })).toBeChecked()
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(
       aPreferences().summaries_prompt,
     )
+  })
 
-    await user.click(enableAi)
+  it('disables the summary settings while AI is off', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
+    renderWithProviders(<AiSettingsView />)
 
-    expect(screen.getByRole('switch', { name: 'Enable summaries' })).toBeEnabled()
-    expect(screen.getByRole('textbox', { name: 'Model' })).toBeEnabled()
-    expect(screen.getByRole('spinbutton', { name: 'Context length' })).toBeEnabled()
-    expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toBeEnabled()
-    expect(screen.getByRole('switch', { name: 'Thinking' })).toBeEnabled()
-    expect(screen.getByRole('textbox', { name: 'Prompt' })).toBeEnabled()
+    expect(await screen.findByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: 'Context length' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: 'Thinking' })).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toBeDisabled()
   })
 
   it('saves only the changed fields', async () => {
@@ -80,6 +93,7 @@ describe('AiSettingsView', () => {
       'GET /api/preferences': aPreferences({
         ai_enabled: true,
         ollama_url: 'http://mac.local:11434',
+        summaries_enabled: true,
       }),
       'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
@@ -196,7 +210,7 @@ describe('AiSettingsView', () => {
 
   it('lists the models of the server just tested', async () => {
     mockApi({
-      'GET /api/preferences': aPreferences(),
+      'GET /api/preferences': aPreferences({ summaries_enabled: true }),
       'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
@@ -255,7 +269,7 @@ describe('AiSettingsView', () => {
   })
 
   it('explains thinking', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences() })
+    mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
 
     await userEvent.setup().hover(await screen.findByRole('button', { name: 'About Thinking' }))
@@ -266,7 +280,7 @@ describe('AiSettingsView', () => {
   })
 
   it('says the default prompt is in use', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences() })
+    mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
 
     expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
@@ -277,10 +291,11 @@ describe('AiSettingsView', () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences({
         ai_enabled: true,
+        summaries_enabled: true,
         summaries_prompt: 'my prompt',
         summaries_prompt_is_default: false,
       }),
-      'PATCH /api/preferences': aPreferences({ ai_enabled: true }),
+      'PATCH /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -297,7 +312,7 @@ describe('AiSettingsView', () => {
   })
 
   it('explains each prompt section and its variables behind a "?" next to the prompt', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences() })
+    mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
@@ -317,7 +332,11 @@ describe('AiSettingsView', () => {
 })
 
 function aiOn() {
-  return aPreferences({ ai_enabled: true, ollama_url: 'http://mac.local:11434' })
+  return aPreferences({
+    ai_enabled: true,
+    ollama_url: 'http://mac.local:11434',
+    summaries_enabled: true,
+  })
 }
 
 function optionTexts(select: HTMLElement): (string | null)[] {
