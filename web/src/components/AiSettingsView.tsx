@@ -1,12 +1,18 @@
 import { useState, type ReactNode } from 'react'
 import { Check } from 'lucide-react'
-import { useCheckOllama, usePreferences, useSavePreferences } from '@/api/queries'
+import { useCheckOllama, useOllama, usePreferences, useSavePreferences } from '@/api/queries'
 import type { OllamaServer, Preferences } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { changedFields, formFrom, hasInvalidNumber, type AiSettingsForm } from '@/lib/aiSettingsForm'
+import {
+  changedFields,
+  formFrom,
+  hasInvalidNumber,
+  modelOptions,
+  type AiSettingsForm,
+} from '@/lib/aiSettingsForm'
 import { errorMessage } from '@/lib/errorMessage'
 import { useSavedFlash } from '@/hooks/useSavedFlash'
 import { cn } from '@/lib/utils'
@@ -44,11 +50,17 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
   const checkOllama = useCheckOllama()
   const [connection, setConnection] = useState<ConnectionCheck>(NO_CHECK)
+  // The server whose models "Model" lists: the saved one, then the last one
+  // tested successfully.
+  const [modelsUrl, setModelsUrl] = useState(saved.ollama_url)
+  const { data: server } = useOllama(modelsUrl)
   const testConnection = async () => {
+    const url = form.ollama_url.trim()
     setConnection({ ...NO_CHECK, checking: true })
     try {
-      const server = await checkOllama(form.ollama_url.trim())
-      setConnection({ ...NO_CHECK, message: connectedMessage(server) })
+      const tested = await checkOllama(url)
+      setModelsUrl(url)
+      setConnection({ ...NO_CHECK, message: connectedMessage(tested) })
     } catch (err) {
       setConnection({ ...NO_CHECK, failed: true, message: errorMessage(err) })
     }
@@ -119,12 +131,28 @@ function AiSettings({ saved }: { saved: Preferences }) {
           onChange={(value) => set('summaries_enabled', value)}
         />
         <Field id="summaries-model" label="Model">
-          <Input
-            id="summaries-model"
-            value={form.summaries_model}
-            disabled={summariesDisabled}
-            onChange={(event) => set('summaries_model', event.target.value)}
-          />
+          {server ? (
+            <select
+              id="summaries-model"
+              value={form.summaries_model}
+              disabled={summariesDisabled}
+              onChange={(event) => set('summaries_model', event.target.value)}
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+            >
+              {modelOptions(server.models, form.summaries_model).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              id="summaries-model"
+              value={form.summaries_model}
+              disabled={summariesDisabled}
+              onChange={(event) => set('summaries_model', event.target.value)}
+            />
+          )}
         </Field>
         <Field id="summaries-context-length" label="Context length">
           <Input

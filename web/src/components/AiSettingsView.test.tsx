@@ -129,7 +129,70 @@ describe('AiSettingsView', () => {
       await screen.findByText('Could not reach Ollama at http://nowhere:11434: connection refused'),
     ).toBeInTheDocument()
   })
+
+  it("lists the saved server's models to pick from", async () => {
+    mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    const model = await screen.findByRole('combobox', { name: 'Model' })
+
+    expect(optionTexts(model)).toEqual(['gemma3:4b', 'qwen3:4b'])
+    expect(model).toHaveValue('qwen3:4b')
+  })
+
+  it('keeps a saved model the server no longer has', async () => {
+    mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer({
+        models: [{ name: 'gemma3:4b', size_bytes: 1, thinking: false }],
+      }),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    const model = await screen.findByRole('combobox', { name: 'Model' })
+
+    expect(optionTexts(model)).toEqual(['gemma3:4b', 'qwen3:4b (not installed)'])
+    expect(model).toHaveValue('qwen3:4b')
+  })
+
+  it('lets the model be typed when the server is down', async () => {
+    mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    expect(await screen.findByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
+  })
+
+  it('lists the models of the server just tested', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'Ollama URL' }), 'http://mac.local:11434')
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+
+    expect(optionTexts(await screen.findByRole('combobox', { name: 'Model' }))).toEqual([
+      'gemma3:4b',
+      'qwen3:4b',
+    ])
+  })
 })
+
+function aiOn() {
+  return aPreferences({ ai_enabled: true, ollama_url: 'http://mac.local:11434' })
+}
+
+function optionTexts(select: HTMLElement): (string | null)[] {
+  return Array.from(select.querySelectorAll('option')).map((option) => option.textContent)
+}
 
 /** The body of every `PATCH /api/preferences` sent. */
 function patchBodies(fetchMock: ReturnType<typeof mockApi>): unknown[] {

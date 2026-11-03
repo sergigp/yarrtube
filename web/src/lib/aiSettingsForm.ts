@@ -1,4 +1,4 @@
-import type { Preferences, PreferencesPatch } from '@/api/types'
+import type { OllamaModel, Preferences, PreferencesPatch } from '@/api/types'
 
 /** The AI page's editable fields, as typed (numbers as text). */
 export interface AiSettingsForm {
@@ -59,4 +59,18 @@ export function hasInvalidNumber(patch: PreferencesPatch): boolean {
 
 function toNumber(text: string): number {
   return text.trim() === '' ? Number.NaN : Number(text)
+}
+
+/**
+ * The choices for "Model": every model on the server, and `selected` marked
+ * as not installed when the server doesn't have it.
+ */
+export function modelOptions(
+  models: OllamaModel[],
+  selected: string,
+): { value: string; label: string }[] {
+  const installed = models.map((model) => ({ value: model.name, label: model.name }))
+  return models.some((model) => model.name === selected)
+    ? installed
+    : [...installed, { value: selected, label: `${selected} (not installed)` }]
 }
