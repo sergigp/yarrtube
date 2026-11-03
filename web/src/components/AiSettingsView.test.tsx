@@ -94,6 +94,41 @@ describe('AiSettingsView', () => {
     )
     expect(patchBodies(fetchMock)).toEqual([])
   })
+
+  it('tests the connection to the typed URL', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    const test = await screen.findByRole('button', { name: 'Test connection' })
+    expect(test).toBeDisabled()
+    await user.type(screen.getByRole('textbox', { name: 'Ollama URL' }), 'http://mac.local:11434')
+    await user.click(test)
+
+    expect(await screen.findByText('Connected to Ollama 0.40.13, 2 models')).toBeInTheDocument()
+  })
+
+  it('shows why the connection test failed', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences(),
+      'GET /api/ollama?url=http%3A%2F%2Fnowhere%3A11434': {
+        status: 502,
+        error: 'Could not reach Ollama at http://nowhere:11434: connection refused',
+      },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'Ollama URL' }), 'http://nowhere:11434')
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+
+    expect(
+      await screen.findByText('Could not reach Ollama at http://nowhere:11434: connection refused'),
+    ).toBeInTheDocument()
+  })
 })
 
 /** The body of every `PATCH /api/preferences` sent. */

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check } from 'lucide-react'
-import { usePreferences, useSavePreferences } from '@/api/queries'
-import type { Preferences } from '@/api/types'
+import { useCheckOllama, usePreferences, useSavePreferences } from '@/api/queries'
+import type { OllamaServer, Preferences } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -42,6 +42,18 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const checkOllama = useCheckOllama()
+  const [connection, setConnection] = useState<ConnectionCheck>(NO_CHECK)
+  const testConnection = async () => {
+    setConnection({ ...NO_CHECK, checking: true })
+    try {
+      const server = await checkOllama(form.ollama_url.trim())
+      setConnection({ ...NO_CHECK, message: connectedMessage(server) })
+    } catch (err) {
+      setConnection({ ...NO_CHECK, failed: true, message: errorMessage(err) })
+    }
+  }
+
   const save = async () => {
     setSaveError(null)
     savedFlash.clear()
@@ -70,13 +82,32 @@ function AiSettings({ saved }: { saved: Preferences }) {
           onChange={(value) => set('ai_enabled', value)}
         />
         <Field id="ollama-url" label="Ollama URL">
-          <Input
-            id="ollama-url"
-            type="url"
-            placeholder="http://192.168.1.10:11434"
-            value={form.ollama_url}
-            onChange={(event) => set('ollama_url', event.target.value)}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="ollama-url"
+              type="url"
+              placeholder="http://192.168.1.10:11434"
+              value={form.ollama_url}
+              onChange={(event) => set('ollama_url', event.target.value)}
+            />
+            <Button
+              variant="outline"
+              disabled={form.ollama_url.trim() === '' || connection.checking}
+              onClick={() => void testConnection()}
+            >
+              Test connection
+            </Button>
+          </div>
+          {connection.message && (
+            <p
+              className={cn(
+                'text-sm',
+                connection.failed ? 'text-destructive' : 'text-muted-foreground',
+              )}
+            >
+              {connection.message}
+            </p>
+          )}
         </Field>
       </Section>
       <Section title="Summaries">
@@ -158,6 +189,19 @@ function AiSettings({ saved }: { saved: Preferences }) {
       </div>
     </>
   )
+}
+
+interface ConnectionCheck {
+  checking: boolean
+  failed: boolean
+  message: string | null
+}
+
+const NO_CHECK: ConnectionCheck = { checking: false, failed: false, message: null }
+
+function connectedMessage(server: OllamaServer): string {
+  const count = server.models.length
+  return `Connected to Ollama ${server.version}, ${count} ${count === 1 ? 'model' : 'models'}`
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
