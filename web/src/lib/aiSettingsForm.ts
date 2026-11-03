@@ -50,6 +50,13 @@ export function changedFields(saved: Preferences, form: AiSettingsForm): Prefere
   )
 }
 
+/** Whether `patch` has a number field that isn't one. */
+export function hasInvalidNumber(patch: PreferencesPatch): boolean {
+  return [patch.summaries_context_length, patch.summaries_temperature].some((value) =>
+    Number.isNaN(value),
+  )
+}
+
 function toNumber(text: string): number {
   return text.trim() === '' ? Number.NaN : Number(text)
 }

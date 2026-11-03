@@ -1,10 +1,14 @@
 import { useState, type ReactNode } from 'react'
-import { usePreferences } from '@/api/queries'
+import { Check } from 'lucide-react'
+import { usePreferences, useSavePreferences } from '@/api/queries'
 import type { Preferences } from '@/api/types'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { formFrom, type AiSettingsForm } from '@/lib/aiSettingsForm'
+import { changedFields, formFrom, hasInvalidNumber, type AiSettingsForm } from '@/lib/aiSettingsForm'
+import { errorMessage } from '@/lib/errorMessage'
+import { useSavedFlash } from '@/hooks/useSavedFlash'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 
@@ -32,6 +36,29 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const set = <K extends keyof AiSettingsForm>(key: K, value: AiSettingsForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
   const summariesDisabled = !form.ai_enabled
+  const patch = changedFields(saved, form)
+  const savePreferences = useSavePreferences()
+  const savedFlash = useSavedFlash()
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const save = async () => {
+    setSaveError(null)
+    savedFlash.clear()
+    if (hasInvalidNumber(patch)) {
+      setSaveError('Context length and temperature must be numbers')
+      return
+    }
+    setSaving(true)
+    try {
+      await savePreferences(patch)
+      savedFlash.flash()
+    } catch (err) {
+      setSaveError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <>
@@ -111,6 +138,24 @@ function AiSettings({ saved }: { saved: Preferences }) {
           />
         </Field>
       </Section>
+      <div className="flex items-center justify-end gap-4">
+        {saveError && (
+          <p role="alert" className="mr-auto text-sm text-destructive">
+            {saveError}
+          </p>
+        )}
+        <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
+          {savedFlash.shown && (
+            <>
+              <Check className="size-4" aria-hidden="true" />
+              Saved
+            </>
+          )}
+        </p>
+        <Button disabled={saving || Object.keys(patch).length === 0} onClick={() => void save()}>
+          Save
+        </Button>
+      </div>
     </>
   )
 }
