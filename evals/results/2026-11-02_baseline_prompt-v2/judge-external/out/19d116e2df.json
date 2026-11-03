@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id": "three-games-as-black", "verdict": "stated", "reason": "Summary says \"attempts the Accelerated Dragon opening three times as black\"."},
-{"id": "game1-technical-endgame-win", "verdict": "contradicted", "reason": "Summary says in the first game he \"realized he lost\", but the fact says he won it."},
-{"id": "game2-advantage-lost-then-won", "verdict": "contradicted", "reason": "Summary says the second game \"ended in a draw\", but the fact says the streamer won it."},
-{"id": "game3-alapin-iqp", "verdict": "stated", "reason": "Summary says the third game was \"against the Alapin variation\", the main claim, though the ...d5 IQP plan is not mentioned."},
-{"id": "game3-draw-missed-win", "verdict": "stated", "reason": "Summary says the third game \"also concluded in a draw\", the main outcome, though the missed win is not mentioned."}
-]}

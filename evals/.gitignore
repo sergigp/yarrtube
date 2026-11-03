@@ -1,4 +1,6 @@
 # Subtitles are third-party captions: kept locally, never committed.
 cases/*/subtitles.srt
 __pycache__/
-results/*/faithfulness-external/transcripts/
+# judge scratch: answers are copied into the run's .jsonl, inputs are rebuilt from summaries
+results/*/judge-external/
+results/*/faithfulness-external/

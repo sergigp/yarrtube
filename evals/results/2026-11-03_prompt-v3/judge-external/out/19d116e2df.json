@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id": "three-games-as-black", "verdict": "stated", "reason": "The summary says \"Three online games where the creator played the accelerated dragon opening\"."},
-{"id": "game1-technical-endgame-win", "verdict": "contradicted", "reason": "The summary says the first game was \"a drawn position after careful maneuvering\", but the fact says the streamer won it."},
-{"id": "game2-advantage-lost-then-won", "verdict": "contradicted", "reason": "The summary says the creator's mistake \"led to a draw\", but the fact says he still won after the opponent's mistakes."},
-{"id": "game3-alapin-iqp", "verdict": "missing", "reason": "The summary only mentions \"the Alapin opening\" and says nothing about ...d5, the isolated queen's pawn structure or the fianchetto."},
-{"id": "game3-draw-missed-win", "verdict": "stated", "reason": "The summary says the creator \"ultimately drew the game\" in the third game."}
-]}

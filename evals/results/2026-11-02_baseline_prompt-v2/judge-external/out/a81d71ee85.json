@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id": "not-the-next-revolution", "verdict": "stated", "reason": "Summary says quantum AI \"no reemplazará a la IA clásica en el corto plazo\" and is theoretically promising but depends on advances not yet achieved."},
-{"id": "hybrid-quantum-classical", "verdict": "missing", "reason": "Summary never mentions the hybrid quantum/classical setup of qubits plus classical parameter tuning or SVM."},
-{"id": "advantage-only-on-artificial-problem", "verdict": "stated", "reason": "Summary cites the roulette problem as artificially designed and not applicable to real situations."},
-{"id": "practical-obstacles", "verdict": "stated", "reason": "Summary cites the instability of quantum computers and the lack of viable scenarios, so the advantage depends on technological advances not yet achieved."},
-{"id": "promise-in-quantum-data-and-niches", "verdict": "stated", "reason": "Summary says it could complement classical AI in specialized areas such as quantum data processing."}
-]}

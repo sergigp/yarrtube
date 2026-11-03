@@ -1,7 +1,0 @@
-{"errors": [
-{"quote": "ended in draws", "kind": "wrong", "severity": "major", "reason": "Only the third game is a draw (57:00 'Only made a draw'); the first is an 'easy win' (13:29) and in the second his pawns promoted (34:44)."},
-{"quote": "resulting in a drawn position after careful maneuvering", "kind": "wrong", "severity": "major", "reason": "In the first game he wins the pawns and says 'this is an easy win' (13:29), finishing with 'Kaching' (13:51) and 'Keep the pawn' (16:14), not a draw."},
-{"quote": "against an opponent who went for the Sicilian defense", "kind": "wrong", "severity": "minor", "reason": "The streamer is Black and plays the Sicilian; the opponent (White) played d4 and an open-Sicilian-or-not line (0:03-0:15)."},
-{"quote": "The second game involved a mistake by the creator that led to a draw despite initial advantages.", "kind": "wrong", "severity": "major", "reason": "After the mistake the endgame was equal, but the opponent made errors and 'my pawns just promoted' (35:44), so the streamer won."},
-{"quote": "The creator concluded he learned from the experience but still found the opening challenging to play effectively.", "kind": "unsupported", "severity": "minor", "reason": "No such conclusion is stated; he says he will keep going for this structure (45:33-45:55) and was 'dominating' the game (57:03)."}
-]}

@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id": "topic-own-harness", "verdict": "stated", "reason": "Summary says he builds 'un agente de inteligencia artificial similar a Cloud Code, utilizando Go y la API de Anthropic' and practices harness engineering."},
-{"id": "agentic-loop", "verdict": "stated", "reason": "Summary mentions explaining 'el bucle agéntico, el uso de herramientas' but not the final-answer-or-tool-call cycle or outer REPL, so only the topic is named; main claim of explaining the loop is present."},
-{"id": "multi-agent-subagents", "verdict": "missing", "reason": "Summary says multiple agents in parallel with status and results shown, inspired by Orca and Herder, but never mentions a spawn tool, background subagents, Git worktrees or goroutines."},
-{"id": "takeaway-demystify", "verdict": "missing", "reason": "Summary only says the project aims to 'desmitificar el uso de la IA' and practice harness engineering, without stating agents are just LLM wrappers, that products sell UI, or that it is for learning not production."},
-{"id": "build-your-own-harness", "verdict": "stated", "reason": "Summary says it offers 'recursos y ejercicios para que los espectadores puedan construir sus propios agentes de IA'."}
-]}

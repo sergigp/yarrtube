@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id": "three-games-as-black", "verdict": "contradicted", "reason": "The summary describes a single game ('In this game against an opponent playing the Alapin Sicilian'), but the video shows three games."},
-{"id": "game1-technical-endgame-win", "verdict": "missing", "reason": "The summary never describes a first game that turned into a technical endgame won thanks to an active king."},
-{"id": "game2-advantage-lost-then-won", "verdict": "missing", "reason": "Nothing in the summary mentions the unambitious c3, the big advantage thrown away, or the eventual win."},
-{"id": "game3-alapin-iqp", "verdict": "missing", "reason": "The summary mentions an opponent playing the Alapin but not the ...d5 reply, the isolated queen's pawn structure, or the plan of trading pieces toward a safe endgame."},
-{"id": "game3-draw-missed-win", "verdict": "stated", "reason": "The summary says the Alapin game ended in a draw ('Black secured a draw'), which is enough even though the missed win is not mentioned."}
-]}

@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id":"not-the-next-revolution","verdict":"missing","reason":"The summary only says quantum AI is in an early phase with 'potencial prometedor pero aún lejano', and never says it is not the next revolution replacing classical AI or that it is neither pure hype."},
-{"id":"hybrid-quantum-classical","verdict":"missing","reason":"The summary never mentions the hybrid quantum-classical approach or a classical machine tuning parameters or finding the boundary."},
-{"id":"advantage-only-on-artificial-problem","verdict":"stated","reason":"It says the roulette example is theoretical and 'en la práctica, el problema es artificialmente creado'."},
-{"id":"practical-obstacles","verdict":"stated","reason":"It says practical application is limited by 'la necesidad de ordenadores cuánticos más potentes', which matches the main claim that the advantage cannot yet be tested without better quantum computers."},
-{"id":"promise-in-quantum-data-and-niches","verdict":"missing","reason":"The summary does not mention processing already-quantum data such as molecules or materials, nor complementing classical AI in specific tasks."}
-]}

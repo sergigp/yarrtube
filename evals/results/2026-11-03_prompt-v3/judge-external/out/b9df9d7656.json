@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id": "topic-claude-duet", "verdict": "stated", "reason": "Summary opens with \"Claude Duet, Anthropic's new personal agent\", which is the main claim, though the phone-app detail is omitted."},
-{"id": "liked-design", "verdict": "stated", "reason": "Says it is \"exceptionally well-designed with intuitive features like task lists, artifacts, and channels\" and far more polished than Dots."},
-{"id": "not-proactive-and-slow", "verdict": "stated", "reason": "Says it \"lacks sufficient proactivity and speed\" and is \"too slow\"."},
-{"id": "no-desktop-no-multiplayer", "verdict": "missing", "reason": "Summary only says \"disconnected from desktop workflows\" and never mentions single-player or no sharing with a team."},
-{"id": "verdict", "verdict": "stated", "reason": "Says \"the speaker is not sure it will become part of their stack\" despite being far more polished than Dots."}
-]}

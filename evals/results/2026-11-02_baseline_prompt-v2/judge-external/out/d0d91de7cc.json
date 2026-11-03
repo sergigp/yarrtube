@@ -1,7 +1,0 @@
-{"verdicts": [
-{"id": "built-browser-tabs-cli", "verdict": "stated", "reason": "Summary says it is an open source CLI utility developed by Codely to manage tabs, grouping news and links for the weekly cafes."},
-{"id": "vivaldi-api-not-computer-use", "verdict": "missing", "reason": "Summary mentions Vivaldi and JSON files but not talking to Vivaldi's API, speed, or contrast with AI computer use."},
-{"id": "motivation-weekly-manual-work", "verdict": "missing", "reason": "Summary says it automates tab organization but does not state the tedious manual work motivation or that AI computer use was too slow and blocked the browser."},
-{"id": "open-source-semantic-release", "verdict": "stated", "reason": "Summary says open source, 'licencia MIT' and 'releases semánticos'."},
-{"id": "worth-it-saves-time", "verdict": "stated", "reason": "Summary says the team concludes it 'ahorra tiempo cada semana', matching the main claim of time saved weekly."}
-]}

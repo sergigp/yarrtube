@@ -1,1 +1,0 @@
-{"errors": [{"quote":"además de integrar funcionalidades como la automatización de releases con semantic release","kind":"misleading","severity":"minor","reason":"Semantic release is how the repo publishes its own releases from conventional commits, not a feature of the tab utility (4:18-4:58)."}]}

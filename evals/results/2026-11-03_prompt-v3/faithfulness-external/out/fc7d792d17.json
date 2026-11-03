@@ -1,4 +1,0 @@
-{"errors": [
-{"quote":"effectively quantifying the information content of the data","kind":"wrong","severity":"minor","reason":"The video says cross-entropy measures average bits when a code optimized for one distribution is used on another (7:43-8:03, 14:44), while information content/entropy is a separate quantity (4:44, 7:27)."},
-{"quote":"highlighting the surprising link between intelligence and efficient data representation","kind":"unsupported","severity":"minor","reason":"The video only mentions 'compression is intelligence' as a phrase it will assess in a later part (30:01-30:05) and does not make that link in this video."}
-]}
