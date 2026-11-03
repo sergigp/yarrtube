@@ -129,6 +129,7 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
         id="edit-playlist-summaries"
         checked={summariesEnabled}
         onChange={setSummariesEnabled}
+        enabledOnSource={playlist.summaries_enabled}
         onNavigateAway={onClose}
       />
       {withCategories && (

@@ -37,7 +37,7 @@ Web (Vitest)
 - [x] 2.22 `EditChannelDialog.test.tsx` — AI on, summaries off: disabled and shown checked for a source with it on; changing only the interval sends only the interval.
 - [x] 2.23 `EditPlaylistDialog.test.tsx` — AI on: checking sends `{ summaries_enabled: true }` alone; AI off: disabled.
 - [x] 2.24 `EditChannelDialog.test.tsx` — AI off, source with summaries on: checked and enabled; unchecking and saving sends `{ summaries_enabled: false }` alone (replaces 2.22's "disabled" assertion with "enabled"); `SummariesField` gains `enabledOnSource`.
-- [ ] 2.25 `EditPlaylistDialog.test.tsx` — same as 2.24 for playlists.
+- [x] 2.25 `EditPlaylistDialog.test.tsx` — same as 2.24 for playlists.
 
 ## 3. Infrastructure adapters (TDD)
 

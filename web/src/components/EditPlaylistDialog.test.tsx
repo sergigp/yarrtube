@@ -77,6 +77,23 @@ describe('EditPlaylistDialog', () => {
     expect(summaries).toBeDisabled()
   })
 
+  it('lets summaries be turned off while AI is off', async () => {
+    const { onSave, onOpenChange, fetchMock } = renderDialog(aPlaylist({ summaries_enabled: true }))
+    const user = userEvent.setup()
+    const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/preferences', expect.anything()),
+    )
+
+    expect(summaries).toBeChecked()
+    expect(summaries).toBeEnabled()
+    await user.click(summaries)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ summaries_enabled: false })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('offers no categories and saves none while categories are off', async () => {
     const { onSave, onOpenChange, fetchMock } = renderDialog(
       aPlaylist({ reconcile_interval_minutes: 180 }),
