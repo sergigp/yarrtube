@@ -39,7 +39,7 @@ Web (Vitest)
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `sqlite_channel_repository`: `it_should_round_trip_the_channels_summaries_setting` — insert `true` → `true`; update to `false` → `false`.
+- [x] 3.1 `sqlite_channel_repository`: `it_should_round_trip_the_channels_summaries_setting` — insert `true` → `true`; update to `false` → `false`.
 - [ ] 3.2 `sqlite_playlist_repository`: `it_should_round_trip_the_playlists_summaries_setting`.
 - [ ] 3.3 `sqlite_migrations`: `it_should_disable_summaries_for_sources_stored_before_the_setting`.
 

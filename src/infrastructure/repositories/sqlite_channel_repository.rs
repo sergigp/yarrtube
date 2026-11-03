@@ -330,6 +330,19 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_channels_summaries_setting() {
+        let repo = repo();
+        let channel = channel("@somechannel", "Some Channel").with_summaries_enabled(true);
+        repo.insert(&channel).unwrap();
+        assert_eq!(repo.find(&channel.id).unwrap(), Some(channel.clone()));
+        let updated = channel.with_summaries_enabled(false);
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
     fn it_should_round_trip_the_maximum_video_limit() {
         let repo = repo();
         let channel = Channel {
