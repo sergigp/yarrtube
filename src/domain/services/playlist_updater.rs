@@ -90,8 +90,12 @@ impl PlaylistUpdater {
             Some(hide_unwatched_count) => playlist.with_hide_unwatched_count(hide_unwatched_count),
             None => playlist,
         };
-        match change.reconcile_interval {
+        let playlist = match change.reconcile_interval {
             Some(reconcile_interval) => playlist.with_reconcile_interval(reconcile_interval),
+            None => playlist,
+        };
+        match change.summaries_enabled {
+            Some(summaries_enabled) => playlist.with_summaries_enabled(summaries_enabled),
             None => playlist,
         }
     }
