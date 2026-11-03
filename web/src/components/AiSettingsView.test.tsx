@@ -296,9 +296,13 @@ describe('AiSettingsView', () => {
     expect(patchBodies(fetchMock)).toEqual([{ summaries_prompt: null }])
   })
 
-  it("explains each prompt section and the variables it can use", async () => {
+  it('explains each prompt section and its variables behind a "?" next to the prompt', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    expect(screen.queryByRole('region', { name: 'Prompt guide' })).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'About Prompt' }))
 
     const guide = await screen.findByRole('region', { name: 'Prompt guide' })
     const reducePart = within(guide).getByRole('group', { name: 'reduce part' })

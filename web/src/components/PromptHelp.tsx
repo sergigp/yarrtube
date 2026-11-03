@@ -1,12 +1,38 @@
+import { CircleHelp } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { PROMPT_SECTIONS } from '@/lib/promptGuide'
 
-/** Explains the summary prompt's sections and the variables each can use. */
-export function PromptGuide() {
+/**
+ * A "?" next to the prompt that opens the guide to its sections and the
+ * variables each can use. A popover rather than a tooltip: the guide is long,
+ * so it opens on click and scrolls.
+ */
+export function PromptHelp() {
   return (
-    <section
-      aria-label="Prompt guide"
-      className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4 text-sm"
-    >
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="About Prompt"
+          className="rounded-full text-muted-foreground hover:text-foreground"
+        >
+          <CircleHelp className="size-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="max-h-[70vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto"
+      >
+        <PromptGuide />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** Explains the summary prompt's sections and the variables each can use. */
+function PromptGuide() {
+  return (
+    <section aria-label="Prompt guide" className="flex flex-col gap-4 text-sm">
       <p className="text-muted-foreground">
         The prompt is split into sections, each starting with a <code>## heading</code> line. A
         video that fits the context length is summarized in one call with <code>system</code> and{' '}

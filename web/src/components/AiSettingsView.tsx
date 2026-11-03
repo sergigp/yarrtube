@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { PreferenceHelp } from '@/components/PreferenceHelp'
-import { PromptGuide } from '@/components/PromptGuide'
+import { PromptHelp } from '@/components/PromptHelp'
 import {
   changedFields,
   formFrom,
@@ -219,7 +219,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
             onChange={(value) => set('summaries_thinking', value)}
           />
         )}
-        <Field id="summaries-prompt" label="Prompt">
+        <Field id="summaries-prompt" label="Prompt" help={<PromptHelp />}>
           <textarea
             id="summaries-prompt"
             rows={20}
@@ -247,7 +247,6 @@ function AiSettings({ saved }: { saved: Preferences }) {
             )}
           </div>
         </Field>
-        <PromptGuide />
       </Section>
       <div className="flex items-center justify-end gap-4">
         {saveError && (
@@ -296,10 +295,23 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+function Field({
+  id,
+  label,
+  help,
+  children,
+}: {
+  id: string
+  label: string
+  help?: ReactNode
+  children: ReactNode
+}) {
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={id}>{label}</Label>
+        {help}
+      </div>
       {children}
     </div>
   )

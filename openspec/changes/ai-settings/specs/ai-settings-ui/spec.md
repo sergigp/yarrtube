@@ -92,11 +92,18 @@ The "Thinking" switch SHALL show unless the selected model is known not to suppo
 - **WHEN** a user deletes the `## map user` section and activates "Save"
 - **THEN** the page shows `Prompt is missing the "map user" section` and the field keeps the edited text
 
+### Requirement: Prompt Guide Access
+A "?" button with the accessible name "About Prompt", next to the "Prompt" label, SHALL open the prompt guide in a scrollable popover; the guide SHALL NOT show until it is opened.
+
+#### Scenario: Guide hidden until asked for
+- **WHEN** a user opens `/ai`
+- **THEN** the guide is not shown until they activate "About Prompt"
+
 ### Requirement: Prompt Guide
-Next to the prompt, the page SHALL explain that a video that fits the context length uses `system` + `user`, a longer one is cut into parts summarized with `map system` + `map user` and then combined with `reduce system` + `reduce user`, and that `chapters`, `map chapters` and `reduce part` are snippets inserted into those messages. For each section it SHALL list the variables it can use, each with what it is replaced by.
+The prompt guide SHALL explain that a video that fits the context length uses `system` + `user`, a longer one is cut into parts summarized with `map system` + `map user` and then combined with `reduce system` + `reduce user`, and that `chapters`, `map chapters` and `reduce part` are snippets inserted into those messages. For each section it SHALL list the variables it can use, each with what it is replaced by.
 
 #### Scenario: Variables for a section
-- **WHEN** a user reads the guide for `reduce part`
+- **WHEN** a user opens the guide and reads `reduce part`
 - **THEN** it lists `{part}`, `{span}` and `{summary}`, each with a description
 
 #### Scenario: Every variable described

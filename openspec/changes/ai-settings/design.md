@@ -31,7 +31,7 @@ Web
 - `web/src/test/helpers.tsx` — `aPreferences`, `anOllamaServer` builders.
 - `web/src/lib/promptGuide.ts` — new: sections + variables + descriptions (mirrors `summary_prompt_section.rs`).
 - `web/src/lib/aiSettingsForm.ts` — new: form state ↔ preferences, `changedFields(saved, form)`.
-- `web/src/components/AiSettingsView.tsx` — new page; `PromptGuide.tsx` — the guide panel.
+- `web/src/components/AiSettingsView.tsx` — new page; `PromptHelp.tsx` — the "?" next to "Prompt" opening the guide in a scrollable popover.
 - `web/src/components/{SettingsMenu,PreferencesView,ThemeToggle}.tsx`, `web/src/App.tsx` — "AI" entry, `/ai` route, patches.
 
 E2E
