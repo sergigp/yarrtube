@@ -31,7 +31,7 @@ Ollama handler (acceptance, mockito Ollama)
 - [x] 2.20 `it_should_fail_with_bad_gateway_if_ollama_is_unreachable` — 502, `Could not reach Ollama at <url>: …`.
 
 Value objects
-- [ ] 2.21 `OllamaUrl` tests: http/https accepted, trailing slash stripped, schemeless/ftp/empty rejected with the spec message.
+- [x] 2.21 `OllamaUrl` tests: http/https accepted, trailing slash stripped, schemeless/ftp/empty rejected with the spec message.
 - [ ] 2.22 `SummaryModel` tests: blank and > 200 chars rejected with the spec message.
 - [ ] 2.23 `ContextLength` tests: 1024 and 131072 accepted, 1023 and 131073 rejected with the spec message.
 - [ ] 2.24 `Temperature` tests: 0 and 2 accepted, −0.1, 2.1 and NaN rejected with the spec message.
