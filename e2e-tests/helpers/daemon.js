@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { startOllamaStub } from '../ollama-stub.js'
 import { startPlexStub } from '../plex-stub.js'
 
 const E2E_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -16,11 +17,12 @@ const run = promisify(execFile)
  * Starts this worker's own yarrtube daemon: the image under test (`image`) in
  * a container of its own, with a fresh database and videos directory, on a
  * free port, pointed at the shared fake YouTube (`youtubeStubPort`) and at a
- * Plex stub of its own. During the upgrade check's phases nothing is started:
+ * Plex stub of its own. An Ollama stub of its own listens too, at `ollamaUrl`
+ * as the container reaches it, for the AI settings to be pointed at. During the upgrade check's phases nothing is started:
  * those run against the container `scripts/run-tests.sh` manages.
  *
  * `stop()` saves the container's log to `test-results/`, removes the
- * container, its directories and the Plex stub, and fails if the daemon
+ * container, its directories and the stubs, and fails if the daemon
  * logged a panic, which nothing the browser sees would reveal.
  */
 export async function startDaemon({ runId, workerIndex, image, youtubeStubPort }) {
@@ -32,12 +34,13 @@ export async function startDaemon({ runId, workerIndex, image, youtubeStubPort }
       stop: async () => {},
     }
   }
-  const [port, plexPort] = await freePorts(2)
+  const [port, plexPort, ollamaPort] = await freePorts(3)
   const dir = mkdtempSync(join(tmpdir(), 'yarrtube-e2e-'))
   const videosDir = join(dir, 'videos')
   mkdirSync(videosDir)
   mkdirSync(join(dir, 'config'))
   const plex = await startPlexStub(plexPort)
+  const ollama = await startOllamaStub(ollamaPort)
   const name = `yarrtube-e2e-${runId}-w${workerIndex}`
   await run('docker', [
     'run', '-d', '--name', name,
@@ -54,14 +57,20 @@ export async function startDaemon({ runId, workerIndex, image, youtubeStubPort }
     image,
   ])
   const url = `http://localhost:${port}`
-  const stop = () => stopDaemon({ name, dir, plex, runId, workerIndex })
+  const stop = () => stopDaemon({ name, dir, plex, ollama, runId, workerIndex })
   try {
     await waitForStatus(url)
   } catch (error) {
     await stop().catch(() => {})
     throw error
   }
-  return { url, videosDir, plexStubUrl: `http://localhost:${plexPort}`, stop }
+  return {
+    url,
+    videosDir,
+    plexStubUrl: `http://localhost:${plexPort}`,
+    ollamaUrl: `http://host.docker.internal:${ollamaPort}`,
+    stop,
+  }
 }
 
 // The daemon against the fake YouTube (see `fake-youtube/`): the stand-in
@@ -83,7 +92,7 @@ function fakeYoutubeArgs(youtubeStubPort) {
   ]
 }
 
-async function stopDaemon({ name, dir, plex, runId, workerIndex }) {
+async function stopDaemon({ name, dir, plex, ollama, runId, workerIndex }) {
   const { stdout, stderr } = await run('docker', ['logs', name], { maxBuffer: 64 * 1024 * 1024 })
   const log = stdout + stderr
   const logFile = join(E2E_DIR, 'test-results', `container-${runId}-w${workerIndex}.log`)
@@ -94,6 +103,7 @@ async function stopDaemon({ name, dir, plex, runId, workerIndex }) {
   await run('docker', ['exec', name, 'find', '/videos', '/config', '-mindepth', '1', '-delete'])
   await run('docker', ['rm', '-f', name])
   await plex.close()
+  await ollama.close()
   rmSync(dir, { recursive: true, force: true, maxRetries: 2 })
   if (log.includes('panicked at')) {
     throw new Error(`the daemon ${name} panicked (see ${logFile})`)

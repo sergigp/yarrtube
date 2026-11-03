@@ -24,8 +24,16 @@ spec: decisions here feed OpenSpec changes later.
   the previous one.
 - Summary model, prompt and the evidence behind them: [`evals/summaries/decisions.md`](../evals/summaries/decisions.md).
 - Prompts live in `prompts/<feature>/<version>.md`, one file per version, never
-  edited once evaluated: a change is a new version. The evals and (later) the
-  app read the same file.
+  edited once evaluated: a change is a new version. The evals and the app read
+  the same file.
+- Settings live in the app (Settings → AI, stored with the other preferences):
+  AI on/off, the Ollama URL (with a connection test that lists the models),
+  and for summaries the model, context length, temperature, thinking (shown
+  only for models whose Ollama capabilities include `thinking`, since Ollama
+  rejects `think` for the rest) and the prompt. The default prompt is the
+  shipped version, embedded at build time (`SummaryPrompt::shipped()`):
+  shipping a new version is changing that one path. Users who never saved a
+  prompt get it on upgrade; a saved prompt is kept until "Reset to default".
 
 ## Starting point in the codebase
 

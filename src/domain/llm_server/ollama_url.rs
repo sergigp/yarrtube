@@ -19,10 +19,6 @@ impl OllamaUrl {
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
     /// What follows an `http://` or `https://` scheme, without trailing
     /// slashes; `None` for any other scheme.
     fn host_and_path(value: &str) -> Option<&str> {
