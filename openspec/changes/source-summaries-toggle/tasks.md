@@ -21,7 +21,7 @@ Playlists handler (acceptance, real SQLite)
 - [x] 2.10 `it_should_fail_to_create_a_playlist_with_summaries_if_ai_is_off` — 409 `…for a playlist`, nothing stored, YouTube fake not called.
 - [x] 2.11 `it_should_enable_summaries_on_a_playlist` — AI + summaries on; only `summaries_enabled: true` → 200, stored `true`, others unchanged.
 - [x] 2.12 `it_should_fail_to_enable_summaries_on_a_playlist_if_summaries_are_off` — with a new interval → 409, playlist unchanged.
-- [ ] 2.13 `it_should_disable_summaries_on_a_playlist_while_ai_is_off`.
+- [x] 2.13 `it_should_disable_summaries_on_a_playlist_while_ai_is_off`.
 - [ ] 2.14 `it_should_list_playlists_with_their_summaries_setting`.
 
 Preferences (domain unit)
