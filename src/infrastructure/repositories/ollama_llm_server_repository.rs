@@ -238,6 +238,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_fail_if_the_server_replies_with_an_error() {
+        let mut server = mockito::Server::new();
+        let _version = server
+            .mock("GET", "/api/version")
+            .with_body(r#"{"version": "0.40.13"}"#)
+            .create();
+        let _tags = server.mock("GET", "/api/tags").with_status(500).create();
+
+        let result = OllamaLlmServerRepository::new().find(&url(&server));
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "HTTP status server error (500 Internal Server Error) for url ({}/api/tags)",
+                server.url()
+            ))
+        );
+    }
+
     fn url(server: &mockito::Server) -> OllamaUrl {
         OllamaUrl::new(server.url()).unwrap()
     }
