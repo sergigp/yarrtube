@@ -40,6 +40,10 @@ Yarrtube is designed to run on your NAS via Docker alongside the rest of your me
   <img src="doc/screenshot_plex.jpeg" alt="Yarrtube Plex Integration screenshot" width="520"/>
 </p>
 
+# One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/Yarrtube/)
+
 # Motivation
 
 This is a personal project. I'm an experienced software engineer coming back from a ~10-month sabbatical, and I wanted a real project to get my hands dirty again, both with writing code and with AI-assisted coding. I wanted to build something that I would actually use, and that would be useful to others too. Yarrtube is the result. If you are a recruiter/dev you can take a look at the [architecture](doc/ARCHITECTURE.md).
