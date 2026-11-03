@@ -45,7 +45,7 @@ Web (Vitest)
 
 ## 4. Verification
 
-- [ ] 4.1 `scripts/run-tests.sh --only web --only rust` passes.
+- [x] 4.1 `scripts/run-tests.sh --only web --only rust` passes.
 - [ ] 4.2 Manual (agent): `scripts/run-local.sh --port <free port> --fresh-videos`; with Playwright MCP, AI off: open add channel (no Advanced options), assert "Summarize videos" disabled with the AI settings link, follow it, assert `/ai` and dialog closed; `curl` a playlist create with `summaries_enabled: true` and assert 409. Enable AI + summaries via `PATCH /api/preferences` (stub Ollama URL), add a playlist with the box checked, assert the `POST` body has `summaries_enabled: true`; open its Edit settings, assert checked, uncheck, save, assert `PATCH` body `{ summaries_enabled: false }`; screenshot. Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.3 Manual (human): visual check of the checkbox and disabled hint in the four dialogs (light/dark, mobile width).
 
