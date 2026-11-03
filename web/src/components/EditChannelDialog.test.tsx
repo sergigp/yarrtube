@@ -74,15 +74,8 @@ describe('EditChannelDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('keeps the summaries setting, disabled, while summaries are off', async () => {
-    const { onSave, fetchMock } = renderDialog(
-      aChannel({ summaries_enabled: true, reconcile_interval_minutes: 180 }),
-      undefined,
-      {
-        'GET /api/categories': aCategoryList(),
-        'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: false }),
-      },
-    )
+  it('lets summaries be turned off while AI is off', async () => {
+    const { onSave, onOpenChange, fetchMock } = renderDialog(aChannel({ summaries_enabled: true }))
     const user = userEvent.setup()
     const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })
     await waitFor(() =>
@@ -90,13 +83,12 @@ describe('EditChannelDialog', () => {
     )
 
     expect(summaries).toBeChecked()
-    expect(summaries).toBeDisabled()
-    const amount = screen.getByLabelText('Check for new videos every')
-    await user.clear(amount)
-    await user.type(amount, '6')
+    expect(summaries).toBeEnabled()
+    await user.click(summaries)
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(onSave).toHaveBeenCalledExactlyOnceWith({ reconcile_interval_minutes: 360 })
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ summaries_enabled: false })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
   it('sends only the changed quality', async () => {

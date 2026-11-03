@@ -6,16 +6,24 @@ interface SummariesFieldProps {
   id: string
   checked: boolean
   onChange: (checked: boolean) => void
+  /** The source's stored value: when true the box stays enabled so summaries can be turned off. */
+  enabledOnSource?: boolean
   /** Called when the "AI settings" link is followed, to close the dialog. */
   onNavigateAway: () => void
 }
 
 /**
  * The "Summarize videos" checkbox of the add and edit source dialogs. Only
- * usable while AI and summaries are on; otherwise it keeps its value,
- * disabled, and points to the AI settings.
+ * usable while AI and summaries are on, or to turn off summaries a source
+ * already has; otherwise it is disabled and points to the AI settings.
  */
-export function SummariesField({ id, checked, onChange, onNavigateAway }: SummariesFieldProps) {
+export function SummariesField({
+  id,
+  checked,
+  onChange,
+  enabledOnSource = false,
+  onNavigateAway,
+}: SummariesFieldProps) {
   const available = useSummariesAvailable()
   const hintId = `${id}-hint`
   return (
@@ -25,7 +33,7 @@ export function SummariesField({ id, checked, onChange, onNavigateAway }: Summar
         type="checkbox"
         className="mt-0.5 size-4 shrink-0 accent-primary"
         checked={checked}
-        disabled={!available}
+        disabled={!available && !enabledOnSource}
         onChange={(event) => onChange(event.target.checked)}
         aria-describedby={hintId}
       />

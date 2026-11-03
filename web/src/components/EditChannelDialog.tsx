@@ -177,6 +177,7 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
         id="edit-channel-summaries"
         checked={form.summaries_enabled}
         onChange={changeSummaries}
+        enabledOnSource={channel.summaries_enabled}
         onNavigateAway={onClose}
       />
 
