@@ -1183,14 +1183,15 @@ When a task the tasks view lists has a recorded last error, the view SHALL show 
 - **THEN** the task's row shows no error text
 
 ### Requirement: Tasks View Tabs
-The tasks view SHALL group its tasks into tabs by task family, in this order: **Active**, **Downloads**, **Syncs**, and **Other**. Each tab SHALL show, beside its name, a count of the tasks it currently contains. A task belongs to a tab as follows:
+The tasks view SHALL group its tasks into tabs by task family, in this order: **Active**, **Downloads**, **Syncs**, **AI**, and **Other**. The **AI** tab SHALL show only while AI is enabled in the preferences, and SHALL NOT show while preferences are loading or failed to load. Each tab SHALL show, beside its name, a count of the tasks it currently contains. A task belongs to a tab as follows:
 
 - **Active**: every task whose status is `running`, regardless of its type.
 - **Downloads**: video download and thumbnail fetch tasks.
 - **Syncs**: playlist reconciliation, channel reconciliation and video sync tasks.
-- **Other**: every task that belongs to neither Downloads nor Syncs, including Plex collection reconciliation, the yt-dlp self-update, deletion of a video file or of a playlist's or channel's files, and any task type the view does not otherwise recognise.
+- **AI**: video summary tasks, while the **AI** tab shows.
+- **Other**: every task that belongs to none of Downloads, Syncs or a shown AI tab, including Plex collection reconciliation, the yt-dlp self-update, deletion of a video file or of a playlist's or channel's files, and any task type the view does not otherwise recognise.
 
-Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additionally in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later). Each task row SHALL show an icon that reflects the kind of work the task does (download, sync, deletion, or maintenance), so rows of different kinds within **Other** remain distinguishable.
+Every task SHALL appear in exactly one of Downloads, Syncs, AI, or Other, and additionally in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later). Each task row SHALL show an icon that reflects the kind of work the task does (download, sync, deletion, AI, or maintenance), so rows of different kinds within **Other** remain distinguishable.
 
 #### Scenario: View opens on the Active tab
 - **WHEN** a user opens the tasks view
@@ -1214,7 +1215,7 @@ Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additi
 
 #### Scenario: Counts match listed tasks
 - **WHEN** tasks of several families are present
-- **THEN** each tab's count matches the number of tasks it lists, and the Downloads, Syncs, and Other counts add up to the total number of tasks
+- **THEN** each tab's count matches the number of tasks it lists, and the counts of every tab but Active add up to the total number of tasks
 
 #### Scenario: No Cleanup or All tab
 - **WHEN** a user opens the tasks view
@@ -1223,6 +1224,22 @@ Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additi
 #### Scenario: Active tab is empty
 - **WHEN** no task is running
 - **THEN** the Active tab shows a message that nothing is running rather than an empty area, and the other tabs still list their tasks
+
+#### Scenario: AI tab lists video summaries
+- **WHEN** AI is enabled and the tasks include video summaries
+- **THEN** the AI tab shows between Syncs and Other and lists them, and the Other tab doesn't
+
+#### Scenario: AI tab with no tasks
+- **WHEN** AI is enabled and no video summary is queued
+- **THEN** the AI tab shows with a count of 0
+
+#### Scenario: AI turned off with summaries still queued
+- **WHEN** AI is off and the tasks include video summaries
+- **THEN** no AI tab shows and the Other tab lists them
+
+#### Scenario: Preferences not loaded
+- **WHEN** preferences are loading or failed to load
+- **THEN** no AI tab shows and the Other tab lists any video summaries
 
 ### Requirement: Tasks View Tab Bar Affordance
 The tasks view's tab bar SHALL make each tab look clickable and SHALL make the selected tab unmistakable. The tasks view SHALL be limited to a readable width and aligned to the left edge of the content area, like the other views, and the tab bar SHALL span exactly the width of the task list, its tabs sharing that width equally. The tab bar SHALL be drawn as a row of tabs over a horizontal rule, with the selected tab marked by an underline in the application's primary colour and its label in the full foreground colour and a heavier weight; unselected tabs SHALL show a muted label. Hovering an unselected tab SHALL visibly change its background and label colour. Each tab SHALL show an icon for its family, its name, and its count as a pill, with the selected tab's pill in the primary colour. On narrow screens each tab SHALL show only its icon and count, keeping its name as its accessible name, so that all tabs fit without horizontal scrolling. While at least one task is running, the **Active** tab SHALL show a live indicator beside its count. Each tab SHALL be at least 40 pixels tall and SHALL show a visible focus ring when focused from the keyboard. The tab bar SHALL look the same whatever the operating system's colour-scheme preference.
