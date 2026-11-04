@@ -50,7 +50,7 @@ import type {
   Video,
 } from './types'
 import { anyWorkInProgress } from '@/lib/libraryPolling'
-import { categoriesShown, summariesAvailable } from '@/lib/preferences'
+import { aiEnabled, categoriesShown, summariesAvailable } from '@/lib/preferences'
 
 // The sidebar lists change rarely and are refetched right after the user's
 // own actions; views showing live download progress poll quickly.
@@ -263,6 +263,11 @@ export function useCategoriesShown(): boolean {
   return categoriesShown(data, isError)
 }
 
+/** Whether AI is on, per the preferences. */
+export function useAiEnabled(): boolean {
+  return aiEnabled(usePreferences().data)
+}
+
 /** Whether sources can have their videos summarized, per the preferences. */
 export function useSummariesAvailable(): boolean {
   return summariesAvailable(usePreferences().data)
@@ -271,7 +276,8 @@ export function useSummariesAvailable(): boolean {
 /**
  * Returns a function that saves the preferences in `patch`, then shows the
  * saved ones everywhere and refetches the home videos, whose sections follow
- * them. Resolves with every preference as saved.
+ * them, and the library with its video lists, whose summaries do. Resolves
+ * with every preference as saved.
  */
 export function useSavePreferences(): (patch: PreferencesPatch) => Promise<Preferences> {
   const queryClient = useQueryClient()
@@ -279,9 +285,16 @@ export function useSavePreferences(): (patch: PreferencesPatch) => Promise<Prefe
     async (patch: PreferencesPatch) => {
       const saved = await patchPreferences(patch)
       queryClient.setQueryData(queryKeys.preferences, saved)
-      // Refetched even while home isn't shown, so going back to it doesn't
-      // first show sections from before the change.
-      await queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos, refetchType: 'all' })
+      // Refetched even while they aren't shown, so going back to one doesn't
+      // first show sections or summaries from before the change.
+      await Promise.all(
+        [
+          queryKeys.recentVideos,
+          queryKeys.channels,
+          queryKeys.playlists,
+          queryKeys.categories,
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'all' })),
+      )
       return saved
     },
     [queryClient],

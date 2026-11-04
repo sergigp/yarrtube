@@ -282,9 +282,8 @@ impl VideoSummarizer {
     ) -> Result<SummaryText, Failure> {
         info!(
             video_id = %video.id,
+            title = %video.title,
             call,
-            system = %messages.system,
-            user = %messages.user,
             "sending prompt to the model"
         );
         let started = Instant::now();

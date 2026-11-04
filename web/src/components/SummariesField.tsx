@@ -41,7 +41,7 @@ export function SummariesField({
         <Label htmlFor={id}>Summarize videos</Label>
         <p id={hintId} className="text-xs text-muted-foreground">
           {available ? (
-            'Generate an AI summary of each new video.'
+            'Generate and show an AI summary of each video.'
           ) : (
             <>
               Turn on AI summaries in{' '}

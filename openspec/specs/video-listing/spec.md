@@ -68,15 +68,15 @@ The system SHALL include each video's recorded sync time in the responses that l
 - **THEN** that video's entry reports its sync time as absent
 
 ### Requirement: Listed Videos Include Their Metadata
-The system SHALL include each video's publish time, description and channel name, taken from its generated metadata, in the responses that list the videos of a playlist and of a channel. The description SHALL be the same truncated plot recorded for the video's metadata file. For a video whose metadata has not been generated, the system SHALL report all three as absent.
+The system SHALL include each video's publish time and channel name, taken from its generated metadata, in the responses that list the videos of a playlist and of a channel. These responses SHALL NOT include the video's description. For a video whose metadata has not been generated, the system SHALL report both as absent.
 
 #### Scenario: Video with generated metadata is listed
 - **WHEN** a client lists the videos of a tracked playlist or channel that has a video with generated metadata
-- **THEN** that video's entry includes its publish time, its description and the name of the channel that published it
+- **THEN** that video's entry includes its publish time and the name of the channel that published it, and no description
 
 #### Scenario: Video without generated metadata is listed
 - **WHEN** a client lists the videos of a tracked playlist or channel that has a video whose metadata has not been generated
-- **THEN** that video's entry reports its publish time, description and channel name as absent, and every other field is still returned
+- **THEN** that video's entry reports its publish time and channel name as absent, and every other field is still returned
 
 ### Requirement: List Home Videos Across Sources
 The system SHALL provide an HTTP endpoint that returns, in one response, the downloaded videos of the home sections across every tracked channel and every tracked playlist not excluded from home, so that a YouTube video appears in at most one section.
@@ -221,7 +221,7 @@ The system SHALL include each video's subtitle language in the responses that li
 - **THEN** that video's entry reports its subtitle language as absent, and every other field is still returned
 
 ### Requirement: List Videos For A Category
-The system SHALL provide an HTTP endpoint that, given a category's identifier, returns the downloaded videos of all the category's members, each YouTube video once, ordered by sync time (the time the video was recorded by the system), newest first. When a YouTube video is tracked by more than one member, it SHALL be returned from a tracking channel when there is one. Playlists excluded from home SHALL still contribute their videos. Each returned video SHALL include every field a video has in the responses that list the videos of a playlist and of a channel, taken from the copy of the source it is returned from: its status, quality, file name, thumbnail, duration, watch state and position, record and sync times, publish time, description, channel name and subtitle language. Each SHALL also include the source that tracks it and its categories. When no category has the identifier, the endpoint SHALL respond with HTTP status 404.
+The system SHALL provide an HTTP endpoint that, given a category's identifier, returns the downloaded videos of all the category's members, each YouTube video once, ordered by sync time (the time the video was recorded by the system), newest first. When a YouTube video is tracked by more than one member, it SHALL be returned from a tracking channel when there is one. Playlists excluded from home SHALL still contribute their videos. Each returned video SHALL include every field a video has in the responses that list the videos of a playlist and of a channel, taken from the copy of the source it is returned from: its status, quality, file name, thumbnail, duration, watch state and position, record and sync times, publish time, channel name and subtitle language. Each SHALL also include the source that tracks it and its categories. When no category has the identifier, the endpoint SHALL respond with HTTP status 404.
 
 #### Scenario: Videos across members
 - **WHEN** the category "Chess" has a channel member with 2 downloaded videos and a playlist member with 1 downloaded video
@@ -233,11 +233,11 @@ The system SHALL provide an HTTP endpoint that, given a category's identifier, r
 
 #### Scenario: Metadata included
 - **WHEN** a member of the category has a downloaded video with generated metadata
-- **THEN** its entry includes its publish time, its description and the name of the channel that published it
+- **THEN** its entry includes its publish time and the name of the channel that published it, and no description
 
 #### Scenario: Metadata not yet generated
 - **WHEN** a member of the category has a downloaded video whose metadata has not been generated
-- **THEN** its entry reports its publish time, description and channel name as absent, and every other field is still returned
+- **THEN** its entry reports its publish time and channel name as absent, and every other field is still returned
 
 #### Scenario: A video tracked by two members
 - **WHEN** a YouTube video is tracked by both a channel member and a playlist member of the category
@@ -384,3 +384,22 @@ The system SHALL include each video's recorded chapters, in playback order, in t
 #### Scenario: Video with unchecked chapters is listed
 - **WHEN** a client lists the videos of a tracked playlist, channel or category that has a video whose chapters were never checked
 - **THEN** that video's entry includes an empty chapter list, and every other field is still returned
+
+### Requirement: Listed Videos Include Their Summary
+The system SHALL include each video's AI summary text in the responses that list the videos of a playlist, of a channel and of a category. It SHALL be reported as absent for a video with no stored summary, and for one whose summary is hidden (see `video-summaries`). In a category, whether it is hidden SHALL follow the source the video is returned from.
+
+#### Scenario: Video with a summary is listed
+- **WHEN** AI and summaries are on and a client lists the videos of a tracked playlist, channel or category whose source has summaries enabled and that has a video with a stored summary
+- **THEN** that video's entry includes the summary's text
+
+#### Scenario: Video without a summary is listed
+- **WHEN** a client lists a video that has no stored summary, whether it is waiting for one or was given up on
+- **THEN** that video's entry reports its summary as absent, and every other field is still returned
+
+#### Scenario: Hidden summary is listed
+- **WHEN** a client lists a video whose stored summary is hidden
+- **THEN** that video's entry reports its summary as absent
+
+#### Scenario: Category video returned from a channel that opted out
+- **WHEN** a category lists a YouTube video tracked by a channel with `summaries_enabled` `false` and a playlist with it `true`
+- **THEN** the video is returned from the channel and reports its summary as absent

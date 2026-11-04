@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Generates a short AI summary of each video from its transcript, through the user's Ollama server, for the sources that opted in, and stores it for later features to show.
+Generates a short AI summary of each video from its transcript, through the user's Ollama server, for the sources that opted in, stores it, and decides when it may be shown.
 
 ## Requirements
 
@@ -247,3 +247,26 @@ Generation SHALL be logged at info level from start to end: the start with the v
 #### Scenario: Failed
 - **WHEN** a generation fails
 - **THEN** the logs hold the specific reason, at error level
+
+### Requirement: Summary Visibility
+A stored summary SHALL be shown only while AI is on, summaries are on and the source holding that copy of the video has `summaries_enabled` `true`. Otherwise the system SHALL treat the video as having no summary wherever it is shown. A hidden summary SHALL stay stored and SHALL show again, without being regenerated, once all three conditions hold.
+
+#### Scenario: AI turned off
+- **WHEN** a video has a stored summary and AI is off
+- **THEN** its summary is not shown and stays stored
+
+#### Scenario: Summaries turned off
+- **WHEN** a video has a stored summary, AI is on and summaries are off
+- **THEN** its summary is not shown and stays stored
+
+#### Scenario: Source opted out
+- **WHEN** a video has a stored summary, AI and summaries are on, and its channel has `summaries_enabled` `false`
+- **THEN** its summary is not shown and stays stored
+
+#### Scenario: Source opted back in
+- **WHEN** a channel with a hidden summary turns `summaries_enabled` back on
+- **THEN** the summary is shown again and Ollama is not called
+
+#### Scenario: Same video in two sources
+- **WHEN** a YouTube video is tracked by a channel with `summaries_enabled` `true` and a playlist with it `false`, and both copies have a stored summary
+- **THEN** the channel's copy shows its summary and the playlist's copy shows none

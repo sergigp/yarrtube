@@ -610,14 +610,14 @@ In a playlist or channel detail view on viewports at or above the desktop breakp
 - **THEN** the page content extends behind the browser's toolbars and the browser is able to collapse them, as it does for any normally scrolling page
 
 ### Requirement: Video Detail Links To YouTube
-A selected video's detail pane SHALL show, at the end of its title row and whether the details section is expanded or collapsed, an icon-only link whose accessible name and tooltip are "Open video on YouTube", which opens that video on YouTube in a new tab.
+A selected video's detail pane SHALL show, at the end of its title row, an icon-only link whose accessible name and tooltip are "Open video on YouTube", which opens that video on YouTube in a new tab.
 
 #### Scenario: Opening a video on YouTube
 - **WHEN** a user activates the "Open video on YouTube" link for a selected video
 - **THEN** a new tab opens to that video's page on youtube.com
 
 #### Scenario: Visible while details are collapsed
-- **WHEN** a user on a mobile-width viewport selects a video with the details section collapsed
+- **WHEN** a user on a mobile-width viewport selects a video
 - **THEN** the "Open video on YouTube" link is visible in the title row
 
 ### Requirement: Resume Playback
@@ -829,20 +829,16 @@ In the video detail pane, the video's title SHALL occupy its own row, taking all
 - **WHEN** a user on a mobile-width viewport selects a video with a long title
 - **THEN** the title wraps across the width of the detail pane left by the video's actions, and the meta line appears below it
 
-### Requirement: Collapsible Video Details
-The video detail pane SHALL always show the video's title and its meta line. The rest of the pane (the status indicator when the video is not downloaded, the description and the storage location) SHALL sit in a section the user can expand and collapse. The storage location SHALL be the folder holding the video's file (its source's storage path joined with the file's folder, for example `channels/some-channel/Season 2026`), never the file name itself, so episode codes do not appear in the UI. This section SHALL start collapsed on viewports narrower than the desktop breakpoint and expanded at or above it. The pane SHALL NOT show a quality indicator, and SHALL NOT show a status indicator for a downloaded video.
+### Requirement: Video Detail Status And Location
+The video detail pane SHALL always show, below the meta line, the video's storage location and, when the video is not downloaded, a status indicator, at every viewport size and with no control to expand or collapse them. The storage location SHALL be the folder holding the video's file, never the file name itself, so episode codes do not appear in the UI. The pane SHALL NOT show a quality indicator, a status indicator for a downloaded video, or the video's YouTube description.
 
-#### Scenario: Details start collapsed on mobile
+#### Scenario: Details on a mobile viewport
 - **WHEN** a user on a mobile-width viewport opens a playlist or channel detail view
-- **THEN** the detail pane shows the video's title, its meta line and an expand control, and hides the description and storage location
+- **THEN** the detail pane shows the video's title, its meta line and its storage location, with no "More" or "Less" control
 
-#### Scenario: Expanding details
-- **WHEN** a user activates the expand control in a collapsed detail pane
-- **THEN** the description and storage location become visible, and the control collapses them again when activated
-
-#### Scenario: Details start expanded on desktop
+#### Scenario: Details on a desktop viewport
 - **WHEN** a user on a desktop-width viewport opens a playlist or channel detail view
-- **THEN** the detail pane shows the title, meta line, description and storage location without needing to be expanded
+- **THEN** the detail pane shows the video's title, its meta line and its storage location, with no "More" or "Less" control
 
 #### Scenario: Storage location of a downloaded episode
 - **WHEN** a downloaded video's recorded filename is `Season 2026/S2026E031501 - Title.mp4` in a channel stored at `channels/some-channel`
@@ -853,15 +849,15 @@ The video detail pane SHALL always show the video's title and its meta line. The
 - **THEN** the detail pane shows its source's storage path
 
 #### Scenario: Downloaded video shows no status indicator
-- **WHEN** a user expands the details of a downloaded video
+- **WHEN** a user selects a downloaded video
 - **THEN** no status or quality indicator is shown
 
 #### Scenario: Pending video shows its status
-- **WHEN** a user expands the details of a video that is pending, downloading, retrying or errored
+- **WHEN** a user selects a video that is pending, downloading, retrying or errored
 - **THEN** a status indicator shows that state, and no quality indicator is shown
 
 ### Requirement: Video Detail Meta Line
-The video detail pane SHALL show a meta line directly below the title, visible whether the details section is expanded or collapsed. The line SHALL read `Watched · <channel name> · Published <date> · Synced <relative time>`:
+The video detail pane SHALL show a meta line directly below the title. The line SHALL read `Watched · <channel name> · Published <date> · Synced <relative time>`:
 - "Watched" SHALL appear only when the video is watched.
 - The channel name SHALL appear only in a playlist detail view.
 - The publish time SHALL be shown as a date, without a time of day.
@@ -885,31 +881,12 @@ The video detail pane SHALL show a meta line directly below the title, visible w
 - **THEN** the meta line shows no "Synced" part and no separator for it
 
 #### Scenario: Meta line on a collapsed mobile pane
-- **WHEN** a user on a mobile-width viewport opens a detail view with the details section collapsed
+- **WHEN** a user on a mobile-width viewport opens a detail view
 - **THEN** the meta line is visible below the title
 
 #### Scenario: Video without metadata or sync time
 - **WHEN** a user selects a pending video that has neither generated metadata nor a sync time
 - **THEN** no meta line is shown
-
-### Requirement: Video Detail Description
-The expandable section of the video detail pane SHALL show the video's description, preserving its line breaks and rendering web URLs in it as links that open in a new tab. The description SHALL be clamped to about four lines, with a "Show more" control, shown only when the text exceeds the clamp, that reveals the rest and can collapse it again. When the video has no description, or an empty one, no description block SHALL be shown.
-
-#### Scenario: Long description
-- **WHEN** a user expands the details of a video whose description is longer than four lines
-- **THEN** the first four lines are shown followed by a "Show more" control, and activating it reveals the whole description
-
-#### Scenario: Short description
-- **WHEN** a user expands the details of a video whose description fits in four lines
-- **THEN** the whole description is shown and no "Show more" control is present
-
-#### Scenario: Link in the description
-- **WHEN** a user activates a URL inside a video's description
-- **THEN** that URL opens in a new tab
-
-#### Scenario: Video without a description
-- **WHEN** a user expands the details of a video with no description
-- **THEN** no description block is shown
 
 ### Requirement: Compact Mobile Player
 On viewports narrower than the desktop breakpoint, the video player area SHALL be sized to the video's own aspect ratio, with no blank padding above or below the video. The player SHALL start one standard page gutter below the detail view's page header. While the page scrolls, the page header SHALL scroll away and the player SHALL stay pinned directly below the application header.
@@ -1206,14 +1183,15 @@ When a task the tasks view lists has a recorded last error, the view SHALL show 
 - **THEN** the task's row shows no error text
 
 ### Requirement: Tasks View Tabs
-The tasks view SHALL group its tasks into tabs by task family, in this order: **Active**, **Downloads**, **Syncs**, and **Other**. Each tab SHALL show, beside its name, a count of the tasks it currently contains. A task belongs to a tab as follows:
+The tasks view SHALL group its tasks into tabs by task family, in this order: **Active**, **Downloads**, **Syncs**, **AI**, and **Other**. The **AI** tab SHALL show only while AI is enabled in the preferences, and SHALL NOT show while preferences are loading or failed to load. Each tab SHALL show, beside its name, a count of the tasks it currently contains. A task belongs to a tab as follows:
 
 - **Active**: every task whose status is `running`, regardless of its type.
 - **Downloads**: video download and thumbnail fetch tasks.
 - **Syncs**: playlist reconciliation, channel reconciliation and video sync tasks.
-- **Other**: every task that belongs to neither Downloads nor Syncs, including Plex collection reconciliation, the yt-dlp self-update, deletion of a video file or of a playlist's or channel's files, and any task type the view does not otherwise recognise.
+- **AI**: video summary tasks, while the **AI** tab shows.
+- **Other**: every task that belongs to none of Downloads, Syncs or a shown AI tab, including Plex collection reconciliation, the yt-dlp self-update, deletion of a video file or of a playlist's or channel's files, and any task type the view does not otherwise recognise.
 
-Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additionally in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later). Each task row SHALL show an icon that reflects the kind of work the task does (download, sync, deletion, or maintenance), so rows of different kinds within **Other** remain distinguishable.
+Every task SHALL appear in exactly one of Downloads, Syncs, AI, or Other, and additionally in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later). Each task row SHALL show an icon that reflects the kind of work the task does (download, sync, deletion, AI, or maintenance), so rows of different kinds within **Other** remain distinguishable.
 
 #### Scenario: View opens on the Active tab
 - **WHEN** a user opens the tasks view
@@ -1237,7 +1215,7 @@ Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additi
 
 #### Scenario: Counts match listed tasks
 - **WHEN** tasks of several families are present
-- **THEN** each tab's count matches the number of tasks it lists, and the Downloads, Syncs, and Other counts add up to the total number of tasks
+- **THEN** each tab's count matches the number of tasks it lists, and the counts of every tab but Active add up to the total number of tasks
 
 #### Scenario: No Cleanup or All tab
 - **WHEN** a user opens the tasks view
@@ -1246,6 +1224,22 @@ Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additi
 #### Scenario: Active tab is empty
 - **WHEN** no task is running
 - **THEN** the Active tab shows a message that nothing is running rather than an empty area, and the other tabs still list their tasks
+
+#### Scenario: AI tab lists video summaries
+- **WHEN** AI is enabled and the tasks include video summaries
+- **THEN** the AI tab shows between Syncs and Other and lists them, and the Other tab doesn't
+
+#### Scenario: AI tab with no tasks
+- **WHEN** AI is enabled and no video summary is queued
+- **THEN** the AI tab shows with a count of 0
+
+#### Scenario: AI turned off with summaries still queued
+- **WHEN** AI is off and the tasks include video summaries
+- **THEN** no AI tab shows and the Other tab lists them
+
+#### Scenario: Preferences not loaded
+- **WHEN** preferences are loading or failed to load
+- **THEN** no AI tab shows and the Other tab lists any video summaries
 
 ### Requirement: Tasks View Tab Bar Affordance
 The tasks view's tab bar SHALL make each tab look clickable and SHALL make the selected tab unmistakable. The tasks view SHALL be limited to a readable width and aligned to the left edge of the content area, like the other views, and the tab bar SHALL span exactly the width of the task list, its tabs sharing that width equally. The tab bar SHALL be drawn as a row of tabs over a horizontal rule, with the selected tab marked by an underline in the application's primary colour and its label in the full foreground colour and a heavier weight; unselected tabs SHALL show a muted label. Hovering an unselected tab SHALL visibly change its background and label colour. Each tab SHALL show an icon for its family, its name, and its count as a pill, with the selected tab's pill in the primary colour. On narrow screens each tab SHALL show only its icon and count, keeping its name as its accessible name, so that all tabs fit without horizontal scrolling. While at least one task is running, the **Active** tab SHALL show a live indicator beside its count. Each tab SHALL be at least 40 pixels tall and SHALL show a visible focus ring when focused from the keyboard. The tab bar SHALL look the same whatever the operating system's colour-scheme preference.
@@ -2353,7 +2347,7 @@ The tasks view SHALL describe a quality check task in plain language, naming the
 - **THEN** the task is still described as a quality check, using a generic placeholder in place of the missing names
 
 ### Requirement: Summarize Videos Checkbox
-The add and edit dialogs for channels and playlists SHALL show a "Summarize videos" checkbox described by the hint "Generate an AI summary of each new video.". In add dialogs it SHALL be always visible, below "Save to" and categories (not in "Advanced options"), unchecked by default, sent as `summaries_enabled`. Edit dialogs SHALL prefill it and send `summaries_enabled` only when changed.
+The add and edit dialogs for channels and playlists SHALL show a "Summarize videos" checkbox described by the hint "Generate and show an AI summary of each video.". In add dialogs it SHALL be always visible, below "Save to" and categories (not in "Advanced options"), unchecked by default, sent as `summaries_enabled`. Edit dialogs SHALL prefill it and send `summaries_enabled` only when changed.
 
 #### Scenario: Visible without advanced options
 - **WHEN** a user opens either add dialog without expanding "Advanced options"
@@ -2393,3 +2387,21 @@ The add and edit dialogs for channels and playlists SHALL show a "Summarize vide
 #### Scenario: Following the link
 - **WHEN** AI is off and a user activates "AI settings" in the hint
 - **THEN** the dialog closes and the AI page at `/ai` opens
+
+### Requirement: Video Detail AI Summary
+The video detail pane SHALL show the video's summary, when the listing reports one, in full between the meta line and the storage location, under the label "AI summary", at every viewport size. Line breaks in the summary SHALL be kept. When the listing reports none, the pane SHALL show neither the text nor the label.
+
+#### Scenario: Video with a summary
+- **WHEN** a user selects a video in a playlist, channel or category view whose listing entry has a summary
+- **THEN** the detail pane shows "AI summary" and the whole summary below the meta line, with no control to expand it
+
+#### Scenario: Video without a summary
+- **WHEN** a user selects a video whose listing entry has no summary
+- **THEN** the detail pane shows no "AI summary" label and no placeholder
+
+### Requirement: Saved Preferences Refresh Video Lists
+Saving preferences SHALL refetch the playlist, channel and category video lists, including those not on screen, so returning to one doesn't first show a summary that was turned off.
+
+#### Scenario: Turning AI off and going back
+- **WHEN** a user viewing a video with a summary goes to AI settings, turns AI off and returns to the video
+- **THEN** the detail pane shows no summary once the list has refetched

@@ -460,6 +460,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.category_repository.clone(),
             category_video_collector(infrastructure),
             infrastructure.preferences_repository.clone(),
+            infrastructure.video_summary_repository.clone(),
         ),
         task_view_searcher: TaskViewSearcher::new(
             infrastructure.task_repository.clone(),

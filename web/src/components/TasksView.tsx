@@ -1,7 +1,15 @@
 import { useState } from 'react'
-import { Activity, Download, RotateCw, Trash2, Wrench, type LucideIcon } from 'lucide-react'
+import {
+  Activity,
+  Download,
+  RotateCw,
+  Sparkles,
+  Trash2,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
 import { reconcileChannel, reconcilePlaylist } from '@/api/client'
-import { useInvalidateTasks, useTasks } from '@/api/queries'
+import { useAiEnabled, useInvalidateTasks, useTasks } from '@/api/queries'
 import { formatRelativeTime } from '@/lib/formatDateTime'
 import {
   describeTask,
@@ -12,7 +20,7 @@ import {
   taskCategory,
   taskKind,
   TASK_SEARCH_THRESHOLD,
-  TASK_TABS,
+  taskTabs,
   type SyncTarget,
   type TaskKind,
   type TaskTab,
@@ -41,6 +49,7 @@ const TAB_LABELS: Record<TaskTab, string> = {
   active: 'Active',
   downloads: 'Downloads',
   syncs: 'Syncs',
+  ai: 'AI',
   other: 'Other',
 }
 
@@ -48,6 +57,7 @@ const TAB_ICON: Record<TaskTab, LucideIcon> = {
   active: Activity,
   downloads: Download,
   syncs: RotateCw,
+  ai: Sparkles,
   other: Wrench,
 }
 
@@ -55,6 +65,7 @@ const KIND_ICON: Record<TaskKind, LucideIcon> = {
   download: Download,
   sync: RotateCw,
   delete: Trash2,
+  ai: Sparkles,
   maintenance: Wrench,
 }
 
@@ -75,6 +86,7 @@ export function TasksView() {
 
 function TaskTabs() {
   const { data: tasks, error } = useTasks()
+  const aiEnabled = useAiEnabled()
   const [tab, setTab] = useState<TaskTab>('active')
   const [search, setSearch] = useState('')
 
@@ -90,8 +102,8 @@ function TaskTabs() {
     return <p className="text-sm text-muted-foreground">No pending or in-progress tasks.</p>
   }
 
-  const counts = tabCounts(tasks)
-  const tabTasks = tasksForTab(tasks, tab)
+  const counts = tabCounts(tasks, aiEnabled)
+  const tabTasks = tasksForTab(tasks, tab, aiEnabled)
   const showSearch = tabTasks.length > TASK_SEARCH_THRESHOLD
   const query = showSearch ? search.trim() : ''
   const rows = query ? tabTasks.filter((task) => matchesTask(task, query)) : tabTasks
@@ -107,7 +119,7 @@ function TaskTabs() {
         }}
       >
         <TabsList variant="line">
-          {TASK_TABS.map((value) => {
+          {taskTabs(aiEnabled).map((value) => {
             const TabIcon = TAB_ICON[value]
             return (
               <TabsTrigger key={value} value={value}>

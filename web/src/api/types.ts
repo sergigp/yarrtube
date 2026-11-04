@@ -70,12 +70,13 @@ export interface Video {
   position_seconds: number
   synced_at: string | null
   published_at: string | null
-  description: string | null
   channel_name: string | null
   /** The fetched subtitles' language code (e.g. `en`), null until fetched. */
   subtitle_language: string | null
   /** YouTube chapters in playback order; empty when none or not checked yet. */
   chapters: Chapter[]
+  /** The AI summary; null when the video has none or it is hidden. */
+  summary: string | null
 }
 
 /** One of a video's chapters, in whole seconds from the start of the video. */

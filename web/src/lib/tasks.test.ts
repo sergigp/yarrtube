@@ -9,6 +9,7 @@ import {
   taskCategory,
   taskFamily,
   taskKind,
+  taskTabs,
 } from './tasks'
 import { aTask } from '@/test/helpers'
 
@@ -93,7 +94,7 @@ describe('describeTask', () => {
     expect(describeTask(aTask({ task_type: 'fetch_chapters', payload: {} }))).toBe(
       'Fetching chapters of a video in an unknown playlist or channel',
     )
-    expect(taskFamily(aTask({ task_type: 'fetch_chapters' }))).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'fetch_chapters' }), false)).toBe('downloads')
     expect(taskKind(aTask({ task_type: 'fetch_chapters' }))).toBe('download')
   })
 
@@ -123,7 +124,7 @@ describe('describeTask', () => {
     expect(describeTask(aTask({ task_type: 'upgrade_quality', payload: {} }))).toBe(
       'Checking the quality of a video in an unknown playlist or channel',
     )
-    expect(taskFamily(aTask({ task_type: 'upgrade_quality' }))).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'upgrade_quality' }), false)).toBe('downloads')
     expect(taskKind(aTask({ task_type: 'upgrade_quality' }))).toBe('download')
   })
 
@@ -198,24 +199,53 @@ describe('taskCategory and byCategory', () => {
 
 describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
   it('maps each task type to downloads, syncs or other, and unknown types to other', () => {
-    expect(taskFamily(aTask({ task_type: 'download_video' }))).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }))).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'fetch_subtitles' }))).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }))).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'reconcile_channel' }))).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'update_ytdlp' }))).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'delete_video_file' }))).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'delete_playlist_files' }))).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'delete_channel_files' }))).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'mystery_task' }))).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'download_video' }), false)).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }), false)).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'fetch_subtitles' }), false)).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }), false)).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'reconcile_channel' }), false)).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'update_ytdlp' }), false)).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'delete_video_file' }), false)).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'delete_playlist_files' }), false)).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'delete_channel_files' }), false)).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'mystery_task' }), false)).toBe('other')
+  })
+
+  it('puts video summaries in the ai family while AI is on', () => {
+    expect(taskFamily(aTask({ task_type: 'summarize_video' }), true)).toBe('ai')
+  })
+
+  it('puts video summaries in the other family while AI is off', () => {
+    expect(taskFamily(aTask({ task_type: 'summarize_video' }), false)).toBe('other')
+  })
+
+  it('lists the ai tab between syncs and other only while AI is on', () => {
+    expect(taskTabs(true)).toEqual(['active', 'downloads', 'syncs', 'ai', 'other'])
+    expect(taskTabs(false)).toEqual(['active', 'downloads', 'syncs', 'other'])
+  })
+
+  it('counts every task once across tabs while AI is on', () => {
+    const tasks = [
+      aTask({ id: 1, task_type: 'summarize_video', status: 'running' }),
+      aTask({ id: 2, task_type: 'summarize_video' }),
+      aTask({ id: 3, task_type: 'download_video' }),
+      aTask({ id: 4, task_type: 'reconcile_channel' }),
+      aTask({ id: 5, task_type: 'update_ytdlp' }),
+    ]
+
+    expect(tabCounts(tasks, true)).toEqual({ active: 1, downloads: 1, syncs: 1, ai: 2, other: 1 })
+  })
+
+  it('gives video summaries the ai kind', () => {
+    expect(taskKind(aTask({ task_type: 'summarize_video' }))).toBe('ai')
   })
 
   it('puts Plex label syncs in the other family', () => {
-    expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }))).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }), false)).toBe('other')
   })
 
   it('puts video syncs in the syncs family', () => {
-    expect(taskFamily(aTask({ task_type: 'sync_video' }))).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'sync_video' }), false)).toBe('syncs')
   })
 
   it("returns only running tasks of any type for the 'active' tab", () => {
@@ -228,7 +258,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       run_at: '2999-01-01T00:00:00Z',
     })
 
-    const active = tasksForTab([pendingDownload, runningSync, runningDownload], 'active')
+    const active = tasksForTab([pendingDownload, runningSync, runningDownload], 'active', false)
 
     expect(active.map((task) => task.id).sort()).toEqual([1, 2])
     expect(active.every((task) => task.status === 'running')).toBe(true)
@@ -242,7 +272,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       aTask({ id: 4, task_type: 'update_ytdlp' }),
     ]
 
-    expect(tasksForTab(tasks, 'syncs').map((task) => task.id)).toEqual([1, 2])
+    expect(tasksForTab(tasks, 'syncs', false).map((task) => task.id)).toEqual([1, 2])
   })
 
   it('collects yt-dlp update, deletions and unknown types in the other tab', () => {
@@ -256,7 +286,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       aTask({ id: 7, task_type: 'reconcile_channel' }),
     ]
 
-    expect(tasksForTab(tasks, 'other').map((task) => task.id)).toEqual([1, 2, 3, 4, 5])
+    expect(tasksForTab(tasks, 'other', false).map((task) => task.id)).toEqual([1, 2, 3, 4, 5])
   })
 
   it('returns counts where downloads, syncs and other add up to every task', () => {
@@ -268,7 +298,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       aTask({ id: 5, task_type: 'update_ytdlp', status: 'running' }),
     ]
 
-    expect(tabCounts(tasks)).toEqual({ active: 2, downloads: 2, syncs: 1, other: 2 })
+    expect(tabCounts(tasks, false)).toEqual({ active: 2, downloads: 2, syncs: 1, ai: 0, other: 2 })
   })
 
   it('maps each task type to its icon kind', () => {

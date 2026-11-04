@@ -1,6 +1,6 @@
-import { Fragment, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { Fragment, type JSX } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import { avatarMediaUrl } from '@/api/client'
 import type { ChannelListItem, Video } from '@/api/types'
 import { formatDate, formatDateTime, formatRelativeTime } from '@/lib/formatDateTime'
@@ -9,7 +9,6 @@ import { PlaybackSpeedMenu } from './PlaybackSpeedMenu'
 import { MarkWatchedButton } from './MarkWatchedButton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
 import { storageLocation } from '@/lib/storageLocation'
 import { channelPath } from '@/lib/sourcePath'
 
@@ -19,12 +18,6 @@ const STATUS_LABELS: Record<string, string> = {
   ERRORED_RETRYING: 'Retrying',
   ERRORED: 'Errored',
 }
-
-// Tailwind's `md` breakpoint: details start expanded from here up.
-const DESKTOP_QUERY = '(min-width: 48rem)'
-
-// A web URL, not counting trailing punctuation such as a sentence's full stop.
-const URL_PATTERN = /(https?:\/\/[^\s]*[^\s.,;:!?)\]'"])/g
 
 interface VideoDetailProps {
   basePath: string
@@ -49,7 +42,6 @@ export function VideoDetail({
   playbackRate,
   onPlaybackRateChange,
 }: VideoDetailProps) {
-  const [expanded, setExpanded] = useState(() => window.matchMedia(DESKTOP_QUERY).matches)
   const location = storageLocation(basePath, video.filename)
 
   return (
@@ -83,27 +75,27 @@ export function VideoDetail({
         </div>
       </div>
       <MetaLine video={video} showChannelName={!channel} />
-      {expanded && (
-        <div className="mt-3 mb-1">
-          {video.status !== 'DOWNLOADED' && (
-            <Badge variant="outline" className="mb-2">
-              {STATUS_LABELS[video.status] ?? video.status}
-            </Badge>
-          )}
-          {video.description && <Description key={video.id} text={video.description} />}
-          <p className="mt-2 text-xs break-words text-muted-foreground">{location}</p>
-        </div>
-      )}
-      <button
-        type="button"
-        className="mt-2 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        onClick={() => setExpanded((value) => !value)}
-        aria-expanded={expanded}
-      >
-        {expanded ? 'Less' : 'More'}
-        <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} />
-      </button>
+      {video.summary && <AiSummary summary={video.summary} />}
+      <div className="mt-2">
+        {video.status !== 'DOWNLOADED' && (
+          <Badge variant="outline" className="mb-2">
+            {STATUS_LABELS[video.status] ?? video.status}
+          </Badge>
+        )}
+        <p className="text-xs break-words text-muted-foreground">{location}</p>
+      </div>
     </div>
+  )
+}
+
+/** The video's AI summary, in full; its line breaks are kept. */
+function AiSummary({ summary }: { summary: string }) {
+  const label = 'AI summary'
+  return (
+    <section aria-label={label} className="mt-3">
+      <h4 className="text-xs font-medium text-muted-foreground">{label}</h4>
+      <p className="mt-1 text-sm break-words whitespace-pre-line text-foreground">{summary}</p>
+    </section>
   )
 }
 
@@ -168,65 +160,5 @@ function MetaLine({ video, showChannelName }: { video: Video; showChannelName: b
         ),
       )}
     </p>
-  )
-}
-
-/**
- * The description clamped to 4 lines, with a "Show more" toggle shown only
- * when the text overflows the clamp. Line breaks are kept and URLs are
- * rendered as links opening in a new tab.
- */
-function Description({ text }: { text: string }) {
-  const ref = useRef<HTMLParagraphElement>(null)
-  const [showAll, setShowAll] = useState(false)
-  const [overflows, setOverflows] = useState(false)
-
-  useLayoutEffect(() => {
-    const element = ref.current
-    if (!element || showAll) {
-      return
-    }
-    const measure = () => setOverflows(element.scrollHeight > element.clientHeight)
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [text, showAll])
-
-  return (
-    <div className="mb-2">
-      <p
-        ref={ref}
-        className={cn(
-          'text-sm break-words whitespace-pre-line text-foreground',
-          !showAll && 'line-clamp-4',
-        )}
-      >
-        {text.split(URL_PATTERN).map((segment, index) =>
-          index % 2 === 1 ? (
-            <a
-              key={index}
-              href={segment}
-              target="_blank"
-              rel="noopener"
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              {segment}
-            </a>
-          ) : (
-            segment
-          ),
-        )}
-      </p>
-      {(overflows || showAll) && (
-        <button
-          type="button"
-          className="mt-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => setShowAll((value) => !value)}
-        >
-          {showAll ? 'Show less' : 'Show more'}
-        </button>
-      )}
-    </div>
   )
 }

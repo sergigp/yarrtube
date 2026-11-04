@@ -35,10 +35,10 @@ pub struct VideoResponse {
     pub position_seconds: i64,
     pub synced_at: Option<DateTime<Utc>>,
     pub published_at: Option<DateTime<Utc>>,
-    pub description: Option<String>,
     pub channel_name: Option<String>,
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
+    pub summary: Option<String>,
 }
 
 /// One of a video's chapters, in whole seconds from the start of the video.
@@ -62,13 +62,12 @@ impl From<VideoChapter> for ChapterResponse {
 impl From<VideoView> for VideoResponse {
     fn from(view: VideoView) -> Self {
         let video = view.video;
-        let (published_at, description, channel_name) = match view.metadata {
-            Some(metadata) => (
-                Some(metadata.published_at),
-                Some(metadata.plot),
-                Some(metadata.studio),
-            ),
-            None => (None, None, None),
+        let summary = view
+            .summary
+            .map(|summary| summary.text.as_str().to_string());
+        let (published_at, channel_name) = match view.metadata {
+            Some(metadata) => (Some(metadata.published_at), Some(metadata.studio)),
+            None => (None, None),
         };
         Self {
             subtitle_language: video.subtitle_language(),
@@ -85,7 +84,6 @@ impl From<VideoView> for VideoResponse {
             updated_at: video.updated_at,
             synced_at: video.synced_at,
             published_at,
-            description,
             channel_name,
             chapters: video
                 .chapters
@@ -93,6 +91,7 @@ impl From<VideoView> for VideoResponse {
                 .into_iter()
                 .map(ChapterResponse::from)
                 .collect(),
+            summary,
         }
     }
 }
@@ -192,10 +191,10 @@ pub struct CategoryVideoResponse {
     pub position_seconds: i64,
     pub synced_at: Option<DateTime<Utc>>,
     pub published_at: Option<DateTime<Utc>>,
-    pub description: Option<String>,
     pub channel_name: Option<String>,
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
+    pub summary: Option<String>,
     pub source: HomeVideoSourceResponse,
     pub category_ids: Vec<String>,
 }
@@ -206,6 +205,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
         let video = VideoResponse::from(VideoView {
             video: view.video,
             metadata: view.metadata,
+            summary: view.summary,
         });
         Self {
             id: video.id,
@@ -221,10 +221,10 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
             position_seconds: video.position_seconds,
             synced_at: video.synced_at,
             published_at: video.published_at,
-            description: video.description,
             channel_name: video.channel_name,
             subtitle_language: video.subtitle_language,
             chapters: video.chapters,
+            summary: video.summary,
             source: HomeVideoSourceResponse::from(view.source),
             category_ids: view
                 .category_ids

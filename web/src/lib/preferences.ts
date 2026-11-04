@@ -36,7 +36,12 @@ export function categoriesShown(preferences: Preferences | undefined, failed: bo
   return effective(preferences, failed)?.categories_enabled ?? false
 }
 
+/** Whether AI is on. */
+export function aiEnabled(preferences: Preferences | undefined): boolean {
+  return preferences?.ai_enabled ?? false
+}
+
 /** Whether sources can have their videos summarized: AI and summaries on. */
 export function summariesAvailable(preferences: Preferences | undefined): boolean {
-  return (preferences?.ai_enabled ?? false) && (preferences?.summaries_enabled ?? false)
+  return aiEnabled(preferences) && (preferences?.summaries_enabled ?? false)
 }

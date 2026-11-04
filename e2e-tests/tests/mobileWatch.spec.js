@@ -53,19 +53,11 @@ test('player sticks under the header while the list scrolls @mobile', async ({ p
     .toBe(Math.round(header.y + header.height))
 })
 
-test('video details start collapsed and More expands them @mobile', async ({ page }) => {
+test('video details show without a More control @mobile', async ({ page }) => {
   await page.goto(playlistPage(seeded))
   await expect(page.locator('main h3').first()).toHaveText(seeded.video.title)
 
-  // The YouTube link sits in the title row, so it shows while collapsed.
   await expect(page.getByRole('link', { name: 'Open video on YouTube' })).toBeVisible()
-  const more = page.getByRole('button', { name: 'More', exact: true })
-  await expect(more).toHaveAttribute('aria-expanded', 'false')
-  const location = page.locator('main').getByText(seeded.path, { exact: false })
-  await expect(location).toHaveCount(0)
-
-  await more.tap()
-
-  await expect(page.getByRole('button', { name: 'Less', exact: true })).toHaveAttribute('aria-expanded', 'true')
-  await expect(location).toBeVisible()
+  await expect(page.locator('main').getByText(seeded.path, { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveCount(0)
 })

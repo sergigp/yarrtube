@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
-import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
+import { queryKeys } from '@/api/queries'
+import {
+  aPreferences,
+  aTask,
+  mockApi,
+  pendingForever,
+  renderWithProviders,
+} from '@/test/helpers'
 
 // A spread of tasks across every family, with one running task per the Active tab.
 function aMixOfTasks() {
@@ -42,6 +49,13 @@ function aMixOfTasks() {
       payload: {},
     }),
   ]
+}
+
+function aSummaryTask() {
+  return aTask({
+    task_type: 'summarize_video',
+    payload: { video_title: 'Intro', channel_name: 'Chan' },
+  })
 }
 
 describe('TasksView', () => {
@@ -112,6 +126,66 @@ describe('TasksView', () => {
       'Syncs1',
       'Other2',
     ])
+  })
+
+  it('lists video summaries under AI while AI is on', async () => {
+    mockApi({
+      'GET /api/tasks': [aSummaryTask()],
+      'GET /api/preferences': aPreferences({ ai_enabled: true }),
+    })
+    renderWithProviders(<TasksView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('tab', { name: /^AI/ }))
+    expect(screen.getByText('Summarizing Intro in Chan')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^Other/ }))
+    expect(screen.getByText('No tasks here')).toBeInTheDocument()
+  })
+
+  it('shows an AI tab with no tasks while AI is on', async () => {
+    mockApi({
+      'GET /api/tasks': [aTask({ task_type: 'download_video' })],
+      'GET /api/preferences': aPreferences({ ai_enabled: true }),
+    })
+
+    renderWithProviders(<TasksView />)
+
+    expect(await screen.findByRole('tab', { name: /^AI/ })).toHaveTextContent('AI0')
+  })
+
+  it('shows no AI tab and lists summaries under Other while AI is off', async () => {
+    mockApi({
+      'GET /api/tasks': [aSummaryTask()],
+      'GET /api/preferences': aPreferences({ ai_enabled: false }),
+    })
+    const { queryClient } = renderWithProviders(<TasksView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('tab', { name: /^Other/ }))
+    await waitFor(() =>
+      expect(queryClient.getQueryState(queryKeys.preferences)?.status).toBe('success'),
+    )
+
+    expect(screen.queryByRole('tab', { name: /^AI/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Summarizing Intro in Chan')).toBeInTheDocument()
+  })
+
+  it('shows no AI tab when preferences fail to load', async () => {
+    mockApi({
+      'GET /api/tasks': [aSummaryTask()],
+      'GET /api/preferences': { status: 500, error: 'boom' },
+    })
+    const { queryClient } = renderWithProviders(<TasksView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('tab', { name: /^Other/ }))
+    await waitFor(() =>
+      expect(queryClient.getQueryState(queryKeys.preferences)?.status).toBe('error'),
+    )
+
+    expect(screen.queryByRole('tab', { name: /^AI/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Summarizing Intro in Chan')).toBeInTheDocument()
   })
 
   it('shows a live indicator on the Active tab only while a task is running', async () => {

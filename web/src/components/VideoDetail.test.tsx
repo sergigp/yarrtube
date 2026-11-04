@@ -5,10 +5,9 @@ import { VideoDetail } from './VideoDetail'
 import { aChannel, aVideo, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('VideoDetail', () => {
-  it('shows the title and a collapsed detail below the desktop breakpoint', () => {
-    // The matchMedia stub reports a non-desktop viewport, so details start
-    // collapsed.
-    const video = aVideo({ title: 'My Video', description: 'The description.' })
+  it('shows the storage location with no More control', () => {
+    // The matchMedia stub reports a non-desktop viewport.
+    const video = aVideo({ title: 'My Video', filename: 'my-video.mp4' })
 
     renderWithProviders(
       <VideoDetail
@@ -20,17 +19,13 @@ describe('VideoDetail', () => {
     )
 
     expect(screen.getByText('My Video')).toBeInTheDocument()
-    expect(screen.queryByText('The description.')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /More/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText('playlists/mix')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /More/ })).not.toBeInTheDocument()
   })
 
-  it('expands to the description and storage location', async () => {
-    const video = aVideo({
-      id: 'abc',
-      title: 'My Video',
-      filename: 'my-video.mp4',
-      description: 'The description.',
-    })
+  it('shows the AI summary', () => {
+    const video = aVideo({ summary: 'What the video says.' })
+
     renderWithProviders(
       <VideoDetail
         basePath="playlists/mix"
@@ -40,13 +35,28 @@ describe('VideoDetail', () => {
       />,
     )
 
-    await userEvent.setup().click(screen.getByRole('button', { name: /More/ }))
-
-    expect(screen.getByText('The description.')).toBeInTheDocument()
-    expect(screen.getByText('playlists/mix')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'AI summary' })).toHaveTextContent(
+      'AI summaryWhat the video says.',
+    )
   })
 
-  it('links the video on YouTube from the title row, in a new tab, while collapsed', () => {
+  it('shows no AI summary label when the video has none', () => {
+    const video = aVideo({ summary: null })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.queryByRole('region', { name: 'AI summary' })).not.toBeInTheDocument()
+    expect(screen.queryByText('AI summary')).not.toBeInTheDocument()
+  })
+
+  it('links the video on YouTube from the title row, in a new tab', () => {
     const video = aVideo({ id: 'abc' })
     renderWithProviders(
       <VideoDetail
@@ -62,7 +72,7 @@ describe('VideoDetail', () => {
     expect(link).toHaveAttribute('target', '_blank')
   })
 
-  it('shows the season folder as the storage location', async () => {
+  it('shows the season folder as the storage location', () => {
     const video = aVideo({ filename: 'Season 2026/S2026E031501 - Title.mp4' })
     renderWithProviders(
       <VideoDetail
@@ -73,35 +83,11 @@ describe('VideoDetail', () => {
       />,
     )
 
-    await userEvent.setup().click(screen.getByRole('button', { name: /More/ }))
-
     expect(screen.getByText('channels/some-channel/Season 2026')).toBeInTheDocument()
     expect(screen.queryByText(/S2026E031501/)).not.toBeInTheDocument()
   })
 
-  it('renders URLs in the description as links', async () => {
-    const video = aVideo({
-      description: 'See https://example.com/page. More text.',
-    })
-    renderWithProviders(
-      <VideoDetail
-        basePath="playlists/mix"
-        video={video}
-        playbackRate={1}
-        onPlaybackRateChange={() => {}}
-      />,
-    )
-
-    await userEvent.setup().click(screen.getByRole('button', { name: /More/ }))
-
-    // The trailing full stop stays outside the link.
-    expect(screen.getByRole('link', { name: 'https://example.com/page' })).toHaveAttribute(
-      'href',
-      'https://example.com/page',
-    )
-  })
-
-  it('badges a video that is not downloaded yet', async () => {
+  it('shows the status of a video that is not downloaded', () => {
     const video = aVideo({ status: 'ERRORED_RETRYING', filename: null })
     renderWithProviders(
       <VideoDetail
@@ -111,8 +97,6 @@ describe('VideoDetail', () => {
         onPlaybackRateChange={() => {}}
       />,
     )
-
-    await userEvent.setup().click(screen.getByRole('button', { name: /More/ }))
 
     expect(screen.getByText('Retrying')).toBeInTheDocument()
   })

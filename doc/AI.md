@@ -103,10 +103,26 @@ spec: decisions here feed OpenSpec changes later.
 - Context length is the user's call. A low one leaves little room to think, so
   summaries will fail, each logged at error level with its reason, until it is
   raised.
-- Everything is logged at info level: the full messages sent, each answer, how
-  long each call and the whole summary took, and the video's length. A full
-  prompt holds the whole transcript, tens of KB per call. Failures are logged
-  at error level.
+- Everything is logged at info level: each call sent, with the video's id and
+  title but not the prompt, each answer, how long each call and the whole
+  summary took, and the video's length. Failures are logged at error level.
+
+### How a summary is shown
+
+- The video detail pane shows the whole summary under the meta line, labelled
+  "AI summary", in playlist, channel and category views. Nothing is shown for a
+  video without one, whether it's waiting or given up on.
+- The playlist, channel and category listings return it as `summary`.
+  `VideoSearcher` decides per listing, so the API never sends a hidden summary:
+  it's shown only while AI is on, summaries are on and the video's own source
+  has `summaries_enabled`.
+- A hidden summary stays stored and comes back when all three hold again, with
+  no call to Ollama.
+- Each source's copy of a video follows that source's toggle. A category lists
+  the channel copy when there is one, so the channel's toggle decides there.
+- Saving preferences refetches the video lists, even off screen, so going back
+  to one doesn't first show a summary that was turned off.
+- The NFO `<plot>` keeps the YouTube description.
 
 ## Glossary
 
