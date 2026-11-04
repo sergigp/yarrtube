@@ -8,6 +8,10 @@ use std::time::Duration;
 /// doesn't answer fails it quickly.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// A summary takes minutes on a small machine, and thinking can loop for an
+/// hour: past this, the call has failed.
+const CHAT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
 /// Port to an LLM server's HTTP API.
 pub trait LlmServerRepository: Send + Sync {
     /// The server at `url`: its version and installed models, each with
@@ -43,8 +47,22 @@ impl LlmServerRepository for OllamaLlmServerRepository {
         })
     }
 
-    fn chat(&self, _url: &OllamaUrl, _chat: &LlmChat) -> anyhow::Result<LlmReply> {
-        anyhow::bail!("not implemented")
+    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
+        let client = reqwest::blocking::Client::builder()
+            .connect_timeout(REQUEST_TIMEOUT)
+            .timeout(CHAT_TIMEOUT)
+            .build()?;
+        let _: ChatResponse = Self::read_json(
+            "/api/chat",
+            client
+                .post(format!("{url}/api/chat"))
+                .json(&Self::chat_body(chat)),
+        )?;
+        Ok(LlmReply {
+            content: String::new(),
+            input_tokens: 0,
+            stopped_at_limit: false,
+        })
     }
 }
 
@@ -55,6 +73,23 @@ impl OllamaLlmServerRepository {
         Ok(reqwest::blocking::Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .build()?)
+    }
+
+    fn chat_body(chat: &LlmChat) -> serde_json::Value {
+        serde_json::json!({
+            "model": chat.model,
+            "stream": false,
+            "think": chat.thinking,
+            "options": {
+                "num_ctx": chat.context_length,
+                "temperature": chat.temperature,
+                "num_predict": chat.max_output_tokens,
+            },
+            "messages": [
+                {"role": "system", "content": chat.system},
+                {"role": "user", "content": chat.user},
+            ],
+        })
     }
 
     /// `model` with its capabilities (`POST /api/show`).
@@ -112,6 +147,9 @@ struct ShowResponse {
     #[serde(default)]
     capabilities: Vec<String>,
 }
+
+#[derive(Deserialize)]
+struct ChatResponse {}
 
 #[derive(Deserialize)]
 struct TagsModel {
@@ -196,6 +234,30 @@ impl LlmServerRepository for FakeLlmServerRepository {
 mod tests {
     use super::*;
     use crate::domain::llm_server::LlmModel;
+
+    #[test]
+    fn it_should_post_the_chat_with_its_options() {
+        let mut server = mockito::Server::new();
+        let chat_mock = server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::Json(serde_json::json!({
+                "model": "qwen3:4b",
+                "stream": false,
+                "think": true,
+                "options": {"num_ctx": 12288, "temperature": 0.3, "num_predict": 3288},
+                "messages": [
+                    {"role": "system", "content": "Be brief."},
+                    {"role": "user", "content": "Title: Sicilian"},
+                ],
+            })))
+            .with_body(ANSWER)
+            .create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
+        chat_mock.assert();
+    }
 
     #[test]
     fn it_should_read_the_version_and_models() {
@@ -322,5 +384,19 @@ mod tests {
 
     fn url(server: &mockito::Server) -> OllamaUrl {
         OllamaUrl::new(server.url()).unwrap()
+    }
+
+    const ANSWER: &str = r#"{"message": {"role": "assistant", "content": "Three games."}, "done_reason": "stop", "prompt_eval_count": 120}"#;
+
+    fn chat() -> LlmChat {
+        LlmChat {
+            model: "qwen3:4b".to_string(),
+            system: "Be brief.".to_string(),
+            user: "Title: Sicilian".to_string(),
+            context_length: 12288,
+            temperature: 0.3,
+            thinking: true,
+            max_output_tokens: 3288,
+        }
     }
 }

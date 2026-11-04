@@ -61,7 +61,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `ollama_llm_server_repository`: `it_should_post_the_chat_with_its_options` — mockito body: model, messages, `stream: false`, `think`, `num_ctx`, `temperature`, `num_predict`. Verify: test red, then green.
+- [x] 3.1 `ollama_llm_server_repository`: `it_should_post_the_chat_with_its_options` — mockito body: model, messages, `stream: false`, `think`, `num_ctx`, `temperature`, `num_predict`. Verify: test red, then green.
 - [ ] 3.2 `ollama_llm_server_repository`: `it_should_read_the_answer_and_input_tokens`. Verify: test red, then green.
 - [ ] 3.3 `ollama_llm_server_repository`: `it_should_report_a_reply_stopped_at_the_limit` — `done_reason: "length"`. Verify: test red, then green.
 - [ ] 3.4 `ollama_llm_server_repository`: `it_should_fail_on_an_error_status`. Verify: test red, then green.
