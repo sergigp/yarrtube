@@ -321,6 +321,22 @@ mod tests {
     }
 
     #[test]
+    fn it_should_fail_on_an_answer_that_is_not_ollamas() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_body("<html>not ollama</html>")
+            .create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err("/api/chat didn't answer as Ollama does".to_string())
+        );
+    }
+
+    #[test]
     fn it_should_read_the_version_and_models() {
         let mut server = mockito::Server::new();
         let _version = server
