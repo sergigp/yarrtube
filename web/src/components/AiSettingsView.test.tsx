@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AiSettingsView } from './AiSettingsView'
-import { aPreferences, anOllamaServer, mockApi, renderWithProviders } from '@/test/helpers'
+import { fetchChannelVideos } from '@/api/client'
+import { queryKeys } from '@/api/queries'
+import { aPreferences, aVideo, anOllamaServer, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('AiSettingsView', () => {
   it('shows the defaults, with the model disabled and the advanced settings hidden', async () => {
@@ -104,6 +106,31 @@ describe('AiSettingsView', () => {
       { ai_enabled: true, ollama_url: 'http://mac.local:11434' },
     ])
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled())
+  })
+
+  it('refetches video lists after saving', async () => {
+    let videoListRequests = 0
+    mockApi({
+      'GET /api/preferences': aiOn(),
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'PATCH /api/preferences': aPreferences(),
+      'GET /api/channels/handle/videos': () => {
+        videoListRequests += 1
+        return [aVideo()]
+      },
+    })
+    const { queryClient } = renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+    await queryClient.prefetchQuery({
+      queryKey: queryKeys.channelVideos('handle'),
+      queryFn: () => fetchChannelVideos('handle'),
+    })
+
+    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(videoListRequests).toBe(2)
   })
 
   it('shows why a save failed and keeps the edits', async () => {
