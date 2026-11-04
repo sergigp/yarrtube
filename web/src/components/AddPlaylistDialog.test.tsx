@@ -268,7 +268,7 @@ describe('AddPlaylistDialog', () => {
 
     await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
     const summaries = await screen.findByRole('checkbox', { name: 'Summarize videos' })
-    expect(summaries).toHaveAccessibleDescription('Generate an AI summary of each new video.')
+    expect(summaries).toHaveAccessibleDescription('Generate and show an AI summary of each video.')
     await waitFor(() => expect(summaries).toBeEnabled())
     await user.click(summaries)
     const submit = screen.getByRole('button', { name: 'Create Playlist' })
