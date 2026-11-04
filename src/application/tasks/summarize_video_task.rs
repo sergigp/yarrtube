@@ -1047,6 +1047,7 @@ mod tests {
             content: content.to_string(),
             input_tokens: 100,
             stopped_at_limit: false,
+            refusal: None,
         })
     }
 

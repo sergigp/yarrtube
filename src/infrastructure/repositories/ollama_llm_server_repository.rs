@@ -1,5 +1,6 @@
 use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
 use anyhow::Context;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
@@ -22,12 +23,21 @@ pub trait LlmServerRepository: Send + Sync {
 }
 
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
-#[derive(Default)]
-pub struct OllamaLlmServerRepository;
+pub struct OllamaLlmServerRepository {
+    chat_timeout: Duration,
+}
 
 impl OllamaLlmServerRepository {
     pub fn new() -> Self {
-        Self
+        Self {
+            chat_timeout: CHAT_TIMEOUT,
+        }
+    }
+}
+
+impl Default for OllamaLlmServerRepository {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -48,17 +58,32 @@ impl LlmServerRepository for OllamaLlmServerRepository {
     }
 
     fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
-        let client = Self::client(CHAT_TIMEOUT)?;
-        let response: ChatResponse = Self::read_json(
-            "/api/chat",
-            client
-                .post(format!("{url}/api/chat"))
-                .json(&Self::chat_body(chat)),
-        )?;
+        let client = Self::client(self.chat_timeout)?;
+        let sent = client
+            .post(format!("{url}/api/chat"))
+            .json(&Self::chat_body(chat))
+            .send();
+        let response = match sent {
+            Err(e) if e.is_timeout() && !e.is_connect() => {
+                let minutes = self.chat_timeout.as_secs() / 60;
+                return Ok(LlmReply::refused(format!(
+                    "no answer within {minutes} minutes"
+                )));
+            }
+            sent => sent?,
+        };
+        if response.status() == StatusCode::BAD_REQUEST {
+            return Ok(LlmReply::refused(Self::refusal(response)?));
+        }
+        let response: ChatResponse = response
+            .error_for_status()?
+            .json()
+            .context("/api/chat didn't answer as Ollama does")?;
         Ok(LlmReply {
             content: response.message.content,
             input_tokens: response.prompt_eval_count,
             stopped_at_limit: response.done_reason.as_deref() == Some("length"),
+            refusal: None,
         })
     }
 }
@@ -71,6 +96,13 @@ impl OllamaLlmServerRepository {
             .connect_timeout(REQUEST_TIMEOUT)
             .timeout(timeout)
             .build()?)
+    }
+
+    fn refusal(response: reqwest::blocking::Response) -> anyhow::Result<String> {
+        let refusal: ChatRefusal = response
+            .json()
+            .context("/api/chat didn't answer as Ollama does")?;
+        Ok(refusal.error)
     }
 
     fn chat_body(chat: &LlmChat) -> serde_json::Value {
@@ -148,7 +180,11 @@ struct ShowResponse {
     capabilities: Vec<String>,
 }
 
-/// `prompt_eval_count` is left out when the prompt came from Ollama's cache.
+#[derive(Deserialize)]
+struct ChatRefusal {
+    error: String,
+}
+
 #[derive(Deserialize)]
 struct ChatResponse {
     message: ChatMessage,
@@ -287,6 +323,7 @@ mod tests {
                 content: "Three games.".to_string(),
                 input_tokens: 120,
                 stopped_at_limit: false,
+                refusal: None,
             }
         );
     }
@@ -307,6 +344,41 @@ mod tests {
     }
 
     #[test]
+    fn it_should_report_a_refusal_on_a_bad_request() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_status(400)
+            .with_body(r#"{"error": "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused(
+                "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_when_the_answer_takes_too_long() {
+        // Connections queue in the backlog but nobody ever answers.
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = OllamaUrl::new(format!("http://{}", silent.local_addr().unwrap())).unwrap();
+        let repository = OllamaLlmServerRepository {
+            chat_timeout: Duration::from_millis(100),
+        };
+
+        let reply = repository.chat(&url, &chat()).unwrap();
+
+        assert_eq!(reply, LlmReply::refused("no answer within 0 minutes"));
+    }
+
+    #[test]
     fn it_should_fail_on_an_error_status() {
         let mut server = mockito::Server::new();
         let _chat = server.mock("POST", "/api/chat").with_status(500).create();
@@ -317,6 +389,22 @@ mod tests {
             result.map_err(|e| e.to_string()),
             Err(format!(
                 "HTTP status server error (500 Internal Server Error) for url ({}/api/chat)",
+                server.url()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_fail_if_the_model_is_not_found() {
+        let mut server = mockito::Server::new();
+        let _chat = server.mock("POST", "/api/chat").with_status(404).create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "HTTP status client error (404 Not Found) for url ({}/api/chat)",
                 server.url()
             ))
         );
