@@ -1,14 +1,7 @@
 use crate::domain::preferences::{ContextLength, SummaryPrompt, SummaryPromptSection};
 use crate::domain::video::{Video, VideoChapter};
-use crate::domain::video_summary::{PartAnswer, SummaryText};
+use crate::domain::video_summary::{PartAnswer, SummaryMessages, SummaryText};
 use crate::domain::video_transcript::{CaptionLanguage, TimedTranscript, TranscriptPart};
-
-/// The two messages of one call to the model.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SummaryMessages {
-    pub system: String,
-    pub user: String,
-}
 
 /// A video as the summary prompt needs it, cut into the parts that fit the
 /// model's context.

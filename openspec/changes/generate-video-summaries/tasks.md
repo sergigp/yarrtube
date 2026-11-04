@@ -103,7 +103,7 @@ Behaviour tasks are TDD like section 2. Refactor tasks change no behaviour: Veri
 - [x] 5.17 `summarize_video_task`: `it_should_keep_reducing_until_the_answers_fit`, including a budget smaller than two answers, which still ends. Verify: test red, then green.
 - [x] 5.18 `summarize_video_task`: `it_should_list_a_chapter_starting_on_the_parts_last_line` — `<=` in `part_chapter_block`. Verify: test red, then green.
 - [x] 5.19 Refactor: lazy `summaries_wanted` in `VideoReconciler`, so a video that can't be summarized reads no preferences. Verify: `cargo test --locked` passes.
-- [ ] 5.20 Refactor: `TimedLine` to `timed_line.rs`, `SummaryMessages` to `summary_messages.rs`, re-exported. Verify: `cargo test --locked` passes.
+- [x] 5.20 Refactor: `TimedLine` to `timed_line.rs`, `SummaryMessages` to `summary_messages.rs`, re-exported. Verify: `cargo test --locked` passes.
 - [ ] 5.21 Refactor: `cut_by_size` keeps a running size and uses a fold. Verify: `cargo test --locked` passes.
 - [ ] 5.22 Refactor: rename the tests per design.md's Test Plan. Verify: `cargo test --locked` passes.
 - [ ] 5.23 Refactor tests: remove `Scene`/`BuiltScene` from `summarize_video_task.rs` and `summaries_scheduled` from `sync_video_task.rs`, per `/rust-architect`; assert whole values; move `it_should_not_queue_a_second_summary` to `sqlite_task_repository`. Verify: `cargo test --locked` passes.

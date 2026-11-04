@@ -1,14 +1,7 @@
-use super::TranscriptPart;
 use super::transcript_text::{cue_text, is_cue_index, strip_tags, without_first_if};
+use super::{TimedLine, TranscriptPart};
 use crate::domain::video::VideoChapter;
 use std::ops::Range;
-
-/// A spoken line and when it starts, in seconds from the video's start.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TimedLine {
-    pub start_seconds: i64,
-    pub text: String,
-}
 
 /// A video's captions with their timings, which the stored `TranscriptText`
 /// doesn't keep. Cleaned as `TranscriptText::from_srt` does.
