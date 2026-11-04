@@ -391,8 +391,13 @@ impl Video {
     /// Ignores the video's age, unlike `LateDataChecks::settles`: a summary
     /// doesn't get better with time.
     pub fn record_summary_failure(self, now: DateTime<Utc>) -> Self {
+        let summary_checks = self.summary_checks.record(LateDataOutcome::Failed, now);
         Self {
-            summary_checks: self.summary_checks.record(LateDataOutcome::Failed, now),
+            summary_state: match summary_checks.failures_exhausted() {
+                true => SummaryState::Unavailable,
+                false => self.summary_state,
+            },
+            summary_checks,
             updated_at: now,
             ..self
         }

@@ -663,6 +663,29 @@ mod tests {
         assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
     }
 
+    #[test]
+    fn it_should_become_unavailable_on_the_third_failure() {
+        let scene = Scene {
+            video: Video {
+                summary_checks: LateDataChecks {
+                    last_checked_at: Some(fixed_timestamp()),
+                    failed_attempts: 2,
+                },
+                ..subtitled_video()
+            },
+            ..Scene::default()
+        }
+        .with_replies(vec![Err(anyhow::anyhow!("model crashed"))])
+        .build();
+
+        scene.run().unwrap();
+
+        assert_eq!(
+            scene.stored_video().summary_state,
+            SummaryState::Unavailable
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

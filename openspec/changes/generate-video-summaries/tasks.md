@@ -34,7 +34,7 @@
 - [x] 2.26 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_answer_is_only_reasoning` — nothing stored. Verify: test red, then green.
 - [x] 2.27 `src/application/tasks/summarize_video_task.rs`: `it_should_stop_at_the_first_failed_part` — no later chats, 1 attempt. Verify: test red, then green.
 - [x] 2.28 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_subtitle_file_is_gone` — no chat. Verify: test red, then green.
-- [ ] 2.29 `src/application/tasks/summarize_video_task.rs`: `it_should_become_unavailable_on_the_third_failure` — state Unavailable. Verify: test red, then green.
+- [x] 2.29 `src/application/tasks/summarize_video_task.rs`: `it_should_become_unavailable_on_the_third_failure` — state Unavailable. Verify: test red, then green.
 - [ ] 2.30 `src/application/tasks/summarize_video_task.rs`: `it_should_store_nothing_when_the_video_is_deleted_while_generating` — fake chat hook deletes it. Verify: test red, then green.
 - [ ] 2.31 `src/application/tasks/sync_video_task.rs`: `it_should_schedule_a_summary_for_a_subtitled_video_in_an_opted_in_source` — one `summarize_video`. Verify: test red, then green.
 - [ ] 2.32 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_summary_when_the_source_opted_out` — none. Verify: test red, then green.

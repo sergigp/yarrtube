@@ -28,7 +28,7 @@ impl LateDataChecks {
 
     /// Whether the data has failed as many checks as it is allowed.
     pub fn failures_exhausted(&self) -> bool {
-        false
+        self.failed_attempts >= MAX_FAILED_ATTEMPTS
     }
 
     /// Records a check that ran `now`, counting a failed attempt for a
@@ -56,7 +56,7 @@ impl LateDataChecks {
         match outcome {
             LateDataOutcome::Complete => true,
             LateDataOutcome::Incomplete => is_old,
-            LateDataOutcome::Failed => is_old && self.failed_attempts >= MAX_FAILED_ATTEMPTS,
+            LateDataOutcome::Failed => is_old && self.failures_exhausted(),
         }
     }
 }
