@@ -477,6 +477,24 @@ mod tests {
         assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
+    #[test]
+    fn it_should_do_nothing_for_a_video_already_summarized() {
+        let scene = Scene {
+            video: Video {
+                summary_state: SummaryState::Generated,
+                ..subtitled_video()
+            },
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        scene.run().unwrap();
+
+        assert_eq!(scene.chats(), vec![]);
+        assert_eq!(scene.stored_summary(), None);
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

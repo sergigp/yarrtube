@@ -106,6 +106,9 @@ impl VideoSummarizer {
         if !preferences.summaries_available() {
             return Err(Skip::NotWanted("AI summaries are off"));
         }
+        if !video.is_summarizable() {
+            return Err(Skip::NotWanted("the video doesn't need a summary"));
+        }
         let url = preferences.ollama_url.context("no Ollama URL is saved")?;
         let settings = preferences.summaries;
         let Some(owner) = self.video_owner_finder.find(video)? else {

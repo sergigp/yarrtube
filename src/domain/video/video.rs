@@ -373,7 +373,9 @@ impl Video {
 
     /// Downloaded, subtitles Fetched, summary Missing.
     pub fn is_summarizable(&self) -> bool {
-        false
+        self.is_downloaded()
+            && self.subtitle_state == SubtitleState::Fetched
+            && self.summary_state == SummaryState::Missing
     }
 
     pub fn mark_summary_generated(self, now: DateTime<Utc>) -> Self {
