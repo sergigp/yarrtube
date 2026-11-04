@@ -153,7 +153,16 @@ impl VideoSummarizer {
     }
 
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<()> {
+        let started = Instant::now();
         let input = self.summary_input(video, job)?;
+        info!(
+            video_id = %video.id,
+            title = %video.title,
+            video_seconds = video.duration_seconds,
+            parts = input.parts(),
+            model = %job.settings.model.as_str(),
+            "generating video summary"
+        );
         let text = self.write_summary(video, &input, job)?;
         if self.video_repository.find(&video.id)?.is_none() {
             return Ok(());
@@ -161,12 +170,21 @@ impl VideoSummarizer {
         let now = self.clock.now();
         self.video_summary_repository.save(&VideoSummary::create(
             video.id.clone(),
-            text,
+            text.clone(),
             &job.settings.model,
             now,
         ))?;
         self.video_repository
-            .update_summary(&video.clone().mark_summary_generated(now))
+            .update_summary(&video.clone().mark_summary_generated(now))?;
+        info!(
+            video_id = %video.id,
+            summary = %text.as_str(),
+            duration_seconds = started.elapsed().as_secs_f64(),
+            video_seconds = video.duration_seconds,
+            model = %job.settings.model.as_str(),
+            "video summary generated"
+        );
+        Ok(())
     }
 
     /// One call for a whole transcript; for one in parts, a call per part

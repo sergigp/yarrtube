@@ -741,6 +741,33 @@ mod tests {
         assert!(answered.contains("duration_seconds="));
     }
 
+    #[test]
+    fn it_should_log_the_summary_total_time_and_video_length() {
+        let scene = Scene::default()
+            .with_replies(vec![reply("Three games.")])
+            .build();
+
+        let lines = captured_log_lines(|| scene.run().unwrap());
+
+        let started = lines
+            .iter()
+            .find(|line| line.contains("generating video summary"))
+            .unwrap();
+        let generated = lines
+            .iter()
+            .find(|line| line.contains("video summary generated"))
+            .unwrap();
+        assert!(started.starts_with("INFO "));
+        assert!(started.contains("title=Sicilian"));
+        assert!(started.contains("video_seconds=1800"));
+        assert!(started.contains("parts=1"));
+        assert!(generated.starts_with("INFO "));
+        assert!(generated.contains("summary=Three games."));
+        assert!(generated.contains("video_seconds=1800"));
+        assert!(generated.contains("model=qwen3:4b"));
+        assert!(generated.contains("duration_seconds="));
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
