@@ -63,7 +63,10 @@ impl CaptionLanguage {
 
     /// 4.3 for `en`, 3.4 otherwise (measured on the eval golden set).
     pub fn chars_per_token(&self) -> f64 {
-        3.4
+        match self.base() {
+            "en" => 4.3,
+            _ => 3.4,
+        }
     }
 
     /// The primary subtag, e.g. `es` for `es-US`.

@@ -367,6 +367,67 @@ mod tests {
         assert!(parts.iter().all(|chat| chat.user.len() < 32_000));
     }
 
+    #[test]
+    fn it_should_cut_a_chapter_too_long_on_its_own_by_size() {
+        let scene = Scene {
+            srt: Some(srt_of(45, 60)),
+            video: with_chapters(vec![chapter(0, 300, "Short"), chapter(300, 2700, "Long")]),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("A."), reply("B."), reply("C."), reply("All.")])
+        .build();
+
+        scene.run().unwrap();
+
+        let chats = scene.chats();
+        assert!(chats[0].user.contains("Part 1 of 3 (0:00–4:00)"));
+        assert!(chats[1].user.contains("Part 2 of 3 (5:00–34:00)"));
+        assert!(chats[2].user.contains("Part 3 of 3 (35:00–44:00)"));
+    }
+
+    #[test]
+    fn it_should_scale_the_budget_with_the_context_length() {
+        let chats_with = |context_length: i64, replies| {
+            let scene = Scene {
+                srt: Some(srt_of(20, 60)),
+                preferences: with_summaries(|settings| SummarySettings {
+                    context_length: ContextLength::new(context_length).unwrap(),
+                    ..settings
+                }),
+                ..Scene::default()
+            }
+            .with_replies(replies)
+            .build();
+            scene.run().unwrap();
+            scene.chats().len()
+        };
+
+        assert_eq!(chats_with(12288, vec![reply("All.")]), 1);
+        assert_eq!(
+            chats_with(6144, vec![reply("A."), reply("B."), reply("All.")]),
+            3
+        );
+    }
+
+    #[test]
+    fn it_should_estimate_english_at_more_characters_per_token() {
+        // 34 lines of 1000 characters: over 30600, the budget for most
+        // languages, but under 38700, the budget for English.
+        let chats_with = |language: &str| {
+            let scene = Scene {
+                srt: Some(srt_of(34, 60)),
+                language: language.to_string(),
+                ..Scene::default()
+            }
+            .with_replies(vec![reply("A."), reply("B."), reply("All.")])
+            .build();
+            scene.run().unwrap();
+            scene.chats().len()
+        };
+
+        assert_eq!((chats_with("en-US"), chats_with("es")), (1, 3));
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
