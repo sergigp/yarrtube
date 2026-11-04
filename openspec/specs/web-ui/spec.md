@@ -610,14 +610,14 @@ In a playlist or channel detail view on viewports at or above the desktop breakp
 - **THEN** the page content extends behind the browser's toolbars and the browser is able to collapse them, as it does for any normally scrolling page
 
 ### Requirement: Video Detail Links To YouTube
-A selected video's detail pane SHALL show, at the end of its title row and whether the details section is expanded or collapsed, an icon-only link whose accessible name and tooltip are "Open video on YouTube", which opens that video on YouTube in a new tab.
+A selected video's detail pane SHALL show, at the end of its title row, an icon-only link whose accessible name and tooltip are "Open video on YouTube", which opens that video on YouTube in a new tab.
 
 #### Scenario: Opening a video on YouTube
 - **WHEN** a user activates the "Open video on YouTube" link for a selected video
 - **THEN** a new tab opens to that video's page on youtube.com
 
 #### Scenario: Visible while details are collapsed
-- **WHEN** a user on a mobile-width viewport selects a video with the details section collapsed
+- **WHEN** a user on a mobile-width viewport selects a video
 - **THEN** the "Open video on YouTube" link is visible in the title row
 
 ### Requirement: Resume Playback
@@ -829,20 +829,16 @@ In the video detail pane, the video's title SHALL occupy its own row, taking all
 - **WHEN** a user on a mobile-width viewport selects a video with a long title
 - **THEN** the title wraps across the width of the detail pane left by the video's actions, and the meta line appears below it
 
-### Requirement: Collapsible Video Details
-The video detail pane SHALL always show the video's title and its meta line. The rest of the pane (the status indicator when the video is not downloaded, the description and the storage location) SHALL sit in a section the user can expand and collapse. The storage location SHALL be the folder holding the video's file (its source's storage path joined with the file's folder, for example `channels/some-channel/Season 2026`), never the file name itself, so episode codes do not appear in the UI. This section SHALL start collapsed on viewports narrower than the desktop breakpoint and expanded at or above it. The pane SHALL NOT show a quality indicator, and SHALL NOT show a status indicator for a downloaded video.
+### Requirement: Video Detail Status And Location
+The video detail pane SHALL always show, below the meta line, the video's storage location and, when the video is not downloaded, a status indicator, at every viewport size and with no control to expand or collapse them. The storage location SHALL be the folder holding the video's file, never the file name itself, so episode codes do not appear in the UI. The pane SHALL NOT show a quality indicator, a status indicator for a downloaded video, or the video's YouTube description.
 
-#### Scenario: Details start collapsed on mobile
+#### Scenario: Details on a mobile viewport
 - **WHEN** a user on a mobile-width viewport opens a playlist or channel detail view
-- **THEN** the detail pane shows the video's title, its meta line and an expand control, and hides the description and storage location
+- **THEN** the detail pane shows the video's title, its meta line and its storage location, with no "More" or "Less" control
 
-#### Scenario: Expanding details
-- **WHEN** a user activates the expand control in a collapsed detail pane
-- **THEN** the description and storage location become visible, and the control collapses them again when activated
-
-#### Scenario: Details start expanded on desktop
+#### Scenario: Details on a desktop viewport
 - **WHEN** a user on a desktop-width viewport opens a playlist or channel detail view
-- **THEN** the detail pane shows the title, meta line, description and storage location without needing to be expanded
+- **THEN** the detail pane shows the video's title, its meta line and its storage location, with no "More" or "Less" control
 
 #### Scenario: Storage location of a downloaded episode
 - **WHEN** a downloaded video's recorded filename is `Season 2026/S2026E031501 - Title.mp4` in a channel stored at `channels/some-channel`
@@ -853,15 +849,15 @@ The video detail pane SHALL always show the video's title and its meta line. The
 - **THEN** the detail pane shows its source's storage path
 
 #### Scenario: Downloaded video shows no status indicator
-- **WHEN** a user expands the details of a downloaded video
+- **WHEN** a user selects a downloaded video
 - **THEN** no status or quality indicator is shown
 
 #### Scenario: Pending video shows its status
-- **WHEN** a user expands the details of a video that is pending, downloading, retrying or errored
+- **WHEN** a user selects a video that is pending, downloading, retrying or errored
 - **THEN** a status indicator shows that state, and no quality indicator is shown
 
 ### Requirement: Video Detail Meta Line
-The video detail pane SHALL show a meta line directly below the title, visible whether the details section is expanded or collapsed. The line SHALL read `Watched · <channel name> · Published <date> · Synced <relative time>`:
+The video detail pane SHALL show a meta line directly below the title. The line SHALL read `Watched · <channel name> · Published <date> · Synced <relative time>`:
 - "Watched" SHALL appear only when the video is watched.
 - The channel name SHALL appear only in a playlist detail view.
 - The publish time SHALL be shown as a date, without a time of day.
@@ -885,31 +881,12 @@ The video detail pane SHALL show a meta line directly below the title, visible w
 - **THEN** the meta line shows no "Synced" part and no separator for it
 
 #### Scenario: Meta line on a collapsed mobile pane
-- **WHEN** a user on a mobile-width viewport opens a detail view with the details section collapsed
+- **WHEN** a user on a mobile-width viewport opens a detail view
 - **THEN** the meta line is visible below the title
 
 #### Scenario: Video without metadata or sync time
 - **WHEN** a user selects a pending video that has neither generated metadata nor a sync time
 - **THEN** no meta line is shown
-
-### Requirement: Video Detail Description
-The expandable section of the video detail pane SHALL show the video's description, preserving its line breaks and rendering web URLs in it as links that open in a new tab. The description SHALL be clamped to about four lines, with a "Show more" control, shown only when the text exceeds the clamp, that reveals the rest and can collapse it again. When the video has no description, or an empty one, no description block SHALL be shown.
-
-#### Scenario: Long description
-- **WHEN** a user expands the details of a video whose description is longer than four lines
-- **THEN** the first four lines are shown followed by a "Show more" control, and activating it reveals the whole description
-
-#### Scenario: Short description
-- **WHEN** a user expands the details of a video whose description fits in four lines
-- **THEN** the whole description is shown and no "Show more" control is present
-
-#### Scenario: Link in the description
-- **WHEN** a user activates a URL inside a video's description
-- **THEN** that URL opens in a new tab
-
-#### Scenario: Video without a description
-- **WHEN** a user expands the details of a video with no description
-- **THEN** no description block is shown
 
 ### Requirement: Compact Mobile Player
 On viewports narrower than the desktop breakpoint, the video player area SHALL be sized to the video's own aspect ratio, with no blank padding above or below the video. The player SHALL start one standard page gutter below the detail view's page header. While the page scrolls, the page header SHALL scroll away and the player SHALL stay pinned directly below the application header.
