@@ -2372,6 +2372,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_schedule_a_summary_while_ai_summaries_are_off() {
+        let ai_off = Preferences {
+            ai_enabled: false,
+            ..summaries_on()
+        };
+        let summaries_off = Preferences {
+            summaries: SummarySettings {
+                enabled: false,
+                ..summaries_on().summaries
+            },
+            ..summaries_on()
+        };
+
+        assert_eq!(
+            [ai_off, summaries_off].map(|preferences| summaries_scheduled(
+                subtitled_video(),
+                true,
+                preferences
+            )),
+            [0, 0]
+        );
+    }
+
     /// How many summaries a sync of `video` schedules, in a channel with
     /// summaries on or off under `preferences`.
     fn summaries_scheduled(video: Video, source_opted_in: bool, preferences: Preferences) -> usize {
