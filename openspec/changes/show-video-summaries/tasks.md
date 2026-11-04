@@ -21,7 +21,7 @@
 - [x] 2.13 VideoDetail `shows no AI summary label when the video has none`.
 - [x] 2.14 AiSettingsView `refetches video lists after saving`: a cached, off-screen channel video list is requested again after saving; `useSavePreferences` invalidates them with `refetchType: 'all'`.
 - [x] 2.15 Change the `SummariesField` hint to "Generate and show an AI summary of each video." and update the `AddChannelDialog` and `AddPlaylistDialog` assertions; `npm run test` passes.
-- [ ] 2.16 Update `doc/AI.md` and `doc/ARCHITECTURE.md` to say summaries are shown and when they're hidden, and replace "stores it for later features to show" in the Purpose of `openspec/specs/video-summaries/spec.md`; verify by reading them against the specs.
+- [x] 2.16 Update `doc/AI.md` and `doc/ARCHITECTURE.md` to say summaries are shown and when they're hidden, and replace "stores it for later features to show" in the Purpose of `openspec/specs/video-summaries/spec.md`; verify by reading them against the specs.
 
 ## 3. Infrastructure adapters (TDD)
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Generates a short AI summary of each video from its transcript, through the user's Ollama server, for the sources that opted in, and stores it for later features to show.
+Generates a short AI summary of each video from its transcript, through the user's Ollama server, for the sources that opted in, stores it, and decides when it may be shown.
 
 ## Requirements
 

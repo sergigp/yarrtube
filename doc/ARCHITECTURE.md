@@ -118,7 +118,9 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    lane, one at a time), and so does every later pass for each stored video
    still without a summary. `VideoSummarizer` fills the prompt and asks Ollama,
    by map-reduce when the transcript doesn't fit, and stores the result
-   (`video_summaries`). See [AI features](AI.md).
+   (`video_summaries`). `VideoSearcher` returns it with the playlist, channel
+   and category listings for the detail pane, hiding it unless AI and summaries
+   are on and the video's own source opted in. See [AI features](AI.md).
 
 ```mermaid
 sequenceDiagram
