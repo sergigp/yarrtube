@@ -103,10 +103,9 @@ spec: decisions here feed OpenSpec changes later.
 - Context length is the user's call. A low one leaves little room to think, so
   summaries will fail, each logged at error level with its reason, until it is
   raised.
-- Everything is logged at info level: the full messages sent, each answer, how
-  long each call and the whole summary took, and the video's length. A full
-  prompt holds the whole transcript, tens of KB per call. Failures are logged
-  at error level.
+- Everything is logged at info level: each call sent, with the video's id and
+  title but not the prompt, each answer, how long each call and the whole
+  summary took, and the video's length. Failures are logged at error level.
 
 ## Glossary
 

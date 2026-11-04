@@ -1415,7 +1415,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_log_each_calls_prompt_answer_and_duration() {
+    fn it_should_log_each_call_without_its_prompt_and_its_answer_and_duration() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1446,9 +1446,9 @@ mod tests {
             .find(|line| line.contains("model answered"))
             .unwrap();
         assert!(sent.starts_with("INFO "));
-        assert!(sent.contains("- Write in Spanish, the language of the video."));
-        assert!(sent.contains("Title: Sicilian\nDuration: 30 minutes"));
-        assert!(sent.contains("Hola a todos"));
+        assert!(sent.contains(&format!("video_id={}", video.id)));
+        assert!(sent.contains("title=Sicilian"));
+        assert!(!sent.contains("Hola a todos"));
         assert!(answered.starts_with("INFO "));
         assert!(answered.contains("answer=Three games."));
         assert!(answered.contains("input_tokens=100"));
