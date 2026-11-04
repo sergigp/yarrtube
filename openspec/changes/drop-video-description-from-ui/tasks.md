@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Nothing to create, this change only removes code: confirm the baseline with `scripts/run-tests.sh --only web --only rust` passing.
+- [x] 1.1 Nothing to create, this change only removes code: confirm the baseline with `scripts/run-tests.sh --only web --only rust` passing.
 
 ## 2. Behaviour (TDD)
 
