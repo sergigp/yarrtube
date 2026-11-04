@@ -2410,6 +2410,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_space_summary_retries_by_a_day() {
+        let failed_ago = |hours| Video {
+            summary_checks: LateDataChecks {
+                last_checked_at: Some(fixed_timestamp() - Duration::hours(hours)),
+                failed_attempts: 1,
+            },
+            ..subtitled_video()
+        };
+
+        assert_eq!(
+            [3, 25].map(|hours| summaries_scheduled(failed_ago(hours), true, summaries_on())),
+            [0, 1]
+        );
+    }
+
     /// How many summaries a sync of `video` schedules, in a channel with
     /// summaries on or off under `preferences`.
     fn summaries_scheduled(video: Video, source_opted_in: bool, preferences: Preferences) -> usize {
