@@ -686,6 +686,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_store_nothing_when_the_video_is_deleted_while_generating() {
+        let scene = Scene::default().build_with_on_chat(|db, video| {
+            SqliteVideoRepository::new(db.database())
+                .delete(video)
+                .unwrap();
+        });
+
+        scene.run().unwrap();
+
+        assert_eq!(scene.chats().len(), 1);
+        assert_eq!(scene.stored_summary(), None);
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
@@ -700,7 +714,7 @@ mod tests {
 
     /// A scene once stored, ready to run.
     struct BuiltScene {
-        db: TestDatabase,
+        db: Arc<TestDatabase>,
         video: Video,
         llm: Arc<FakeLlmServerRepository>,
         task: SummarizeVideoTask,
@@ -727,8 +741,26 @@ mod tests {
             }
         }
 
+        /// Builds the scene with `hook` running while the model answers.
+        fn build_with_on_chat(
+            self,
+            hook: impl Fn(&TestDatabase, &VideoRecordId) + Send + Sync + 'static,
+        ) -> BuiltScene {
+            let db = Arc::new(TestDatabase::new());
+            let video_id = self.video.id.clone();
+            let hook_db = db.clone();
+            let llm = self
+                .llm
+                .with_replies(vec![reply("Three games.")])
+                .with_on_chat(move || hook(&hook_db, &video_id));
+            Self { llm, ..self }.build_in(db)
+        }
+
         fn build(self) -> BuiltScene {
-            let db = TestDatabase::new();
+            self.build_in(Arc::new(TestDatabase::new()))
+        }
+
+        fn build_in(self, db: Arc<TestDatabase>) -> BuiltScene {
             let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
             video_repository.save(&self.video).unwrap();
             let preferences = Arc::new(SqlitePreferencesRepository::new(db.database()));

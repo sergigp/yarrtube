@@ -154,6 +154,9 @@ impl VideoSummarizer {
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<()> {
         let input = self.summary_input(video, job)?;
         let text = self.write_summary(&input, job)?;
+        if self.video_repository.find(&video.id)?.is_none() {
+            return Ok(());
+        }
         let now = self.clock.now();
         self.video_summary_repository.save(&VideoSummary::create(
             video.id.clone(),
