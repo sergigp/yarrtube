@@ -51,7 +51,7 @@
 - [x] 2.43 `src/application/http/playlists/mod.rs, channels/mod.rs`: `it_should_delete_the_summaries_of_a_deleted_channel`. Verify: test red, then green.
 - [x] 2.44 `src/application/tasks/reconcile_channel_task.rs, reconcile_playlist_task.rs`: `it_should_delete_the_summary_of_a_video_removed_from_the_channel`. Verify: test red, then green.
 - [x] 2.45 `src/application/tasks/reconcile_channel_task.rs, reconcile_playlist_task.rs`: `it_should_delete_the_summary_of_a_video_removed_from_the_playlist`. Verify: test red, then green.
-- [ ] 2.46 `src/domain/task/task.rs`: `it_should_run_summarize_video_in_the_summaries_lane_exclusive_per_video` — lane, key. Verify: test red, then green.
+- [x] 2.46 `src/domain/task/task.rs`: `it_should_run_summarize_video_in_the_summaries_lane_exclusive_per_video` — lane, key. Verify: test red, then green.
 - [ ] 2.47 `src/infrastructure/repositories/task_executor.rs`: `it_should_run_one_summary_at_a_time` — lane capacity 1. Verify: test red, then green.
 - [ ] 2.48 `src/infrastructure/repositories/task_executor.rs`: `it_should_not_hold_other_lanes_back_while_summarizing`. Verify: test red, then green.
 - [ ] 2.49 `web/src/lib/tasks.test.ts`: `describes a summarize task` — `Summarizing <video>`; fallback without a title. Verify: test red, then green.

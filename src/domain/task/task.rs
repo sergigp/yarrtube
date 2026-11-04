@@ -746,6 +746,22 @@ mod tests {
     }
 
     #[test]
+    fn it_should_run_summarize_video_in_the_summaries_lane_exclusive_per_video() {
+        let task = Task::SummarizeVideo {
+            video_id: "rec1".to_string(),
+        };
+
+        assert_eq!(
+            (
+                Task::lane_for(task.task_type()),
+                Task::exclusivity_key(task.task_type(), &task.payload().to_string()),
+                Task::dedupes_running(task.task_type())
+            ),
+            (TaskLane::Summaries, Some("video:rec1".to_string()), true)
+        );
+    }
+
+    #[test]
     fn it_should_run_fetch_chapters_in_the_subtitles_lane_exclusive_per_video() {
         let task = Task::FetchChapters {
             video_id: "rec1".to_string(),
