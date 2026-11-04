@@ -108,10 +108,12 @@ impl VideoSummarizer {
         }
         let url = preferences.ollama_url.context("no Ollama URL is saved")?;
         let settings = preferences.summaries;
-        let owner = self
-            .video_owner_finder
-            .find(video)?
-            .context("video has no owner")?;
+        let Some(owner) = self.video_owner_finder.find(video)? else {
+            return Err(Skip::NotWanted("the video has no channel or playlist"));
+        };
+        if !owner.summaries_enabled {
+            return Err(Skip::NotWanted("its channel or playlist has summaries off"));
+        }
         let server = self.llm_server_repository.find(&url)?;
         let thinking = settings.thinking
             && server

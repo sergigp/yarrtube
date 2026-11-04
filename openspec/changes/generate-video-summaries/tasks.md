@@ -22,7 +22,7 @@
 - [x] 2.14 `src/application/tasks/summarize_video_task.rs`: `it_should_cut_a_chapter_too_long_on_its_own_by_size` — others whole. Verify: test red, then green.
 - [x] 2.15 `src/application/tasks/summarize_video_task.rs`: `it_should_scale_the_budget_with_the_context_length` — same text single at 12288, parts at 6144. Verify: test red, then green.
 - [x] 2.16 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_when_summaries_are_no_longer_available` — table AI/summaries off; no chat. Verify: test red, then green.
-- [ ] 2.17 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_when_the_source_opted_out` — no chat, Missing. Verify: test red, then green.
+- [x] 2.17 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_when_the_source_opted_out` — no chat, Missing. Verify: test red, then green.
 - [ ] 2.18 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_for_a_video_already_summarized` — no chat, summary unchanged. Verify: test red, then green.
 - [ ] 2.19 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_for_a_missing_video` — `Ok`. Verify: test red, then green.
 - [ ] 2.20 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_the_saved_prompt_is_invalid` — no chat, 0 attempts, no check. Verify: test red, then green.
