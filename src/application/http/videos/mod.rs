@@ -205,12 +205,13 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::preferences::Preferences;
+    use crate::domain::preferences::{Preferences, SummaryModel, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoRecordId};
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_metadata::VideoMetadata;
+    use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
@@ -239,7 +240,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
+    use crate::infrastructure::repositories::sqlite_video_summary_repository::{
+        SqliteVideoSummaryRepository, VideoSummaryRepository,
+    };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
@@ -249,6 +252,25 @@ mod tests {
     use rusqlite::Connection;
     use std::ops::Range;
     use std::sync::Arc;
+
+    const SUMMARY: &str = "What the video says.";
+
+    #[tokio::test]
+    async fn it_should_include_the_summary_when_listing_playlist_videos() {
+        let db = TestDatabase::new();
+        save_summarized_playlist_video(&db, &playlist("PL1").with_summaries_enabled(true));
+        save_preferences(&db, summaries_on());
+
+        let response = list_for_playlist(home_video_searcher(&db), "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                summary: Some(SUMMARY.to_string()),
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
 
     #[tokio::test]
     async fn it_should_list_playlist_videos() {
@@ -6084,6 +6106,46 @@ mod tests {
         SqlitePreferencesRepository::new(db.database())
             .save(&preferences)
             .unwrap();
+    }
+
+    /// AI and summaries on.
+    fn summaries_on() -> Preferences {
+        Preferences {
+            ai_enabled: true,
+            summaries: SummarySettings {
+                enabled: true,
+                ..SummarySettings::default()
+            },
+            ..Preferences::default()
+        }
+    }
+
+    /// Stores `SUMMARY` for `video`.
+    fn save_summary(db: &TestDatabase, video: &Video) {
+        SqliteVideoSummaryRepository::new(db.database())
+            .save(&VideoSummary::create(
+                video.id.clone(),
+                SummaryText::new(SUMMARY),
+                &SummaryModel::default(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    /// Stores `playlist` holding a video "vid1" with a summary.
+    fn save_summarized_playlist_video(db: &TestDatabase, playlist: &Playlist) -> Video {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(playlist)
+            .unwrap();
+        save_playlist_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            playlist.id.as_str(),
+            &video,
+        );
+        save_summary(db, &video);
+        video
     }
 
     /// A video searcher over every SQLite repository of `db`.

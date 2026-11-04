@@ -125,7 +125,7 @@ impl VideoSearcherApi for VideoSearcher {
             .iter()
             .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
             .filter(|video| !is_excluded(video))
-            .map(|video| video.and_then(|video| self.view(video, false)))
+            .map(|video| video.and_then(|video| self.view(video, true)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -243,12 +243,16 @@ impl VideoSearcher {
     }
 
     /// `video` with its metadata, and its summary when `summaries_shown`.
-    fn view(&self, video: Video, _summaries_shown: bool) -> anyhow::Result<VideoView> {
+    fn view(&self, video: Video, summaries_shown: bool) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
+        let summary = match summaries_shown {
+            true => self.video_summary_repository.find(&video.id)?,
+            false => None,
+        };
         Ok(VideoView {
             video,
             metadata,
-            summary: None,
+            summary,
         })
     }
 

@@ -62,6 +62,9 @@ impl From<VideoChapter> for ChapterResponse {
 impl From<VideoView> for VideoResponse {
     fn from(view: VideoView) -> Self {
         let video = view.video;
+        let summary = view
+            .summary
+            .map(|summary| summary.text.as_str().to_string());
         let (published_at, channel_name) = match view.metadata {
             Some(metadata) => (Some(metadata.published_at), Some(metadata.studio)),
             None => (None, None),
@@ -88,7 +91,7 @@ impl From<VideoView> for VideoResponse {
                 .into_iter()
                 .map(ChapterResponse::from)
                 .collect(),
-            summary: None,
+            summary,
         }
     }
 }
