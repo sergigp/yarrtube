@@ -52,10 +52,13 @@ function humanizeType(type: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Task'
 }
 
-export type TaskFamily = 'downloads' | 'syncs' | 'other'
-export type TaskTab = 'active' | 'downloads' | 'syncs' | 'other'
+export type TaskFamily = 'downloads' | 'syncs' | 'ai' | 'other'
+export type TaskTab = 'active' | 'downloads' | 'syncs' | 'ai' | 'other'
 
-export const TASK_TABS: readonly TaskTab[] = ['active', 'downloads', 'syncs', 'other']
+/** The tabs shown, in order; "ai" only while `aiEnabled`. */
+export function taskTabs(_aiEnabled: boolean): readonly TaskTab[] {
+  return ['active', 'downloads', 'syncs', 'other']
+}
 
 /** Above this many tasks in a tab, the search field is worth showing. */
 export const TASK_SEARCH_THRESHOLD = 15
@@ -71,29 +74,30 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   sync_video: 'syncs',
 }
 
-export function taskFamily(task: Task): TaskFamily {
+/** A task's family; AI tasks are 'other' unless `aiEnabled`. */
+export function taskFamily(task: Task, _aiEnabled: boolean): TaskFamily {
   return FAMILY_BY_TYPE[task.task_type] ?? 'other'
 }
 
-export function tasksForTab(tasks: Task[], tab: TaskTab): Task[] {
+export function tasksForTab(tasks: Task[], tab: TaskTab, aiEnabled: boolean): Task[] {
   const inTab =
     tab === 'active'
       ? tasks.filter((task) => task.status === 'running')
-      : tasks.filter((task) => taskFamily(task) === tab)
+      : tasks.filter((task) => taskFamily(task, aiEnabled) === tab)
   return [...inTab].sort(byCategory)
 }
 
-export function tabCounts(tasks: Task[]): Record<TaskTab, number> {
-  return TASK_TABS.reduce(
+export function tabCounts(tasks: Task[], aiEnabled: boolean): Record<TaskTab, number> {
+  return taskTabs(aiEnabled).reduce(
     (counts, tab) => {
-      counts[tab] = tasksForTab(tasks, tab).length
+      counts[tab] = tasksForTab(tasks, tab, aiEnabled).length
       return counts
     },
-    {} as Record<TaskTab, number>,
+    { ai: 0 } as Record<TaskTab, number>,
   )
 }
 
-export type TaskKind = 'download' | 'sync' | 'delete' | 'maintenance'
+export type TaskKind = 'download' | 'sync' | 'delete' | 'ai' | 'maintenance'
 
 const KIND_BY_TYPE: Record<string, TaskKind> = {
   download_video: 'download',
