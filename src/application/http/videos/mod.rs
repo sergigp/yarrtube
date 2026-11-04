@@ -355,6 +355,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_hide_the_summary_of_a_channel_with_summaries_off() {
+        let db = TestDatabase::new();
+        save_summarized_channel_video(&db, &channel("@somechannel", None));
+        save_preferences(&db, summaries_on());
+
+        let response = list_for_channel(home_video_searcher(&db), "@somechannel").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![pending_video_response("vid1", "My Video")])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

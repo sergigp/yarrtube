@@ -117,8 +117,7 @@ impl VideoSearcherApi for VideoSearcher {
             .find(playlist_id)
             .map_err(ListVideosError::Repository)?
             .ok_or_else(|| ListVideosError::PlaylistNotFound(playlist_id.clone()))?;
-        let summaries_shown =
-            self.find_preferences()?.summaries_available() && playlist.summaries_enabled;
+        let summaries_shown = self.summaries_shown(playlist.summaries_enabled)?;
 
         let playlist_videos = self
             .playlist_video_repository
@@ -137,10 +136,12 @@ impl VideoSearcherApi for VideoSearcher {
         &self,
         channel_id: &ChannelHandle,
     ) -> Result<Vec<VideoView>, ListVideosError> {
-        self.channel_repository
+        let channel = self
+            .channel_repository
             .find(channel_id)
             .map_err(ListVideosError::Repository)?
             .ok_or_else(|| ListVideosError::ChannelNotFound(channel_id.clone()))?;
+        let summaries_shown = self.summaries_shown(channel.summaries_enabled)?;
 
         let channel_videos = self
             .channel_video_repository
@@ -150,7 +151,7 @@ impl VideoSearcherApi for VideoSearcher {
             .iter()
             .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
             .filter(|video| !is_excluded(video))
-            .map(|video| video.and_then(|video| self.view(video, true)))
+            .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -236,6 +237,11 @@ impl VideoSearcher {
             .find()
             .map(Option::unwrap_or_default)
             .map_err(ListVideosError::Repository)
+    }
+
+    /// Whether a source with `source_enabled` shows its summaries.
+    fn summaries_shown(&self, source_enabled: bool) -> Result<bool, ListVideosError> {
+        Ok(self.find_preferences()?.summaries_available() && source_enabled)
     }
 
     fn find_category(&self, id: &CategoryId) -> Result<Category, ListVideosError> {
