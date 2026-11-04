@@ -442,6 +442,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_hide_the_summary_of_a_category_video_whose_source_opted_out() {
+        let db = TestDatabase::new();
+        let video = downloaded_video("vid1", "My Video", None, 10);
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
+        save_playlist_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PL1",
+            &video,
+        );
+        save_summary(&db, &video);
+        let chess = save_category_of(&db, &[playlist_member("PL1")]);
+        save_preferences(&db, summaries_on());
+
+        let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![category_video_in(
+                category_video_response("vid1", "My Video", 10, playlist_source()),
+                &[&chess]
+            )])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

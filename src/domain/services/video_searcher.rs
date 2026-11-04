@@ -274,11 +274,13 @@ impl VideoSearcher {
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
         summaries_available: bool,
     ) -> anyhow::Result<CategoryVideoView> {
+        let summaries_shown =
+            summaries_available && self.source_summaries_enabled(&sourced.source)?;
         let VideoView {
             video,
             metadata,
             summary,
-        } = self.view(sourced.video, summaries_available)?;
+        } = self.view(sourced.video, summaries_shown)?;
         let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
         Ok(CategoryVideoView {
             video,
@@ -290,8 +292,14 @@ impl VideoSearcher {
     }
 
     /// Whether `source` opted in; false when it is no longer stored.
-    fn source_summaries_enabled(&self, _source: &VideoSource) -> anyhow::Result<bool> {
-        Ok(false)
+    fn source_summaries_enabled(&self, source: &VideoSource) -> anyhow::Result<bool> {
+        match source {
+            VideoSource::Playlist { id, .. } => Ok(self
+                .playlist_repository
+                .find(id)?
+                .is_some_and(|playlist| playlist.summaries_enabled)),
+            VideoSource::Channel { .. } => Ok(true),
+        }
     }
 
     /// `videos` as home cards, each with its publish date when its metadata
