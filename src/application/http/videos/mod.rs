@@ -429,7 +429,6 @@ mod tests {
                 filename: Some("My Video.mp4".to_string()),
                 synced_at: Some(fixed_timestamp()),
                 published_at: Some(published_timestamp()),
-                description: Some("A description\nwith two lines".to_string()),
                 channel_name: Some("Some Channel".to_string()),
                 ..pending_video_response("vid1", "My Video")
             }])
@@ -509,7 +508,6 @@ mod tests {
             response,
             Ok(vec![VideoResponse {
                 published_at: None,
-                description: None,
                 channel_name: None,
                 ..pending_video_response("vid1", "My Video")
             }])
@@ -894,7 +892,6 @@ mod tests {
                 filename: Some("My Video.mp4".to_string()),
                 synced_at: Some(fixed_timestamp()),
                 published_at: Some(published_timestamp()),
-                description: Some("A description\nwith two lines".to_string()),
                 channel_name: Some("Some Channel".to_string()),
                 ..pending_video_response("vid1", "My Video")
             }])
@@ -5878,7 +5875,6 @@ mod tests {
             position_seconds: 0,
             synced_at: None,
             published_at: None,
-            description: None,
             channel_name: None,
             subtitle_language: None,
             chapters: vec![],

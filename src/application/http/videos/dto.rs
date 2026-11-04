@@ -35,7 +35,6 @@ pub struct VideoResponse {
     pub position_seconds: i64,
     pub synced_at: Option<DateTime<Utc>>,
     pub published_at: Option<DateTime<Utc>>,
-    pub description: Option<String>,
     pub channel_name: Option<String>,
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
@@ -62,13 +61,9 @@ impl From<VideoChapter> for ChapterResponse {
 impl From<VideoView> for VideoResponse {
     fn from(view: VideoView) -> Self {
         let video = view.video;
-        let (published_at, description, channel_name) = match view.metadata {
-            Some(metadata) => (
-                Some(metadata.published_at),
-                Some(metadata.plot),
-                Some(metadata.studio),
-            ),
-            None => (None, None, None),
+        let (published_at, channel_name) = match view.metadata {
+            Some(metadata) => (Some(metadata.published_at), Some(metadata.studio)),
+            None => (None, None),
         };
         Self {
             subtitle_language: video.subtitle_language(),
@@ -85,7 +80,6 @@ impl From<VideoView> for VideoResponse {
             updated_at: video.updated_at,
             synced_at: video.synced_at,
             published_at,
-            description,
             channel_name,
             chapters: video
                 .chapters
