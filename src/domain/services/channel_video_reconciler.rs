@@ -14,6 +14,7 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::Channe
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_channel_videos_repository::{
     ChannelVideoListing, ChannelVideosRepository,
@@ -36,6 +37,8 @@ pub struct ChannelVideoReconciler {
     channel_repository: Arc<dyn ChannelRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+    #[allow(dead_code)]
+    video_summary_repository: Arc<dyn VideoSummaryRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     channel_videos_repository: Arc<dyn ChannelVideosRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -54,6 +57,7 @@ impl ChannelVideoReconciler {
         channel_repository: Arc<dyn ChannelRepository>,
         video_repository: Arc<dyn VideoRepository>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+        video_summary_repository: Arc<dyn VideoSummaryRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         channel_videos_repository: Arc<dyn ChannelVideosRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -69,6 +73,7 @@ impl ChannelVideoReconciler {
             channel_repository,
             video_repository,
             video_transcript_repository,
+            video_summary_repository,
             channel_video_repository,
             channel_videos_repository,
             event_publisher,

@@ -15,7 +15,7 @@ pub struct VideoSyncPlan {
 }
 
 impl VideoSyncPlan {
-    pub fn for_video(video: &Video, now: DateTime<Utc>) -> Self {
+    pub fn for_video(video: &Video, _summaries_wanted: bool, now: DateTime<Utc>) -> Self {
         let steps = [
             (
                 VideoSyncStep::FetchThumbnail,

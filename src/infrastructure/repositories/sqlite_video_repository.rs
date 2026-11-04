@@ -1,7 +1,7 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, SubtitleState, Video,
-    VideoChapter, VideoStatus,
+    ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, SubtitleState,
+    SummaryState, Video, VideoChapter, VideoStatus,
 };
 use crate::domain::video::{VideoId, VideoRecordId};
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -70,6 +70,10 @@ pub trait VideoRepository: Send + Sync {
     /// leaving the download's fields untouched even if they changed since
     /// the caller read the video.
     fn update_subtitles(&self, video: &Video) -> anyhow::Result<()>;
+    /// Writes only `summary_state`, the summary checks and `updated_at`,
+    /// leaving everything else untouched even if it changed since the caller
+    /// read the video.
+    fn update_summary(&self, video: &Video) -> anyhow::Result<()>;
     /// Writes only `thumbnail_filename` (and `updated_at`), leaving the
     /// download's fields untouched even if they changed since the caller
     /// read the video.
@@ -310,6 +314,10 @@ impl VideoRepository for SqliteVideoRepository {
             |e| tracing::error!(video_id = %id, error = %e, "failed to update video title"),
         )
         .context("failed to update video title")?;
+        Ok(())
+    }
+
+    fn update_summary(&self, _video: &Video) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -662,6 +670,8 @@ impl SqliteVideoRepository {
                 "quality_last_checked_at",
             )?,
             quality_settled: row.quality_settled,
+            summary_state: SummaryState::Missing,
+            summary_checks: LateDataChecks::default(),
         })
     }
 

@@ -14,6 +14,7 @@ pub mod sync_plex_labels_on_video_downloaded;
 pub mod sync_video_on_video_added_to_channel;
 pub mod sync_video_on_video_added_to_playlist;
 pub mod sync_video_on_video_downloaded;
+pub mod sync_video_on_video_subtitles_fetched;
 
 use crate::domain::channel::{ChannelCreated, ChannelDeleted};
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
@@ -49,6 +50,7 @@ use sync_plex_labels_on_video_downloaded::SyncPlexLabelsOnVideoDownloaded;
 use sync_video_on_video_added_to_channel::SyncVideoOnVideoAddedToChannel;
 use sync_video_on_video_added_to_playlist::SyncVideoOnVideoAddedToPlaylist;
 use sync_video_on_video_downloaded::SyncVideoOnVideoDownloaded;
+use sync_video_on_video_subtitles_fetched::SyncVideoOnVideoSubtitlesFetched;
 
 /// Maps each domain event type to the subscribers that react to it, handed
 /// to `DomainEventsConsumer` at composition time.
@@ -96,6 +98,13 @@ pub fn registry(
     registry.insert(
         VideoDownloaded::EVENT_TYPE.to_string(),
         vec![Arc::new(SyncVideoOnVideoDownloaded::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
+    registry.insert(
+        VideoSubtitlesFetched::EVENT_TYPE.to_string(),
+        vec![Arc::new(SyncVideoOnVideoSubtitlesFetched::new(
             task_repository.clone(),
             clock.clone(),
         ))],
@@ -149,12 +158,12 @@ pub fn registry(
             .push(Arc::new(ScanPlexFolderOnVideoDownloaded::new(
                 scanner.clone(),
             )));
-        registry.insert(
-            VideoSubtitlesFetched::EVENT_TYPE.to_string(),
-            vec![Arc::new(ScanPlexFolderOnVideoSubtitlesFetched::new(
+        registry
+            .entry(VideoSubtitlesFetched::EVENT_TYPE.to_string())
+            .or_default()
+            .push(Arc::new(ScanPlexFolderOnVideoSubtitlesFetched::new(
                 scanner.clone(),
-            ))],
-        );
+            )));
         registry.insert(
             ShowMoved::EVENT_TYPE.to_string(),
             vec![Arc::new(ScanPlexFolderOnShowMoved::new(scanner))],

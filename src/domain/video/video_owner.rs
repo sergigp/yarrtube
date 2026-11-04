@@ -9,4 +9,6 @@ pub struct VideoOwner {
     /// The video's playlist position; `None` for a channel video, which
     /// sorts by publish date.
     pub sort_position: Option<i64>,
+    /// Whether the source opted in to AI summaries.
+    pub summaries_enabled: bool,
 }

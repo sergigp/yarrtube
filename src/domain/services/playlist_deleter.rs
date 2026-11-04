@@ -9,6 +9,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::sync::Arc;
@@ -20,6 +21,8 @@ pub struct PlaylistDeleter {
     repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+    #[allow(dead_code)]
+    video_summary_repository: Arc<dyn VideoSummaryRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
@@ -31,6 +34,7 @@ impl PlaylistDeleter {
         repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+        video_summary_repository: Arc<dyn VideoSummaryRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
@@ -40,6 +44,7 @@ impl PlaylistDeleter {
             repository,
             video_repository,
             video_transcript_repository,
+            video_summary_repository,
             playlist_video_repository,
             event_publisher,
             task_repository,

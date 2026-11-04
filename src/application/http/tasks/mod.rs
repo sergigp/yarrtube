@@ -28,7 +28,7 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
     use crate::domain::video::{LateDataChecks, VideoId, VideoRecordId};
-    use crate::domain::video::{PlaybackPosition, SubtitleState, Video, VideoStatus};
+    use crate::domain::video::{PlaybackPosition, SubtitleState, SummaryState, Video, VideoStatus};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -927,6 +927,8 @@ mod tests {
             downloaded_height: None,
             quality_checks: LateDataChecks::default(),
             quality_settled: false,
+            summary_state: SummaryState::Missing,
+            summary_checks: LateDataChecks::default(),
         }
     }
 

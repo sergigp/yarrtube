@@ -3,6 +3,7 @@ use super::late_data_checks::LateDataChecks;
 use super::late_data_outcome::LateDataOutcome;
 use super::playback_position::PlaybackPosition;
 use super::subtitle_state::SubtitleState;
+use super::summary_state::SummaryState;
 use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
@@ -72,6 +73,9 @@ pub struct Video {
     pub quality_checks: LateDataChecks,
     /// Whether the downloaded quality is final: never checked again.
     pub quality_settled: bool,
+    pub summary_state: SummaryState,
+    /// Checks of the video's summary; only failed generations are retried.
+    pub summary_checks: LateDataChecks,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -105,6 +109,8 @@ impl Video {
             downloaded_height: None,
             quality_checks: LateDataChecks::default(),
             quality_settled: false,
+            summary_state: SummaryState::Missing,
+            summary_checks: LateDataChecks::default(),
         }
     }
 
@@ -363,6 +369,22 @@ impl Video {
     /// chapters unsettled.
     pub fn is_chapters_fetchable(&self) -> bool {
         self.is_downloaded() && !self.chapters_settled
+    }
+
+    /// Downloaded, subtitles Fetched, summary Missing.
+    pub fn is_summarizable(&self) -> bool {
+        false
+    }
+
+    pub fn mark_summary_generated(self, _now: DateTime<Utc>) -> Self {
+        self
+    }
+
+    /// Records a failed generation: Unavailable once failures are exhausted.
+    /// Ignores the video's age, unlike `LateDataChecks::settles`: a summary
+    /// doesn't get better with time.
+    pub fn record_summary_failure(self, _now: DateTime<Utc>) -> Self {
+        self
     }
 
     /// Test fixture: sets the chapters alone, without recording a check

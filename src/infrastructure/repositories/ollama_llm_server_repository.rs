@@ -1,4 +1,4 @@
-use crate::domain::llm_server::{LlmModel, LlmServer, OllamaUrl};
+use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
 use anyhow::Context;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -13,6 +13,8 @@ pub trait LlmServerRepository: Send + Sync {
     /// The server at `url`: its version and installed models, each with
     /// whether it can think.
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer>;
+    /// What the model says to `chat`: `POST /api/chat`, unstreamed.
+    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply>;
 }
 
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
@@ -39,6 +41,10 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             version: version.version,
             models,
         })
+    }
+
+    fn chat(&self, _url: &OllamaUrl, _chat: &LlmChat) -> anyhow::Result<LlmReply> {
+        anyhow::bail!("not implemented")
     }
 }
 
@@ -117,19 +123,51 @@ struct TagsModel {
 #[cfg(test)]
 pub struct FakeLlmServerRepository {
     server: Option<LlmServer>,
+    /// The answers `chat` gives, in order; once used up, it fails.
+    replies: std::sync::Mutex<std::collections::VecDeque<anyhow::Result<LlmReply>>>,
+    chats: std::sync::Mutex<Vec<LlmChat>>,
+    on_chat: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
 #[cfg(test)]
 impl FakeLlmServerRepository {
     pub fn new(server: LlmServer) -> Self {
-        Self {
-            server: Some(server),
-        }
+        Self::with(Some(server))
     }
 
     /// A server that is down: every call fails.
     pub fn failing() -> Self {
-        Self { server: None }
+        Self::with(None)
+    }
+
+    /// Answers `chat` with `replies`, in order.
+    pub fn with_replies(self, replies: Vec<anyhow::Result<LlmReply>>) -> Self {
+        Self {
+            replies: std::sync::Mutex::new(replies.into()),
+            ..self
+        }
+    }
+
+    /// Runs `hook` while `chat` is in flight.
+    pub fn with_on_chat(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            on_chat: Some(Box::new(hook)),
+            ..self
+        }
+    }
+
+    /// The chats received, in order.
+    pub fn chats(&self) -> Vec<LlmChat> {
+        self.chats.lock().unwrap().clone()
+    }
+
+    fn with(server: Option<LlmServer>) -> Self {
+        Self {
+            server,
+            replies: Default::default(),
+            chats: Default::default(),
+            on_chat: None,
+        }
     }
 }
 
@@ -139,6 +177,18 @@ impl LlmServerRepository for FakeLlmServerRepository {
         self.server
             .clone()
             .ok_or_else(|| anyhow::anyhow!("connection refused"))
+    }
+
+    fn chat(&self, _url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
+        self.chats.lock().unwrap().push(chat.clone());
+        if let Some(hook) = &self.on_chat {
+            hook();
+        }
+        self.replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| Err(anyhow::anyhow!("no reply left")))
     }
 }
 

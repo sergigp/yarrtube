@@ -61,6 +61,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -138,6 +139,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -211,6 +213,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -282,6 +285,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -349,6 +353,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -416,6 +421,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -472,6 +478,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -540,6 +547,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -607,6 +615,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -676,6 +685,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -736,6 +746,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -796,6 +807,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -855,6 +867,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -911,6 +924,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -964,6 +978,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1023,6 +1038,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1076,6 +1092,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1141,6 +1158,7 @@ mod tests {
                 )),
                 Arc::new(CategoryLock::default()),
             ),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1230,6 +1248,7 @@ mod tests {
                 )),
                 Arc::new(CategoryLock::default()),
             ),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1276,6 +1295,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&my_video()));
@@ -1319,6 +1339,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1369,6 +1390,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1444,6 +1466,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1526,6 +1549,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1588,6 +1612,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1650,6 +1675,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1709,6 +1735,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1796,6 +1823,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1904,6 +1932,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1972,6 +2001,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -2066,6 +2096,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -2118,6 +2149,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());
@@ -2176,6 +2208,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());
@@ -2239,6 +2272,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());
@@ -2298,6 +2332,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());

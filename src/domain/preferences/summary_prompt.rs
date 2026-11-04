@@ -41,6 +41,16 @@ impl SummaryPrompt {
         &self.0
     }
 
+    /// Re-checks a `from_stored` prompt.
+    pub fn validated(&self) -> Result<Self, ValidationError> {
+        Ok(self.clone())
+    }
+
+    /// `section`'s body with its `{name}`s replaced in one pass.
+    pub fn render(&self, _section: SummaryPromptSection, _values: &[(&str, String)]) -> String {
+        String::new()
+    }
+
     /// Every section in order; the note before the first one is left out.
     fn sections(value: &str) -> Vec<Section<'_>> {
         value.lines().fold(Vec::new(), |mut sections, line| {

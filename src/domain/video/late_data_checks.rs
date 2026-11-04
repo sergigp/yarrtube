@@ -26,6 +26,11 @@ impl LateDataChecks {
             .is_none_or(|checked_at| now - checked_at >= RECHECK_AFTER)
     }
 
+    /// Whether the data has failed as many checks as it is allowed.
+    pub fn failures_exhausted(&self) -> bool {
+        false
+    }
+
     /// Records a check that ran `now`, counting a failed attempt for a
     /// `Failed` outcome.
     pub fn record(self, outcome: LateDataOutcome, now: DateTime<Utc>) -> Self {

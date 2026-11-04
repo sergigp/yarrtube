@@ -8,5 +8,6 @@ pub enum TaskLane {
     VideoSync,
     Light,
     Plex,
+    Summaries,
     Exclusive,
 }

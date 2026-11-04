@@ -8,6 +8,7 @@ use crate::domain::video::{
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -34,6 +35,8 @@ pub struct VideoReconciler {
     video_lock: Arc<VideoLock>,
     clock: Arc<dyn Clock>,
     video_category_assigner: VideoCategoryAssigner,
+    #[allow(dead_code)]
+    preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
 impl VideoReconciler {
@@ -49,6 +52,7 @@ impl VideoReconciler {
         video_lock: Arc<VideoLock>,
         clock: Arc<dyn Clock>,
         video_category_assigner: VideoCategoryAssigner,
+        preferences_repository: Arc<dyn PreferencesRepository>,
     ) -> Self {
         Self {
             video_repository,
@@ -61,6 +65,7 @@ impl VideoReconciler {
             video_lock,
             clock,
             video_category_assigner,
+            preferences_repository,
         }
     }
 }
@@ -230,7 +235,7 @@ impl VideoReconciler {
     }
 
     fn schedule_steps(&self, video: &Video, target: &VideoTarget) -> anyhow::Result<()> {
-        VideoSyncPlan::for_video(video, self.clock.now())
+        VideoSyncPlan::for_video(video, false, self.clock.now())
             .steps
             .iter()
             .try_for_each(|step| {

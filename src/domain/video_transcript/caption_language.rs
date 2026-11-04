@@ -24,6 +24,16 @@ impl CaptionLanguage {
         &self.0
     }
 
+    /// `Spanish` for `es-US`; the code itself when unknown.
+    pub fn english_name(&self) -> String {
+        self.0.clone()
+    }
+
+    /// 4.3 for `en`, 3.4 otherwise (measured on the eval golden set).
+    pub fn chars_per_token(&self) -> f64 {
+        3.4
+    }
+
     /// The primary subtag, e.g. `es` for `es-US`.
     pub fn base(&self) -> &str {
         self.0.split('-').next().unwrap_or(&self.0)

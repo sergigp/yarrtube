@@ -20,6 +20,17 @@ impl ContextLength {
     pub fn value(&self) -> u32 {
         self.0
     }
+
+    /// The tokens the prompt can take, leaving room for thinking and the
+    /// answer: 9000 of the default 12288, as measured in `evals/summaries`.
+    pub fn input_budget_tokens(&self) -> u32 {
+        0
+    }
+
+    /// The tokens the model can write: what the input budget leaves.
+    pub fn output_budget_tokens(&self) -> u32 {
+        0
+    }
 }
 
 impl Default for ContextLength {

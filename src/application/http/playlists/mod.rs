@@ -243,6 +243,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
     use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
         SqliteVideoTranscriptRepository, VideoTranscriptRepository,
     };
@@ -1145,6 +1146,7 @@ mod tests {
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -1199,6 +1201,7 @@ mod tests {
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             task_repository.clone(),
@@ -1258,6 +1261,7 @@ mod tests {
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             task_repository.clone(),
@@ -1319,6 +1323,7 @@ mod tests {
             playlist_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             playlist_video_repository.clone(),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -1375,6 +1380,7 @@ mod tests {
             playlist_repository.clone(),
             video_repository.clone(),
             video_transcript_repository.clone(),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             playlist_video_repository.clone(),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -1419,6 +1425,7 @@ mod tests {
             playlist_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             playlist_video_repository.clone(),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -1451,6 +1458,7 @@ mod tests {
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -2715,6 +2723,7 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             playlist_video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::failing()),
             event_publisher(&db),
@@ -2747,6 +2756,7 @@ mod tests {
                     Arc::new(VideoLock::default()),
                     Arc::new(FixedClock(fixed_timestamp())),
                     video_category_assigner(db.database()),
+                    Arc::new(SqlitePreferencesRepository::new(db.database())),
                 ),
                 "/videos",
             )),
@@ -3642,6 +3652,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
+            Arc::new(SqliteVideoSummaryRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             unused_event_publisher(),
             Arc::new(SqliteTaskRepository::new(
@@ -3681,6 +3692,7 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             playlist_video_repository,
             Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(
                 playlist_items,
@@ -3715,6 +3727,7 @@ mod tests {
                     Arc::new(VideoLock::default()),
                     Arc::new(FixedClock(fixed_timestamp())),
                     video_category_assigner(db.database()),
+                    Arc::new(SqlitePreferencesRepository::new(db.database())),
                 ),
                 "/videos",
             )),
@@ -3741,6 +3754,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
+            Arc::new(SqliteVideoSummaryRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(Vec::new())),
             unused_event_publisher(),
@@ -3773,6 +3787,7 @@ mod tests {
                     Arc::new(VideoLock::default()),
                     Arc::new(FixedClock(fixed_timestamp())),
                     video_category_assigner(unused_connection()),
+                    Arc::new(SqlitePreferencesRepository::new(unused_connection())),
                 ),
                 "/videos",
             )),
