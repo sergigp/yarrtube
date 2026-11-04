@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_do_nothing_when_summaries_are_no_longer_available() {
+    fn it_should_skip_if_summaries_are_unavailable() {
         let changed: Vec<(Vec<LlmChat>, SummaryState)> = [
             Preferences {
                 ai_enabled: false,
@@ -556,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_do_nothing_when_the_source_opted_out() {
+    fn it_should_skip_if_the_source_opted_out() {
         let scene = Scene {
             summaries_enabled: false,
             ..Scene::default()
@@ -571,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_do_nothing_for_a_video_already_summarized() {
+    fn it_should_skip_a_video_already_summarized() {
         let scene = Scene {
             video: Video {
                 summary_state: SummaryState::Generated,
@@ -589,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_do_nothing_for_a_missing_video() {
+    fn it_should_ignore_a_missing_video() {
         let scene = Scene::default().build();
         SqliteVideoRepository::new(scene.db.database())
             .delete(&scene.video.id)
@@ -600,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_without_counting_when_the_saved_prompt_is_invalid() {
+    fn it_should_skip_when_the_saved_prompt_is_invalid() {
         let scene = Scene {
             preferences: with_summaries(|settings| SummarySettings {
                 prompt: Some(SummaryPrompt::from_stored("## system\n\nBe brief.\n")),
@@ -618,7 +618,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_without_counting_when_ollama_is_unreachable() {
+    fn it_should_skip_when_ollama_is_unreachable() {
         let scene = Scene {
             llm: FakeLlmServerRepository::failing(),
             ..Scene::default()
@@ -632,7 +632,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_without_counting_when_the_model_is_not_installed() {
+    fn it_should_skip_when_the_model_is_not_installed() {
         let scene = Scene {
             llm: FakeLlmServerRepository::new(server_with(LlmModel {
                 name: "gemma3:4b".to_string(),
@@ -766,7 +766,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_store_nothing_when_the_video_is_deleted_while_generating() {
+    fn it_should_ignore_a_video_deleted_while_generating() {
         let scene = Scene::default().build_with_on_chat(|db, video| {
             SqliteVideoRepository::new(db.database())
                 .delete(video)
