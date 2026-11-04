@@ -369,6 +369,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_report_no_summary_for_a_video_without_one() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1").with_summaries_enabled(true))
+            .unwrap();
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp()),
+        );
+        save_preferences(&db, summaries_on());
+
+        let response = list_for_playlist(home_video_searcher(&db), "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![pending_video_response("vid1", "My Video")])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
