@@ -2364,6 +2364,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_schedule_a_summary_when_the_source_opted_out() {
+        assert_eq!(
+            summaries_scheduled(subtitled_video(), false, summaries_on()),
+            0
+        );
+    }
+
     /// How many summaries a sync of `video` schedules, in a channel with
     /// summaries on or off under `preferences`.
     fn summaries_scheduled(video: Video, source_opted_in: bool, preferences: Preferences) -> usize {

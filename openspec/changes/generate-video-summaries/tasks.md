@@ -37,7 +37,7 @@
 - [x] 2.29 `src/application/tasks/summarize_video_task.rs`: `it_should_become_unavailable_on_the_third_failure` — state Unavailable. Verify: test red, then green.
 - [x] 2.30 `src/application/tasks/summarize_video_task.rs`: `it_should_store_nothing_when_the_video_is_deleted_while_generating` — fake chat hook deletes it. Verify: test red, then green.
 - [x] 2.31 `src/application/tasks/sync_video_task.rs`: `it_should_schedule_a_summary_for_a_subtitled_video_in_an_opted_in_source` — one `summarize_video`. Verify: test red, then green.
-- [ ] 2.32 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_summary_when_the_source_opted_out` — none. Verify: test red, then green.
+- [x] 2.32 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_summary_when_the_source_opted_out` — none. Verify: test red, then green.
 - [ ] 2.33 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_summary_while_ai_summaries_are_off` — table. Verify: test red, then green.
 - [ ] 2.34 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_summary_without_fetched_subtitles` — Missing, Unavailable. Verify: test red, then green.
 - [ ] 2.35 `src/application/tasks/sync_video_task.rs`: `it_should_space_summary_retries_by_a_day` — 3 h no, 25 h yes. Verify: test red, then green.
