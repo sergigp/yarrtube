@@ -116,6 +116,7 @@ impl VideoSearcherApi for VideoSearcher {
             .find(playlist_id)
             .map_err(ListVideosError::Repository)?
             .ok_or_else(|| ListVideosError::PlaylistNotFound(playlist_id.clone()))?;
+        let summaries_shown = self.find_preferences()?.summaries_available();
 
         let playlist_videos = self
             .playlist_video_repository
@@ -125,7 +126,7 @@ impl VideoSearcherApi for VideoSearcher {
             .iter()
             .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
             .filter(|video| !is_excluded(video))
-            .map(|video| video.and_then(|video| self.view(video, true)))
+            .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
