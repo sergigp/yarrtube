@@ -340,7 +340,7 @@ impl Task {
     }
 
     /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail`,
-    /// `fetch_subtitles`, `fetch_chapters`, `upgrade_quality` and `sync_video`: two tasks sharing a key never run
+    /// `fetch_subtitles`, `fetch_chapters`, `upgrade_quality`, `summarize_video` and `sync_video`: two tasks sharing a key never run
     /// at the same time, and a task with a key is not scheduled twice while
     /// one is pending (or running, see `dedupes_running`).
     pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
@@ -356,6 +356,7 @@ impl Task {
                 .map(|(video_id, _)| video_id),
             "sync_video" => Self::decode_sync_video_payload(payload).ok(),
             "fetch_chapters" => Self::decode_fetch_chapters_payload(payload).ok(),
+            "summarize_video" => Self::decode_summarize_video_payload(payload).ok(),
             "upgrade_quality" => Self::decode_upgrade_quality_payload(payload)
                 .ok()
                 .map(|(video_id, _, _)| video_id),

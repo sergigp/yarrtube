@@ -2444,6 +2444,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_queue_a_second_summary() {
+        let task = Task::SummarizeVideo {
+            video_id: "rec1".to_string(),
+        };
+
+        let db = TestDatabase::new();
+        let repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        repository.schedule(&task, fixed_timestamp()).unwrap();
+        repository.schedule(&task, fixed_timestamp()).unwrap();
+
+        assert_eq!(repository.list_non_completed().unwrap().len(), 1);
+    }
+
     /// How many summaries a sync of `video` schedules, in a channel with
     /// summaries on or off under `preferences`.
     fn summaries_scheduled(video: Video, source_opted_in: bool, preferences: Preferences) -> usize {
