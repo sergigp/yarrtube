@@ -416,6 +416,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_hide_the_summary_of_a_category_video_when_ai_is_off() {
+        let db = TestDatabase::new();
+        let chess = save_summarized_category_channel(
+            &db,
+            &channel("@somechannel", None).with_summaries_enabled(true),
+        );
+        save_preferences(
+            &db,
+            Preferences {
+                ai_enabled: false,
+                ..summaries_on()
+            },
+        );
+
+        let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![category_video_in(
+                category_video_response("vid1", "My Video", 10, channel_source(None)),
+                &[&chess]
+            )])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

@@ -196,9 +196,10 @@ impl VideoSearcherApi for VideoSearcher {
         let by_video = self
             .category_ids_by_video(&self.list_categories()?)
             .map_err(ListVideosError::Repository)?;
+        let summaries_available = self.find_preferences()?.summaries_available();
         videos
             .into_iter()
-            .map(|sourced| self.category_view(sourced, &by_video, false))
+            .map(|sourced| self.category_view(sourced, &by_video, summaries_available))
             .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -271,13 +272,13 @@ impl VideoSearcher {
         &self,
         sourced: SourcedVideo,
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
-        _summaries_available: bool,
+        summaries_available: bool,
     ) -> anyhow::Result<CategoryVideoView> {
         let VideoView {
             video,
             metadata,
             summary,
-        } = self.view(sourced.video, true)?;
+        } = self.view(sourced.video, summaries_available)?;
         let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
         Ok(CategoryVideoView {
             video,
