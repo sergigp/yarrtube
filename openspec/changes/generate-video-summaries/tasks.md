@@ -31,7 +31,7 @@
 - [x] 2.23 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_chat_fails` — 1 attempt, check recorded, nothing stored. Verify: test red, then green.
 - [x] 2.24 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_answer_stopped_at_the_limit` — nothing stored. Verify: test red, then green.
 - [x] 2.25 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_input_was_truncated` — prompt tokens 12250. Verify: test red, then green.
-- [ ] 2.26 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_answer_is_only_reasoning` — nothing stored. Verify: test red, then green.
+- [x] 2.26 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_answer_is_only_reasoning` — nothing stored. Verify: test red, then green.
 - [ ] 2.27 `src/application/tasks/summarize_video_task.rs`: `it_should_stop_at_the_first_failed_part` — no later chats, 1 attempt. Verify: test red, then green.
 - [ ] 2.28 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_subtitle_file_is_gone` — no chat. Verify: test red, then green.
 - [ ] 2.29 `src/application/tasks/summarize_video_task.rs`: `it_should_become_unavailable_on_the_third_failure` — state Unavailable. Verify: test red, then green.
