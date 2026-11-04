@@ -72,6 +72,7 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   reconcile_playlist: 'syncs',
   reconcile_channel: 'syncs',
   sync_video: 'syncs',
+  summarize_video: 'ai',
 }
 
 /** A task's family; AI tasks are 'other' unless `aiEnabled`. */
