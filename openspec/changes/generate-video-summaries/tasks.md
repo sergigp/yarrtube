@@ -28,7 +28,7 @@
 - [x] 2.20 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_the_saved_prompt_is_invalid` — no chat, 0 attempts, no check. Verify: test red, then green.
 - [x] 2.21 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_ollama_is_unreachable` — task `Ok`, no check. Verify: test red, then green.
 - [x] 2.22 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_the_model_is_not_installed` — same. Verify: test red, then green.
-- [ ] 2.23 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_chat_fails` — 1 attempt, check recorded, nothing stored. Verify: test red, then green.
+- [x] 2.23 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_chat_fails` — 1 attempt, check recorded, nothing stored. Verify: test red, then green.
 - [ ] 2.24 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_answer_stopped_at_the_limit` — nothing stored. Verify: test red, then green.
 - [ ] 2.25 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_input_was_truncated` — prompt tokens 12250. Verify: test red, then green.
 - [ ] 2.26 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_answer_is_only_reasoning` — nothing stored. Verify: test red, then green.

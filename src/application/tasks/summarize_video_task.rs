@@ -565,6 +565,28 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_count_a_failed_attempt_when_the_chat_fails() {
+        let scene = Scene::default()
+            .with_replies(vec![Err(anyhow::anyhow!("model crashed"))])
+            .build();
+
+        assert_eq!(scene.run(), Ok(()));
+
+        assert_eq!(scene.stored_summary(), None);
+        let video = scene.stored_video();
+        assert_eq!(
+            (video.summary_state, video.summary_checks),
+            (
+                SummaryState::Missing,
+                LateDataChecks {
+                    last_checked_at: Some(later()),
+                    failed_attempts: 1,
+                }
+            )
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

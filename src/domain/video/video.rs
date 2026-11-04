@@ -390,8 +390,12 @@ impl Video {
     /// Records a failed generation: Unavailable once failures are exhausted.
     /// Ignores the video's age, unlike `LateDataChecks::settles`: a summary
     /// doesn't get better with time.
-    pub fn record_summary_failure(self, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn record_summary_failure(self, now: DateTime<Utc>) -> Self {
+        Self {
+            summary_checks: self.summary_checks.record(LateDataOutcome::Failed, now),
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Test fixture: sets the chapters alone, without recording a check
