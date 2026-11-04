@@ -22,8 +22,7 @@ Rust
 - `src/domain/video_transcript/transcript_text.rs` — share cue cleaning with `TimedTranscript`.
 - `src/domain/video_transcript/caption_language.rs` — `english_name()`.
 - `src/domain/llm_server/llm_chat.rs` — new: request to the chat port.
-- `src/domain/llm_server/llm_reply.rs` — new: raw answer, `input_tokens`, `stopped_at_limit`.
-- `src/domain/llm_server/llm_chat_error.rs` — new: `ServerFault` or `Refused`.
+- `src/domain/llm_server/llm_reply.rs` — new: raw answer, `input_tokens`, `stopped_at_limit`, `refusal`.
 - `src/domain/llm_server/llm_server.rs` — `model(name)`.
 - `src/domain/preferences/summary_prompt.rs` — `validated`, `render`.
 - `src/domain/preferences/context_length.rs` — `input_budget_tokens`, `output_budget_tokens`.
@@ -134,15 +133,13 @@ pub struct LlmChat {
 }
 
 // domain/llm_server/llm_reply.rs
-/// Why a chat failed.
-pub enum LlmChatError {
-    /// Ollama's fault: a later sync can try again.
-    ServerFault(String),
-    /// This request can't work as it is: too long, or past the timeout.
-    Refused(String),
+pub struct LlmReply {
+    pub content: String,
+    pub input_tokens: u32,
+    pub stopped_at_limit: bool,
+    /// Why Ollama wouldn't answer this request: too long, or past the timeout.
+    pub refusal: Option<String>,
 }
-
-pub struct LlmReply { pub content: String, pub input_tokens: u32, pub stopped_at_limit: bool }
 
 // domain/llm_server/llm_server.rs
 impl LlmServer { pub fn model(&self, name: &str) -> Option<&LlmModel>; }
@@ -212,9 +209,9 @@ pub trait VideoSummarizerApi: Send + Sync {
 pub trait LlmServerRepository: Send + Sync {
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer>;
     /// `POST /api/chat`, `stream: false`, `truncate: false`, `shift: false`,
-    /// 30-minute timeout. 400 or a timeout is `Refused`; anything else that
-    /// fails is `ServerFault`.
-    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> Result<LlmReply, LlmChatError>;
+    /// 30-minute timeout. A 400 or the timeout is a reply with a `refusal`;
+    /// any other failure is an `Err`, the server's fault.
+    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply>;
 }
 
 // infrastructure/repositories/sqlite_video_summary_repository.rs
@@ -281,7 +278,7 @@ SummarizeVideoTask::handle(payload, _)
     effective_prompt().validated()         // Err -> warn, return
     LlmServerRepository::find(url)         // Err -> warn, return
     LlmServer::model(name)                 // None -> warn, return
-    --- failures below: error!(reason); on the last attempt, unless ServerFault: mark_summary_unavailable + update_summary; return Err ---
+    --- failures below: error!(reason); on the last attempt, unless chat returned Err: mark_summary_unavailable + update_summary; return Err ---
     VideoTranscriptRepository::find(id)    // None -> failure
     VideoFileRepository::read_to_string(output_dir, subtitle_filename) // None -> failure
     TimedTranscript::from_srt(srt)         // no lines -> failure
@@ -296,7 +293,7 @@ SummarizeVideoTask::handle(payload, _)
       info!(part, system, user)            // full messages
       LlmServerRepository::chat(url, LlmChat { .. })
       info!(answer, input_tokens, duration_seconds)
-      reply.stopped_at_limit -> failure
+      reply.refusal or reply.stopped_at_limit -> failure
       SummaryText::from_answer(content)
     reduced(answers)
       input.reduce_fits(answers) or one left: ask(input.reduce(prompt, answers))
@@ -350,9 +347,9 @@ Behaviour (application layer):
 20. `it_should_skip_when_the_saved_prompt_is_invalid` — no chat, Missing, `Ok`.
 21. `it_should_skip_when_ollama_is_unreachable` — task `Ok`, Missing.
 22. `it_should_skip_when_the_model_is_not_installed` — same.
-23. `it_should_fail_the_task_and_stay_missing_on_a_server_fault` — even on the last attempt; nothing stored.
+23. `it_should_fail_the_task_and_stay_missing_on_a_server_fault` — `chat` errs, even on the last attempt; nothing stored.
 24. `it_should_fail_the_task_when_the_answer_stopped_at_the_limit` — Missing before the last attempt; nothing stored.
-25. `it_should_fail_the_task_when_ollama_refuses_the_prompt` — `Refused`; nothing stored.
+25. `it_should_fail_the_task_when_ollama_refuses_the_prompt` — reply with a `refusal`; nothing stored.
 26. `it_should_fail_the_task_when_the_answer_is_only_reasoning` — nothing stored.
 27. `it_should_stop_at_the_first_failed_part` — no later chats, task fails.
 28. `it_should_fail_the_task_when_the_subtitle_file_is_gone` — no chat.
@@ -406,7 +403,7 @@ Infrastructure:
 53. `it_should_post_the_chat_with_its_options` — mockito body: model, messages, `stream: false`, `truncate: false`, `shift: false`, `think`, `num_ctx`, `temperature`, `num_predict`.
 54. `it_should_read_the_answer_and_input_tokens`.
 55. `it_should_report_a_reply_stopped_at_the_limit` — `done_reason: "length"`.
-56. `it_should_report_a_server_fault_on_an_error_status` — 500 and 404; 400 is `it_should_report_a_refusal_on_a_bad_request`.
+56. `it_should_fail_on_an_error_status` — 500 and 404; 400 is `it_should_report_a_refusal_on_a_bad_request`.
 57. `it_should_fail_on_an_answer_that_is_not_ollamas`.
 
 `sqlite_video_summary_repository`

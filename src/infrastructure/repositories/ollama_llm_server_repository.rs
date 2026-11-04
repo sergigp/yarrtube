@@ -77,6 +77,8 @@ impl OllamaLlmServerRepository {
         serde_json::json!({
             "model": chat.model,
             "stream": false,
+            "truncate": false,
+            "shift": false,
             "think": chat.thinking,
             "options": {
                 "num_ctx": chat.context_length,
@@ -252,6 +254,8 @@ mod tests {
             .match_body(mockito::Matcher::Json(serde_json::json!({
                 "model": "qwen3:4b",
                 "stream": false,
+                "truncate": false,
+                "shift": false,
                 "think": true,
                 "options": {"num_ctx": 12288, "temperature": 0.3, "num_predict": 3288},
                 "messages": [
