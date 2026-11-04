@@ -258,7 +258,14 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_summary_when_listing_playlist_videos() {
         let db = TestDatabase::new();
-        save_summarized_playlist_video(&db, &playlist("PL1").with_summaries_enabled(true));
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1").with_summaries_enabled(true))
+            .unwrap();
+        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        save_summary(&db, &video);
         save_preferences(&db, summaries_on());
 
         let response = list_for_playlist(home_video_searcher(&db), "PL1").await;
@@ -275,8 +282,14 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_when_ai_is_off() {
         let db = TestDatabase::new();
-        let video =
-            save_summarized_playlist_video(&db, &playlist("PL1").with_summaries_enabled(true));
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1").with_summaries_enabled(true))
+            .unwrap();
+        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        save_summary(&db, &video);
         save_preferences(
             &db,
             Preferences {
@@ -303,7 +316,14 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_when_summaries_are_off() {
         let db = TestDatabase::new();
-        save_summarized_playlist_video(&db, &playlist("PL1").with_summaries_enabled(true));
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1").with_summaries_enabled(true))
+            .unwrap();
+        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        save_summary(&db, &video);
         save_preferences(
             &db,
             Preferences {
@@ -323,7 +343,14 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_of_a_playlist_with_summaries_off() {
         let db = TestDatabase::new();
-        save_summarized_playlist_video(&db, &playlist("PL1"));
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
+        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        save_summary(&db, &video);
         save_preferences(&db, summaries_on());
 
         let response = list_for_playlist(home_video_searcher(&db), "PL1").await;
@@ -337,10 +364,18 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_summary_when_listing_channel_videos() {
         let db = TestDatabase::new();
-        save_summarized_channel_video(
-            &db,
-            &channel("@somechannel", None).with_summaries_enabled(true),
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None).with_summaries_enabled(true))
+            .unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@somechannel",
+            &video,
+            0,
         );
+        save_summary(&db, &video);
         save_preferences(&db, summaries_on());
 
         let response = list_for_channel(home_video_searcher(&db), "@somechannel").await;
@@ -357,7 +392,18 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_of_a_channel_with_summaries_off() {
         let db = TestDatabase::new();
-        save_summarized_channel_video(&db, &channel("@somechannel", None));
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@somechannel",
+            &video,
+            0,
+        );
+        save_summary(&db, &video);
         save_preferences(&db, summaries_on());
 
         let response = list_for_channel(home_video_searcher(&db), "@somechannel").await;
@@ -395,10 +441,19 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_summary_when_listing_category_videos() {
         let db = TestDatabase::new();
-        let chess = save_summarized_category_channel(
-            &db,
-            &channel("@somechannel", None).with_summaries_enabled(true),
+        let video = downloaded_video("vid1", "My Video", None, 10);
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None).with_summaries_enabled(true))
+            .unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@somechannel",
+            &video,
+            0,
         );
+        save_summary(&db, &video);
+        let chess = save_category_of(&db, &[channel_member("@somechannel")]);
         save_preferences(&db, summaries_on());
 
         let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
@@ -418,10 +473,19 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_of_a_category_video_when_ai_is_off() {
         let db = TestDatabase::new();
-        let chess = save_summarized_category_channel(
-            &db,
-            &channel("@somechannel", None).with_summaries_enabled(true),
+        let video = downloaded_video("vid1", "My Video", None, 10);
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None).with_summaries_enabled(true))
+            .unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@somechannel",
+            &video,
+            0,
         );
+        save_summary(&db, &video);
+        let chess = save_category_of(&db, &[channel_member("@somechannel")]);
         save_preferences(
             &db,
             Preferences {
@@ -6371,56 +6435,6 @@ mod tests {
                 fixed_timestamp(),
             ))
             .unwrap();
-    }
-
-    /// Stores `playlist` holding a video "vid1" with a summary.
-    fn save_summarized_playlist_video(db: &TestDatabase, playlist: &Playlist) -> Video {
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
-        SqlitePlaylistRepository::new(db.database())
-            .insert(playlist)
-            .unwrap();
-        save_playlist_video(
-            &SqliteVideoRepository::new(db.database()),
-            &SqlitePlaylistVideoRepository::new(db.database()),
-            playlist.id.as_str(),
-            &video,
-        );
-        save_summary(db, &video);
-        video
-    }
-
-    /// Stores `channel` holding a video "vid1" with a summary.
-    fn save_summarized_channel_video(db: &TestDatabase, channel: &Channel) {
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
-        SqliteChannelRepository::new(db.database())
-            .insert(channel)
-            .unwrap();
-        save_channel_video(
-            &SqliteVideoRepository::new(db.database()),
-            &SqliteChannelVideoRepository::new(db.database()),
-            channel.id.as_str(),
-            &video,
-            0,
-        );
-        save_summary(db, &video);
-    }
-
-    /// Stores `channel` as the only member of a category, holding a downloaded
-    /// video "vid1" with a summary.
-    fn save_summarized_category_channel(db: &TestDatabase, channel: &Channel) -> Category {
-        let video = downloaded_video("vid1", "My Video", None, 10);
-        SqliteChannelRepository::new(db.database())
-            .insert(channel)
-            .unwrap();
-        save_channel_video(
-            &SqliteVideoRepository::new(db.database()),
-            &SqliteChannelVideoRepository::new(db.database()),
-            channel.id.as_str(),
-            &video,
-            0,
-        );
-        save_summary(db, &video);
-        save_category_of(db, &[channel_member(channel.id.as_str())])
     }
 
     /// Stores a category "Chess" of `members`, every one of them having it.

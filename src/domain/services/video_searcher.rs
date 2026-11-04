@@ -255,9 +255,10 @@ impl VideoSearcher {
     /// `video` with its metadata, and its summary when `summaries_shown`.
     fn view(&self, video: Video, summaries_shown: bool) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
-        let summary = match summaries_shown {
-            true => self.video_summary_repository.find(&video.id)?,
-            false => None,
+        let summary = if summaries_shown {
+            self.video_summary_repository.find(&video.id)?
+        } else {
+            None
         };
         Ok(VideoView {
             video,
@@ -266,7 +267,8 @@ impl VideoSearcher {
         })
     }
 
-    /// `sourced` as a category video: with its metadata and the categories
+    /// `sourced` as a category video: with its metadata, its summary when
+    /// `summaries_available` and its source opted in, and the categories
     /// having its YouTube video in `by_video` (see `category_ids_by_video`).
     fn category_view(
         &self,
