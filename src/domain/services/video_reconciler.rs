@@ -92,7 +92,7 @@ impl VideoReconcilerApi for VideoReconciler {
         let video = self.recover_if_due(video)?;
         self.repair_metadata(&video, &owner);
         self.warn_if_stranded(&video)?;
-        let summaries_wanted = self.summaries_wanted(&owner)?;
+        let summaries_wanted = video.is_summarizable() && self.summaries_wanted(&owner)?;
         self.schedule_steps(&video, &owner.target, summaries_wanted)
     }
 }
