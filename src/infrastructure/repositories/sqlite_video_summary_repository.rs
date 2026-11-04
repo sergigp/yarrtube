@@ -109,3 +109,62 @@ impl SqliteVideoSummaryRepository {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+
+    #[test]
+    fn it_should_save_and_find_a_summary() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoSummaryRepository::new(db.database());
+        let stored = summary("rec1", "Three games.");
+
+        let result = repository.save(&stored);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(repository.find(&stored.video_id).unwrap(), Some(stored));
+    }
+
+    #[test]
+    fn it_should_replace_a_videos_summary() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoSummaryRepository::new(db.database());
+        let replacement = summary("rec1", "Four games.");
+        repository.save(&summary("rec1", "Three games.")).unwrap();
+
+        repository.save(&replacement).unwrap();
+
+        assert_eq!(
+            repository.find(&replacement.video_id).unwrap(),
+            Some(replacement)
+        );
+    }
+
+    #[test]
+    fn it_should_delete_a_summary() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoSummaryRepository::new(db.database());
+        let (deleted, kept) = (summary("rec1", "Gone."), summary("rec2", "Kept."));
+        repository.save(&deleted).unwrap();
+        repository.save(&kept).unwrap();
+
+        let result = repository.delete(&deleted.video_id);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            [&deleted, &kept].map(|summary| repository.find(&summary.video_id).unwrap()),
+            [None, Some(kept.clone())]
+        );
+    }
+
+    fn summary(video_id: &str, text: &str) -> VideoSummary {
+        VideoSummary {
+            video_id: VideoRecordId::new(video_id).unwrap(),
+            text: SummaryText::new(text),
+            model: "qwen3:4b".to_string(),
+            created_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap(),
+        }
+    }
+}
