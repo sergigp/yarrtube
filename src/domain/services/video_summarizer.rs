@@ -122,7 +122,10 @@ impl VideoSummarizer {
             && server
                 .model(settings.model.as_str())
                 .is_some_and(|model| model.thinking);
-        let prompt = settings.effective_prompt();
+        let prompt = settings
+            .effective_prompt()
+            .validated()
+            .map_err(anyhow::Error::new)?;
         Ok(SummaryJob {
             url,
             settings,

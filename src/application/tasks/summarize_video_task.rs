@@ -49,7 +49,7 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{SummaryState, Video, VideoChapter, VideoId};
+    use crate::domain::video::{LateDataChecks, SummaryState, Video, VideoChapter, VideoId};
     use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
@@ -504,6 +504,27 @@ mod tests {
 
         assert_eq!(scene.run(), Ok(()));
         assert_eq!(scene.chats(), vec![]);
+    }
+
+    #[test]
+    fn it_should_skip_without_counting_when_the_saved_prompt_is_invalid() {
+        let scene = Scene {
+            preferences: with_summaries(|settings| SummarySettings {
+                prompt: Some(SummaryPrompt::from_stored("## system\n\nBe brief.\n")),
+                ..settings
+            }),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        assert_eq!(scene.run(), Ok(()));
+
+        assert_eq!(scene.chats(), vec![]);
+        assert_eq!(
+            scene.stored_video().summary_checks,
+            LateDataChecks::default()
+        );
     }
 
     /// What a test changes about the default situation: a downloaded,

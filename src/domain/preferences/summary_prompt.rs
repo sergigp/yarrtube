@@ -43,7 +43,7 @@ impl SummaryPrompt {
 
     /// Re-checks a `from_stored` prompt.
     pub fn validated(&self) -> Result<Self, ValidationError> {
-        Ok(self.clone())
+        Self::new(self.0.clone())
     }
 
     /// `section`'s body with its `{name}`s replaced in one pass.

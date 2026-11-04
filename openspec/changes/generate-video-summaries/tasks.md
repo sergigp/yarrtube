@@ -25,7 +25,7 @@
 - [x] 2.17 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_when_the_source_opted_out` — no chat, Missing. Verify: test red, then green.
 - [x] 2.18 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_for_a_video_already_summarized` — no chat, summary unchanged. Verify: test red, then green.
 - [x] 2.19 `src/application/tasks/summarize_video_task.rs`: `it_should_do_nothing_for_a_missing_video` — `Ok`. Verify: test red, then green.
-- [ ] 2.20 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_the_saved_prompt_is_invalid` — no chat, 0 attempts, no check. Verify: test red, then green.
+- [x] 2.20 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_the_saved_prompt_is_invalid` — no chat, 0 attempts, no check. Verify: test red, then green.
 - [ ] 2.21 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_ollama_is_unreachable` — task `Ok`, no check. Verify: test red, then green.
 - [ ] 2.22 `src/application/tasks/summarize_video_task.rs`: `it_should_skip_without_counting_when_the_model_is_not_installed` — same. Verify: test red, then green.
 - [ ] 2.23 `src/application/tasks/summarize_video_task.rs`: `it_should_count_a_failed_attempt_when_the_chat_fails` — 1 attempt, check recorded, nothing stored. Verify: test red, then green.
