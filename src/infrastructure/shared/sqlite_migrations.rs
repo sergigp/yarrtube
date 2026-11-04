@@ -908,6 +908,32 @@ mod tests {
     }
 
     #[test]
+    fn it_should_start_stored_videos_with_a_missing_summary() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_late_video_data(&mut conn);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'Title', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let summary = conn.query_row(
+            "SELECT summary_state, summary_last_checked_at, summary_failed_attempts FROM videos",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        );
+        assert_eq!(summary, Ok(("MISSING".to_string(), None, 0)));
+    }
+
+    #[test]
     fn it_should_settle_checked_chapters_and_downloaded_quality() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate_to_video_chapters(&mut conn);

@@ -12,7 +12,7 @@ pub use caption_language::CaptionLanguage;
 pub use caption_source::CaptionSource;
 pub use caption_track::CaptionTrack;
 pub use caption_tracks::CaptionTracks;
-pub use timed_transcript::{TimedLine, TimedTranscript};
+pub use timed_transcript::TimedTranscript;
 pub use transcript_part::TranscriptPart;
 pub use transcript_text::TranscriptText;
 pub use video_transcript::VideoTranscript;

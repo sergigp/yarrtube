@@ -71,7 +71,7 @@
 - [x] 3.8 `sqlite_video_summary_repository`: `it_should_delete_a_summary`. Verify: test red, then green.
 - [x] 3.9 `sqlite_video_repository`: `it_should_read_missing_summary_state_for_a_new_video`. Verify: test red, then green.
 - [x] 3.10 `sqlite_video_repository`: `it_should_update_only_the_summary_fields`. Verify: test red, then green.
-- [ ] 3.11 `sqlite_migrations`: `it_should_start_stored_videos_with_a_missing_summary`. Verify: test red, then green.
+- [x] 3.11 `sqlite_migrations`: `it_should_start_stored_videos_with_a_missing_summary`. Verify: test red, then green.
 
 ## 4. Verification
 
