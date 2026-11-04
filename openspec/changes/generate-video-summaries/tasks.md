@@ -106,7 +106,7 @@ Behaviour tasks are TDD like section 2. Refactor tasks change no behaviour: Veri
 - [x] 5.20 Refactor: `TimedLine` to `timed_line.rs`, `SummaryMessages` to `summary_messages.rs`, re-exported. Verify: `cargo test --locked` passes.
 - [x] 5.21 Refactor: `cut_by_size` keeps a running size and uses a fold. Verify: `cargo test --locked` passes.
 - [x] 5.22 Refactor: rename the tests per design.md's Test Plan. Verify: `cargo test --locked` passes.
-- [ ] 5.23 Refactor tests: remove `Scene`/`BuiltScene` from `summarize_video_task.rs` and `summaries_scheduled` from `sync_video_task.rs`, per `/rust-architect`; assert whole values; move `it_should_not_queue_a_second_summary` to `sqlite_task_repository`. Verify: `cargo test --locked` passes.
-- [ ] 5.24 Docs: `doc/AI.md` (the backlog wording, retries, Unavailable reset, `truncate: false`, generation time) and `doc/ARCHITECTURE.md`. Verify: both describe the implemented flow.
+- [x] 5.23 Refactor tests: remove `Scene`/`BuiltScene` from `summarize_video_task.rs` and `summaries_scheduled` from `sync_video_task.rs`, per `/rust-architect`; assert whole values; move `it_should_not_queue_a_second_summary` to `sqlite_task_repository`. Verify: `cargo test --locked` passes.
+- [x] 5.24 Docs: `doc/AI.md` (the backlog wording, retries, Unavailable reset, `truncate: false`, generation time) and `doc/ARCHITECTURE.md`. Verify: both describe the implemented flow.
 - [ ] 5.25 Run `scripts/run-tests.sh --only web --only rust`. Verify: all pass.
 - [ ] 5.26 Manual (agent): against real Ollama, an oversized prompt fails with Ollama's refusal logged at error and a long enough video summarizes end to end. Verify: observed in the logs.

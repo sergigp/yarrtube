@@ -2359,18 +2359,57 @@ mod tests {
 
     #[test]
     fn it_should_schedule_a_summary_for_a_subtitled_video_in_an_opted_in_source() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        seed_channel_with_summaries(&db, &video, true);
+        preferences_repository.save(&summaries_on()).unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
         assert_eq!(
-            summaries_scheduled(subtitled_video(), true, summaries_on()),
-            1
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &summarize_video(&video))]
         );
     }
 
     #[test]
     fn it_should_not_schedule_a_summary_when_the_source_opted_out() {
-        assert_eq!(
-            summaries_scheduled(subtitled_video(), false, summaries_on()),
-            0
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        seed_channel_with_summaries(&db, &video, false);
+        preferences_repository.save(&summaries_on()).unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
         );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[test]
@@ -2387,14 +2426,31 @@ mod tests {
             ..summaries_on()
         };
 
-        assert_eq!(
-            [ai_off, summaries_off].map(|preferences| summaries_scheduled(
-                subtitled_video(),
-                true,
-                preferences
-            )),
-            [0, 0]
-        );
+        let scheduled = [ai_off, summaries_off].map(|preferences| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            let video = subtitled_video();
+            video_repository.save(&video).unwrap();
+            seed_channel_with_summaries(&db, &video, true);
+            preferences_repository.save(&preferences).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
+
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
+        assert_eq!(scheduled, [vec![], vec![]]);
     }
 
     #[test]
@@ -2405,79 +2461,84 @@ mod tests {
             ..downloaded_video()
         };
 
+        let scheduled = [missing.clone(), unavailable].map(|video| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            video_repository.save(&video).unwrap();
+            seed_channel_with_summaries(&db, &video, true);
+            preferences_repository.save(&summaries_on()).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
+
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
         assert_eq!(
-            [missing, unavailable].map(|video| summaries_scheduled(video, true, summaries_on())),
-            [0, 0]
+            scheduled,
+            [vec![pending_task(1, &fetch_subtitles(&missing))], vec![]]
         );
     }
 
     #[test]
     fn it_should_not_schedule_a_settled_summary() {
-        let settled = |summary_state| Video {
-            summary_state,
-            ..subtitled_video()
-        };
+        let scheduled = [SummaryState::Generated, SummaryState::Unavailable].map(|summary_state| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            let video = Video {
+                summary_state,
+                ..subtitled_video()
+            };
+            video_repository.save(&video).unwrap();
+            seed_channel_with_summaries(&db, &video, true);
+            preferences_repository.save(&summaries_on()).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
 
-        assert_eq!(
-            [SummaryState::Generated, SummaryState::Unavailable].map(|state| summaries_scheduled(
-                settled(state),
-                true,
-                summaries_on()
-            )),
-            [0, 0]
-        );
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
+        assert_eq!(scheduled, [vec![], vec![]]);
     }
 
-    #[test]
-    fn it_should_not_queue_a_second_summary() {
-        let task = Task::SummarizeVideo {
-            video_id: "rec1".to_string(),
-        };
-
-        let db = TestDatabase::new();
-        let repository =
-            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
-        repository.schedule(&task, fixed_timestamp()).unwrap();
-        repository.schedule(&task, fixed_timestamp()).unwrap();
-
-        assert_eq!(repository.list_non_completed().unwrap().len(), 1);
-    }
-
-    /// How many summaries a sync of `video` schedules, in a channel with
-    /// summaries on or off under `preferences`.
-    fn summaries_scheduled(video: Video, source_opted_in: bool, preferences: Preferences) -> usize {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
-        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        video_repository.save(&video).unwrap();
-        channel_repository
-            .insert(&my_channel().with_summaries_enabled(source_opted_in))
-            .unwrap();
-        channel_video_repository
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        preferences_repository.save(&preferences).unwrap();
-        let task = SyncVideoTask::new(VideoReconciler::new(
+    /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
+    fn sync_task_of_downloaded_video(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        task_repository: Arc<SqliteTaskRepository>,
+        preferences_repository: Arc<SqlitePreferencesRepository>,
+    ) -> SyncVideoTask {
+        SyncVideoTask::new(VideoReconciler::new(
             video_repository.clone(),
             Arc::new(VideoOwnerFinder::new(
-                channel_video_repository,
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
                 Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                channel_repository,
+                Arc::new(SqliteChannelRepository::new(db.database())),
                 Arc::new(SqlitePlaylistRepository::new(db.database())),
                 "/videos",
             )),
-            task_repository.clone(),
+            task_repository,
             Arc::new(FakeVideoFileRepository::with_listing(vec![
                 DOWNLOADED_FILENAME.to_string(),
             ])),
@@ -2496,14 +2557,22 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             preferences_repository,
-        ));
-        run(&task, &payload_for(&video)).unwrap();
-        task_repository
-            .list_non_completed()
-            .unwrap()
-            .iter()
-            .filter(|scheduled| scheduled.task_type == "summarize_video")
-            .count()
+        ))
+    }
+
+    /// Stores `my_channel()`, with summaries on or off, as the owner of `video`.
+    fn seed_channel_with_summaries(db: &TestDatabase, video: &Video, summaries_enabled: bool) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel().with_summaries_enabled(summaries_enabled))
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
     }
 
     fn summaries_on() -> Preferences {
@@ -2704,6 +2773,19 @@ mod tests {
         Task::FetchThumbnail {
             video_id: video.id.as_str().to_string(),
             output_dir: "/videos/creators/somechannel".to_string(),
+        }
+    }
+
+    fn fetch_subtitles(video: &Video) -> Task {
+        Task::FetchSubtitles {
+            video_id: video.id.as_str().to_string(),
+            output_dir: "/videos/creators/somechannel".to_string(),
+        }
+    }
+
+    fn summarize_video(video: &Video) -> Task {
+        Task::SummarizeVideo {
+            video_id: video.id.as_str().to_string(),
         }
     }
 

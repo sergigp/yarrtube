@@ -45,12 +45,12 @@ mod tests {
     use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::{
-        ContextLength, Preferences, SummaryModel, SummaryPrompt, SummarySettings, Temperature,
+        ContextLength, Preferences, SummaryPrompt, SummarySettings, Temperature,
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{SummaryState, Video, VideoChapter, VideoId};
-    use crate::domain::video_summary::{SummaryText, VideoSummary};
+    use crate::domain::video_summary::{SummaryMessages, SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
     };
@@ -77,6 +77,7 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
+    use std::ops::Range;
 
     const OUTPUT_DIR: &str = "/videos/creators/somechannel";
     const SUBTITLES: &str = "Season 2026/S2026E010101 - Sicilian.es.srt";
@@ -84,236 +85,398 @@ mod tests {
 
     #[test]
     fn it_should_store_the_summary_of_a_video_that_fits_one_call() {
-        let scene = Scene::default()
-            .with_replies(vec![reply("Three games.")])
-            .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        let result = scene.run();
+        let result = run(&task, &video);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
-            scene.stored_summary(),
-            Some(VideoSummary {
-                video_id: scene.video.id.clone(),
-                text: SummaryText::new("Three games."),
-                model: "qwen3:4b".to_string(),
-                created_at: later(),
-            })
+            summary_repository.find(&video.id).unwrap(),
+            Some(stored_summary(&video, "Three games."))
         );
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Generated);
-        assert_eq!(scene.chats().len(), 1);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone().mark_summary_generated(later()))
+        );
+        assert_eq!(llm.chats(), vec![one_call_chat()]);
     }
 
     #[test]
     fn it_should_send_the_shipped_prompt_filled_with_the_videos_data() {
-        let scene = Scene::default()
-            .with_replies(vec![reply("Three games.")])
-            .build();
-
-        scene.run().unwrap();
-
-        let chat = &scene.chats()[0];
-        assert!(
-            chat.system
-                .contains("- Write in Spanish, the language of the video.")
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
         );
-        assert!(!chat.system.contains('{'));
+
+        run(&task, &video).unwrap();
+
         assert_eq!(
-            chat.user,
-            "Title: Sicilian\nDuration: 30 minutes\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences."
+            sent_messages(&llm),
+            vec![SummaryMessages {
+                system: SYSTEM.to_string(),
+                user: "Title: Sicilian\nDuration: 30 minutes\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences.".to_string(),
+            }]
         );
     }
 
     #[test]
     fn it_should_send_the_saved_prompt_when_there_is_one() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
         let saved = SummaryPrompt::shipped()
             .as_str()
             .replace("You summarize YouTube videos", "You digest YouTube videos");
-        let scene = Scene {
-            preferences: with_summaries(|settings| SummarySettings {
-                prompt: Some(SummaryPrompt::from_stored(saved.clone())),
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository
+            .save(&with_summaries(|settings| SummarySettings {
+                prompt: Some(SummaryPrompt::from_stored(saved)),
                 ..settings
-            }),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+            }))
+            .unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert!(
-            scene.chats()[0]
-                .system
-                .starts_with("You digest YouTube videos")
+        assert_eq!(
+            llm.chats(),
+            vec![LlmChat {
+                system: SYSTEM.replace("You summarize YouTube videos", "You digest YouTube videos"),
+                ..one_call_chat()
+            }]
         );
     }
 
     #[test]
     fn it_should_send_the_saved_model_settings() {
-        let scene = Scene {
-            preferences: with_summaries(|settings| SummarySettings {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository
+            .save(&with_summaries(|settings| SummarySettings {
                 context_length: ContextLength::new(8192).unwrap(),
                 temperature: Temperature::new(0.5).unwrap(),
                 ..settings
-            }),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+            }))
+            .unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        let chat = &scene.chats()[0];
         assert_eq!(
-            (
-                chat.model.as_str(),
-                chat.context_length,
-                chat.temperature,
-                chat.max_output_tokens
-            ),
-            ("qwen3:4b", 8192, 0.5, 2192)
+            llm.chats(),
+            vec![LlmChat {
+                context_length: 8192,
+                temperature: 0.5,
+                max_output_tokens: 2192,
+                ..one_call_chat()
+            }]
         );
     }
 
     #[test]
     fn it_should_list_the_chapters_in_the_prompt() {
-        let scene = Scene {
-            video: with_chapters(vec![chapter(0, 125, "Intro"), chapter(125, 1800, "Game 1")]),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = with_chapters(vec![chapter(0, 125, "Intro"), chapter(125, 1800, "Game 1")]);
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
         assert_eq!(
-            scene.chats()[0].user,
-            "Title: Sicilian\nDuration: 30 minutes\n\nChapters (set by the uploader; use them to see the video's structure, but summarize what is said, not the chapter titles):\n0:00 Intro\n2:05 Game 1\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences."
+            llm.chats(),
+            vec![LlmChat {
+                user: "Title: Sicilian\nDuration: 30 minutes\n\nChapters (set by the uploader; use them to see the video's structure, but summarize what is said, not the chapter titles):\n0:00 Intro\n2:05 Game 1\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences.".to_string(),
+                ..one_call_chat()
+            }]
         );
     }
 
     #[test]
     fn it_should_leave_chapters_out_of_the_prompt_when_the_video_has_none() {
-        let scene = Scene {
-            video: with_chapters(vec![]),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
-
-        scene.run().unwrap();
-
-        assert!(
-            scene.chats()[0]
-                .user
-                .starts_with("Title: Sicilian\nDuration: 30 minutes\n\nTranscript:")
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = with_chapters(vec![]);
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
         );
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(llm.chats(), vec![one_call_chat()]);
     }
 
     #[test]
     fn it_should_keep_braces_in_values_unfilled() {
-        let scene = Scene {
-            video: Video {
-                title: "{transcript} explained".to_string(),
-                ..subtitled_video()
-            },
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = Video {
+            title: "{transcript} explained".to_string(),
+            ..subtitled_video()
+        };
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert!(
-            scene.chats()[0]
-                .user
-                .starts_with("Title: {transcript} explained\n")
+        assert_eq!(
+            llm.chats(),
+            vec![LlmChat {
+                user: "Title: {transcript} explained\nDuration: 30 minutes\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences.".to_string(),
+                ..one_call_chat()
+            }]
         );
     }
 
     #[test]
     fn it_should_use_the_language_code_when_its_name_is_unknown() {
-        let scene = Scene {
-            language: "xh".to_string(),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "xh");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert!(
-            scene.chats()[0]
-                .user
-                .ends_with("Now write the summary in xh, 3 to 5 sentences.")
+        assert_eq!(
+            sent_messages(&llm),
+            vec![in_language("xh", whole_messages("Hola a todos"))]
         );
     }
 
     #[test]
     fn it_should_drop_the_reasoning_before_the_answer() {
-        let scene = Scene::default()
-            .with_replies(vec![reply("<think>a </think> b</think>\n\nThree games.\n")])
-            .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("<think>a </think> b</think>\n\nThree games.\n")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository.clone(),
+            llm,
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
         assert_eq!(
-            scene.stored_summary().map(|summary| summary.text),
-            Some(SummaryText::new("Three games."))
+            summary_repository.find(&video.id).unwrap(),
+            Some(stored_summary(&video, "Three games."))
         );
     }
 
     #[test]
     fn it_should_ask_for_thinking_only_when_the_model_supports_it() {
-        let thinking_asked = [(true, true), (true, false), (false, true), (false, false)].map(
+        let chats = [(true, true), (true, false), (false, true), (false, false)].map(
             |(setting, capable)| {
-                let scene = Scene {
-                    preferences: with_summaries(|settings| SummarySettings {
-                        thinking: setting,
-                        ..settings
-                    }),
-                    llm: FakeLlmServerRepository::new(server_with(LlmModel {
+                let db = TestDatabase::new();
+                let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+                let preferences_repository =
+                    Arc::new(SqlitePreferencesRepository::new(db.database()));
+                let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+                let llm = Arc::new(
+                    FakeLlmServerRepository::new(server_with(LlmModel {
                         thinking: capable,
                         ..thinking_model()
-                    })),
-                    ..Scene::default()
-                }
-                .with_replies(vec![reply("Three games.")])
-                .build();
+                    }))
+                    .with_replies(vec![reply("Three games.")]),
+                );
+                let video = subtitled_video();
+                video_repository.save(&video).unwrap();
+                preferences_repository
+                    .save(&with_summaries(|settings| SummarySettings {
+                        thinking: setting,
+                        ..settings
+                    }))
+                    .unwrap();
+                seed_channel(&db, &video, true);
+                seed_transcript(&db, &video, "es");
+                let task = summarize_video_task(
+                    &db,
+                    video_repository,
+                    preferences_repository,
+                    summary_repository,
+                    llm.clone(),
+                    files_with(SHORT_SRT),
+                );
 
-                scene.run().unwrap();
+                run(&task, &video).unwrap();
 
-                scene.chats()[0].thinking
+                llm.chats()
             },
         );
 
-        assert_eq!(thinking_asked, [true, false, false, false]);
+        let chat_thinking = |thinking| {
+            vec![LlmChat {
+                thinking,
+                ..one_call_chat()
+            }]
+        };
+        assert_eq!(
+            chats,
+            [
+                chat_thinking(true),
+                chat_thinking(false),
+                chat_thinking(false),
+                chat_thinking(false)
+            ]
+        );
     }
 
     #[test]
     fn it_should_summarize_a_long_transcript_in_parts_then_reduce() {
         // Each line is 1000 characters, so 30 lines cut into parts of ~30600.
-        let scene = Scene {
-            srt: Some(srt_of(45, 60)),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("First."), reply("Second."), reply("All of it.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("First."), reply("Second."), reply("All of it.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(&srt_of(45, 60)),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        let chats = scene.chats();
-        assert_eq!(chats.len(), 3);
-        assert!(chats[0].system.starts_with("You summarize one part"));
-        assert!(chats[1].user.contains("Part 2 of 2 ("));
-        assert!(chats[2].system.starts_with("You write the final summary"));
         assert_eq!(
-            chats[2].user,
-            "Title: Sicilian\nDuration: 30 minutes\n\nPart summaries, in order:\n\nPart 1 (0:00–29:00):\nFirst.\n\nPart 2 (30:00–44:00):\nSecond.\n\nNow write the final summary of the whole video in Spanish, 3 to 5 sentences."
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 2, "0:00–29:00", &[], 0..30),
+                part_messages(2, 2, "30:00–44:00", &[], 30..45),
+                SummaryMessages {
+                    system: REDUCE_SYSTEM.to_string(),
+                    user: "Title: Sicilian\nDuration: 30 minutes\n\nPart summaries, in order:\n\nPart 1 (0:00–29:00):\nFirst.\n\nPart 2 (30:00–44:00):\nSecond.\n\nNow write the final summary of the whole video in Spanish, 3 to 5 sentences.".to_string(),
+                },
+            ]
         );
         assert_eq!(
-            scene.stored_summary().map(|summary| summary.text),
-            Some(SummaryText::new("All of it."))
+            summary_repository.find(&video.id).unwrap(),
+            Some(stored_summary(&video, "All of it."))
         );
     }
 
@@ -322,38 +485,57 @@ mod tests {
         // At 8192 the budget is ~20400 characters: two 8000-character answers
         // fit together, a third doesn't.
         let long_answer = "x".repeat(8000);
-        let scene = Scene {
-            srt: Some(srt_of(45, 60)),
-            video: with_chapters(vec![chapter(0, 2700, "Game 1")]),
-            preferences: Preferences {
-                summaries: SummarySettings {
-                    context_length: ContextLength::new(8192).unwrap(),
-                    ..summaries_on().summaries
-                },
-                ..summaries_on()
-            },
-            ..Scene::default()
-        }
-        .with_replies(vec![
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![
             reply(&long_answer),
             reply(&long_answer),
             reply(&long_answer),
             reply("Both."),
             reply("All of it."),
-        ])
-        .build();
+        ]);
+        let video = with_chapters(vec![chapter(0, 2700, "Game 1")]);
+        video_repository.save(&video).unwrap();
+        preferences_repository
+            .save(&with_summaries(|settings| SummarySettings {
+                context_length: ContextLength::new(8192).unwrap(),
+                ..settings
+            }))
+            .unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(&srt_of(45, 60)),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        let chats = scene.chats();
-        assert_eq!(chats.len(), 5);
-        assert!(chats[3].system.starts_with("You write the final summary"));
-        assert!(!chats[3].user.contains("Game 1"));
-        assert!(chats[4].user.contains("Game 1"));
-        assert!(chats[4].user.contains("Both."));
         assert_eq!(
-            scene.stored_summary().map(|summary| summary.text),
-            Some(SummaryText::new("All of it."))
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 3, "0:00–19:00", &["0:00 Game 1"], 0..20),
+                part_messages(2, 3, "20:00–39:00", &["0:00 Game 1"], 20..40),
+                part_messages(3, 3, "40:00–44:00", &["0:00 Game 1"], 40..45),
+                reduce_messages(
+                    &[],
+                    &[("0:00–19:00", &long_answer), ("20:00–39:00", &long_answer)]
+                ),
+                reduce_messages(
+                    &["0:00 Game 1"],
+                    &[("0:00–39:00", "Both."), ("40:00–44:00", &long_answer)]
+                ),
+            ]
+        );
+        assert_eq!(
+            summary_repository.find(&video.id).unwrap(),
+            Some(stored_summary(&video, "All of it."))
         );
     }
 
@@ -361,144 +543,287 @@ mod tests {
     fn it_should_keep_reducing_until_the_answers_fit() {
         // Every answer alone is over the ~20400-character budget at 8192.
         let long_answer = "x".repeat(25000);
-        let scene = Scene {
-            srt: Some(srt_of(45, 60)),
-            preferences: Preferences {
-                summaries: SummarySettings {
-                    context_length: ContextLength::new(8192).unwrap(),
-                    ..summaries_on().summaries
-                },
-                ..summaries_on()
-            },
-            ..Scene::default()
-        }
-        .with_replies(vec![
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![
             reply(&long_answer),
             reply(&long_answer),
             reply(&long_answer),
             reply(&long_answer),
             reply("Both."),
             reply("All of it."),
-        ])
-        .build();
+        ]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository
+            .save(&with_summaries(|settings| SummarySettings {
+                context_length: ContextLength::new(8192).unwrap(),
+                ..settings
+            }))
+            .unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(&srt_of(45, 60)),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert_eq!(scene.chats().len(), 6);
         assert_eq!(
-            scene.stored_summary().map(|summary| summary.text),
-            Some(SummaryText::new("All of it."))
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 3, "0:00–19:00", &[], 0..20),
+                part_messages(2, 3, "20:00–39:00", &[], 20..40),
+                part_messages(3, 3, "40:00–44:00", &[], 40..45),
+                reduce_messages(
+                    &[],
+                    &[("0:00–19:00", &long_answer), ("20:00–39:00", &long_answer)]
+                ),
+                reduce_messages(
+                    &[],
+                    &[("0:00–39:00", &long_answer), ("40:00–44:00", &long_answer)]
+                ),
+                reduce_messages(&[], &[("0:00–44:00", "Both.")]),
+            ]
+        );
+        assert_eq!(
+            summary_repository.find(&video.id).unwrap(),
+            Some(stored_summary(&video, "All of it."))
         );
     }
 
     #[test]
     fn it_should_list_a_chapter_starting_on_the_parts_last_line() {
-        let scene = Scene {
-            srt: Some(srt_of(45, 60)),
-            video: with_chapters(vec![
-                chapter(0, 1740, "Game 1"),
-                chapter(1740, 1800, "Short"),
-                chapter(1800, 2700, "Game 2"),
-            ]),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("First."), reply("Second."), reply("All of it.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("First."), reply("Second."), reply("All of it.")]);
+        let video = with_chapters(vec![
+            chapter(0, 1740, "Game 1"),
+            chapter(1740, 1800, "Short"),
+            chapter(1800, 2700, "Game 2"),
+        ]);
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(&srt_of(45, 60)),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert!(scene.chats()[0].user.contains("29:00 Short"));
+        assert_eq!(
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 2, "0:00–29:00", &["0:00 Game 1", "29:00 Short"], 0..30),
+                part_messages(2, 2, "30:00–44:00", &["30:00 Game 2"], 30..45),
+                reduce_messages(
+                    &["0:00 Game 1", "29:00 Short", "30:00 Game 2"],
+                    &[("0:00–29:00", "First."), ("30:00–44:00", "Second.")]
+                ),
+            ]
+        );
     }
 
     #[test]
     fn it_should_cut_parts_at_chapter_starts() {
-        let scene = Scene {
-            srt: Some(srt_of(45, 60)),
-            video: with_chapters(vec![
-                chapter(0, 600, "Game 1"),
-                chapter(600, 1500, "Game 2"),
-                chapter(1500, 2100, "Game 3"),
-                chapter(2100, 2700, "Game 4"),
-            ]),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("First."), reply("Second."), reply("All of it.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("First."), reply("Second."), reply("All of it.")]);
+        let video = with_chapters(vec![
+            chapter(0, 600, "Game 1"),
+            chapter(600, 1500, "Game 2"),
+            chapter(1500, 2100, "Game 3"),
+            chapter(2100, 2700, "Game 4"),
+        ]);
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(&srt_of(45, 60)),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert!(scene.chats()[1].user.contains(
-            "Part 2 of 2 (25:00–44:00)\n\nChapters in this part:\n25:00 Game 3\n35:00 Game 4\n\nTranscript part:\n"
-        ));
+        assert_eq!(
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 2, "0:00–24:00", &["0:00 Game 1", "10:00 Game 2"], 0..25),
+                part_messages(
+                    2,
+                    2,
+                    "25:00–44:00",
+                    &["25:00 Game 3", "35:00 Game 4"],
+                    25..45
+                ),
+                reduce_messages(
+                    &[
+                        "0:00 Game 1",
+                        "10:00 Game 2",
+                        "25:00 Game 3",
+                        "35:00 Game 4"
+                    ],
+                    &[("0:00–24:00", "First."), ("25:00–44:00", "Second.")]
+                ),
+            ]
+        );
     }
 
     #[test]
     fn it_should_cut_by_size_without_chapters() {
-        let scene = Scene {
-            srt: Some(srt_of(100, 60)),
-            ..Scene::default()
-        }
-        .with_replies(vec![
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![
             reply("A."),
             reply("B."),
             reply("C."),
             reply("D."),
             reply("All."),
-        ])
-        .build();
+        ]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(&srt_of(100, 60)),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        let chats = scene.chats();
-        let parts = &chats[..chats.len() - 1];
-        let every_line_sent = (0..100).all(|line| {
-            parts
-                .iter()
-                .any(|chat| chat.user.contains(&format!("{line:04}").repeat(250)))
-        });
-        assert_eq!((parts.len(), every_line_sent), (4, true));
-        assert!(parts.iter().all(|chat| chat.user.len() < 32_000));
+        assert_eq!(
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 4, "0:00–29:00", &[], 0..30),
+                part_messages(2, 4, "30:00–59:00", &[], 30..60),
+                part_messages(3, 4, "1:00:00–1:29:00", &[], 60..90),
+                part_messages(4, 4, "1:30:00–1:39:00", &[], 90..100),
+                reduce_messages(
+                    &[],
+                    &[
+                        ("0:00–29:00", "A."),
+                        ("30:00–59:00", "B."),
+                        ("1:00:00–1:29:00", "C."),
+                        ("1:30:00–1:39:00", "D.")
+                    ]
+                ),
+            ]
+        );
     }
 
     #[test]
     fn it_should_cut_a_chapter_too_long_on_its_own_by_size() {
-        let scene = Scene {
-            srt: Some(srt_of(45, 60)),
-            video: with_chapters(vec![chapter(0, 300, "Short"), chapter(300, 2700, "Long")]),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("A."), reply("B."), reply("C."), reply("All.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("A."), reply("B."), reply("C."), reply("All.")]);
+        let video = with_chapters(vec![chapter(0, 300, "Short"), chapter(300, 2700, "Long")]);
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(&srt_of(45, 60)),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        let chats = scene.chats();
-        assert!(chats[0].user.contains("Part 1 of 3 (0:00–4:00)"));
-        assert!(chats[1].user.contains("Part 2 of 3 (5:00–34:00)"));
-        assert!(chats[2].user.contains("Part 3 of 3 (35:00–44:00)"));
+        assert_eq!(
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 3, "0:00–4:00", &["0:00 Short"], 0..5),
+                part_messages(2, 3, "5:00–34:00", &["5:00 Long"], 5..35),
+                part_messages(3, 3, "35:00–44:00", &["5:00 Long"], 35..45),
+                reduce_messages(
+                    &["0:00 Short", "5:00 Long"],
+                    &[
+                        ("0:00–4:00", "A."),
+                        ("5:00–34:00", "B."),
+                        ("35:00–44:00", "C.")
+                    ]
+                ),
+            ]
+        );
     }
 
     #[test]
     fn it_should_scale_the_budget_with_the_context_length() {
-        let chats_with = |context_length: i64, replies| {
-            let scene = Scene {
-                srt: Some(srt_of(20, 60)),
-                preferences: with_summaries(|settings| SummarySettings {
+        let messages_with = |context_length: i64, replies| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+            let llm = llm_replying(replies);
+            let video = subtitled_video();
+            video_repository.save(&video).unwrap();
+            preferences_repository
+                .save(&with_summaries(|settings| SummarySettings {
                     context_length: ContextLength::new(context_length).unwrap(),
                     ..settings
-                }),
-                ..Scene::default()
-            }
-            .with_replies(replies)
-            .build();
-            scene.run().unwrap();
-            scene.chats().len()
+                }))
+                .unwrap();
+            seed_channel(&db, &video, true);
+            seed_transcript(&db, &video, "es");
+            let task = summarize_video_task(
+                &db,
+                video_repository,
+                preferences_repository,
+                summary_repository,
+                llm.clone(),
+                files_with(&srt_of(20, 60)),
+            );
+
+            run(&task, &video).unwrap();
+
+            sent_messages(&llm)
         };
 
-        assert_eq!(chats_with(12288, vec![reply("All.")]), 1);
         assert_eq!(
-            chats_with(6144, vec![reply("A."), reply("B."), reply("All.")]),
-            3
+            messages_with(12288, vec![reply("All.")]),
+            vec![whole_messages(&transcript_lines(0..20))]
+        );
+        assert_eq!(
+            messages_with(6144, vec![reply("A."), reply("B."), reply("All.")]),
+            vec![
+                part_messages(1, 2, "0:00–14:00", &[], 0..15),
+                part_messages(2, 2, "15:00–19:00", &[], 15..20),
+                reduce_messages(&[], &[("0:00–14:00", "A."), ("15:00–19:00", "B.")]),
+            ]
         );
     }
 
@@ -506,24 +831,52 @@ mod tests {
     fn it_should_estimate_english_at_more_characters_per_token() {
         // 34 lines of 1000 characters: over 30600, the budget for most
         // languages, but under 38700, the budget for English.
-        let chats_with = |language: &str| {
-            let scene = Scene {
-                srt: Some(srt_of(34, 60)),
-                language: language.to_string(),
-                ..Scene::default()
-            }
-            .with_replies(vec![reply("A."), reply("B."), reply("All.")])
-            .build();
-            scene.run().unwrap();
-            scene.chats().len()
+        let messages_with = |language: &str| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+            let llm = llm_replying(vec![reply("A."), reply("B."), reply("All.")]);
+            let video = subtitled_video();
+            video_repository.save(&video).unwrap();
+            preferences_repository.save(&summaries_on()).unwrap();
+            seed_channel(&db, &video, true);
+            seed_transcript(&db, &video, language);
+            let task = summarize_video_task(
+                &db,
+                video_repository,
+                preferences_repository,
+                summary_repository,
+                llm.clone(),
+                files_with(&srt_of(34, 60)),
+            );
+
+            run(&task, &video).unwrap();
+
+            sent_messages(&llm)
         };
 
-        assert_eq!((chats_with("en-US"), chats_with("es")), (1, 3));
+        assert_eq!(
+            messages_with("en-US"),
+            vec![in_language(
+                "English",
+                whole_messages(&transcript_lines(0..34))
+            )]
+        );
+        assert_eq!(
+            messages_with("es"),
+            vec![
+                part_messages(1, 2, "0:00–29:00", &[], 0..30),
+                part_messages(2, 2, "30:00–33:00", &[], 30..34),
+                reduce_messages(&[], &[("0:00–29:00", "A."), ("30:00–33:00", "B.")]),
+            ]
+        );
     }
 
     #[test]
     fn it_should_skip_if_summaries_are_unavailable() {
-        let changed: Vec<(Vec<LlmChat>, SummaryState)> = [
+        let video = subtitled_video();
+        let changed: Vec<(Vec<LlmChat>, Option<Video>)> = [
             Preferences {
                 ai_enabled: false,
                 ..summaries_on()
@@ -535,274 +888,554 @@ mod tests {
         ]
         .into_iter()
         .map(|preferences| {
-            let scene = Scene {
-                preferences,
-                ..Scene::default()
-            }
-            .with_replies(vec![reply("Three games.")])
-            .build();
-            scene.run().unwrap();
-            (scene.chats(), scene.stored_video().summary_state)
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+            let llm = llm_replying(vec![reply("Three games.")]);
+            video_repository.save(&video).unwrap();
+            preferences_repository.save(&preferences).unwrap();
+            seed_channel(&db, &video, true);
+            seed_transcript(&db, &video, "es");
+            let task = summarize_video_task(
+                &db,
+                video_repository.clone(),
+                preferences_repository,
+                summary_repository,
+                llm.clone(),
+                files_with(SHORT_SRT),
+            );
+
+            run(&task, &video).unwrap();
+
+            (llm.chats(), video_repository.find(&video.id).unwrap())
         })
         .collect();
 
         assert_eq!(
             changed,
-            vec![
-                (vec![], SummaryState::Missing),
-                (vec![], SummaryState::Missing)
-            ]
+            vec![(vec![], Some(video.clone())), (vec![], Some(video.clone()))]
         );
     }
 
     #[test]
     fn it_should_skip_if_the_source_opted_out() {
-        let scene = Scene {
-            summaries_enabled: false,
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, false);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_skip_a_video_already_summarized() {
-        let scene = Scene {
-            video: Video {
-                summary_state: SummaryState::Generated,
-                ..subtitled_video()
-            },
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = Video {
+            summary_state: SummaryState::Generated,
+            ..subtitled_video()
+        };
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_summary(), None);
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
     }
 
     #[test]
     fn it_should_ignore_a_missing_video() {
-        let scene = Scene::default().build();
-        SqliteVideoRepository::new(scene.db.database())
-            .delete(&scene.video.id)
-            .unwrap();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        video_repository.delete(&video.id).unwrap();
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        assert_eq!(scene.run(), Ok(()));
-        assert_eq!(scene.chats(), vec![]);
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(llm.chats(), vec![]);
     }
 
     #[test]
     fn it_should_skip_when_the_saved_prompt_is_invalid() {
-        let scene = Scene {
-            preferences: with_summaries(|settings| SummarySettings {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository
+            .save(&with_summaries(|settings| SummarySettings {
                 prompt: Some(SummaryPrompt::from_stored("## system\n\nBe brief.\n")),
                 ..settings
-            }),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+            }))
+            .unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        assert_eq!(scene.run(), Ok(()));
+        let result = run(&task, &video);
 
-        assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        assert_eq!(result, Ok(()));
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_skip_when_ollama_is_unreachable() {
-        let scene = Scene {
-            llm: FakeLlmServerRepository::failing(),
-            ..Scene::default()
-        }
-        .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = Arc::new(FakeLlmServerRepository::failing());
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        assert_eq!(scene.run(), Ok(()));
+        let result = run(&task, &video);
 
-        assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        assert_eq!(result, Ok(()));
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_skip_when_the_model_is_not_installed() {
-        let scene = Scene {
-            llm: FakeLlmServerRepository::new(server_with(LlmModel {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(LlmModel {
                 name: "gemma3:4b".to_string(),
                 ..thinking_model()
-            })),
-            ..Scene::default()
-        }
-        .with_replies(vec![reply("Three games.")])
-        .build();
+            }))
+            .with_replies(vec![reply("Three games.")]),
+        );
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        assert_eq!(scene.run(), Ok(()));
+        let result = run(&task, &video);
 
-        assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        assert_eq!(result, Ok(()));
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_fail_the_task_and_stay_missing_on_a_server_fault() {
-        let scene = Scene::default()
-            .with_replies(vec![Err(anyhow::anyhow!("model crashed"))])
-            .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![Err(anyhow::anyhow!("model crashed"))]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm,
+            files_with(SHORT_SRT),
+        );
 
-        assert_eq!(scene.run_last_attempt(), Err("model crashed".to_string()));
+        let result = run_last_attempt(&task, &video);
 
-        assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        assert_eq!(result, Err("model crashed".to_string()));
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_fail_the_task_when_the_answer_stopped_at_the_limit() {
-        let scene = Scene::default()
-            .with_replies(vec![Ok(LlmReply {
-                stopped_at_limit: true,
-                ..reply("Three games and").unwrap()
-            })])
-            .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![Ok(LlmReply {
+            stopped_at_limit: true,
+            ..reply("Three games and").unwrap()
+        })]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm,
+            files_with(SHORT_SRT),
+        );
+
+        let result = run(&task, &video);
 
         assert_eq!(
-            scene.run(),
+            result,
             Err(
                 "the model stopped at the 3288-token output cap (context 12288, 100 input tokens)"
                     .to_string()
             )
         );
-
-        assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_fail_the_task_when_ollama_refuses_the_prompt() {
-        let scene = Scene::default()
-            .with_replies(vec![Ok(LlmReply::refused("request too long"))])
-            .build();
-
-        assert_eq!(
-            scene.run(),
-            Err("Ollama refused the call: request too long".to_string())
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![Ok(LlmReply::refused("request too long"))]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm,
+            files_with(SHORT_SRT),
         );
 
-        assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Err("Ollama refused the call: request too long".to_string())
+        );
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_fail_the_task_when_the_answer_is_only_reasoning() {
-        let scene = Scene::default()
-            .with_replies(vec![reply("<think>hmm</think>\n")])
-            .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("<think>hmm</think>\n")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm,
+            files_with(SHORT_SRT),
+        );
 
-        assert_eq!(scene.run(), Err("The model's answer is empty".to_string()));
+        let result = run(&task, &video);
 
-        assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        assert_eq!(result, Err("The model's answer is empty".to_string()));
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_stop_at_the_first_failed_part() {
-        let scene = Scene {
-            srt: Some(srt_of(100, 60)),
-            ..Scene::default()
-        }
-        .with_replies(vec![
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![
             reply("A."),
             Err(anyhow::anyhow!("model crashed")),
             reply("C."),
-        ])
-        .build();
+        ]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(&srt_of(100, 60)),
+        );
 
-        assert_eq!(scene.run(), Err("model crashed".to_string()));
+        let result = run(&task, &video);
 
-        assert_eq!(scene.chats().len(), 2);
-        assert_eq!(scene.stored_summary(), None);
+        assert_eq!(result, Err("model crashed".to_string()));
+        assert_eq!(
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 4, "0:00–29:00", &[], 0..30),
+                part_messages(2, 4, "30:00–59:00", &[], 30..60),
+            ]
+        );
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
     }
 
     #[test]
     fn it_should_fail_the_task_when_the_subtitle_file_is_gone() {
-        let scene = Scene {
-            srt: None,
-            ..Scene::default()
-        }
-        .build();
-
-        assert_eq!(
-            scene.run_last_attempt(),
-            Err("video's subtitle file is gone".to_string())
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
         );
 
-        assert_eq!(scene.chats(), vec![]);
+        let result = run_last_attempt(&task, &video);
+
+        assert_eq!(result, Err("video's subtitle file is gone".to_string()));
+        assert_eq!(llm.chats(), vec![]);
         assert_eq!(
-            scene.stored_video().summary_state,
-            SummaryState::Unavailable
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone().mark_summary_unavailable(later()))
         );
     }
 
     #[test]
     fn it_should_become_unavailable_when_rejected_on_the_last_attempt() {
-        let scene = Scene::default()
-            .with_replies(vec![Ok(LlmReply::refused("request too long"))])
-            .build();
-
-        assert_eq!(
-            scene.run_last_attempt(),
-            Err("Ollama refused the call: request too long".to_string())
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![Ok(LlmReply::refused("request too long"))]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm,
+            files_with(SHORT_SRT),
         );
 
+        let result = run_last_attempt(&task, &video);
+
         assert_eq!(
-            scene.stored_video().summary_state,
-            SummaryState::Unavailable
+            result,
+            Err("Ollama refused the call: request too long".to_string())
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone().mark_summary_unavailable(later()))
         );
     }
 
     #[test]
     fn it_should_ignore_a_video_deleted_while_generating() {
-        let scene = Scene::default().build_with_on_chat(|db, video| {
-            SqliteVideoRepository::new(db.database())
-                .delete(video)
-                .unwrap();
-        });
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let video = subtitled_video();
+        let llm = {
+            let video_repository = video_repository.clone();
+            let video_id = video.id.clone();
+            Arc::new(
+                FakeLlmServerRepository::new(server_with(thinking_model()))
+                    .with_replies(vec![reply("Three games.")])
+                    .with_on_chat(move || video_repository.delete(&video_id).unwrap()),
+            )
+        };
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
 
-        scene.run().unwrap();
+        run(&task, &video).unwrap();
 
-        assert_eq!(scene.chats().len(), 1);
-        assert_eq!(scene.stored_summary(), None);
+        assert_eq!(llm.chats(), vec![one_call_chat()]);
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
     }
 
     #[test]
     fn it_should_fail_the_task_when_the_subtitle_file_is_empty() {
-        let scene = Scene {
-            srt: Some(String::new()),
-            ..Scene::default()
-        }
-        .build();
-
-        assert_eq!(
-            scene.run(),
-            Err("video's subtitle file has no text".to_string())
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(""),
         );
 
-        assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+        let result = run(&task, &video);
+
+        assert_eq!(result, Err("video's subtitle file has no text".to_string()));
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
     fn it_should_log_each_calls_prompt_answer_and_duration() {
-        let scene = Scene::default()
-            .with_replies(vec![reply("Three games.")])
-            .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm,
+            files_with(SHORT_SRT),
+        );
 
-        let lines = captured_log_lines(|| scene.run().unwrap());
+        let lines = captured_log_lines(|| run(&task, &video).unwrap());
 
         let sent = lines
             .iter()
@@ -824,11 +1457,26 @@ mod tests {
 
     #[test]
     fn it_should_log_the_summary_total_time_and_video_length() {
-        let scene = Scene::default()
-            .with_replies(vec![reply("Three games.")])
-            .build();
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("Three games.")]);
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository,
+            preferences_repository,
+            summary_repository,
+            llm,
+            files_with(SHORT_SRT),
+        );
 
-        let lines = captured_log_lines(|| scene.run().unwrap());
+        let lines = captured_log_lines(|| run(&task, &video).unwrap());
 
         let started = lines
             .iter()
@@ -851,18 +1499,45 @@ mod tests {
 
     #[test]
     fn it_should_log_why_a_generation_was_skipped_or_failed() {
-        let opted_out = Scene {
-            summaries_enabled: false,
-            ..Scene::default()
-        }
-        .build();
-        let failing = Scene::default()
-            .with_replies(vec![Err(anyhow::anyhow!("model crashed"))])
-            .build();
+        let skipped_db = TestDatabase::new();
+        let skipped_video_repository = Arc::new(SqliteVideoRepository::new(skipped_db.database()));
+        let skipped_preferences_repository =
+            Arc::new(SqlitePreferencesRepository::new(skipped_db.database()));
+        let video = subtitled_video();
+        skipped_video_repository.save(&video).unwrap();
+        skipped_preferences_repository
+            .save(&summaries_on())
+            .unwrap();
+        seed_channel(&skipped_db, &video, false);
+        seed_transcript(&skipped_db, &video, "es");
+        let opted_out = summarize_video_task(
+            &skipped_db,
+            skipped_video_repository,
+            skipped_preferences_repository,
+            Arc::new(SqliteVideoSummaryRepository::new(skipped_db.database())),
+            llm_replying(vec![]),
+            files_with(SHORT_SRT),
+        );
+        let failed_db = TestDatabase::new();
+        let failed_video_repository = Arc::new(SqliteVideoRepository::new(failed_db.database()));
+        let failed_preferences_repository =
+            Arc::new(SqlitePreferencesRepository::new(failed_db.database()));
+        failed_video_repository.save(&video).unwrap();
+        failed_preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&failed_db, &video, true);
+        seed_transcript(&failed_db, &video, "es");
+        let failing = summarize_video_task(
+            &failed_db,
+            failed_video_repository,
+            failed_preferences_repository,
+            Arc::new(SqliteVideoSummaryRepository::new(failed_db.database())),
+            llm_replying(vec![Err(anyhow::anyhow!("model crashed"))]),
+            files_with(SHORT_SRT),
+        );
 
-        let skipped = captured_log_lines(|| opted_out.run().unwrap());
+        let skipped = captured_log_lines(|| run(&opted_out, &video).unwrap());
         let failed = captured_log_lines(|| {
-            failing.run().unwrap_err();
+            run(&failing, &video).unwrap_err();
         });
 
         assert!(
@@ -879,161 +1554,183 @@ mod tests {
         );
     }
 
-    /// What a test changes about the default situation: a downloaded,
-    /// subtitled, 30-minute Spanish video in a channel with summaries on,
-    /// and AI and summaries on, with `qwen3:4b` installed.
-    struct Scene {
-        preferences: Preferences,
-        summaries_enabled: bool,
-        video: Video,
-        language: String,
-        srt: Option<String>,
-        llm: FakeLlmServerRepository,
-    }
-
-    /// A scene once stored, ready to run.
-    struct BuiltScene {
-        db: Arc<TestDatabase>,
-        video: Video,
+    fn summarize_video_task(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        preferences_repository: Arc<SqlitePreferencesRepository>,
+        summary_repository: Arc<SqliteVideoSummaryRepository>,
         llm: Arc<FakeLlmServerRepository>,
-        task: SummarizeVideoTask,
-    }
-
-    impl Default for Scene {
-        fn default() -> Self {
-            Self {
-                preferences: summaries_on(),
-                summaries_enabled: true,
-                video: subtitled_video(),
-                language: "es".to_string(),
-                srt: Some(SHORT_SRT.to_string()),
-                llm: FakeLlmServerRepository::new(server_with(thinking_model())),
-            }
-        }
-    }
-
-    impl Scene {
-        fn with_replies(self, replies: Vec<anyhow::Result<LlmReply>>) -> Self {
-            Self {
-                llm: self.llm.with_replies(replies),
-                ..self
-            }
-        }
-
-        /// Builds the scene with `hook` running while the model answers.
-        fn build_with_on_chat(
-            self,
-            hook: impl Fn(&TestDatabase, &VideoRecordId) + Send + Sync + 'static,
-        ) -> BuiltScene {
-            let db = Arc::new(TestDatabase::new());
-            let video_id = self.video.id.clone();
-            let hook_db = db.clone();
-            let llm = self
-                .llm
-                .with_replies(vec![reply("Three games.")])
-                .with_on_chat(move || hook(&hook_db, &video_id));
-            Self { llm, ..self }.build_in(db)
-        }
-
-        fn build(self) -> BuiltScene {
-            self.build_in(Arc::new(TestDatabase::new()))
-        }
-
-        fn build_in(self, db: Arc<TestDatabase>) -> BuiltScene {
-            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-            video_repository.save(&self.video).unwrap();
-            let preferences = Arc::new(SqlitePreferencesRepository::new(db.database()));
-            preferences.save(&self.preferences).unwrap();
-            let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-            channel_repository
-                .insert(&my_channel().with_summaries_enabled(self.summaries_enabled))
-                .unwrap();
-            let channel_video_repository =
-                Arc::new(SqliteChannelVideoRepository::new(db.database()));
-            channel_video_repository
-                .save(&ChannelVideo::create(
-                    my_channel_id(),
-                    self.video.id.clone(),
-                    0,
-                    fixed_timestamp(),
-                ))
-                .unwrap();
-            let transcript_repository =
-                Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
-            transcript_repository
-                .save(&VideoTranscript {
-                    video_id: self.video.id.clone(),
-                    language: CaptionLanguage::new(&self.language).unwrap(),
-                    source: CaptionSource::Automatic,
-                    text: TranscriptText::new("unused: timed lines come from the SRT"),
-                    created_at: fixed_timestamp(),
-                })
-                .unwrap();
-            let files = self
-                .srt
-                .iter()
-                .fold(FakeVideoFileRepository::default(), |files, srt| {
-                    files.with_file(format!("{OUTPUT_DIR}/{SUBTITLES}"), srt)
-                });
-            let llm = Arc::new(self.llm);
-            let task = SummarizeVideoTask::new(
-                video_repository.clone(),
-                Arc::new(VideoSummarizer::new(
-                    video_repository,
-                    Arc::new(VideoOwnerFinder::new(
-                        channel_video_repository,
-                        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                        channel_repository,
-                        Arc::new(SqlitePlaylistRepository::new(db.database())),
-                        "/videos",
-                    )),
-                    preferences,
-                    transcript_repository,
-                    Arc::new(files),
-                    llm.clone(),
-                    Arc::new(SqliteVideoSummaryRepository::new(db.database())),
-                    Arc::new(FixedClock(later())),
+        files: Arc<FakeVideoFileRepository>,
+    ) -> SummarizeVideoTask {
+        SummarizeVideoTask::new(
+            video_repository.clone(),
+            Arc::new(VideoSummarizer::new(
+                video_repository,
+                Arc::new(VideoOwnerFinder::new(
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(SqliteChannelRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistRepository::new(db.database())),
+                    "/videos",
                 )),
-            );
-            BuiltScene {
-                db,
-                video: self.video,
+                preferences_repository,
+                Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+                files,
                 llm,
-                task,
-            }
+                summary_repository,
+                Arc::new(FixedClock(later())),
+            )),
+        )
+    }
+
+    fn run(task: &SummarizeVideoTask, video: &Video) -> Result<(), String> {
+        task.handle(&payload_for(video), false)
+            .map_err(|error| error.to_string())
+    }
+
+    fn run_last_attempt(task: &SummarizeVideoTask, video: &Video) -> Result<(), String> {
+        task.handle(&payload_for(video), true)
+            .map_err(|error| error.to_string())
+    }
+
+    fn payload_for(video: &Video) -> String {
+        Task::SummarizeVideo {
+            video_id: video.id.as_str().to_string(),
+        }
+        .payload()
+        .to_string()
+    }
+
+    /// Stores `my_channel()`, with summaries on or off, as the owner of `video`.
+    fn seed_channel(db: &TestDatabase, video: &Video, summaries_enabled: bool) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel().with_summaries_enabled(summaries_enabled))
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn seed_transcript(db: &TestDatabase, video: &Video, language: &str) {
+        SqliteVideoTranscriptRepository::new(db.database())
+            .save(&VideoTranscript {
+                video_id: video.id.clone(),
+                language: CaptionLanguage::new(language).unwrap(),
+                source: CaptionSource::Automatic,
+                text: TranscriptText::new("unused: timed lines come from the SRT"),
+                created_at: fixed_timestamp(),
+            })
+            .unwrap();
+    }
+
+    /// An installed `qwen3:4b` answering `chat` with `replies`, in order.
+    fn llm_replying(replies: Vec<anyhow::Result<LlmReply>>) -> Arc<FakeLlmServerRepository> {
+        Arc::new(FakeLlmServerRepository::new(server_with(thinking_model())).with_replies(replies))
+    }
+
+    /// `srt` as the subtitle file of `subtitled_video()`.
+    fn files_with(srt: &str) -> Arc<FakeVideoFileRepository> {
+        Arc::new(
+            FakeVideoFileRepository::default().with_file(format!("{OUTPUT_DIR}/{SUBTITLES}"), srt),
+        )
+    }
+
+    fn sent_messages(llm: &FakeLlmServerRepository) -> Vec<SummaryMessages> {
+        llm.chats()
+            .into_iter()
+            .map(|chat| SummaryMessages {
+                system: chat.system,
+                user: chat.user,
+            })
+            .collect()
+    }
+
+    /// The call for a video that fits one, under `summaries_on()`.
+    fn one_call_chat() -> LlmChat {
+        let messages = whole_messages("Hola a todos");
+        LlmChat {
+            model: "qwen3:4b".to_string(),
+            system: messages.system,
+            user: messages.user,
+            context_length: 12288,
+            temperature: 0.3,
+            thinking: true,
+            max_output_tokens: 3288,
         }
     }
 
-    impl BuiltScene {
-        fn run(&self) -> Result<(), String> {
-            let payload = serde_json::json!({ "video_id": self.video.id.as_str() }).to_string();
-            self.task
-                .handle(&payload, false)
-                .map_err(|error| error.to_string())
+    fn whole_messages(transcript: &str) -> SummaryMessages {
+        SummaryMessages {
+            system: SYSTEM.to_string(),
+            user: format!(
+                "Title: Sicilian\nDuration: 30 minutes\n\nTranscript:\n{transcript}\n\nNow write the summary in Spanish, 3 to 5 sentences."
+            ),
         }
+    }
 
-        fn run_last_attempt(&self) -> Result<(), String> {
-            let payload = serde_json::json!({ "video_id": self.video.id.as_str() }).to_string();
-            self.task
-                .handle(&payload, true)
-                .map_err(|error| error.to_string())
+    /// The call for the transcript `lines` of `srt_of`, as one part.
+    fn part_messages(
+        part: usize,
+        parts: usize,
+        span: &str,
+        chapters: &[&str],
+        lines: Range<i64>,
+    ) -> SummaryMessages {
+        let chapters = match chapters.is_empty() {
+            true => String::new(),
+            false => format!("\nChapters in this part:\n{}\n", chapters.join("\n")),
+        };
+        SummaryMessages {
+            system: MAP_SYSTEM.to_string(),
+            user: format!(
+                "Title: Sicilian\nDuration: 30 minutes\nPart {part} of {parts} ({span})\n{chapters}\nTranscript part:\n{}\n\nNow summarize this part in Spanish, 4 to 6 sentences.",
+                transcript_lines(lines)
+            ),
         }
+    }
 
-        fn chats(&self) -> Vec<LlmChat> {
-            self.llm.chats()
+    /// The call over `answers`, each a span and what the model said about it.
+    fn reduce_messages(chapters: &[&str], answers: &[(&str, &str)]) -> SummaryMessages {
+        let chapters = match chapters.is_empty() {
+            true => String::new(),
+            false => format!(
+                "\nChapters (set by the uploader; use them to see the video's structure, but summarize what is said, not the chapter titles):\n{}\n",
+                chapters.join("\n")
+            ),
+        };
+        let part_summaries = answers
+            .iter()
+            .enumerate()
+            .map(|(index, (span, summary))| format!("Part {} ({span}):\n{summary}", index + 1))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        SummaryMessages {
+            system: REDUCE_SYSTEM.to_string(),
+            user: format!(
+                "Title: Sicilian\nDuration: 30 minutes\n{chapters}\nPart summaries, in order:\n\n{part_summaries}\n\nNow write the final summary of the whole video in Spanish, 3 to 5 sentences."
+            ),
         }
+    }
 
-        fn stored_summary(&self) -> Option<VideoSummary> {
-            SqliteVideoSummaryRepository::new(self.db.database())
-                .find(&self.video.id)
-                .unwrap()
+    /// `messages` for a video in `language` rather than Spanish.
+    fn in_language(language: &str, messages: SummaryMessages) -> SummaryMessages {
+        SummaryMessages {
+            system: messages.system.replace("Spanish", language),
+            user: messages.user.replace("Spanish", language),
         }
+    }
 
-        fn stored_video(&self) -> Video {
-            SqliteVideoRepository::new(self.db.database())
-                .find(&self.video.id)
-                .unwrap()
-                .unwrap()
+    fn stored_summary(video: &Video, text: &str) -> VideoSummary {
+        VideoSummary {
+            video_id: video.id.clone(),
+            text: SummaryText::new(text),
+            model: "qwen3:4b".to_string(),
+            created_at: later(),
         }
     }
 
@@ -1058,6 +1755,7 @@ mod tests {
         }
     }
 
+    /// A downloaded, subtitled, 30-minute video.
     fn subtitled_video() -> Video {
         let video = Video::create(VideoId::new("yt1").unwrap(), "Sicilian", fixed_timestamp())
             .mark_downloaded(
@@ -1091,11 +1789,20 @@ mod tests {
             .map(|line| {
                 let (hours, minutes) = (line * step / 3600, line * step % 3600 / 60);
                 let start = format!("{hours:02}:{minutes:02}:{:02},000", line * step % 60);
-                let text = format!("{line:04}").repeat(250);
+                let text = line_text(line);
                 format!("{}\n{start} --> {start}\n{text}\n", line + 1)
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    /// The text of `lines` of `srt_of`, as the model receives it.
+    fn transcript_lines(lines: Range<i64>) -> String {
+        lines.map(line_text).collect::<Vec<_>>().join("\n")
+    }
+
+    fn line_text(line: i64) -> String {
+        format!("{line:04}").repeat(250)
     }
 
     fn my_channel_id() -> ChannelHandle {
@@ -1118,7 +1825,7 @@ mod tests {
 
     fn thinking_model() -> LlmModel {
         LlmModel {
-            name: SummaryModel::default().as_str().to_string(),
+            name: "qwen3:4b".to_string(),
             size_bytes: 1,
             thinking: true,
         }
@@ -1147,4 +1854,38 @@ mod tests {
     fn later() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(2_000_000, 0).unwrap()
     }
+
+    /// The shipped `system` section, for a Spanish video.
+    const SYSTEM: &str = r#"You summarize YouTube videos from their transcript.
+Rules:
+- Write in Spanish, the language of the video.
+- Plain prose, no lists or headings. Start directly with the subject, e.g. "Three online games where…" or "La edad de oro del anarquismo…". Do not repeat the title, and do not start with "The video", "In this video" or "El vídeo".
+- Say what the video is about and its main points. For an argument, give the reasoning behind the conclusion, not just the conclusion.
+- Say how it ends: the result or verdict as the speaker states it (who won, what was decided). If the video draws no conclusion, do not invent one.
+- Keep the speaker's certainty: "I'm not sure it will" is not "it won't".
+- If the video has several parts (several games, places, stories), say how many and cover each with its own result.
+- Keep the video's own view apart from views it presents or criticizes.
+- Keep the main subject apart from things the speaker only mentions or promotes (other projects, courses, websites, other products).
+- Use only what the transcript says. Include a number only if the transcript states it, and give it exactly. Do not add names, numbers or comparisons of your own.
+- The transcript is auto-generated and may misspell names; use the title to correct them.
+- Ignore sponsors, ads and requests to like or subscribe."#;
+
+    /// The shipped `map system` section, for a Spanish video.
+    const MAP_SYSTEM: &str = r#"You summarize one part of a long YouTube video transcript.
+Write in Spanish, 4 to 6 sentences of plain prose. Keep this part's key facts, names, numbers and conclusions exactly as stated. Use only what this part says. Ignore sponsors and requests to subscribe."#;
+
+    /// The shipped `reduce system` section, for a Spanish video.
+    const REDUCE_SYSTEM: &str = r#"You write the final summary of a YouTube video from summaries of its consecutive parts.
+Rules:
+- Write in Spanish, the language of the video.
+- Plain prose, no lists or headings. Start directly with the subject, e.g. "Three online games where…" or "La edad de oro del anarquismo…". Do not repeat the title, and do not start with "The video", "In this video" or "El vídeo".
+- Say what the video is about and its main points. For an argument, give the reasoning behind the conclusion, not just the conclusion.
+- Say how it ends: the result or verdict as the speaker states it (who won, what was decided). If the video draws no conclusion, do not invent one.
+- Keep the speaker's certainty: "I'm not sure it will" is not "it won't".
+- If the video has several parts (several games, places, stories), say how many and cover each with its own result.
+- Keep the video's own view apart from views it presents or criticizes.
+- Keep the main subject apart from things the speaker only mentions or promotes (other projects, courses, websites, other products).
+- Use only what the part summaries says. Include a number only if the part summaries states it, and give it exactly. Do not add names, numbers or comparisons of your own.
+- The part summaries is auto-generated and may misspell names; use the title to correct them.
+- Ignore sponsors, ads and requests to like or subscribe."#;
 }
