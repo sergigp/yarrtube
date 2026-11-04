@@ -16,7 +16,7 @@ Saving preferences SHALL refetch the playlist, channel and category video lists,
 
 #### Scenario: Turning AI off and going back
 - **WHEN** a user viewing a video with a summary goes to AI settings, turns AI off and returns to the video
-- **THEN** the detail pane shows no summary, not even briefly
+- **THEN** the detail pane shows no summary once the list has refetched
 
 ## MODIFIED Requirements
 

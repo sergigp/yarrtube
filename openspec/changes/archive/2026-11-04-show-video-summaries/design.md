@@ -148,3 +148,7 @@ useSavePreferences()(patch)
 2. Infrastructure tests
 
    None: `SqliteVideoSummaryRepository::find` already has its tests.
+
+## Decisions
+
+**Stale summaries can flash.** Lists are refetched after a save, not before it. So returning before a refetch lands, or after one fails, can briefly paint a cached summary that was just turned off, and turning off a source's toggle can do the same for off-screen lists. Accepted: it heals itself on the next fetch and the API never sends a hidden summary.

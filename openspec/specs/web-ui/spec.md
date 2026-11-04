@@ -2330,7 +2330,7 @@ The tasks view SHALL describe a quality check task in plain language, naming the
 - **THEN** the task is still described as a quality check, using a generic placeholder in place of the missing names
 
 ### Requirement: Summarize Videos Checkbox
-The add and edit dialogs for channels and playlists SHALL show a "Summarize videos" checkbox described by the hint "Generate an AI summary of each new video.". In add dialogs it SHALL be always visible, below "Save to" and categories (not in "Advanced options"), unchecked by default, sent as `summaries_enabled`. Edit dialogs SHALL prefill it and send `summaries_enabled` only when changed.
+The add and edit dialogs for channels and playlists SHALL show a "Summarize videos" checkbox described by the hint "Generate and show an AI summary of each video.". In add dialogs it SHALL be always visible, below "Save to" and categories (not in "Advanced options"), unchecked by default, sent as `summaries_enabled`. Edit dialogs SHALL prefill it and send `summaries_enabled` only when changed.
 
 #### Scenario: Visible without advanced options
 - **WHEN** a user opens either add dialog without expanding "Advanced options"
@@ -2370,3 +2370,21 @@ The add and edit dialogs for channels and playlists SHALL show a "Summarize vide
 #### Scenario: Following the link
 - **WHEN** AI is off and a user activates "AI settings" in the hint
 - **THEN** the dialog closes and the AI page at `/ai` opens
+
+### Requirement: Video Detail AI Summary
+The video detail pane SHALL show the video's summary, when the listing reports one, in full between the meta line and the storage location, under the label "AI summary", at every viewport size. Line breaks in the summary SHALL be kept. When the listing reports none, the pane SHALL show neither the text nor the label.
+
+#### Scenario: Video with a summary
+- **WHEN** a user selects a video in a playlist, channel or category view whose listing entry has a summary
+- **THEN** the detail pane shows "AI summary" and the whole summary below the meta line, with no control to expand it
+
+#### Scenario: Video without a summary
+- **WHEN** a user selects a video whose listing entry has no summary
+- **THEN** the detail pane shows no "AI summary" label and no placeholder
+
+### Requirement: Saved Preferences Refresh Video Lists
+Saving preferences SHALL refetch the playlist, channel and category video lists, including those not on screen, so returning to one doesn't first show a summary that was turned off.
+
+#### Scenario: Turning AI off and going back
+- **WHEN** a user viewing a video with a summary goes to AI settings, turns AI off and returns to the video
+- **THEN** the detail pane shows no summary once the list has refetched
