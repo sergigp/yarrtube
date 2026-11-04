@@ -63,14 +63,19 @@ impl TimedTranscript {
     /// `range` cut into consecutive ranges of at most `max_chars`. A line
     /// longer than that stays whole, on its own.
     fn cut_by_size(&self, range: Range<usize>, max_chars: usize) -> Vec<Range<usize>> {
-        let mut pieces = Vec::new();
-        let mut start = range.start;
-        for end in range.clone() {
-            if end > start && self.chars(start..end + 1) > max_chars {
-                pieces.push(start..end);
-                start = end;
-            }
-        }
+        let (mut pieces, start, _) = range.clone().fold(
+            (Vec::new(), range.start, 0),
+            |(mut pieces, start, chars), end| {
+                let line_chars = self.0[end].text.chars().count();
+                match end > start && chars + 1 + line_chars > max_chars {
+                    true => {
+                        pieces.push(start..end);
+                        (pieces, end, line_chars)
+                    }
+                    false => (pieces, start, chars + usize::from(end > start) + line_chars),
+                }
+            },
+        );
         pieces.push(start..range.end);
         pieces
     }
