@@ -277,7 +277,7 @@ impl VideoSearcher {
             video,
             metadata,
             summary,
-        } = self.view(sourced.video, false)?;
+        } = self.view(sourced.video, true)?;
         let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
         Ok(CategoryVideoView {
             video,

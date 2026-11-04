@@ -393,6 +393,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_summary_when_listing_category_videos() {
+        let db = TestDatabase::new();
+        let chess = save_summarized_category_channel(
+            &db,
+            &channel("@somechannel", None).with_summaries_enabled(true),
+        );
+        save_preferences(&db, summaries_on());
+
+        let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![CategoryVideoResponse {
+                summary: Some(SUMMARY.to_string()),
+                ..category_video_in(
+                    category_video_response("vid1", "My Video", 10, channel_source(None)),
+                    &[&chess]
+                )
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -6282,6 +6305,36 @@ mod tests {
             0,
         );
         save_summary(db, &video);
+    }
+
+    /// Stores `channel` as the only member of a category, holding a downloaded
+    /// video "vid1" with a summary.
+    fn save_summarized_category_channel(db: &TestDatabase, channel: &Channel) -> Category {
+        let video = downloaded_video("vid1", "My Video", None, 10);
+        SqliteChannelRepository::new(db.database())
+            .insert(channel)
+            .unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            channel.id.as_str(),
+            &video,
+            0,
+        );
+        save_summary(db, &video);
+        save_category_of(db, &[channel_member(channel.id.as_str())])
+    }
+
+    /// Stores a category "Chess" of `members`, every one of them having it.
+    fn save_category_of(db: &TestDatabase, members: &[CategoryMember]) -> Category {
+        let category = named_category("Chess", members);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&category)
+            .unwrap();
+        members
+            .iter()
+            .for_each(|member| categorize_source(db, member, &[&category]));
+        category
     }
 
     /// A video searcher over every SQLite repository of `db`.
