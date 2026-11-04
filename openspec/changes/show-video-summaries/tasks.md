@@ -18,7 +18,7 @@
 - [x] 2.10 `it_should_hide_the_summary_of_a_category_video_whose_source_opted_out`: the source's toggle hides it in a category.
 - [x] 2.11 `it_should_follow_the_channel_copy_of_a_category_video`: the channel's toggle decides when both copies exist.
 - [x] 2.12 VideoDetail `shows the AI summary`: the region "AI summary" holds the exact text, line breaks kept with `whitespace-pre-line`.
-- [ ] 2.13 VideoDetail `shows no AI summary label when the video has none`.
+- [x] 2.13 VideoDetail `shows no AI summary label when the video has none`.
 - [ ] 2.14 AiSettingsView `refetches video lists after saving`: a cached, off-screen channel video list is requested again after saving; `useSavePreferences` invalidates them with `refetchType: 'all'`.
 - [ ] 2.15 Change the `SummariesField` hint to "Generate and show an AI summary of each video." and update the `AddChannelDialog` and `AddPlaylistDialog` assertions; `npm run test` passes.
 - [ ] 2.16 Update `doc/AI.md` and `doc/ARCHITECTURE.md` to say summaries are shown and when they're hidden, and replace "stores it for later features to show" in the Purpose of `openspec/specs/video-summaries/spec.md`; verify by reading them against the specs.

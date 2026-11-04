@@ -40,6 +40,22 @@ describe('VideoDetail', () => {
     )
   })
 
+  it('shows no AI summary label when the video has none', () => {
+    const video = aVideo({ summary: null })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.queryByRole('region', { name: 'AI summary' })).not.toBeInTheDocument()
+    expect(screen.queryByText('AI summary')).not.toBeInTheDocument()
+  })
+
   it('links the video on YouTube from the title row, in a new tab', () => {
     const video = aVideo({ id: 'abc' })
     renderWithProviders(
