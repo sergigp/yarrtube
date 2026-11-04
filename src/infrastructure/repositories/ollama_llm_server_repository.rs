@@ -305,6 +305,22 @@ mod tests {
     }
 
     #[test]
+    fn it_should_fail_on_an_error_status() {
+        let mut server = mockito::Server::new();
+        let _chat = server.mock("POST", "/api/chat").with_status(500).create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "HTTP status server error (500 Internal Server Error) for url ({}/api/chat)",
+                server.url()
+            ))
+        );
+    }
+
+    #[test]
     fn it_should_read_the_version_and_models() {
         let mut server = mockito::Server::new();
         let _version = server
