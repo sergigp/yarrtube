@@ -41,7 +41,7 @@
 - [x] 2.33 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_summary_while_ai_summaries_are_off` — table. Verify: test red, then green.
 - [x] 2.34 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_summary_without_fetched_subtitles` — Missing, Unavailable. Verify: test red, then green.
 - [x] 2.35 `src/application/tasks/sync_video_task.rs`: `it_should_space_summary_retries_by_a_day` — 3 h no, 25 h yes. Verify: test red, then green.
-- [ ] 2.36 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_settled_summary` — Generated, Unavailable. Verify: test red, then green.
+- [x] 2.36 `src/application/tasks/sync_video_task.rs`: `it_should_not_schedule_a_settled_summary` — Generated, Unavailable. Verify: test red, then green.
 - [ ] 2.37 `src/application/tasks/sync_video_task.rs`: `it_should_not_queue_a_second_summary` — dedupe. Verify: test red, then green.
 - [ ] 2.38 `src/application/tasks/reconcile_channel_task.rs`: `it_should_schedule_summaries_for_the_stored_videos_of_an_opted_in_channel` — one per video. Verify: test red, then green.
 - [ ] 2.39 `src/application/subscribers/sync_video_on_video_subtitles_fetched.rs`: `it_should_schedule_a_video_sync` — `sync_video` now. Verify: test red, then green.

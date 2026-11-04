@@ -43,7 +43,8 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoChapter, VideoId, VideoStatus,
+        EpisodeNumber, LateDataChecks, SubtitleState, SummaryState, Video, VideoChapter, VideoId,
+        VideoStatus,
     };
     use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
@@ -2423,6 +2424,23 @@ mod tests {
         assert_eq!(
             [3, 25].map(|hours| summaries_scheduled(failed_ago(hours), true, summaries_on())),
             [0, 1]
+        );
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_settled_summary() {
+        let settled = |summary_state| Video {
+            summary_state,
+            ..subtitled_video()
+        };
+
+        assert_eq!(
+            [SummaryState::Generated, SummaryState::Unavailable].map(|state| summaries_scheduled(
+                settled(state),
+                true,
+                summaries_on()
+            )),
+            [0, 0]
         );
     }
 
