@@ -191,6 +191,9 @@ impl VideoSummarizer {
                 max_output_tokens: context_length.output_budget_tokens(),
             },
         )?;
+        if reply.is_incomplete(context_length.value()) {
+            anyhow::bail!("the model's answer is incomplete");
+        }
         Ok(SummaryText::from_answer(&reply.content)?)
     }
 

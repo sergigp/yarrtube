@@ -587,6 +587,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_count_a_failed_attempt_when_the_answer_stopped_at_the_limit() {
+        let scene = Scene::default()
+            .with_replies(vec![Ok(LlmReply {
+                stopped_at_limit: true,
+                ..reply("Three games and").unwrap()
+            })])
+            .build();
+
+        scene.run().unwrap();
+
+        assert_eq!(scene.stored_summary(), None);
+        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

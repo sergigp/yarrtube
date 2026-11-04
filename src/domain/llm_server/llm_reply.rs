@@ -10,6 +10,6 @@ impl LlmReply {
     /// Stopped at the output cap, or input within 64 tokens of
     /// `context_length`.
     pub fn is_incomplete(&self, _context_length: u32) -> bool {
-        false
+        self.stopped_at_limit
     }
 }
