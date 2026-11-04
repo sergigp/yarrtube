@@ -87,8 +87,8 @@ Behaviour tasks are TDD like section 2. Refactor tasks change no behaviour: Veri
 - [x] 5.1 Commit the audit's added tests and cleanups as they stand. Verify: `cargo test --locked` passes; `git status` clean.
 - [x] 5.2 `ollama_llm_server_repository`: `it_should_post_the_chat_with_its_options` gains `truncate: false` and `shift: false`. Verify: test red, then green.
 - [x] 5.3 `ollama_llm_server_repository`: `it_should_report_a_refusal_on_a_bad_request` — a reply with Ollama's message as `refusal`. Verify: test red, then green.
-- [ ] 5.4 `ollama_llm_server_repository`: `it_should_fail_on_an_error_status` — 500 and 404 are `Err`. Verify: test red, then green.
-- [ ] 5.5 Remove `LlmReply::is_incomplete` and `TRUNCATION_MARGIN`, the false `prompt_eval_count` comment, `it_should_count_a_failed_attempt_when_the_input_was_truncated`; fix `evals/summaries/eval.py` (send `truncate: false`, drop the `truncated` flag). Verify: `cargo test --locked` passes.
+- [x] 5.4 `ollama_llm_server_repository`: `it_should_fail_on_an_error_status` — 500 and 404 are `Err`. Verify: test red, then green.
+- [x] 5.5 Remove `LlmReply::is_incomplete` and `TRUNCATION_MARGIN`, the false `prompt_eval_count` comment, `it_should_count_a_failed_attempt_when_the_input_was_truncated`; fix `evals/summaries/eval.py` (send `truncate: false`, drop the `truncated` flag). Verify: `cargo test --locked` passes.
 - [ ] 5.6 `caption_language`: `it_should_estimate_japanese_chinese_and_korean_at_fewer_characters_per_token`. Verify: test red, then green.
 - [ ] 5.7 `summarize_video_task`: `it_should_fail_the_task_when_the_answer_stopped_at_the_limit` — handler returns `Err`, `summarize(video, is_last_attempt)`. Verify: test red, then green.
 - [ ] 5.8 `summarize_video_task`: `it_should_become_unavailable_when_rejected_on_the_last_attempt`. Verify: test red, then green.

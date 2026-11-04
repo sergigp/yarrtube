@@ -604,21 +604,6 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_when_the_input_was_truncated() {
-        let scene = Scene::default()
-            .with_replies(vec![Ok(LlmReply {
-                input_tokens: 12250,
-                ..reply("Three games.").unwrap()
-            })])
-            .build();
-
-        scene.run().unwrap();
-
-        assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
-    }
-
-    #[test]
     fn it_should_count_a_failed_attempt_when_the_answer_is_only_reasoning() {
         let scene = Scene::default()
             .with_replies(vec![reply("<think>hmm</think>\n")])

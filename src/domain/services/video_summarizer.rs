@@ -251,8 +251,13 @@ impl VideoSummarizer {
             duration_seconds = started.elapsed().as_secs_f64(),
             "model answered"
         );
-        if reply.is_incomplete(context_length.value()) {
-            anyhow::bail!("the model's answer is incomplete");
+        if reply.stopped_at_limit {
+            anyhow::bail!(
+                "the model stopped at the {}-token output cap (context {}, {} input tokens)",
+                context_length.output_budget_tokens(),
+                context_length.value(),
+                reply.input_tokens
+            );
         }
         Ok(SummaryText::from_answer(&reply.content)?)
     }
