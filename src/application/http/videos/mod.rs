@@ -5521,7 +5521,6 @@ mod tests {
             response,
             Ok(vec![CategoryVideoResponse {
                 published_at: Some(published_timestamp()),
-                description: Some("A description\nwith two lines".to_string()),
                 channel_name: Some("Some Channel".to_string()),
                 ..category_video_in(
                     category_video_response("vid1", "My Video", 10, channel_source(None)),
@@ -5571,7 +5570,6 @@ mod tests {
             Ok(vec![CategoryVideoResponse {
                 thumbnail_filename: Some("vid1.jpg".to_string()),
                 published_at: None,
-                description: None,
                 channel_name: None,
                 ..category_video_in(
                     category_video_response("vid1", "No metadata yet", 10, channel_source(None)),
@@ -5936,7 +5934,6 @@ mod tests {
             position_seconds: 0,
             synced_at: Some(created_at),
             published_at: None,
-            description: None,
             channel_name: None,
             subtitle_language: None,
             chapters: vec![],
