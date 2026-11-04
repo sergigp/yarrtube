@@ -61,7 +61,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
         Ok(LlmReply {
             content: response.message.content,
             input_tokens: response.prompt_eval_count,
-            stopped_at_limit: false,
+            stopped_at_limit: response.done_reason.as_deref() == Some("length"),
         })
     }
 }
@@ -154,6 +154,7 @@ struct ChatResponse {
     message: ChatMessage,
     #[serde(default)]
     prompt_eval_count: u32,
+    done_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -286,6 +287,21 @@ mod tests {
                 stopped_at_limit: false,
             }
         );
+    }
+
+    #[test]
+    fn it_should_report_a_reply_stopped_at_the_limit() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_body(r#"{"message": {"content": "Three"}, "done_reason": "length"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert!(reply.stopped_at_limit);
     }
 
     #[test]
