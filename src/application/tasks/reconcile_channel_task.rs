@@ -37,7 +37,9 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::llm_server::OllamaUrl;
     use crate::domain::playlist::PlaylistPath;
+    use crate::domain::preferences::{Preferences, SummarySettings};
     use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
@@ -69,7 +71,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
+    use crate::infrastructure::repositories::sqlite_preferences_repository::{
+        PreferencesRepository, SqlitePreferencesRepository,
+    };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -2127,6 +2131,72 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![fetch_subtitles_task(1, &video.id), next_reconcile(2)]
+        );
+    }
+
+    #[test]
+    fn it_should_schedule_summaries_for_the_stored_videos_of_an_opted_in_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        channel_repository
+            .insert(&channel("@somechannel").with_summaries_enabled(true))
+            .unwrap();
+        SqlitePreferencesRepository::new(db.database())
+            .save(&Preferences {
+                ai_enabled: true,
+                ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+                summaries: SummarySettings {
+                    enabled: true,
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            })
+            .unwrap();
+        let subtitled = downloaded_episode().mark_subtitles_fetched(
+            "Season 2023/S2023E111401 - My Video.en.srt",
+            fixed_timestamp(),
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &subtitled,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository,
+            channel_video_repository,
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(episode_files())),
+        ));
+
+        run(&task, &payload_for("@somechannel")).unwrap();
+
+        let summarized: Vec<String> = task_repository
+            .list_non_completed()
+            .unwrap()
+            .into_iter()
+            .filter(|task| task.task_type == "summarize_video")
+            .map(|task| task.payload)
+            .collect();
+        assert_eq!(
+            summarized,
+            vec![
+                Task::SummarizeVideo {
+                    video_id: subtitled.id.as_str().to_string()
+                }
+                .payload()
+                .to_string()
+            ]
         );
     }
 
