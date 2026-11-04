@@ -842,6 +842,47 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_its_generated_summary() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video();
+
+        let generated = video.clone().mark_summary_generated(now);
+
+        assert_eq!(
+            generated,
+            Video {
+                summary_state: SummaryState::Generated,
+                summary_checks: LateDataChecks {
+                    last_checked_at: Some(now),
+                    failed_attempts: 0,
+                },
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_record_a_failed_summary() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video();
+
+        let failed = video.clone().record_summary_failure(now);
+
+        assert_eq!(
+            failed,
+            Video {
+                summary_checks: LateDataChecks {
+                    last_checked_at: Some(now),
+                    failed_attempts: 1,
+                },
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
     fn it_should_report_the_subtitle_language_from_its_filename() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let filename = "Season 1/S01E003 - My Video.en.srt";

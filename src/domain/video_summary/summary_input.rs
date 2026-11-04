@@ -31,12 +31,13 @@ impl SummaryInput {
         let chapters = video.chapters.clone().unwrap_or_default();
         let max_chars =
             f64::from(context_length.input_budget_tokens()) * language.chars_per_token();
+        let parts = transcript.parts(&chapters, max_chars as usize);
         Self {
             title: video.title.clone(),
             minutes: video.duration_seconds.unwrap_or(0) / 60,
             language: language.english_name(),
-            chapters: chapters.clone(),
-            parts: transcript.parts(&chapters, max_chars as usize),
+            chapters,
+            parts,
         }
     }
 
@@ -51,14 +52,10 @@ impl SummaryInput {
             system: prompt.render(SummaryPromptSection::System, &self.language_value()),
             user: prompt.render(
                 SummaryPromptSection::User,
-                &[
-                    self.head_values(),
-                    vec![
-                        ("chapters", self.chapter_block(prompt)),
-                        ("transcript", transcript.to_string()),
-                    ],
-                ]
-                .concat(),
+                &self.head_values_with(vec![
+                    ("chapters", self.chapter_block(prompt)),
+                    ("transcript", transcript.to_string()),
+                ]),
             ),
         }
     }
@@ -70,17 +67,13 @@ impl SummaryInput {
             system: prompt.render(SummaryPromptSection::MapSystem, &self.language_value()),
             user: prompt.render(
                 SummaryPromptSection::MapUser,
-                &[
-                    self.head_values(),
-                    vec![
-                        ("part", (index + 1).to_string()),
-                        ("parts", self.parts.len().to_string()),
-                        ("span", Self::span(part)),
-                        ("chapters", self.part_chapter_block(prompt, part)),
-                        ("transcript", part.text.clone()),
-                    ],
-                ]
-                .concat(),
+                &self.head_values_with(vec![
+                    ("part", (index + 1).to_string()),
+                    ("parts", self.parts.len().to_string()),
+                    ("span", Self::span(part)),
+                    ("chapters", self.part_chapter_block(prompt, part)),
+                    ("transcript", part.text.clone()),
+                ]),
             ),
         }
     }
@@ -91,14 +84,10 @@ impl SummaryInput {
             system: prompt.render(SummaryPromptSection::ReduceSystem, &self.language_value()),
             user: prompt.render(
                 SummaryPromptSection::ReduceUser,
-                &[
-                    self.head_values(),
-                    vec![
-                        ("chapters", self.chapter_block(prompt)),
-                        ("part_summaries", self.part_summaries(prompt, answers)),
-                    ],
-                ]
-                .concat(),
+                &self.head_values_with(vec![
+                    ("chapters", self.chapter_block(prompt)),
+                    ("part_summaries", self.part_summaries(prompt, answers)),
+                ]),
             ),
         }
     }
@@ -130,12 +119,14 @@ impl SummaryInput {
         vec![("lang", self.language.clone())]
     }
 
-    fn head_values(&self) -> Vec<(&'static str, String)> {
-        vec![
+    fn head_values_with(&self, extras: Vec<(&'static str, String)>) -> Vec<(&'static str, String)> {
+        let mut values = vec![
             ("title", self.title.clone()),
             ("minutes", self.minutes.to_string()),
-            ("lang", self.language.clone()),
-        ]
+        ];
+        values.extend(self.language_value());
+        values.extend(extras);
+        values
     }
 
     /// The whole video's chapters as the `chapters` section.

@@ -33,7 +33,7 @@ impl OllamaLlmServerRepository {
 
 impl LlmServerRepository for OllamaLlmServerRepository {
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer> {
-        let client = Self::client()?;
+        let client = Self::client(REQUEST_TIMEOUT)?;
         let version: VersionResponse = Self::get_json(&client, url, "/api/version")?;
         let tags: TagsResponse = Self::get_json(&client, url, "/api/tags")?;
         let models = tags
@@ -48,10 +48,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
     }
 
     fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
-        let client = reqwest::blocking::Client::builder()
-            .connect_timeout(REQUEST_TIMEOUT)
-            .timeout(CHAT_TIMEOUT)
-            .build()?;
+        let client = Self::client(CHAT_TIMEOUT)?;
         let response: ChatResponse = Self::read_json(
             "/api/chat",
             client
@@ -69,9 +66,10 @@ impl LlmServerRepository for OllamaLlmServerRepository {
 impl OllamaLlmServerRepository {
     /// A fresh client per check, as for Plex: a blocking client whose
     /// private thread died would fail every later request.
-    fn client() -> anyhow::Result<reqwest::blocking::Client> {
+    fn client(timeout: Duration) -> anyhow::Result<reqwest::blocking::Client> {
         Ok(reqwest::blocking::Client::builder()
-            .timeout(REQUEST_TIMEOUT)
+            .connect_timeout(REQUEST_TIMEOUT)
+            .timeout(timeout)
             .build()?)
     }
 

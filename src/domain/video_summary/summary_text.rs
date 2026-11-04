@@ -13,7 +13,10 @@ impl SummaryText {
 
     /// `answer` after its last `</think>`, trimmed; rejects an empty result.
     pub fn from_answer(answer: &str) -> Result<Self, ValidationError> {
-        let cleaned = answer.rsplit("</think>").next().unwrap_or(answer).trim();
+        let cleaned = answer
+            .rsplit_once("</think>")
+            .map_or(answer, |(_, after)| after)
+            .trim();
         match cleaned.is_empty() {
             true => Err(ValidationError("The model's answer is empty".to_string())),
             false => Ok(Self::new(cleaned)),

@@ -2518,7 +2518,7 @@ mod tests {
             .list_non_completed()
             .unwrap()
             .iter()
-            .filter(|task| task.task_type == "summarize_video")
+            .filter(|scheduled| scheduled.task_type == "summarize_video")
             .count()
     }
 

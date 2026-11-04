@@ -145,3 +145,55 @@ fn cue_start(cue: &[&str]) -> Option<i64> {
         Some(seconds * 60 + unit.parse::<i64>().ok()?)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_keep_a_line_over_the_limit_on_its_own() {
+        let transcript = transcript(&[(0, "aaaaaaaaaa"), (5, "bb")]);
+
+        let parts = transcript.parts(&[], 5);
+
+        assert_eq!(parts, vec![part(0, 0, "aaaaaaaaaa"), part(5, 5, "bb")]);
+    }
+
+    #[test]
+    fn it_should_fill_a_part_up_to_exactly_the_limit() {
+        let transcript = transcript(&[(0, "aaaa"), (5, "bbbb"), (10, "c"), (15, "d")]);
+
+        let parts = transcript.parts(&[], 9);
+
+        assert_eq!(parts, vec![part(0, 5, "aaaa\nbbbb"), part(10, 15, "c\nd")]);
+    }
+
+    #[test]
+    fn it_should_count_line_breaks_in_the_size_of_a_transcript() {
+        let transcript = transcript(&[(0, "aaaa"), (5, "bbbb")]);
+
+        let parts = transcript.parts(&[], 8);
+
+        assert_eq!(parts, vec![part(0, 0, "aaaa"), part(5, 5, "bbbb")]);
+    }
+
+    fn transcript(lines: &[(i64, &str)]) -> TimedTranscript {
+        TimedTranscript(
+            lines
+                .iter()
+                .map(|(start_seconds, text)| TimedLine {
+                    start_seconds: *start_seconds,
+                    text: text.to_string(),
+                })
+                .collect(),
+        )
+    }
+
+    fn part(start_seconds: i64, end_seconds: i64, text: &str) -> TranscriptPart {
+        TranscriptPart {
+            start_seconds,
+            end_seconds,
+            text: text.to_string(),
+        }
+    }
+}
