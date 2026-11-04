@@ -470,6 +470,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_follow_the_channel_copy_of_a_category_video() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_copy = downloaded_video("vid1", "My Video", None, 10);
+        let playlist_copy = downloaded_video("vid1", "My Video", None, 10);
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1").with_summaries_enabled(true))
+            .unwrap();
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@somechannel",
+            &channel_copy,
+            0,
+        );
+        save_playlist_video(
+            &video_repository,
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PL1",
+            &playlist_copy,
+        );
+        save_summary(&db, &channel_copy);
+        save_summary(&db, &playlist_copy);
+        let chess = save_category_of(
+            &db,
+            &[channel_member("@somechannel"), playlist_member("PL1")],
+        );
+        save_preferences(&db, summaries_on());
+
+        let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![category_video_in(
+                category_video_response("vid1", "My Video", 10, channel_source(None)),
+                &[&chess]
+            )])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

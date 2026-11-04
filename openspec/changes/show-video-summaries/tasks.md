@@ -16,7 +16,7 @@
 - [x] 2.8 `it_should_include_the_summary_when_listing_category_videos`: a category video carries its stored summary.
 - [x] 2.9 `it_should_hide_the_summary_of_a_category_video_when_ai_is_off`: AI off hides it in a category.
 - [x] 2.10 `it_should_hide_the_summary_of_a_category_video_whose_source_opted_out`: the source's toggle hides it in a category.
-- [ ] 2.11 `it_should_follow_the_channel_copy_of_a_category_video`: the channel's toggle decides when both copies exist.
+- [x] 2.11 `it_should_follow_the_channel_copy_of_a_category_video`: the channel's toggle decides when both copies exist.
 - [ ] 2.12 VideoDetail `shows the AI summary`: the region "AI summary" holds the exact text, line breaks kept with `whitespace-pre-line`.
 - [ ] 2.13 VideoDetail `shows no AI summary label when the video has none`.
 - [ ] 2.14 AiSettingsView `refetches video lists after saving`: a cached, off-screen channel video list is requested again after saving; `useSavePreferences` invalidates them with `refetchType: 'all'`.

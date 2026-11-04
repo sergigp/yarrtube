@@ -298,7 +298,10 @@ impl VideoSearcher {
                 .playlist_repository
                 .find(id)?
                 .is_some_and(|playlist| playlist.summaries_enabled)),
-            VideoSource::Channel { .. } => Ok(true),
+            VideoSource::Channel { handle, .. } => Ok(self
+                .channel_repository
+                .find(handle)?
+                .is_some_and(|channel| channel.summaries_enabled)),
         }
     }
 
