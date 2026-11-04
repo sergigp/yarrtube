@@ -301,6 +301,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_hide_the_summary_when_summaries_are_off() {
+        let db = TestDatabase::new();
+        save_summarized_playlist_video(&db, &playlist("PL1").with_summaries_enabled(true));
+        save_preferences(
+            &db,
+            Preferences {
+                ai_enabled: true,
+                ..Preferences::default()
+            },
+        );
+
+        let response = list_for_playlist(home_video_searcher(&db), "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![pending_video_response("vid1", "My Video")])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
