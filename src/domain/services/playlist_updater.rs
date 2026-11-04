@@ -5,6 +5,7 @@ use crate::domain::playlist::errors::UpdatePlaylistError;
 use crate::domain::shared::ReconcileInterval;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
@@ -16,6 +17,7 @@ pub struct PlaylistUpdater {
     repository: Arc<dyn PlaylistRepository>,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
+    preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
 impl PlaylistUpdater {
@@ -23,11 +25,13 @@ impl PlaylistUpdater {
         repository: Arc<dyn PlaylistRepository>,
         task_repository: Arc<dyn TaskRepository>,
         clock: Arc<dyn Clock>,
+        preferences_repository: Arc<dyn PreferencesRepository>,
     ) -> Self {
         Self {
             repository,
             task_repository,
             clock,
+            preferences_repository,
         }
     }
 }
@@ -52,6 +56,7 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
         id: PlaylistId,
         change: PlaylistSettingsChange,
     ) -> Result<Playlist, UpdatePlaylistError> {
+        self.ensure_summaries_available(change.summaries_enabled)?;
         let playlist = Self::apply_settings(self.find_playlist(&id)?, change);
         self.update_playlist(&playlist)?;
         if let Some(reconcile_interval) = change.reconcile_interval {
@@ -69,6 +74,26 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
 }
 
 impl PlaylistUpdater {
+    /// Enabling summaries needs AI and summaries on in the preferences.
+    fn ensure_summaries_available(
+        &self,
+        summaries_enabled: Option<bool>,
+    ) -> Result<(), UpdatePlaylistError> {
+        if summaries_enabled != Some(true) {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(UpdatePlaylistError::Repository)?
+            .unwrap_or_default();
+        if preferences.summaries_available() {
+            Ok(())
+        } else {
+            Err(UpdatePlaylistError::SummariesUnavailable)
+        }
+    }
+
     fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, UpdatePlaylistError> {
         match self.repository.find(id) {
             Ok(Some(playlist)) => Ok(playlist),
@@ -86,8 +111,12 @@ impl PlaylistUpdater {
             Some(hide_unwatched_count) => playlist.with_hide_unwatched_count(hide_unwatched_count),
             None => playlist,
         };
-        match change.reconcile_interval {
+        let playlist = match change.reconcile_interval {
             Some(reconcile_interval) => playlist.with_reconcile_interval(reconcile_interval),
+            None => playlist,
+        };
+        match change.summaries_enabled {
+            Some(summaries_enabled) => playlist.with_summaries_enabled(summaries_enabled),
             None => playlist,
         }
     }

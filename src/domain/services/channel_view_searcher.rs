@@ -111,6 +111,7 @@ impl ChannelViewSearcher {
             video_limit: channel.video_limit,
             reconcile_interval: channel.reconcile_interval,
             avatar_filename: channel.avatar_filename,
+            summaries_enabled: channel.summaries_enabled,
         }
     }
 }

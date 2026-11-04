@@ -33,6 +33,7 @@ const CATEGORY_PALETTE_REFRESH_SQL: &str =
     include_str!("../../../migrations/0019_category_palette_refresh.sql");
 const VIDEO_CHAPTERS_SQL: &str = include_str!("../../../migrations/0020_video_chapters.sql");
 const LATE_VIDEO_DATA_SQL: &str = include_str!("../../../migrations/0021_late_video_data.sql");
+const SOURCE_SUMMARIES_SQL: &str = include_str!("../../../migrations/0022_source_summaries.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -60,6 +61,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(CATEGORY_PALETTE_REFRESH_SQL),
         M::up(VIDEO_CHAPTERS_SQL),
         M::up(LATE_VIDEO_DATA_SQL),
+        M::up(SOURCE_SUMMARIES_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -869,6 +871,40 @@ mod tests {
     }
 
     #[test]
+    fn it_should_disable_summaries_for_sources_stored_before_the_setting() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_late_video_data(&mut conn);
+        conn.execute_batch(
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, created_at)
+             VALUES ('@chan', 'Chan', 'UC1', 'high', 3, 'channels/chan', '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlists (id, name, path, quality, kind, created_at)
+             VALUES ('PL1', 'Mix', 'playlists/mix', 'high', 'youtube_linked', '2024-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let summaries_enabled = conn
+            .prepare(
+                "SELECT id, summaries_enabled FROM channels
+                 UNION ALL SELECT id, summaries_enabled FROM playlists",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        assert_eq!(
+            summaries_enabled,
+            Ok(vec![
+                ("@chan".to_string(), false),
+                ("PL1".to_string(), false)
+            ])
+        );
+    }
+
+    #[test]
     fn it_should_settle_checked_chapters_and_downloaded_quality() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate_to_video_chapters(&mut conn);
@@ -955,6 +991,37 @@ mod tests {
             ),
             M::up(CATEGORY_PALETTE_REFRESH_SQL),
             M::up(VIDEO_CHAPTERS_SQL),
+        ])
+        .to_latest(conn)
+        .unwrap();
+    }
+
+    fn migrate_to_late_video_data(conn: &mut Connection) {
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+            M::up(RECONCILE_INTERVAL_SQL),
+            M::up(VIDEO_SUBTITLES_SQL),
+            M::up(CATEGORIES_SQL),
+            M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+            M::up(CATEGORY_COLOR_SQL),
+            M::up(VIDEO_CATEGORIES_SQL),
+            M::up(PLEX_LABELS_SQL),
+            M::up(EPISODE_LABELS_GENERATION_SQL),
+            M::up(PREFERENCES_SQL),
+            M::up_with_hook(
+                CATEGORY_COLOR_STRENGTHEN_SQL,
+                strengthen_light_category_colors,
+            ),
+            M::up(CATEGORY_PALETTE_REFRESH_SQL),
+            M::up(VIDEO_CHAPTERS_SQL),
+            M::up(LATE_VIDEO_DATA_SQL),
         ])
         .to_latest(conn)
         .unwrap();

@@ -35,3 +35,8 @@ function effective(
 export function categoriesShown(preferences: Preferences | undefined, failed: boolean): boolean {
   return effective(preferences, failed)?.categories_enabled ?? false
 }
+
+/** Whether sources can have their videos summarized: AI and summaries on. */
+export function summariesAvailable(preferences: Preferences | undefined): boolean {
+  return (preferences?.ai_enabled ?? false) && (preferences?.summaries_enabled ?? false)
+}

@@ -135,6 +135,7 @@ export interface CreatePlaylistRequest {
   quality: string
   exclude_from_home: boolean
   reconcile_interval_minutes: number
+  summaries_enabled: boolean
 }
 
 export function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistListItem> {
@@ -158,6 +159,7 @@ export interface UpdatePlaylistRequest {
   exclude_from_home?: boolean
   hide_unwatched_count?: boolean
   reconcile_interval_minutes?: number
+  summaries_enabled?: boolean
 }
 
 /**
@@ -216,6 +218,7 @@ export interface CreateChannelRequest {
   video_limit: number
   path: string
   reconcile_interval_minutes: number
+  summaries_enabled: boolean
 }
 
 export function createChannel(body: CreateChannelRequest): Promise<CreatedChannel> {
@@ -227,6 +230,7 @@ export interface UpdateChannelRequest {
   quality?: string
   video_limit?: number
   reconcile_interval_minutes?: number
+  summaries_enabled?: boolean
 }
 
 /** Changes a channel's quality, video limit and/or reconcile interval. */

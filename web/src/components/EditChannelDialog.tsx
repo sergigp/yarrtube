@@ -13,6 +13,7 @@ import { CategoryPicker } from './CategoryPicker'
 import { LocationLine } from './LocationLine'
 import { MoveSourceDialog } from './MoveSourceDialog'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
+import { SummariesField } from './SummariesField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -83,6 +84,7 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
     quality: channel.quality,
     video_limit: String(channel.video_limit),
     interval: intervalForm(channel.reconcile_interval_minutes),
+    summaries_enabled: channel.summaries_enabled,
   })
 
   const setField =
@@ -91,6 +93,8 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
       setForm((prev) => ({ ...prev, [field]: value }))
     }
   const changeInterval = (interval: IntervalForm) => setForm((prev) => ({ ...prev, interval }))
+  const changeSummaries = (summaries_enabled: boolean) =>
+    setForm((prev) => ({ ...prev, summaries_enabled }))
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -167,6 +171,14 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
         id="edit-channel-interval"
         value={form.interval}
         onChange={changeInterval}
+      />
+
+      <SummariesField
+        id="edit-channel-summaries"
+        checked={form.summaries_enabled}
+        onChange={changeSummaries}
+        enabledOnSource={channel.summaries_enabled}
+        onNavigateAway={onClose}
       />
 
       {withCategories && (

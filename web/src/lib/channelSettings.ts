@@ -7,11 +7,15 @@ export interface ChannelSettingsForm {
   quality: string
   video_limit: string
   interval: IntervalForm
+  summaries_enabled: boolean
 }
 
 /** The settings the form changes from the channel's current ones; `{}` when none. */
 export function channelSettingsChanges(
-  current: Pick<ChannelListItem, 'quality' | 'video_limit' | 'reconcile_interval_minutes'>,
+  current: Pick<
+    ChannelListItem,
+    'quality' | 'video_limit' | 'reconcile_interval_minutes' | 'summaries_enabled'
+  >,
   form: ChannelSettingsForm,
 ): UpdateChannelRequest {
   const videoLimit = Number(form.video_limit)
@@ -21,6 +25,9 @@ export function channelSettingsChanges(
     ...(videoLimit !== current.video_limit && { video_limit: videoLimit }),
     ...(interval !== null &&
       interval !== current.reconcile_interval_minutes && { reconcile_interval_minutes: interval }),
+    ...(form.summaries_enabled !== current.summaries_enabled && {
+      summaries_enabled: form.summaries_enabled,
+    }),
   }
 }
 

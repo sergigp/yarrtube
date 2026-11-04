@@ -18,6 +18,7 @@ import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { lookupNotice } from './lookupNotice'
 import { FolderNameField } from './FolderNameField'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
+import { SummariesField } from './SummariesField'
 import { CategoryPicker } from './CategoryPicker'
 import { SaveToField } from './SaveToField'
 import { Thumbnail } from './Thumbnail'
@@ -103,6 +104,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [categoryIds, setCategoryIds] = useState<string[]>([])
+  const [summariesEnabled, setSummariesEnabled] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
   const saveSourceCategories = useSaveSourceCategories()
   const withCategories = useCategoriesShown()
@@ -134,6 +136,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         video_limit: Number(form.video_limit),
         path: location.value.path,
         reconcile_interval_minutes: reconcileIntervalMinutes,
+        summaries_enabled: summariesEnabled,
       })
       location.remember()
       invalidateLibrary()
@@ -175,6 +178,13 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
       )}
 
       {withCategories && <CategoryPicker value={categoryIds} onChange={setCategoryIds} />}
+
+      <SummariesField
+        id="add-channel-summaries"
+        checked={summariesEnabled}
+        onChange={setSummariesEnabled}
+        onNavigateAway={onClose}
+      />
 
       <div className="min-w-0 border-t border-border pt-4">
         <button

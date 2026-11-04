@@ -50,7 +50,7 @@ import type {
   Video,
 } from './types'
 import { anyWorkInProgress } from '@/lib/libraryPolling'
-import { categoriesShown } from '@/lib/preferences'
+import { categoriesShown, summariesAvailable } from '@/lib/preferences'
 
 // The sidebar lists change rarely and are refetched right after the user's
 // own actions; views showing live download progress poll quickly.
@@ -261,6 +261,11 @@ export function useCheckOllama(): (url: string) => Promise<OllamaServer> {
 export function useCategoriesShown(): boolean {
   const { data, isError } = usePreferences()
   return categoriesShown(data, isError)
+}
+
+/** Whether sources can have their videos summarized, per the preferences. */
+export function useSummariesAvailable(): boolean {
+  return summariesAvailable(usePreferences().data)
 }
 
 /**

@@ -8,6 +8,7 @@ pub enum CreatePlaylistError {
     PathAlreadyInUse(PlaylistPath),
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
+    SummariesUnavailable,
 }
 
 impl fmt::Display for CreatePlaylistError {
@@ -27,6 +28,12 @@ impl fmt::Display for CreatePlaylistError {
             }
             Self::Lookup(e) => write!(f, "{e}"),
             Self::Repository(e) => write!(f, "{e}"),
+            Self::SummariesUnavailable => {
+                write!(
+                    f,
+                    "Turn on AI summaries before enabling them for a playlist"
+                )
+            }
         }
     }
 }
@@ -54,6 +61,7 @@ impl std::error::Error for DeletePlaylistError {}
 pub enum UpdatePlaylistError {
     NotFound(PlaylistId),
     Repository(anyhow::Error),
+    SummariesUnavailable,
 }
 
 impl fmt::Display for UpdatePlaylistError {
@@ -61,6 +69,12 @@ impl fmt::Display for UpdatePlaylistError {
         match self {
             Self::NotFound(id) => write!(f, "playlist {id} not found"),
             Self::Repository(e) => write!(f, "{e}"),
+            Self::SummariesUnavailable => {
+                write!(
+                    f,
+                    "Turn on AI summaries before enabling them for a playlist"
+                )
+            }
         }
     }
 }

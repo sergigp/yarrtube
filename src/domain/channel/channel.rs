@@ -15,6 +15,7 @@ pub struct Channel {
     pub path: PlaylistPath,
     pub avatar_filename: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub summaries_enabled: bool,
 }
 
 impl Channel {
@@ -40,6 +41,7 @@ impl Channel {
             path,
             avatar_filename,
             created_at,
+            summaries_enabled: false,
         }
     }
 
@@ -61,6 +63,13 @@ impl Channel {
     pub fn with_reconcile_interval(self, reconcile_interval: ReconcileInterval) -> Self {
         Self {
             reconcile_interval,
+            ..self
+        }
+    }
+
+    pub fn with_summaries_enabled(self, summaries_enabled: bool) -> Self {
+        Self {
+            summaries_enabled,
             ..self
         }
     }

@@ -419,6 +419,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.youtube_playlist_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.clock.clone(),
+            infrastructure.preferences_repository.clone(),
         ),
         playlist_deleter: PlaylistDeleter::new(
             infrastructure.playlist_repository.clone(),
@@ -436,6 +437,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_repository.clone(),
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
+            infrastructure.preferences_repository.clone(),
         ),
         playlist_video_reconciler: playlist_video_reconciler(infrastructure),
         playlist_view_searcher: PlaylistViewSearcher::new(
@@ -472,6 +474,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.clock.clone(),
+            infrastructure.preferences_repository.clone(),
         ),
         channel_deleter: ChannelDeleter::new(
             infrastructure.channel_repository.clone(),
@@ -488,6 +491,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_repository.clone(),
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
+            infrastructure.preferences_repository.clone(),
         ),
         channel_view_searcher: ChannelViewSearcher::new(
             infrastructure.channel_repository.clone(),

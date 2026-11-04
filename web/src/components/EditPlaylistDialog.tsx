@@ -8,6 +8,7 @@ import { CategoryPicker } from './CategoryPicker'
 import { LocationLine } from './LocationLine'
 import { MoveSourceDialog } from './MoveSourceDialog'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
+import { SummariesField } from './SummariesField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -79,6 +80,7 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
   const [interval, changeInterval] = useState<IntervalForm>(
     intervalForm(playlist.reconcile_interval_minutes),
   )
+  const [summariesEnabled, setSummariesEnabled] = useState(playlist.summaries_enabled)
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -89,16 +91,22 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
     event.preventDefault()
     const minutes = intervalMinutes(interval)
     if (minutes === null) return
-    const changesInterval = minutes !== playlist.reconcile_interval_minutes
-    if (!changesInterval && !categories.changed) {
+    const changes: UpdatePlaylistRequest = {
+      ...(minutes !== playlist.reconcile_interval_minutes && { reconcile_interval_minutes: minutes }),
+      ...(summariesEnabled !== playlist.summaries_enabled && {
+        summaries_enabled: summariesEnabled,
+      }),
+    }
+    const changesSettings = Object.keys(changes).length > 0
+    if (!changesSettings && !categories.changed) {
       onClose()
       return
     }
     setSubmitting(true)
     setError(null)
     try {
-      if (changesInterval) {
-        await onSave({ reconcile_interval_minutes: minutes })
+      if (changesSettings) {
+        await onSave(changes)
       }
       await categories.save()
       onClose()
@@ -117,6 +125,13 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
         moveBlocked={playlist.work_in_progress}
       />
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
+      <SummariesField
+        id="edit-playlist-summaries"
+        checked={summariesEnabled}
+        onChange={setSummariesEnabled}
+        enabledOnSource={playlist.summaries_enabled}
+        onNavigateAway={onClose}
+      />
       {withCategories && (
         <CategoryPicker value={categories.value} onChange={categories.onChange} />
       )}

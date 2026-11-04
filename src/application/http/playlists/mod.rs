@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
-use super::validation::{MISSING_QUALITY, required};
+use super::validation::{MISSING_QUALITY, MISSING_SUMMARIES, required};
 use super::videos::update_watch_state_error;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
@@ -26,8 +26,7 @@ use dto::{
 };
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
-const NOTHING_TO_UPDATE: &str =
-    "Request must change exclude from home, hide unwatched count or the reconcile interval";
+const NOTHING_TO_UPDATE: &str = "Request must change exclude from home, hide unwatched count, the reconcile interval or summaries";
 
 pub async fn create_playlist(
     State(playlist_creator): State<PlaylistCreator>,
@@ -42,9 +41,17 @@ pub async fn create_playlist(
         .map(ReconcileInterval::new)
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
+    let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
 
     let outcome = run_blocking(move || {
-        playlist_creator.create(id, path, quality, exclude_from_home, reconcile_interval)
+        playlist_creator.create(
+            id,
+            path,
+            quality,
+            exclude_from_home,
+            reconcile_interval,
+            summaries_enabled,
+        )
     })
     .await?;
 
@@ -58,6 +65,9 @@ pub async fn create_playlist(
         Err(e @ CreatePlaylistError::YoutubePlaylistNotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ CreatePlaylistError::PathAlreadyInUse(_)) => Err(ApiError::bad_request(e)),
         Err(e @ CreatePlaylistError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
+        Err(e @ CreatePlaylistError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
         Err(e @ CreatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -103,6 +113,7 @@ pub async fn update_playlist(
             .reconcile_interval_minutes
             .map(ReconcileInterval::new)
             .transpose()?,
+        summaries_enabled: request.summaries_enabled,
     };
     if change.is_empty() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
@@ -111,6 +122,9 @@ pub async fn update_playlist(
     match run_blocking(move || playlist_updater.update_settings(id, change)).await? {
         Ok(playlist) => Ok(Json(PlaylistResponse::from(playlist))),
         Err(e @ UpdatePlaylistError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
+        Err(e @ UpdatePlaylistError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
         Err(e @ UpdatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -176,10 +190,12 @@ mod tests {
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::llm_server::OllamaUrl;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName};
     use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
+    use crate::domain::preferences::{Preferences, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
@@ -213,6 +229,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_preferences_repository::{
+        PreferencesRepository, SqlitePreferencesRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
@@ -252,6 +271,105 @@ mod tests {
     const DEFAULT_PATH: &str = "music/chill";
 
     #[tokio::test]
+    async fn it_should_create_a_playlist_with_summaries_disabled() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let request = CreatePlaylistRequest {
+            summaries_enabled: Some(false),
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((StatusCode::CREATED, playlist_response("PL1", DEFAULT_PATH)))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_a_playlist_with_summaries_enabled() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&summaries_on()).unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = CreatePlaylistRequest {
+            summaries_enabled: Some(true),
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    summaries_enabled: true,
+                    ..playlist_response("PL1", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_a_playlist_with_summaries_if_ai_is_off() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        // Failing lookup: reaching YouTube would answer 502, not 409.
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FailingYoutubePlaylistRepository),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let request = CreatePlaylistRequest {
+            summaries_enabled: Some(true),
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "Turn on AI summaries before enabling them for a playlist"
+            ))
+        );
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_create_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -263,6 +381,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(playlist_creator, create_request("PL1")).await;
@@ -292,6 +411,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(playlist_creator, create_request("PL1")).await;
@@ -327,6 +447,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = CreatePlaylistRequest {
@@ -370,6 +491,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = CreatePlaylistRequest {
@@ -413,6 +535,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(
@@ -447,6 +570,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreatePlaylistRequest {
             exclude_from_home: None,
@@ -490,6 +614,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreatePlaylistRequest {
             exclude_from_home: Some(true),
@@ -536,6 +661,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(playlist_creator, create_request("PLabc123")).await;
@@ -578,6 +704,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(playlist_creator, create_request("PLabc123")).await;
@@ -620,6 +747,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreatePlaylistRequest {
             path: Some("different/path".to_string()),
@@ -655,6 +783,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreatePlaylistRequest {
             reconcile_interval_minutes: Some(30),
@@ -692,6 +821,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreatePlaylistRequest {
             exclude_from_home: Some(true),
@@ -723,6 +853,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         create(playlist_creator.clone(), create_request("PL1"))
@@ -787,6 +918,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_create_if_summaries_missing() {
+        let request = CreatePlaylistRequest {
+            summaries_enabled: None,
+            ..create_request("PL1")
+        };
+
+        let response = create(any_playlist_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Summaries setting must be true or false (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_if_quality_missing() {
         let request = CreatePlaylistRequest {
             quality: None,
@@ -818,6 +966,7 @@ mod tests {
             }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
         let request = CreatePlaylistRequest {
             path: Some("shared/path".to_string()),
@@ -849,6 +998,7 @@ mod tests {
             Arc::new(FakeYoutubePlaylistRepository { resolved: None }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(playlist_creator, create_request("PL404")).await;
@@ -873,6 +1023,7 @@ mod tests {
             Arc::new(FailingYoutubePlaylistRepository),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = create(playlist_creator, create_request("PL1")).await;
@@ -1427,6 +1578,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_playlists_with_their_summaries_setting() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true))
+            .unwrap();
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteEventRepository::new(db.database())),
+            "/videos",
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![PlaylistListItemResponse {
+                summaries_enabled: true,
+                ..playlist_list_item_response("PL1", DEFAULT_PATH)
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlists_with_their_interval() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -1766,6 +1947,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = update(playlist_updater, "PL1", update_request(true)).await;
@@ -1803,6 +1985,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = update(playlist_updater, "PL1", hide_count_request(true)).await;
@@ -1836,6 +2019,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = update(playlist_updater, "PL1", hide_count_request(false)).await;
@@ -1864,6 +2048,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = update(playlist_updater, "PL1", update_request(false)).await;
@@ -1891,6 +2076,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = update(playlist_updater, "PL1", update_request(true)).await;
@@ -1903,6 +2089,118 @@ mod tests {
             })
         );
         assert_eq!(playlist_repository.list().unwrap(), vec![excluded]);
+    }
+
+    #[tokio::test]
+    async fn it_should_enable_summaries_on_a_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&summaries_on()).unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = UpdatePlaylistRequest {
+            summaries_enabled: Some(true),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                summaries_enabled: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_enable_summaries_on_a_playlist_if_summaries_are_off() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let ai_on_summaries_off = Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+            ..Preferences::default()
+        };
+        preferences_repository.save(&ai_on_summaries_off).unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = UpdatePlaylistRequest {
+            reconcile_interval_minutes: Some(60),
+            summaries_enabled: Some(true),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "Turn on AI summaries before enabling them for a playlist"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_disable_summaries_on_a_playlist_while_ai_is_off() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true))
+            .unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let request = UpdatePlaylistRequest {
+            summaries_enabled: Some(false),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", DEFAULT_PATH)));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
     }
 
     #[tokio::test]
@@ -1922,6 +2220,7 @@ mod tests {
             playlist_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdatePlaylistRequest {
@@ -1966,6 +2265,7 @@ mod tests {
             playlist_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdatePlaylistRequest {
@@ -2012,6 +2312,7 @@ mod tests {
             playlist_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdatePlaylistRequest {
@@ -2061,6 +2362,7 @@ mod tests {
             playlist_repository.clone(),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let request = UpdatePlaylistRequest {
@@ -2100,6 +2402,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         );
 
         let response = update(playlist_updater, "PL404", update_request(true)).await;
@@ -2126,7 +2429,7 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Request must change exclude from home, hide unwatched count or the reconcile interval"
+                "Request must change exclude from home, hide unwatched count, the reconcile interval or summaries"
             ))
         );
     }
@@ -3321,6 +3624,7 @@ mod tests {
             }),
             unused_event_publisher(),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(unused_connection())),
         )
     }
 
@@ -3358,6 +3662,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(unused_connection())),
         )
     }
 
@@ -3623,6 +3928,19 @@ mod tests {
             )
     }
 
+    /// Preferences with AI and summaries on, so sources can enable summaries.
+    fn summaries_on() -> Preferences {
+        Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+            summaries: SummarySettings {
+                enabled: true,
+                ..SummarySettings::default()
+            },
+            ..Preferences::default()
+        }
+    }
+
     fn playlist(id: &str, path: &str) -> Playlist {
         Playlist::create(
             playlist_id(id),
@@ -3744,6 +4062,7 @@ mod tests {
             quality: Some("high".to_string()),
             exclude_from_home: None,
             reconcile_interval_minutes: None,
+            summaries_enabled: Some(false),
         }
     }
 
@@ -3752,6 +4071,7 @@ mod tests {
             exclude_from_home: None,
             hide_unwatched_count: None,
             reconcile_interval_minutes: None,
+            summaries_enabled: None,
         }
     }
 
@@ -3760,6 +4080,7 @@ mod tests {
             exclude_from_home: Some(exclude_from_home),
             hide_unwatched_count: None,
             reconcile_interval_minutes: None,
+            summaries_enabled: None,
         }
     }
 
@@ -3795,6 +4116,7 @@ mod tests {
             hide_unwatched_count: false,
             reconcile_interval_minutes: 180,
             created_at: fixed_timestamp(),
+            summaries_enabled: false,
         }
     }
 
@@ -3811,6 +4133,7 @@ mod tests {
             created_at: fixed_timestamp(),
             unwatched_count: 0,
             work_in_progress: false,
+            summaries_enabled: false,
         }
     }
 

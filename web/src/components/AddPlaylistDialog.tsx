@@ -17,6 +17,7 @@ import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { lookupNotice } from './lookupNotice'
 import { FolderNameField } from './FolderNameField'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
+import { SummariesField } from './SummariesField'
 import { SaveToField } from './SaveToField'
 import { CategoryPicker } from './CategoryPicker'
 import { VideoQualityField } from './VideoQualityField'
@@ -94,6 +95,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [categoryIds, setCategoryIds] = useState<string[]>([])
+  const [summariesEnabled, setSummariesEnabled] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
   const saveSourceCategories = useSaveSourceCategories()
   const withCategories = useCategoriesShown()
@@ -125,6 +127,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
         quality: form.quality,
         exclude_from_home: excludeFromHome,
         reconcile_interval_minutes: reconcileIntervalMinutes,
+        summaries_enabled: summariesEnabled,
       })
       location.remember()
       invalidateLibrary()
@@ -163,6 +166,13 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
       {entered && <PlaylistNotice lookup={lookup} location={location.value} />}
 
       {withCategories && <CategoryPicker value={categoryIds} onChange={setCategoryIds} />}
+
+      <SummariesField
+        id="add-playlist-summaries"
+        checked={summariesEnabled}
+        onChange={setSummariesEnabled}
+        onNavigateAway={onClose}
+      />
 
       <div className="min-w-0 border-t border-border pt-4">
         <button

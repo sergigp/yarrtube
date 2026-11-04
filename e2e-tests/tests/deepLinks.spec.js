@@ -21,6 +21,7 @@ test('reloading each route shows its view; unknown playlist says Playlist not fo
       quality: 'low',
       exclude_from_home: false,
       reconcile_interval_minutes: 180,
+      summaries_enabled: false,
     },
   })
   expect(playlist.ok(), await playlist.text()).toBeTruthy()
@@ -31,6 +32,7 @@ test('reloading each route shows its view; unknown playlist says Playlist not fo
       video_limit: 1,
       path: `channels/${slugOf(CHANNEL_HANDLE)}`,
       reconcile_interval_minutes: 180,
+      summaries_enabled: false,
     },
   })
   expect(channel.ok(), await channel.text()).toBeTruthy()
