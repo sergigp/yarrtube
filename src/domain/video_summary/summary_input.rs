@@ -64,13 +64,66 @@ impl SummaryInput {
     }
 
     /// `map system` + `map user` for the 0-based `index`.
-    pub fn part(&self, _prompt: &SummaryPrompt, _index: usize) -> SummaryMessages {
-        Self::empty_messages()
+    pub fn part(&self, prompt: &SummaryPrompt, index: usize) -> SummaryMessages {
+        let part = &self.parts[index];
+        SummaryMessages {
+            system: prompt.render(SummaryPromptSection::MapSystem, &self.language_value()),
+            user: prompt.render(
+                SummaryPromptSection::MapUser,
+                &[
+                    self.head_values(),
+                    vec![
+                        ("part", (index + 1).to_string()),
+                        ("parts", self.parts.len().to_string()),
+                        ("span", Self::span(part)),
+                        ("chapters", String::new()),
+                        ("transcript", part.text.clone()),
+                    ],
+                ]
+                .concat(),
+            ),
+        }
     }
 
     /// `reduce system` + `reduce user`, one `reduce part` per answer.
-    pub fn reduce(&self, _prompt: &SummaryPrompt, _answers: &[SummaryText]) -> SummaryMessages {
-        Self::empty_messages()
+    pub fn reduce(&self, prompt: &SummaryPrompt, answers: &[SummaryText]) -> SummaryMessages {
+        SummaryMessages {
+            system: prompt.render(SummaryPromptSection::ReduceSystem, &self.language_value()),
+            user: prompt.render(
+                SummaryPromptSection::ReduceUser,
+                &[
+                    self.head_values(),
+                    vec![
+                        ("chapters", self.chapter_block(prompt)),
+                        ("part_summaries", self.part_summaries(prompt, answers)),
+                    ],
+                ]
+                .concat(),
+            ),
+        }
+    }
+
+    fn part_summaries(&self, prompt: &SummaryPrompt, answers: &[SummaryText]) -> String {
+        answers
+            .iter()
+            .zip(&self.parts)
+            .enumerate()
+            .map(|(index, (answer, part))| {
+                prompt.render(
+                    SummaryPromptSection::ReducePart,
+                    &[
+                        ("part", (index + 1).to_string()),
+                        ("span", Self::span(part)),
+                        ("summary", answer.as_str().to_string()),
+                    ],
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+
+    fn span(part: &TranscriptPart) -> String {
+        format!("{}–{}", clock(part.start_seconds), clock(part.end_seconds))
     }
 
     fn language_value(&self) -> Vec<(&'static str, String)> {
@@ -96,13 +149,6 @@ impl SummaryInput {
                     prompt.render(SummaryPromptSection::Chapters, &[("chapter_list", list)]);
                 format!("\n{block}\n")
             }
-        }
-    }
-
-    fn empty_messages() -> SummaryMessages {
-        SummaryMessages {
-            system: String::new(),
-            user: String::new(),
         }
     }
 }

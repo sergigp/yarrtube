@@ -290,6 +290,33 @@ mod tests {
         assert_eq!(thinking_asked, [true, false, false, false]);
     }
 
+    #[test]
+    fn it_should_summarize_a_long_transcript_in_parts_then_reduce() {
+        // Each line is 1000 characters, so 30 lines cut into parts of ~30600.
+        let scene = Scene {
+            srt: Some(srt_of(45, 60)),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("First."), reply("Second."), reply("All of it.")])
+        .build();
+
+        scene.run().unwrap();
+
+        let chats = scene.chats();
+        assert_eq!(chats.len(), 3);
+        assert!(chats[0].system.starts_with("You summarize one part"));
+        assert!(chats[1].user.contains("Part 2 of 2 ("));
+        assert!(chats[2].system.starts_with("You write the final summary"));
+        assert_eq!(
+            chats[2].user,
+            "Title: Sicilian\nDuration: 30 minutes\n\nPart summaries, in order:\n\nPart 1 (0:00–29:00):\nFirst.\n\nPart 2 (30:00–44:00):\nSecond.\n\nNow write the final summary of the whole video in Spanish, 3 to 5 sentences."
+        );
+        assert_eq!(
+            scene.stored_summary().map(|summary| summary.text),
+            Some(SummaryText::new("All of it."))
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
@@ -469,6 +496,19 @@ mod tests {
             end_seconds,
             title: title.to_string(),
         }
+    }
+
+    /// `lines` cues of 1000 distinct characters each, one every `step` seconds.
+    fn srt_of(lines: i64, step: i64) -> String {
+        (0..lines)
+            .map(|line| {
+                let (hours, minutes) = (line * step / 3600, line * step % 3600 / 60);
+                let start = format!("{hours:02}:{minutes:02}:{:02},000", line * step % 60);
+                let text = format!("{line:04}").repeat(250);
+                format!("{}\n{start} --> {start}\n{text}\n", line + 1)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn my_channel_id() -> ChannelHandle {

@@ -1,6 +1,7 @@
 use super::TranscriptPart;
 use super::transcript_text::{cue_text, is_cue_index, strip_tags, without_first_if};
 use crate::domain::video::VideoChapter;
+use std::ops::Range;
 
 /// A spoken line and when it starts, in seconds from the video's start.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,8 +36,51 @@ impl TimedTranscript {
 
     /// The whole transcript as one part when it fits `max_chars`, else cut
     /// at chapter starts, then by size.
-    pub fn parts(&self, _chapters: &[VideoChapter], _max_chars: usize) -> Vec<TranscriptPart> {
-        vec![Self::part(&self.0)]
+    pub fn parts(&self, _chapters: &[VideoChapter], max_chars: usize) -> Vec<TranscriptPart> {
+        if self.chars(0..self.0.len()) <= max_chars {
+            return vec![Self::part(&self.0)];
+        }
+        self.packed(self.cut_by_size(0..self.0.len(), max_chars), max_chars)
+            .into_iter()
+            .map(|range| Self::part(&self.0[range]))
+            .collect()
+    }
+
+    /// `range` cut into consecutive ranges of at most `max_chars`. A line
+    /// longer than that stays whole, on its own.
+    fn cut_by_size(&self, range: Range<usize>, max_chars: usize) -> Vec<Range<usize>> {
+        let mut pieces = Vec::new();
+        let mut start = range.start;
+        for end in range.clone() {
+            if end > start && self.chars(start..end + 1) > max_chars {
+                pieces.push(start..end);
+                start = end;
+            }
+        }
+        pieces.push(start..range.end);
+        pieces
+    }
+
+    /// `pieces` with neighbours joined while they fit `max_chars` together.
+    fn packed(&self, pieces: Vec<Range<usize>>, max_chars: usize) -> Vec<Range<usize>> {
+        pieces.into_iter().fold(Vec::new(), |mut packed, piece| {
+            match packed.last_mut() {
+                Some(last) if self.chars(last.start..piece.end) <= max_chars => {
+                    *last = last.start..piece.end
+                }
+                _ => packed.push(piece),
+            }
+            packed
+        })
+    }
+
+    /// The length of `range` joined by line breaks.
+    fn chars(&self, range: Range<usize>) -> usize {
+        self.0[range]
+            .iter()
+            .map(|line| line.text.chars().count() + 1)
+            .sum::<usize>()
+            .saturating_sub(1)
     }
 
     fn part(lines: &[TimedLine]) -> TranscriptPart {
