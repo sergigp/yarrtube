@@ -17,7 +17,7 @@
 - [x] 2.9 `src/application/tasks/summarize_video_task.rs`: `it_should_drop_the_reasoning_before_the_answer` — `</think>` stripped from the stored text. Verify: test red, then green.
 - [x] 2.10 `src/application/tasks/summarize_video_task.rs`: `it_should_ask_for_thinking_only_when_the_model_supports_it` — table of setting × capability. Verify: test red, then green.
 - [x] 2.11 `src/application/tasks/summarize_video_task.rs`: `it_should_summarize_a_long_transcript_in_parts_then_reduce` — N map chats + reduce holding answers in order. Verify: test red, then green.
-- [ ] 2.12 `src/application/tasks/summarize_video_task.rs`: `it_should_cut_parts_at_chapter_starts` — each part starts at a chapter; only overlapping chapters listed; `{span}`. Verify: test red, then green.
+- [x] 2.12 `src/application/tasks/summarize_video_task.rs`: `it_should_cut_parts_at_chapter_starts` — each part starts at a chapter; only overlapping chapters listed; `{span}`. Verify: test red, then green.
 - [ ] 2.13 `src/application/tasks/summarize_video_task.rs`: `it_should_cut_by_size_without_chapters` — parts under the budget, no text lost. Verify: test red, then green.
 - [ ] 2.14 `src/application/tasks/summarize_video_task.rs`: `it_should_cut_a_chapter_too_long_on_its_own_by_size` — others whole. Verify: test red, then green.
 - [ ] 2.15 `src/application/tasks/summarize_video_task.rs`: `it_should_scale_the_budget_with_the_context_length` — same text single at 12288, parts at 6144. Verify: test red, then green.

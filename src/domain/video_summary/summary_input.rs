@@ -76,7 +76,7 @@ impl SummaryInput {
                         ("part", (index + 1).to_string()),
                         ("parts", self.parts.len().to_string()),
                         ("span", Self::span(part)),
-                        ("chapters", String::new()),
+                        ("chapters", self.part_chapter_block(prompt, part)),
                         ("transcript", part.text.clone()),
                     ],
                 ]
@@ -138,17 +138,36 @@ impl SummaryInput {
         ]
     }
 
-    /// The whole video's chapters as the `chapters` section, on lines of
-    /// their own; empty without chapters.
+    /// The whole video's chapters as the `chapters` section.
     fn chapter_block(&self, prompt: &SummaryPrompt) -> String {
-        match self.chapters.is_empty() {
-            true => String::new(),
-            false => {
-                let list = chapter_list(&self.chapters);
-                let block =
-                    prompt.render(SummaryPromptSection::Chapters, &[("chapter_list", list)]);
-                format!("\n{block}\n")
-            }
+        block(prompt, SummaryPromptSection::Chapters, &self.chapters)
+    }
+
+    /// The chapters overlapping `part` as the `map chapters` section.
+    fn part_chapter_block(&self, prompt: &SummaryPrompt, part: &TranscriptPart) -> String {
+        let overlapping: Vec<VideoChapter> = self
+            .chapters
+            .iter()
+            .filter(|chapter| {
+                chapter.end_seconds > part.start_seconds && chapter.start_seconds < part.end_seconds
+            })
+            .cloned()
+            .collect();
+        block(prompt, SummaryPromptSection::MapChapters, &overlapping)
+    }
+}
+
+/// `chapters` as `section`, on lines of its own; empty without chapters.
+fn block(
+    prompt: &SummaryPrompt,
+    section: SummaryPromptSection,
+    chapters: &[VideoChapter],
+) -> String {
+    match chapters.is_empty() {
+        true => String::new(),
+        false => {
+            let list = chapter_list(chapters);
+            format!("\n{}\n", prompt.render(section, &[("chapter_list", list)]))
         }
     }
 }

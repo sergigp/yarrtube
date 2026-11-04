@@ -317,6 +317,28 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_cut_parts_at_chapter_starts() {
+        let scene = Scene {
+            srt: Some(srt_of(45, 60)),
+            video: with_chapters(vec![
+                chapter(0, 600, "Game 1"),
+                chapter(600, 1500, "Game 2"),
+                chapter(1500, 2100, "Game 3"),
+                chapter(2100, 2700, "Game 4"),
+            ]),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("First."), reply("Second."), reply("All of it.")])
+        .build();
+
+        scene.run().unwrap();
+
+        assert!(scene.chats()[1].user.contains(
+            "Part 2 of 2 (25:00–44:00)\n\nChapters in this part:\n25:00 Game 3\n35:00 Game 4\n\nTranscript part:\n"
+        ));
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

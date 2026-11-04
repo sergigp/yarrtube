@@ -36,14 +36,35 @@ impl TimedTranscript {
 
     /// The whole transcript as one part when it fits `max_chars`, else cut
     /// at chapter starts, then by size.
-    pub fn parts(&self, _chapters: &[VideoChapter], max_chars: usize) -> Vec<TranscriptPart> {
+    pub fn parts(&self, chapters: &[VideoChapter], max_chars: usize) -> Vec<TranscriptPart> {
         if self.chars(0..self.0.len()) <= max_chars {
             return vec![Self::part(&self.0)];
         }
-        self.packed(self.cut_by_size(0..self.0.len(), max_chars), max_chars)
+        let pieces = self
+            .sections(chapters)
+            .into_iter()
+            .flat_map(|section| self.cut_by_size(section, max_chars))
+            .collect();
+        self.packed(pieces, max_chars)
             .into_iter()
             .map(|range| Self::part(&self.0[range]))
             .collect()
+    }
+
+    /// The lines of each chapter, cutting only where one starts.
+    fn sections(&self, chapters: &[VideoChapter]) -> Vec<Range<usize>> {
+        let mut cuts: Vec<usize> = chapters
+            .iter()
+            .map(|chapter| {
+                self.0
+                    .partition_point(|line| line.start_seconds < chapter.start_seconds)
+            })
+            .filter(|cut| (1..self.0.len()).contains(cut))
+            .collect();
+        cuts.dedup();
+        let starts = std::iter::once(0).chain(cuts.iter().copied());
+        let ends = cuts.iter().copied().chain(std::iter::once(self.0.len()));
+        starts.zip(ends).map(|(start, end)| start..end).collect()
     }
 
     /// `range` cut into consecutive ranges of at most `max_chars`. A line
