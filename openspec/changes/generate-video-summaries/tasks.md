@@ -76,6 +76,6 @@
 ## 4. Verification
 
 - [x] 4.1 Update `doc/ARCHITECTURE.md` (summary step in the walkthrough) and `doc/AI.md` (generation behaviour, native `/api/chat`). Verify: both describe the implemented flow.
-- [ ] 4.2 Run `scripts/run-tests.sh --only web --only rust`. Verify: fmt, clippy and tests pass.
+- [x] 4.2 Run `scripts/run-tests.sh --only web --only rust`. Verify: fmt, clippy and tests pass.
 - [ ] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, enable AI and summaries against a reachable Ollama via `PATCH /api/preferences`, add a short channel or playlist with `summaries_enabled` `true`, wait for download and subtitles. Verify: `/api/tasks` and the Tasks page (Playwright) show `Summarizing <title>`, and `video_summaries` holds one row with the video `GENERATED`. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): read a generated summary for a video with chapters and a long one over the budget, on the real `qwen3:4b` Ollama server, and judge the quality. Verify: both are 3 to 5 sentences in the video's language, with no reasoning leaked.
