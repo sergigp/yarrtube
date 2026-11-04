@@ -527,6 +527,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_skip_without_counting_when_ollama_is_unreachable() {
+        let scene = Scene {
+            llm: FakeLlmServerRepository::failing(),
+            ..Scene::default()
+        }
+        .build();
+
+        assert_eq!(scene.run(), Ok(()));
+
+        assert_eq!(scene.chats(), vec![]);
+        assert_eq!(
+            scene.stored_video().summary_checks,
+            LateDataChecks::default()
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
