@@ -1,5 +1,5 @@
 use crate::domain::preferences::{ContextLength, SummaryPrompt, SummaryPromptSection};
-use crate::domain::video::Video;
+use crate::domain::video::{Video, VideoChapter};
 use crate::domain::video_summary::SummaryText;
 use crate::domain::video_transcript::{CaptionLanguage, TimedTranscript, TranscriptPart};
 
@@ -17,6 +17,7 @@ pub struct SummaryInput {
     title: String,
     minutes: i64,
     language: String,
+    chapters: Vec<VideoChapter>,
     parts: Vec<TranscriptPart>,
 }
 
@@ -27,13 +28,15 @@ impl SummaryInput {
         transcript: &TimedTranscript,
         context_length: &ContextLength,
     ) -> Self {
+        let chapters = video.chapters.clone().unwrap_or_default();
         let max_chars =
             f64::from(context_length.input_budget_tokens()) * language.chars_per_token();
         Self {
             title: video.title.clone(),
             minutes: video.duration_seconds.unwrap_or(0) / 60,
             language: language.english_name(),
-            parts: transcript.parts(&[], max_chars as usize),
+            chapters: chapters.clone(),
+            parts: transcript.parts(&chapters, max_chars as usize),
         }
     }
 
@@ -51,7 +54,7 @@ impl SummaryInput {
                 &[
                     self.head_values(),
                     vec![
-                        ("chapters", String::new()),
+                        ("chapters", self.chapter_block(prompt)),
                         ("transcript", transcript.to_string()),
                     ],
                 ]
@@ -82,10 +85,45 @@ impl SummaryInput {
         ]
     }
 
+    /// The whole video's chapters as the `chapters` section, on lines of
+    /// their own; empty without chapters.
+    fn chapter_block(&self, prompt: &SummaryPrompt) -> String {
+        match self.chapters.is_empty() {
+            true => String::new(),
+            false => {
+                let list = chapter_list(&self.chapters);
+                let block =
+                    prompt.render(SummaryPromptSection::Chapters, &[("chapter_list", list)]);
+                format!("\n{block}\n")
+            }
+        }
+    }
+
     fn empty_messages() -> SummaryMessages {
         SummaryMessages {
             system: String::new(),
             user: String::new(),
         }
+    }
+}
+
+fn chapter_list(chapters: &[VideoChapter]) -> String {
+    chapters
+        .iter()
+        .map(|chapter| format!("{} {}", clock(chapter.start_seconds), chapter.title))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `seconds` as a viewer reads it: `2:05`, or `1:02:05` from an hour on.
+fn clock(seconds: i64) -> String {
+    match seconds >= 3600 {
+        true => format!(
+            "{}:{:02}:{:02}",
+            seconds / 3600,
+            seconds % 3600 / 60,
+            seconds % 60
+        ),
+        false => format!("{}:{:02}", seconds / 60, seconds % 60),
     }
 }

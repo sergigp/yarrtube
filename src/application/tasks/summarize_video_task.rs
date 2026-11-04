@@ -49,7 +49,7 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{SummaryState, Video, VideoId};
+    use crate::domain::video::{SummaryState, Video, VideoChapter, VideoId};
     use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
@@ -172,6 +172,23 @@ mod tests {
                 chat.max_output_tokens
             ),
             ("qwen3:4b", 8192, 0.5, 2192)
+        );
+    }
+
+    #[test]
+    fn it_should_list_the_chapters_in_the_prompt() {
+        let scene = Scene {
+            video: with_chapters(vec![chapter(0, 125, "Intro"), chapter(125, 1800, "Game 1")]),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        scene.run().unwrap();
+
+        assert_eq!(
+            scene.chats()[0].user,
+            "Title: Sicilian\nDuration: 30 minutes\n\nChapters (set by the uploader; use them to see the video's structure, but summarize what is said, not the chapter titles):\n0:00 Intro\n2:05 Game 1\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences."
         );
     }
 
@@ -339,6 +356,21 @@ mod tests {
                 fixed_timestamp(),
             );
         video.mark_subtitles_fetched(SUBTITLES, fixed_timestamp())
+    }
+
+    fn with_chapters(chapters: Vec<VideoChapter>) -> Video {
+        Video {
+            chapters: Some(chapters),
+            ..subtitled_video()
+        }
+    }
+
+    fn chapter(start_seconds: i64, end_seconds: i64, title: &str) -> VideoChapter {
+        VideoChapter {
+            start_seconds,
+            end_seconds,
+            title: title.to_string(),
+        }
     }
 
     fn my_channel_id() -> ChannelHandle {
