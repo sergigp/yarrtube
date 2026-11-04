@@ -20,7 +20,6 @@ pub struct ChannelDeleter {
     repository: Arc<dyn ChannelRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
-    #[allow(dead_code)]
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     avatar_repository: Arc<dyn ChannelAvatarRepository>,
@@ -96,6 +95,9 @@ impl ChannelDeleter {
                 .delete(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
             self.video_transcript_repository
+                .delete(&channel_video.video_id)
+                .map_err(DeleteChannelError::Repository)?;
+            self.video_summary_repository
                 .delete(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
             self.video_categories_repository
