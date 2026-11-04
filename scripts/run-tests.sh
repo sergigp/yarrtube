@@ -84,6 +84,10 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
   set +a
 fi
 
+# These suites need a development environment, whatever the caller's shell
+# has: NODE_ENV=production gives React's production build, without `act`.
+unset NODE_ENV
+
 step() {
   echo
   echo "==> $*"
