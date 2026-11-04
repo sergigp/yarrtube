@@ -74,7 +74,16 @@ impl VideoSummaryRepository for SqliteVideoSummaryRepository {
         .transpose()
     }
 
-    fn delete(&self, _video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "DELETE FROM video_summaries WHERE video_id = ?1",
+            params![video_id.as_str()],
+        )
+        .inspect_err(
+            |e| tracing::error!(video_id = %video_id, error = %e, "failed to delete video summary"),
+        )
+        .context("failed to delete video summary")?;
         Ok(())
     }
 }

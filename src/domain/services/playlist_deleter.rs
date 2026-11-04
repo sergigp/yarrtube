@@ -21,7 +21,6 @@ pub struct PlaylistDeleter {
     repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
-    #[allow(dead_code)]
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -90,6 +89,9 @@ impl PlaylistDeleter {
                 .delete(&playlist_video.video_id)
                 .map_err(DeletePlaylistError::Repository)?;
             self.video_transcript_repository
+                .delete(&playlist_video.video_id)
+                .map_err(DeletePlaylistError::Repository)?;
+            self.video_summary_repository
                 .delete(&playlist_video.video_id)
                 .map_err(DeletePlaylistError::Repository)?;
             self.video_categories_repository
