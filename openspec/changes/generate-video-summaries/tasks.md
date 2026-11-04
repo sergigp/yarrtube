@@ -11,7 +11,7 @@
 - [x] 2.3 `src/application/tasks/summarize_video_task.rs`: `it_should_send_the_saved_prompt_when_there_is_one` — messages come from the saved text. Verify: test red, then green.
 - [x] 2.4 `src/application/tasks/summarize_video_task.rs`: `it_should_send_the_saved_model_settings` — model, context, temperature, output cap in the chat. Verify: test red, then green.
 - [x] 2.5 `src/application/tasks/summarize_video_task.rs`: `it_should_list_the_chapters_in_the_prompt` — `chapters` section, `0:00 Intro`. Verify: test red, then green.
-- [ ] 2.6 `src/application/tasks/summarize_video_task.rs`: `it_should_leave_chapters_out_of_the_prompt_when_the_video_has_none` — no block. Verify: test red, then green.
+- [x] 2.6 `src/application/tasks/summarize_video_task.rs`: `it_should_leave_chapters_out_of_the_prompt_when_the_video_has_none` — no block. Verify: test red, then green.
 - [ ] 2.7 `src/application/tasks/summarize_video_task.rs`: `it_should_keep_braces_in_values_unfilled` — title `{transcript} explained` unchanged. Verify: test red, then green.
 - [ ] 2.8 `src/application/tasks/summarize_video_task.rs`: `it_should_use_the_language_code_when_its_name_is_unknown` — `xh`. Verify: test red, then green.
 - [ ] 2.9 `src/application/tasks/summarize_video_task.rs`: `it_should_drop_the_reasoning_before_the_answer` — `</think>` stripped from the stored text. Verify: test red, then green.

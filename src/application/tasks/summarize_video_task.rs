@@ -192,6 +192,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_leave_chapters_out_of_the_prompt_when_the_video_has_none() {
+        let scene = Scene {
+            video: with_chapters(vec![]),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        scene.run().unwrap();
+
+        assert!(
+            scene.chats()[0]
+                .user
+                .starts_with("Title: Sicilian\nDuration: 30 minutes\n\nTranscript:")
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
