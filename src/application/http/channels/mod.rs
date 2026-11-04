@@ -195,6 +195,7 @@ mod tests {
     use crate::domain::llm_server::OllamaUrl;
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::preferences::SummaryModel;
     use crate::domain::preferences::{Preferences, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::ChannelAvatarRestorer;
@@ -210,6 +211,7 @@ mod tests {
     use crate::domain::video::VideoId;
     use crate::domain::video::{PlaybackPosition, Video};
     use crate::domain::video_category::VideoCategories;
+    use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, CaptionTrack, TranscriptText, VideoTranscript,
     };
@@ -239,6 +241,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_summary_repository::{
+        SqliteVideoSummaryRepository, VideoSummaryRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
         SqliteVideoTranscriptRepository, VideoTranscriptRepository,
@@ -1032,6 +1037,7 @@ mod tests {
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
@@ -1079,6 +1085,7 @@ mod tests {
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -1130,6 +1137,7 @@ mod tests {
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -1183,6 +1191,7 @@ mod tests {
             channel_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             channel_video_repository.clone(),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -1238,6 +1247,7 @@ mod tests {
             channel_repository.clone(),
             video_repository.clone(),
             video_transcript_repository.clone(),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             channel_video_repository.clone(),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -1253,6 +1263,56 @@ mod tests {
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_the_summaries_of_a_deleted_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let (video, _) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt1",
+            0,
+        );
+        video_transcript_repository
+            .save(&video_transcript(&video))
+            .unwrap();
+        let video_summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        video_summary_repository
+            .save(&VideoSummary::create(
+                video.id.clone(),
+                SummaryText::new("Three games."),
+                &SummaryModel::default(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            video_transcript_repository.clone(),
+            video_summary_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        );
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
     }
 
     #[tokio::test]
@@ -1281,6 +1341,7 @@ mod tests {
             channel_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             channel_video_repository.clone(),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -1320,6 +1381,7 @@ mod tests {
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
@@ -1353,6 +1415,7 @@ mod tests {
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -2808,6 +2871,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
+            Arc::new(SqliteVideoSummaryRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(FakeChannelAvatarRepository::default()),
             unused_event_publisher(),
@@ -2846,6 +2910,7 @@ mod tests {
             channel_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::with_videos(listed_videos)),
             event_publisher(db),
@@ -2878,6 +2943,7 @@ mod tests {
                     Arc::new(VideoLock::default()),
                     Arc::new(FixedClock(fixed_timestamp())),
                     video_category_assigner(db.database()),
+                    Arc::new(SqlitePreferencesRepository::new(db.database())),
                 ),
                 "/videos",
             )),
@@ -2907,6 +2973,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
+            Arc::new(SqliteVideoSummaryRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
             unused_event_publisher(),
@@ -2939,6 +3006,7 @@ mod tests {
                     Arc::new(VideoLock::default()),
                     Arc::new(FixedClock(fixed_timestamp())),
                     video_category_assigner(unused_connection()),
+                    Arc::new(SqlitePreferencesRepository::new(unused_connection())),
                 ),
                 "/videos",
             )),

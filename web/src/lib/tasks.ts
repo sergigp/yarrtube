@@ -25,6 +25,8 @@ export function describeTask(task: Task): string {
       return `Fetching subtitles of ${videoInContainer(payload)}`
     case 'fetch_chapters':
       return `Fetching chapters of ${videoInContainer(payload)}`
+    case 'summarize_video':
+      return `Summarizing ${videoInContainer(payload)}`
     case 'upgrade_quality':
       return `Checking the quality of ${videoInContainer(payload)}`
     case 'sync_video':

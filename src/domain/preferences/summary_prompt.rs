@@ -41,6 +41,49 @@ impl SummaryPrompt {
         &self.0
     }
 
+    /// Re-checks a `from_stored` prompt.
+    pub fn validated(&self) -> Result<Self, ValidationError> {
+        Self::new(self.0.clone())
+    }
+
+    /// `section`'s body with its `{name}`s replaced in one pass.
+    pub fn render(&self, section: SummaryPromptSection, values: &[(&str, String)]) -> String {
+        let body = Self::sections(&self.0)
+            .into_iter()
+            .find(|candidate| candidate.heading == section.heading())
+            .map_or_else(String::new, |found| found.lines.join("\n"));
+        Self::fill(body.trim_matches('\n'), values)
+    }
+
+    /// `template` with each `{name}` of `values` replaced. One pass over the
+    /// template, so braces inside a value stay as they are.
+    fn fill(template: &str, values: &[(&str, String)]) -> String {
+        let mut filled = String::new();
+        let mut rest = template;
+        while let Some(start) = rest.find('{') {
+            filled.push_str(&rest[..start]);
+            let after = &rest[start + 1..];
+            let value = after.split_once('}').and_then(|(name, _)| {
+                values
+                    .iter()
+                    .find(|(candidate, _)| *candidate == name)
+                    .map(|(_, value)| (name, value))
+            });
+            rest = match value {
+                Some((name, value)) => {
+                    filled.push_str(value);
+                    &after[name.len() + 1..]
+                }
+                None => {
+                    filled.push('{');
+                    after
+                }
+            };
+        }
+        filled.push_str(rest);
+        filled
+    }
+
     /// Every section in order; the note before the first one is left out.
     fn sections(value: &str) -> Vec<Section<'_>> {
         value.lines().fold(Vec::new(), |mut sections, line| {

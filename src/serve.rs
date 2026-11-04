@@ -10,7 +10,7 @@ use crate::domain::services::{
     PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
     ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
     VideoCategoryAssigner, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
-    VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
+    VideoRelocator, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -425,6 +425,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_repository.clone(),
             infrastructure.video_repository.clone(),
             infrastructure.video_transcript_repository.clone(),
+            infrastructure.video_summary_repository.clone(),
             infrastructure.playlist_video_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.task_repository.clone(),
@@ -480,6 +481,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_repository.clone(),
             infrastructure.video_repository.clone(),
             infrastructure.video_transcript_repository.clone(),
+            infrastructure.video_summary_repository.clone(),
             infrastructure.channel_video_repository.clone(),
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),
@@ -527,7 +529,11 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         preferences_searcher: PreferencesSearcher::new(
             infrastructure.preferences_repository.clone(),
         ),
-        preferences_updater: PreferencesUpdater::new(infrastructure.preferences_repository.clone()),
+        preferences_updater: PreferencesUpdater::new(
+            infrastructure.preferences_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.clock.clone(),
+        ),
         llm_server_searcher: LlmServerSearcher::new(infrastructure.llm_server_repository.clone()),
         category_creator: CategoryCreator::new(
             infrastructure.category_repository.clone(),
@@ -655,6 +661,7 @@ fn task_handlers(
         subtitle_fetcher(infrastructure),
         chapter_fetcher(infrastructure),
         quality_upgrader(infrastructure),
+        video_summarizer(infrastructure),
         video_reconciler(infrastructure),
         infrastructure.video_repository.clone(),
         VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
@@ -672,6 +679,7 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         infrastructure.playlist_repository.clone(),
         infrastructure.video_repository.clone(),
         infrastructure.video_transcript_repository.clone(),
+        infrastructure.video_summary_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
         infrastructure.youtube_playlist_items_repository.clone(),
         infrastructure.event_publisher.clone(),
@@ -689,6 +697,7 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         infrastructure.channel_repository.clone(),
         infrastructure.video_repository.clone(),
         infrastructure.video_transcript_repository.clone(),
+        infrastructure.video_summary_repository.clone(),
         infrastructure.channel_video_repository.clone(),
         infrastructure.channel_videos_repository.clone(),
         infrastructure.event_publisher.clone(),
@@ -778,6 +787,7 @@ fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler
         infrastructure.video_lock.clone(),
         infrastructure.clock.clone(),
         video_category_assigner(infrastructure),
+        infrastructure.preferences_repository.clone(),
     )
 }
 
@@ -805,6 +815,19 @@ fn chapter_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ChapterFetch
     Arc::new(ChapterFetcher::new(
         infrastructure.video_repository.clone(),
         infrastructure.video_downloader_repository.clone(),
+        infrastructure.clock.clone(),
+    ))
+}
+
+fn video_summarizer(infrastructure: &InfrastructureContainer) -> Arc<VideoSummarizer> {
+    Arc::new(VideoSummarizer::new(
+        infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
+        infrastructure.preferences_repository.clone(),
+        infrastructure.video_transcript_repository.clone(),
+        infrastructure.video_file_repository.clone(),
+        infrastructure.llm_server_repository.clone(),
+        infrastructure.video_summary_repository.clone(),
         infrastructure.clock.clone(),
     ))
 }
@@ -1208,6 +1231,7 @@ mod tests {
                 "fetch_thumbnail",
                 "reconcile_channel",
                 "reconcile_playlist",
+                "summarize_video",
                 "sync_video",
                 "update_ytdlp",
                 "upgrade_quality",
@@ -1237,6 +1261,7 @@ mod tests {
                 ("video_downloaded", 1),
                 ("video_removed_from_channel", 1),
                 ("video_removed_from_playlist", 1),
+                ("video_subtitles_fetched", 1),
             ])
         );
     }
@@ -1274,14 +1299,14 @@ mod tests {
             })
             .collect();
 
-        // Without Plex, `video_downloaded` keeps only the video sync.
+        // Without Plex, each event keeps only the video sync.
         assert_eq!(
             scan_subscribers,
             vec![
-                (Some(2), Some(1)),
-                (Some(1), None),
-                (Some(1), None),
-                (Some(1), None),
+                (Some(2), Some(2)),
+                (Some(1), Some(1)),
+                (Some(1), Some(1)),
+                (Some(1), Some(1)),
             ]
         );
     }

@@ -32,8 +32,10 @@ mod tests {
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::llm_server::OllamaUrl;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::preferences::{Preferences, SummarySettings};
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::services::VideoOwnerFinder;
@@ -41,7 +43,8 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoChapter, VideoId, VideoStatus,
+        EpisodeNumber, LateDataChecks, SubtitleState, SummaryState, Video, VideoChapter, VideoId,
+        VideoStatus,
     };
     use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
@@ -60,6 +63,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_preferences_repository::{
+        PreferencesRepository, SqlitePreferencesRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
@@ -138,6 +144,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -211,6 +218,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -282,6 +290,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -349,6 +358,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -416,6 +426,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -472,6 +483,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -540,6 +552,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -607,6 +620,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -676,6 +690,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -736,6 +751,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -796,6 +812,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -855,6 +872,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -911,6 +929,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -964,6 +983,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1023,6 +1043,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1076,6 +1097,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1141,6 +1163,7 @@ mod tests {
                 )),
                 Arc::new(CategoryLock::default()),
             ),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1230,6 +1253,7 @@ mod tests {
                 )),
                 Arc::new(CategoryLock::default()),
             ),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1276,6 +1300,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&my_video()));
@@ -1319,6 +1344,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1369,6 +1395,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1444,6 +1471,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1526,6 +1554,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1588,6 +1617,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1650,6 +1680,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1709,6 +1740,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1796,6 +1828,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1904,6 +1937,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -1972,6 +2006,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -2066,6 +2101,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -2118,6 +2154,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());
@@ -2176,6 +2213,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());
@@ -2239,6 +2277,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());
@@ -2298,6 +2337,7 @@ mod tests {
             Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
         ));
 
         let mut result = Err(String::new());
@@ -2316,6 +2356,244 @@ mod tests {
 
     const STRANDED_WARNING: &str = "stranded video found, scheduling its download";
     const DOWNLOADED_FILENAME: &str = "Season 2026/S2026E031501 - My Video.mp4";
+
+    #[test]
+    fn it_should_schedule_a_summary_for_a_subtitled_video_in_an_opted_in_source() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        seed_channel_with_summaries(&db, &video, true);
+        preferences_repository.save(&summaries_on()).unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &summarize_video(&video))]
+        );
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_summary_when_the_source_opted_out() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = subtitled_video();
+        video_repository.save(&video).unwrap();
+        seed_channel_with_summaries(&db, &video, false);
+        preferences_repository.save(&summaries_on()).unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_summary_while_ai_summaries_are_off() {
+        let ai_off = Preferences {
+            ai_enabled: false,
+            ..summaries_on()
+        };
+        let summaries_off = Preferences {
+            summaries: SummarySettings {
+                enabled: false,
+                ..summaries_on().summaries
+            },
+            ..summaries_on()
+        };
+
+        let scheduled = [ai_off, summaries_off].map(|preferences| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            let video = subtitled_video();
+            video_repository.save(&video).unwrap();
+            seed_channel_with_summaries(&db, &video, true);
+            preferences_repository.save(&preferences).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
+
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
+        assert_eq!(scheduled, [vec![], vec![]]);
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_summary_without_fetched_subtitles() {
+        let missing = downloaded_video();
+        let unavailable = Video {
+            subtitle_state: SubtitleState::Unavailable,
+            ..downloaded_video()
+        };
+
+        let scheduled = [missing.clone(), unavailable].map(|video| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            video_repository.save(&video).unwrap();
+            seed_channel_with_summaries(&db, &video, true);
+            preferences_repository.save(&summaries_on()).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
+
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
+        assert_eq!(
+            scheduled,
+            [vec![pending_task(1, &fetch_subtitles(&missing))], vec![]]
+        );
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_settled_summary() {
+        let scheduled = [SummaryState::Generated, SummaryState::Unavailable].map(|summary_state| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            let video = Video {
+                summary_state,
+                ..subtitled_video()
+            };
+            video_repository.save(&video).unwrap();
+            seed_channel_with_summaries(&db, &video, true);
+            preferences_repository.save(&summaries_on()).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
+
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
+        assert_eq!(scheduled, [vec![], vec![]]);
+    }
+
+    /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
+    fn sync_task_of_downloaded_video(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        task_repository: Arc<SqliteTaskRepository>,
+        preferences_repository: Arc<SqlitePreferencesRepository>,
+    ) -> SyncVideoTask {
+        SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            task_repository,
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                DOWNLOADED_FILENAME.to_string(),
+            ])),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            video_category_assigner(db.database()),
+            preferences_repository,
+        ))
+    }
+
+    /// Stores `my_channel()`, with summaries on or off, as the owner of `video`.
+    fn seed_channel_with_summaries(db: &TestDatabase, video: &Video, summaries_enabled: bool) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel().with_summaries_enabled(summaries_enabled))
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn summaries_on() -> Preferences {
+        let preferences = Preferences::default();
+        Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+            summaries: SummarySettings {
+                enabled: true,
+                ..preferences.summaries
+            },
+            ..Preferences::default()
+        }
+    }
+
+    fn subtitled_video() -> Video {
+        Video {
+            subtitle_state: SubtitleState::Fetched,
+            ..downloaded_video()
+        }
+    }
 
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
@@ -2495,6 +2773,19 @@ mod tests {
         Task::FetchThumbnail {
             video_id: video.id.as_str().to_string(),
             output_dir: "/videos/creators/somechannel".to_string(),
+        }
+    }
+
+    fn fetch_subtitles(video: &Video) -> Task {
+        Task::FetchSubtitles {
+            video_id: video.id.as_str().to_string(),
+            output_dir: "/videos/creators/somechannel".to_string(),
+        }
+    }
+
+    fn summarize_video(video: &Video) -> Task {
+        Task::SummarizeVideo {
+            video_id: video.id.as_str().to_string(),
         }
     }
 

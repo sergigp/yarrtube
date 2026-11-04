@@ -61,6 +61,7 @@ impl VideoOwnerFinder {
                 source: CategoryMember::Channel(channel.id),
                 target: self.target(channel.path.as_str(), channel.quality),
                 sort_position: None,
+                summaries_enabled: channel.summaries_enabled,
             }))
     }
 
@@ -75,6 +76,7 @@ impl VideoOwnerFinder {
                 source: CategoryMember::Playlist(playlist.id),
                 target: self.target(playlist.path.as_str(), playlist.quality),
                 sort_position: Some(playlist_video.position),
+                summaries_enabled: playlist.summaries_enabled,
             }))
     }
 

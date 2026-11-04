@@ -102,7 +102,7 @@ def chat(model, system, user, fmt=None, think=False, ctx=NUM_CTX, max_out=None, 
     options = {"num_ctx": ctx, "temperature": 0.3}
     if max_out:
         options["num_predict"] = max_out  # stops runaway thinking loops
-    body = {"model": model, "stream": False, "think": think, "options": options,
+    body = {"model": model, "stream": False, "truncate": False, "shift": False, "think": think, "options": options,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     if fmt:
         body["format"] = fmt
@@ -111,9 +111,8 @@ def chat(model, system, user, fmt=None, think=False, ctx=NUM_CTX, max_out=None, 
     t0 = time.time()
     r = json.load(urllib.request.urlopen(req, timeout=timeout))
     text = r["message"]["content"].split("</think>")[-1].strip()  # qwen3 thinks even when told not to
-    truncated = r.get("prompt_eval_count", 0) >= ctx - 64
     return text, {"s": round(time.time() - t0, 1), "in": r.get("prompt_eval_count"),
-                  "out": r.get("eval_count"), "truncated": truncated}
+                  "out": r.get("eval_count")}
 
 
 # --- generation ----------------------------------------------------------------

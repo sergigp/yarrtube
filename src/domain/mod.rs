@@ -16,4 +16,5 @@ pub mod task;
 pub mod video;
 pub mod video_category;
 pub mod video_metadata;
+pub mod video_summary;
 pub mod video_transcript;

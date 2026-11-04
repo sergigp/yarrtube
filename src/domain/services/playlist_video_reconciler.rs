@@ -15,6 +15,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::{
     YoutubePlaylistItem, YoutubePlaylistItemsRepository,
@@ -36,6 +37,7 @@ pub struct PlaylistVideoReconciler {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+    video_summary_repository: Arc<dyn VideoSummaryRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -53,6 +55,7 @@ impl PlaylistVideoReconciler {
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+        video_summary_repository: Arc<dyn VideoSummaryRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -67,6 +70,7 @@ impl PlaylistVideoReconciler {
             playlist_repository,
             video_repository,
             video_transcript_repository,
+            video_summary_repository,
             playlist_video_repository,
             youtube_playlist_items_repository,
             event_publisher,
@@ -361,6 +365,7 @@ impl PlaylistVideoReconciler {
                     .delete(&playlist.id, &video.youtube_id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
+                self.video_summary_repository.delete(&video.id)?;
                 self.video_categories_repository.delete(&video.id)?;
                 self.event_publisher
                     .publish(&DomainEvent::VideoRemovedFromPlaylist(

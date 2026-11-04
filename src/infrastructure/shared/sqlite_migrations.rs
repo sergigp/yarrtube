@@ -34,6 +34,7 @@ const CATEGORY_PALETTE_REFRESH_SQL: &str =
 const VIDEO_CHAPTERS_SQL: &str = include_str!("../../../migrations/0020_video_chapters.sql");
 const LATE_VIDEO_DATA_SQL: &str = include_str!("../../../migrations/0021_late_video_data.sql");
 const SOURCE_SUMMARIES_SQL: &str = include_str!("../../../migrations/0022_source_summaries.sql");
+const VIDEO_SUMMARIES_SQL: &str = include_str!("../../../migrations/0023_video_summaries.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -62,6 +63,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(VIDEO_CHAPTERS_SQL),
         M::up(LATE_VIDEO_DATA_SQL),
         M::up(SOURCE_SUMMARIES_SQL),
+        M::up(VIDEO_SUMMARIES_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -135,6 +137,7 @@ mod tests {
                 "tasks_dead_letter",
                 "video_categories",
                 "video_metadata",
+                "video_summaries",
                 "video_transcripts",
                 "videos",
             ]
@@ -902,6 +905,24 @@ mod tests {
                 ("PL1".to_string(), false)
             ])
         );
+    }
+
+    #[test]
+    fn it_should_start_stored_videos_with_a_missing_summary() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_late_video_data(&mut conn);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'Title', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let summary = conn.query_row("SELECT summary_state FROM videos", [], |row| {
+            row.get::<_, String>(0)
+        });
+        assert_eq!(summary, Ok("MISSING".to_string()));
     }
 
     #[test]

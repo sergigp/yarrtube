@@ -2,6 +2,8 @@ use crate::domain::shared::ValidationError;
 
 const MIN: u32 = 1024;
 const MAX: u32 = 131072;
+const DEFAULT: u32 = 12288;
+const INPUT_BUDGET_OF_DEFAULT: u32 = 9000;
 
 /// How many tokens the model reads at once (Ollama's `num_ctx`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,11 +22,22 @@ impl ContextLength {
     pub fn value(&self) -> u32 {
         self.0
     }
+
+    /// The tokens the prompt can take, leaving room for thinking and the
+    /// answer: 9000 of the default 12288, as measured in `evals/summaries`.
+    pub fn input_budget_tokens(&self) -> u32 {
+        self.0 * INPUT_BUDGET_OF_DEFAULT / DEFAULT
+    }
+
+    /// The tokens the model can write: what the input budget leaves.
+    pub fn output_budget_tokens(&self) -> u32 {
+        self.0 - self.input_budget_tokens()
+    }
 }
 
 impl Default for ContextLength {
     fn default() -> Self {
-        Self(12288)
+        Self(DEFAULT)
     }
 }
 

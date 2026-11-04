@@ -230,6 +230,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -464,6 +465,7 @@ mod tests {
                 Arc::new(VideoLock::default()),
                 Arc::new(FixedClock(fixed_timestamp())),
                 video_category_assigner(db.database()),
+                Arc::new(SqlitePreferencesRepository::new(db.database())),
             ),
             "/videos",
         )

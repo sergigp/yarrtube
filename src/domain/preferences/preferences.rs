@@ -44,6 +44,16 @@ impl Preferences {
         self.ai_enabled && self.summaries.enabled
     }
 
+    /// Whether `other` generates summaries differently: another server or
+    /// other settings, not merely summaries turned on or off.
+    pub fn changes_summaries(&self, other: &Self) -> bool {
+        let settings = SummarySettings {
+            enabled: other.summaries.enabled,
+            ..self.summaries.clone()
+        };
+        self.ollama_url != other.ollama_url || settings != other.summaries
+    }
+
     /// These preferences with `change` applied, as long as the result is
     /// consistent: AI can't be on without an Ollama URL.
     pub fn apply(self, change: PreferencesChange) -> Result<Self, ValidationError> {

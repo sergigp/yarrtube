@@ -796,6 +796,90 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_run_one_summary_at_a_time() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let releases = [
+            handler.gate(&summarize_video("rec1")),
+            handler.gate(&summarize_video("rec2")),
+        ];
+        task_repository
+            .schedule(&summarize_video("rec1"), now())
+            .unwrap();
+        task_repository
+            .schedule(&summarize_video("rec2"), now())
+            .unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+
+        let mut handles = executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &summarize_video("rec1")),
+                pending(2, &summarize_video("rec2")),
+            ]
+        );
+
+        release(&releases[0], handles.remove(0)).await;
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![running(2, &summarize_video("rec2"))]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_not_hold_other_lanes_back_while_summarizing() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let _releases = [
+            handler.gate(&summarize_video("rec1")),
+            handler.gate(&reconcile("PL1")),
+        ];
+        task_repository
+            .schedule(&summarize_video("rec1"), now())
+            .unwrap();
+        task_repository
+            .schedule(&summarize_video("rec2"), now())
+            .unwrap();
+        task_repository.schedule(&reconcile("PL1"), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &summarize_video("rec1")),
+                pending(2, &summarize_video("rec2")),
+                running(3, &reconcile("PL1")),
+            ]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn it_should_run_thumbnail_fetches_one_at_a_time() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -1204,6 +1288,12 @@ mod tests {
         }
     }
 
+    fn summarize_video(video_id: &str) -> Task {
+        Task::SummarizeVideo {
+            video_id: video_id.to_string(),
+        }
+    }
+
     fn reconcile(playlist_id: &str) -> Task {
         Task::ReconcilePlaylist {
             playlist_id: playlist_id.to_string(),
@@ -1278,6 +1368,7 @@ mod tests {
             "download_video",
             "fetch_thumbnail",
             "reconcile_playlist",
+            "summarize_video",
             "update_ytdlp",
         ]
         .into_iter()
