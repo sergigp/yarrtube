@@ -70,7 +70,6 @@ export interface Video {
   position_seconds: number
   synced_at: string | null
   published_at: string | null
-  description: string | null
   channel_name: string | null
   /** The fetched subtitles' language code (e.g. `en`), null until fetched. */
   subtitle_language: string | null
