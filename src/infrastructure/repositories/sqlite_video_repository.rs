@@ -779,6 +779,45 @@ mod tests {
         SqliteVideoRepository::new(Database::single(conn))
     }
 
+    #[test]
+    fn it_should_read_missing_summary_state_for_a_new_video() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video("New", now);
+
+        repo.save(&video).unwrap();
+
+        let stored = repo.find(&video.id).unwrap().unwrap();
+        assert_eq!(
+            (stored.summary_state, stored.summary_checks),
+            (SummaryState::Missing, LateDataChecks::default())
+        );
+    }
+
+    #[test]
+    fn it_should_update_only_the_summary_fields() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
+        let read = video("Summarized", now);
+        repo.save(&read).unwrap();
+        repo.update_title(&read.id, "Renamed while summarizing", now)
+            .unwrap();
+
+        repo.update_summary(&read.clone().mark_summary_generated(later))
+            .unwrap();
+
+        assert_eq!(
+            repo.find(&read.id).unwrap(),
+            Some(Video {
+                title: "Renamed while summarizing".to_string(),
+                ..read.mark_summary_generated(later)
+            })
+        );
+    }
+
     fn video(title: &str, now: DateTime<Utc>) -> Video {
         Video::create(VideoId::new("yt1").unwrap(), title, now)
     }
