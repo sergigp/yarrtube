@@ -629,6 +629,26 @@ mod tests {
         assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
     }
 
+    #[test]
+    fn it_should_stop_at_the_first_failed_part() {
+        let scene = Scene {
+            srt: Some(srt_of(100, 60)),
+            ..Scene::default()
+        }
+        .with_replies(vec![
+            reply("A."),
+            Err(anyhow::anyhow!("model crashed")),
+            reply("C."),
+        ])
+        .build();
+
+        scene.run().unwrap();
+
+        assert_eq!(scene.chats().len(), 2);
+        assert_eq!(scene.stored_summary(), None);
+        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
