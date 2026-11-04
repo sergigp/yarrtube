@@ -29,11 +29,15 @@ A create or update request for a channel or playlist that supplies `summaries_en
 - **THEN** the system stores the channel with `summaries_enabled` `false` and returns it
 
 ### Requirement: Summaries Setting On Creation
-Creating a channel or a playlist SHALL accept an optional `summaries_enabled` boolean; when omitted the source SHALL be stored with `false`. A non-boolean value SHALL be rejected with a client error and nothing stored. Creating a source that already exists SHALL ignore the request's value and return the stored record.
+Creating a channel or a playlist SHALL require a `summaries_enabled` boolean. A missing or non-boolean value SHALL be rejected with a client error and nothing stored. Creating a source that already exists SHALL ignore the request's value and return the stored record.
+
+#### Scenario: Created with summaries off
+- **WHEN** a valid channel or playlist creation request supplies `summaries_enabled` `false`
+- **THEN** the system stores the source with `summaries_enabled` `false` and returns it with `summaries_enabled` `false`
 
 #### Scenario: Created without the setting
-- **WHEN** a valid channel or playlist creation request omits `summaries_enabled`
-- **THEN** the system stores the source with `summaries_enabled` `false` and returns it with `summaries_enabled` `false`
+- **WHEN** a channel or playlist creation request omits `summaries_enabled`
+- **THEN** the system stores nothing and rejects the request with a client error `Summaries setting must be true or false (missing)`
 
 #### Scenario: Created with summaries on
 - **WHEN** AI and summaries are on and a valid channel or playlist creation request supplies `summaries_enabled` `true`

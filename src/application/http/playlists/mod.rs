@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
-use super::validation::{MISSING_QUALITY, required};
+use super::validation::{MISSING_QUALITY, MISSING_SUMMARIES, required};
 use super::videos::update_watch_state_error;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
@@ -41,7 +41,7 @@ pub async fn create_playlist(
         .map(ReconcileInterval::new)
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
-    let summaries_enabled = request.summaries_enabled.unwrap_or(false);
+    let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
 
     let outcome = run_blocking(move || {
         playlist_creator.create(
@@ -271,7 +271,7 @@ mod tests {
     const DEFAULT_PATH: &str = "music/chill";
 
     #[tokio::test]
-    async fn it_should_create_a_playlist_with_summaries_disabled_by_default() {
+    async fn it_should_create_a_playlist_with_summaries_disabled() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let playlist_creator = PlaylistCreator::new(
@@ -285,7 +285,7 @@ mod tests {
         );
 
         let request = CreatePlaylistRequest {
-            summaries_enabled: None,
+            summaries_enabled: Some(false),
             ..create_request("PL1")
         };
         let response = create(playlist_creator, request).await;
@@ -914,6 +914,23 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request("Playlist path must not be empty"))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_summaries_missing() {
+        let request = CreatePlaylistRequest {
+            summaries_enabled: None,
+            ..create_request("PL1")
+        };
+
+        let response = create(any_playlist_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Summaries setting must be true or false (missing)"
+            ))
         );
     }
 
@@ -4045,7 +4062,7 @@ mod tests {
             quality: Some("high".to_string()),
             exclude_from_home: None,
             reconcile_interval_minutes: None,
-            summaries_enabled: None,
+            summaries_enabled: Some(false),
         }
     }
 

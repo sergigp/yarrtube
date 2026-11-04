@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
-use super::validation::{MISSING_QUALITY, required};
+use super::validation::{MISSING_QUALITY, MISSING_SUMMARIES, required};
 use super::videos::update_watch_state_error;
 use crate::domain::channel::{
     ChannelHandle, ChannelSettingsChange, CreateChannelError, DeleteChannelError,
@@ -42,7 +42,7 @@ pub async fn create_channel(
         .map(ReconcileInterval::new)
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
-    let summaries_enabled = request.summaries_enabled.unwrap_or(false);
+    let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
 
     let outcome = run_blocking(move || {
         channel_creator.create(
@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_create_a_channel_with_summaries_disabled_by_default() {
+    async fn it_should_create_a_channel_with_summaries_disabled() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let channel_creator = ChannelCreator::new(
@@ -307,7 +307,7 @@ mod tests {
         );
 
         let request = CreateChannelRequest {
-            summaries_enabled: None,
+            summaries_enabled: Some(false),
             ..create_request("@somechannel")
         };
         let response = create(channel_creator, request).await;
@@ -795,6 +795,23 @@ mod tests {
             response,
             Err(ApiError::bad_request(
                 "Reconcile interval must be at least 1 minute (got 0)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_summaries_missing() {
+        let request = CreateChannelRequest {
+            summaries_enabled: None,
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Summaries setting must be true or false (missing)"
             ))
         );
     }
@@ -3208,7 +3225,7 @@ mod tests {
             video_limit: Some(10),
             path: Some("creators/somechannel".to_string()),
             reconcile_interval_minutes: None,
-            summaries_enabled: None,
+            summaries_enabled: Some(false),
         }
     }
 

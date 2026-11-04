@@ -26,6 +26,7 @@ test('lowering a channel video limit deletes the videos beyond it on the next sy
       video_limit: 2,
       path: CHANNEL_PATH,
       reconcile_interval_minutes: 180,
+      summaries_enabled: false,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()

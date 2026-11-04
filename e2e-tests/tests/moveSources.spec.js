@@ -71,6 +71,7 @@ test('moving a playlist renames its show folder and keeps its videos', async ({ 
       quality: 'low',
       exclude_from_home: false,
       reconcile_interval_minutes: 180,
+      summaries_enabled: false,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()
@@ -108,6 +109,7 @@ test('moving a channel renames its show folder and keeps its videos', async ({ p
       video_limit: 1,
       path: CHANNEL_PATH,
       reconcile_interval_minutes: 180,
+      summaries_enabled: false,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()
