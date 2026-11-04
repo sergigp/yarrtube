@@ -13,7 +13,7 @@
 - [x] 2.5 `src/application/tasks/summarize_video_task.rs`: `it_should_list_the_chapters_in_the_prompt` — `chapters` section, `0:00 Intro`. Verify: test red, then green.
 - [x] 2.6 `src/application/tasks/summarize_video_task.rs`: `it_should_leave_chapters_out_of_the_prompt_when_the_video_has_none` — no block. Verify: test red, then green.
 - [x] 2.7 `src/application/tasks/summarize_video_task.rs`: `it_should_keep_braces_in_values_unfilled` — title `{transcript} explained` unchanged. Verify: test red, then green.
-- [ ] 2.8 `src/application/tasks/summarize_video_task.rs`: `it_should_use_the_language_code_when_its_name_is_unknown` — `xh`. Verify: test red, then green.
+- [x] 2.8 `src/application/tasks/summarize_video_task.rs`: `it_should_use_the_language_code_when_its_name_is_unknown` — `xh`. Verify: test red, then green.
 - [ ] 2.9 `src/application/tasks/summarize_video_task.rs`: `it_should_drop_the_reasoning_before_the_answer` — `</think>` stripped from the stored text. Verify: test red, then green.
 - [ ] 2.10 `src/application/tasks/summarize_video_task.rs`: `it_should_ask_for_thinking_only_when_the_model_supports_it` — table of setting × capability. Verify: test red, then green.
 - [ ] 2.11 `src/application/tasks/summarize_video_task.rs`: `it_should_summarize_a_long_transcript_in_parts_then_reduce` — N map chats + reduce holding answers in order. Verify: test red, then green.
