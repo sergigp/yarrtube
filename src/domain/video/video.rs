@@ -74,8 +74,6 @@ pub struct Video {
     /// Whether the downloaded quality is final: never checked again.
     pub quality_settled: bool,
     pub summary_state: SummaryState,
-    /// Checks of the video's summary; only failed generations are retried.
-    pub summary_checks: LateDataChecks,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -110,7 +108,6 @@ impl Video {
             quality_checks: LateDataChecks::default(),
             quality_settled: false,
             summary_state: SummaryState::Missing,
-            summary_checks: LateDataChecks::default(),
         }
     }
 
@@ -381,7 +378,6 @@ impl Video {
     pub fn mark_summary_generated(self, now: DateTime<Utc>) -> Self {
         Self {
             summary_state: SummaryState::Generated,
-            summary_checks: self.summary_checks.record(LateDataOutcome::Complete, now),
             updated_at: now,
             ..self
         }
@@ -845,10 +841,6 @@ mod tests {
             generated,
             Video {
                 summary_state: SummaryState::Generated,
-                summary_checks: LateDataChecks {
-                    last_checked_at: Some(now),
-                    failed_attempts: 0,
-                },
                 updated_at: now,
                 ..video
             }

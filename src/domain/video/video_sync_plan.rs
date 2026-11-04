@@ -40,7 +40,7 @@ impl VideoSyncPlan {
             ),
             (
                 VideoSyncStep::Summarize,
-                summaries_wanted && video.is_summarizable() && video.summary_checks.is_due(now),
+                summaries_wanted && video.is_summarizable(),
             ),
         ]
         .into_iter()

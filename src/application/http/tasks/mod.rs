@@ -1063,7 +1063,6 @@ mod tests {
             quality_checks: LateDataChecks::default(),
             quality_settled: false,
             summary_state: SummaryState::Missing,
-            summary_checks: LateDataChecks::default(),
         }
     }
 

@@ -49,7 +49,7 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{LateDataChecks, SummaryState, Video, VideoChapter, VideoId};
+    use crate::domain::video::{SummaryState, Video, VideoChapter, VideoId};
     use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,

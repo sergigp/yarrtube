@@ -919,18 +919,10 @@ mod tests {
 
         apply(&mut conn).unwrap();
 
-        let summary = conn.query_row(
-            "SELECT summary_state, summary_last_checked_at, summary_failed_attempts FROM videos",
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, i64>(2)?,
-                ))
-            },
-        );
-        assert_eq!(summary, Ok(("MISSING".to_string(), None, 0)));
+        let summary = conn.query_row("SELECT summary_state FROM videos", [], |row| {
+            row.get::<_, String>(0)
+        });
+        assert_eq!(summary, Ok("MISSING".to_string()));
     }
 
     #[test]
