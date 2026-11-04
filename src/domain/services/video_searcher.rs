@@ -150,7 +150,7 @@ impl VideoSearcherApi for VideoSearcher {
             .iter()
             .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
             .filter(|video| !is_excluded(video))
-            .map(|video| video.and_then(|video| self.view(video, false)))
+            .map(|video| video.and_then(|video| self.view(video, true)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }

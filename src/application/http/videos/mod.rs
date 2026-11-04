@@ -335,6 +335,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_summary_when_listing_channel_videos() {
+        let db = TestDatabase::new();
+        save_summarized_channel_video(
+            &db,
+            &channel("@somechannel", None).with_summaries_enabled(true),
+        );
+        save_preferences(&db, summaries_on());
+
+        let response = list_for_channel(home_video_searcher(&db), "@somechannel").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                summary: Some(SUMMARY.to_string()),
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -6208,6 +6228,22 @@ mod tests {
         );
         save_summary(db, &video);
         video
+    }
+
+    /// Stores `channel` holding a video "vid1" with a summary.
+    fn save_summarized_channel_video(db: &TestDatabase, channel: &Channel) {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        SqliteChannelRepository::new(db.database())
+            .insert(channel)
+            .unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            channel.id.as_str(),
+            &video,
+            0,
+        );
+        save_summary(db, &video);
     }
 
     /// A video searcher over every SQLite repository of `db`.
