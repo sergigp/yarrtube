@@ -376,8 +376,13 @@ impl Video {
         false
     }
 
-    pub fn mark_summary_generated(self, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn mark_summary_generated(self, now: DateTime<Utc>) -> Self {
+        Self {
+            summary_state: SummaryState::Generated,
+            summary_checks: self.summary_checks.record(LateDataOutcome::Complete, now),
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Records a failed generation: Unavailable once failures are exhausted.

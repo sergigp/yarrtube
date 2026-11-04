@@ -1,5 +1,7 @@
+use crate::domain::llm_server::LlmChat;
 use crate::domain::services::VideoOwnerFinder;
 use crate::domain::video::Video;
+use crate::domain::video_summary::{SummaryText, VideoSummary};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
@@ -7,7 +9,9 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use anyhow::Context;
 use std::sync::Arc;
+use tracing::warn;
 
 /// Writes a video's AI summary through the LLM server — see the
 /// `video-summaries` capability. Runs from the `summarize_video` task;
@@ -56,5 +60,37 @@ pub trait VideoSummarizerApi: Send + Sync {
 }
 
 impl VideoSummarizerApi for VideoSummarizer {
-    fn summarize(&self, _video: &Video) {}
+    fn summarize(&self, video: &Video) {
+        if let Err(e) = self.generate(video) {
+            warn!(video_id = %video.id, error = %e, "failed to summarize video");
+        }
+    }
+}
+
+impl VideoSummarizer {
+    fn generate(&self, video: &Video) -> anyhow::Result<()> {
+        let preferences = self.preferences_repository.find()?.unwrap_or_default();
+        let settings = preferences.summaries;
+        let url = preferences.ollama_url.context("no Ollama URL is saved")?;
+        let chat = LlmChat {
+            model: settings.model.as_str().to_string(),
+            system: String::new(),
+            user: String::new(),
+            context_length: settings.context_length.value(),
+            temperature: settings.temperature.value(),
+            thinking: settings.thinking,
+            max_output_tokens: settings.context_length.output_budget_tokens(),
+        };
+        let reply = self.llm_server_repository.chat(&url, &chat)?;
+        let text = SummaryText::from_answer(&reply.content)?;
+        let now = self.clock.now();
+        self.video_summary_repository.save(&VideoSummary::create(
+            video.id.clone(),
+            text,
+            &settings.model,
+            now,
+        ))?;
+        self.video_repository
+            .update_summary(&video.clone().mark_summary_generated(now))
+    }
 }

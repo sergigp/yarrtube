@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled, summary_state, summary_last_checked_at, summary_failed_attempts";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -43,6 +43,9 @@ struct VideoRow {
     quality_last_checked_at: Option<String>,
     quality_failed_attempts: u32,
     quality_settled: bool,
+    summary_state: String,
+    summary_last_checked_at: Option<String>,
+    summary_failed_attempts: u32,
 }
 
 pub trait VideoRepository: Send + Sync {
@@ -147,8 +150,8 @@ impl VideoRepository for SqliteVideoRepository {
     fn save(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled, summary_state, summary_last_checked_at, summary_failed_attempts)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
@@ -177,7 +180,10 @@ impl VideoRepository for SqliteVideoRepository {
                 downloaded_height = excluded.downloaded_height,
                 quality_last_checked_at = excluded.quality_last_checked_at,
                 quality_failed_attempts = excluded.quality_failed_attempts,
-                quality_settled = excluded.quality_settled",
+                quality_settled = excluded.quality_settled,
+                summary_state = excluded.summary_state,
+                summary_last_checked_at = excluded.summary_last_checked_at,
+                summary_failed_attempts = excluded.summary_failed_attempts",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -208,6 +214,9 @@ impl VideoRepository for SqliteVideoRepository {
                 video.quality_checks.last_checked_at.map(|t| t.to_rfc3339()),
                 video.quality_checks.failed_attempts,
                 video.quality_settled,
+                video.summary_state.as_str(),
+                video.summary_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.summary_checks.failed_attempts,
             ],
         )
         .inspect_err(|e| {
@@ -259,7 +268,7 @@ impl VideoRepository for SqliteVideoRepository {
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_settled = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_settled = ?28
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_settled = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_settled = ?28, summary_state = ?29, summary_last_checked_at = ?30, summary_failed_attempts = ?31
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -290,6 +299,9 @@ impl VideoRepository for SqliteVideoRepository {
                 video.quality_checks.last_checked_at.map(|t| t.to_rfc3339()),
                 video.quality_checks.failed_attempts,
                 video.quality_settled,
+                video.summary_state.as_str(),
+                video.summary_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.summary_checks.failed_attempts,
             ],
         )
         .inspect_err(|e| {
@@ -317,7 +329,22 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn update_summary(&self, _video: &Video) -> anyhow::Result<()> {
+    fn update_summary(&self, video: &Video) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE videos SET summary_state = ?2, summary_last_checked_at = ?3, summary_failed_attempts = ?4, updated_at = ?5 WHERE id = ?1",
+            params![
+                video.id.as_str(),
+                video.summary_state.as_str(),
+                video.summary_checks.last_checked_at.map(|t| t.to_rfc3339()),
+                video.summary_checks.failed_attempts,
+                video.updated_at.to_rfc3339(),
+            ],
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %video.id, error = %e, "failed to update video summary state")
+        })
+        .context("failed to update video summary state")?;
         Ok(())
     }
 
@@ -613,6 +640,9 @@ impl SqliteVideoRepository {
             quality_last_checked_at: row.get(26)?,
             quality_failed_attempts: row.get(27)?,
             quality_settled: row.get(28)?,
+            summary_state: row.get(29)?,
+            summary_last_checked_at: row.get(30)?,
+            summary_failed_attempts: row.get(31)?,
         })
     }
 
@@ -670,8 +700,12 @@ impl SqliteVideoRepository {
                 "quality_last_checked_at",
             )?,
             quality_settled: row.quality_settled,
-            summary_state: SummaryState::Missing,
-            summary_checks: LateDataChecks::default(),
+            summary_state: SummaryState::parse(&row.summary_state)?,
+            summary_checks: Self::decode_checks(
+                row.summary_last_checked_at,
+                row.summary_failed_attempts,
+                "summary_last_checked_at",
+            )?,
         })
     }
 

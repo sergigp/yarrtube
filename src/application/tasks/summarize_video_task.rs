@@ -36,3 +36,275 @@ impl TaskHandler for SummarizeVideoTask {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+    use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
+    use crate::domain::playlist::PlaylistPath;
+    use crate::domain::preferences::{Preferences, SummaryModel, SummarySettings};
+    use crate::domain::services::VideoOwnerFinder;
+    use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::{SummaryState, Video, VideoId};
+    use crate::domain::video_summary::{SummaryText, VideoSummary};
+    use crate::domain::video_transcript::{
+        CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
+    };
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, SqliteChannelRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_preferences_repository::{
+        PreferencesRepository, SqlitePreferencesRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_summary_repository::{
+        SqliteVideoSummaryRepository, VideoSummaryRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
+        SqliteVideoTranscriptRepository, VideoTranscriptRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
+
+    const OUTPUT_DIR: &str = "/videos/creators/somechannel";
+    const SUBTITLES: &str = "Season 2026/S2026E010101 - Sicilian.es.srt";
+    const SHORT_SRT: &str = "1\n00:00:00,000 --> 00:00:02,000\nHola a todos\n";
+
+    #[test]
+    fn it_should_store_the_summary_of_a_video_that_fits_one_call() {
+        let scene = Scene::default()
+            .with_replies(vec![reply("Three games.")])
+            .build();
+
+        let result = scene.run();
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            scene.stored_summary(),
+            Some(VideoSummary {
+                video_id: scene.video.id.clone(),
+                text: SummaryText::new("Three games."),
+                model: "qwen3:4b".to_string(),
+                created_at: later(),
+            })
+        );
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Generated);
+        assert_eq!(scene.chats().len(), 1);
+    }
+
+    /// What a test changes about the default situation: a downloaded,
+    /// subtitled, 30-minute Spanish video in a channel with summaries on,
+    /// and AI and summaries on, with `qwen3:4b` installed.
+    struct Scene {
+        preferences: Preferences,
+        summaries_enabled: bool,
+        video: Video,
+        language: String,
+        srt: Option<String>,
+        llm: FakeLlmServerRepository,
+    }
+
+    /// A scene once stored, ready to run.
+    struct BuiltScene {
+        db: TestDatabase,
+        video: Video,
+        llm: Arc<FakeLlmServerRepository>,
+        task: SummarizeVideoTask,
+    }
+
+    impl Default for Scene {
+        fn default() -> Self {
+            Self {
+                preferences: summaries_on(),
+                summaries_enabled: true,
+                video: subtitled_video(),
+                language: "es".to_string(),
+                srt: Some(SHORT_SRT.to_string()),
+                llm: FakeLlmServerRepository::new(server_with(thinking_model())),
+            }
+        }
+    }
+
+    impl Scene {
+        fn with_replies(self, replies: Vec<anyhow::Result<LlmReply>>) -> Self {
+            Self {
+                llm: self.llm.with_replies(replies),
+                ..self
+            }
+        }
+
+        fn build(self) -> BuiltScene {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            video_repository.save(&self.video).unwrap();
+            let preferences = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences.save(&self.preferences).unwrap();
+            let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+            channel_repository
+                .insert(&my_channel().with_summaries_enabled(self.summaries_enabled))
+                .unwrap();
+            let channel_video_repository =
+                Arc::new(SqliteChannelVideoRepository::new(db.database()));
+            channel_video_repository
+                .save(&ChannelVideo::create(
+                    my_channel_id(),
+                    self.video.id.clone(),
+                    0,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+            let transcript_repository =
+                Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+            transcript_repository
+                .save(&VideoTranscript {
+                    video_id: self.video.id.clone(),
+                    language: CaptionLanguage::new(&self.language).unwrap(),
+                    source: CaptionSource::Automatic,
+                    text: TranscriptText::new("unused: timed lines come from the SRT"),
+                    created_at: fixed_timestamp(),
+                })
+                .unwrap();
+            let files = self
+                .srt
+                .iter()
+                .fold(FakeVideoFileRepository::default(), |files, srt| {
+                    files.with_file(format!("{OUTPUT_DIR}/{SUBTITLES}"), srt)
+                });
+            let llm = Arc::new(self.llm);
+            let task = SummarizeVideoTask::new(
+                video_repository.clone(),
+                Arc::new(VideoSummarizer::new(
+                    video_repository,
+                    Arc::new(VideoOwnerFinder::new(
+                        channel_video_repository,
+                        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                        channel_repository,
+                        Arc::new(SqlitePlaylistRepository::new(db.database())),
+                        "/videos",
+                    )),
+                    preferences,
+                    transcript_repository,
+                    Arc::new(files),
+                    llm.clone(),
+                    Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+                    Arc::new(FixedClock(later())),
+                )),
+            );
+            BuiltScene {
+                db,
+                video: self.video,
+                llm,
+                task,
+            }
+        }
+    }
+
+    impl BuiltScene {
+        fn run(&self) -> Result<(), String> {
+            let payload = serde_json::json!({ "video_id": self.video.id.as_str() }).to_string();
+            self.task
+                .handle(&payload, false)
+                .map_err(|error| error.to_string())
+        }
+
+        fn chats(&self) -> Vec<LlmChat> {
+            self.llm.chats()
+        }
+
+        fn stored_summary(&self) -> Option<VideoSummary> {
+            SqliteVideoSummaryRepository::new(self.db.database())
+                .find(&self.video.id)
+                .unwrap()
+        }
+
+        fn stored_video(&self) -> Video {
+            SqliteVideoRepository::new(self.db.database())
+                .find(&self.video.id)
+                .unwrap()
+                .unwrap()
+        }
+    }
+
+    fn summaries_on() -> Preferences {
+        Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+            summaries: SummarySettings {
+                enabled: true,
+                ..SummarySettings::default()
+            },
+            ..Preferences::default()
+        }
+    }
+
+    fn subtitled_video() -> Video {
+        let video = Video::create(VideoId::new("yt1").unwrap(), "Sicilian", fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "Season 2026/S2026E010101 - Sicilian.mp4",
+                None,
+                Some(1800),
+                fixed_timestamp(),
+            );
+        video.mark_subtitles_fetched(SUBTITLES, fixed_timestamp())
+    }
+
+    fn my_channel_id() -> ChannelHandle {
+        ChannelHandle::new("@somechannel").unwrap()
+    }
+
+    fn my_channel() -> Channel {
+        Channel::create(
+            my_channel_id(),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
+            fixed_timestamp(),
+        )
+    }
+
+    fn thinking_model() -> LlmModel {
+        LlmModel {
+            name: SummaryModel::default().as_str().to_string(),
+            size_bytes: 1,
+            thinking: true,
+        }
+    }
+
+    fn server_with(model: LlmModel) -> LlmServer {
+        LlmServer {
+            version: "0.40.13".to_string(),
+            models: vec![model],
+        }
+    }
+
+    fn reply(content: &str) -> anyhow::Result<LlmReply> {
+        Ok(LlmReply {
+            content: content.to_string(),
+            input_tokens: 100,
+            stopped_at_limit: false,
+        })
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_000_000, 0).unwrap()
+    }
+
+    fn later() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(2_000_000, 0).unwrap()
+    }
+}

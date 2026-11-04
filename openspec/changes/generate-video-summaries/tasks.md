@@ -6,7 +6,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `src/application/tasks/summarize_video_task.rs`: `it_should_store_the_summary_of_a_video_that_fits_one_call` — fake reply stored with model; state Generated; one chat. Verify: test red, then green.
+- [x] 2.1 `src/application/tasks/summarize_video_task.rs`: `it_should_store_the_summary_of_a_video_that_fits_one_call` — fake reply stored with model; state Generated; one chat. Verify: test red, then green.
 - [ ] 2.2 `src/application/tasks/summarize_video_task.rs`: `it_should_send_the_shipped_prompt_filled_with_the_videos_data` — exact system and user messages, `lang` from the language name. Verify: test red, then green.
 - [ ] 2.3 `src/application/tasks/summarize_video_task.rs`: `it_should_send_the_saved_prompt_when_there_is_one` — messages come from the saved text. Verify: test red, then green.
 - [ ] 2.4 `src/application/tasks/summarize_video_task.rs`: `it_should_send_the_saved_model_settings` — model, context, temperature, output cap in the chat. Verify: test red, then green.
