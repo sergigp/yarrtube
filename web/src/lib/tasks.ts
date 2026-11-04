@@ -56,8 +56,10 @@ export type TaskFamily = 'downloads' | 'syncs' | 'ai' | 'other'
 export type TaskTab = 'active' | 'downloads' | 'syncs' | 'ai' | 'other'
 
 /** The tabs shown, in order; "ai" only while `aiEnabled`. */
-export function taskTabs(_aiEnabled: boolean): readonly TaskTab[] {
-  return ['active', 'downloads', 'syncs', 'other']
+export function taskTabs(aiEnabled: boolean): readonly TaskTab[] {
+  return aiEnabled
+    ? ['active', 'downloads', 'syncs', 'ai', 'other']
+    : ['active', 'downloads', 'syncs', 'other']
 }
 
 /** Above this many tasks in a tab, the search field is worth showing. */

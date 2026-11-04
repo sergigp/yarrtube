@@ -9,6 +9,7 @@ import {
   taskCategory,
   taskFamily,
   taskKind,
+  taskTabs,
 } from './tasks'
 import { aTask } from '@/test/helpers'
 
@@ -216,6 +217,11 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
 
   it('puts video summaries in the other family while AI is off', () => {
     expect(taskFamily(aTask({ task_type: 'summarize_video' }), false)).toBe('other')
+  })
+
+  it('lists the ai tab between syncs and other only while AI is on', () => {
+    expect(taskTabs(true)).toEqual(['active', 'downloads', 'syncs', 'ai', 'other'])
+    expect(taskTabs(false)).toEqual(['active', 'downloads', 'syncs', 'other'])
   })
 
   it('puts Plex label syncs in the other family', () => {

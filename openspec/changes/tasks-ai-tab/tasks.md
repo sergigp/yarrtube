@@ -8,7 +8,7 @@
 
 - [x] 2.1 `puts video summaries in the ai family while AI is on`.
 - [x] 2.2 `puts video summaries in the other family while AI is off`.
-- [ ] 2.3 `lists the ai tab between syncs and other only while AI is on`.
+- [x] 2.3 `lists the ai tab between syncs and other only while AI is on`.
 - [ ] 2.4 `counts every task once across tabs while AI is on`.
 - [ ] 2.5 `gives video summaries the ai kind`.
 - [ ] 2.6 `lists video summaries under AI while AI is on`: drives `aiEnabled` reading the preferences.
