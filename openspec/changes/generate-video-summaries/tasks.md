@@ -96,9 +96,9 @@ Behaviour tasks are TDD like section 2. Refactor tasks change no behaviour: Veri
 - [x] 5.10 `summarize_video_task`: `it_should_fail_the_task_when_ollama_refuses_the_prompt`. Verify: test red, then green.
 - [x] 5.11 Remove the attempt counting: `summary_checks`, `record_summary_failure`, the two `summary_*` columns from migration `0023`, `is_due` from the summary step in `VideoSyncPlan`, `it_should_space_summary_retries_by_a_day`, and `sqlite_video_repository` mappings. Verify: `cargo test --locked` passes.
 - [x] 5.12 `summarize_video_task` (logging): failures log at error with the specific reason, per `it_should_log_why_a_generation_was_skipped_or_failed`. Verify: test red, then green.
-- [ ] 5.13 `sqlite_video_repository`: `it_should_reset_unavailable_summaries_to_missing`. Verify: test red, then green.
-- [ ] 5.14 `preferences_updater` via `http/preferences`: `it_should_reset_unavailable_summaries_when_the_summary_settings_change` — table of the URL and each setting. Verify: test red, then green.
-- [ ] 5.15 `preferences_updater`: `it_should_keep_unavailable_summaries_on_an_unrelated_change`, including saving the same values. Verify: test red, then green.
+- [x] 5.13 `sqlite_video_repository`: `it_should_reset_unavailable_summaries_to_missing`. Verify: test red, then green.
+- [x] 5.14 `preferences_updater` via `http/preferences`: `it_should_reset_unavailable_summaries_when_the_summary_settings_change` — table of the URL and each setting. Verify: test red, then green.
+- [x] 5.15 `preferences_updater`: `it_should_keep_unavailable_summaries_on_an_unrelated_change`, including saving the same values. Verify: test red, then green.
 - [ ] 5.16 `summarize_video_task`: `it_should_reduce_answers_in_groups_when_they_do_not_fit` — group calls without chapters, last call with them. Verify: test red, then green.
 - [ ] 5.17 `summarize_video_task`: `it_should_keep_reducing_until_the_answers_fit`, including a budget smaller than two answers, which still ends. Verify: test red, then green.
 - [ ] 5.18 `summarize_video_task`: `it_should_list_a_chapter_starting_on_the_parts_last_line` — `<=` in `part_chapter_block`. Verify: test red, then green.

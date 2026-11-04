@@ -529,7 +529,11 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         preferences_searcher: PreferencesSearcher::new(
             infrastructure.preferences_repository.clone(),
         ),
-        preferences_updater: PreferencesUpdater::new(infrastructure.preferences_repository.clone()),
+        preferences_updater: PreferencesUpdater::new(
+            infrastructure.preferences_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.clock.clone(),
+        ),
         llm_server_searcher: LlmServerSearcher::new(infrastructure.llm_server_repository.clone()),
         category_creator: CategoryCreator::new(
             infrastructure.category_repository.clone(),

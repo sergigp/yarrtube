@@ -71,10 +71,11 @@ pub trait VideoRepository: Send + Sync {
     /// leaving the download's fields untouched even if they changed since
     /// the caller read the video.
     fn update_subtitles(&self, video: &Video) -> anyhow::Result<()>;
-    /// Writes only `summary_state`, the summary checks and `updated_at`,
-    /// leaving everything else untouched even if it changed since the caller
-    /// read the video.
+    /// Writes only `summary_state` and `updated_at`, leaving everything else
+    /// untouched even if it changed since the caller read the video.
     fn update_summary(&self, video: &Video) -> anyhow::Result<()>;
+    /// Puts every Unavailable summary back to Missing.
+    fn reset_unavailable_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()>;
     /// Writes only `thumbnail_filename` (and `updated_at`), leaving the
     /// download's fields untouched even if they changed since the caller
     /// read the video.
@@ -318,6 +319,20 @@ impl VideoRepository for SqliteVideoRepository {
             |e| tracing::error!(video_id = %id, error = %e, "failed to update video title"),
         )
         .context("failed to update video title")?;
+        Ok(())
+    }
+
+    fn reset_unavailable_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE videos SET summary_state = ?1, updated_at = ?2 WHERE summary_state = ?3",
+            params![
+                SummaryState::Missing.as_str(),
+                now.to_rfc3339(),
+                SummaryState::Unavailable.as_str(),
+            ],
+        )
+        .inspect_err(|e| tracing::error!(error = %e, "failed to reset unavailable summaries"))?;
         Ok(())
     }
 
@@ -773,6 +788,36 @@ mod tests {
 
         let stored = repo.find(&video.id).unwrap().unwrap();
         assert_eq!(stored.summary_state, SummaryState::Missing);
+    }
+
+    #[test]
+    fn it_should_reset_unavailable_summaries_to_missing() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
+        let unavailable = video("Unavailable", now).mark_summary_unavailable(now);
+        let generated = Video::create(VideoId::new("yt2").unwrap(), "Generated", now)
+            .mark_summary_generated(now);
+        repo.save(&unavailable).unwrap();
+        repo.save(&generated).unwrap();
+
+        repo.reset_unavailable_summaries(later).unwrap();
+
+        assert_eq!(
+            (
+                repo.find(&unavailable.id).unwrap(),
+                repo.find(&generated.id).unwrap()
+            ),
+            (
+                Some(Video {
+                    summary_state: SummaryState::Missing,
+                    updated_at: later,
+                    ..unavailable
+                }),
+                Some(generated)
+            )
+        );
     }
 
     #[test]
