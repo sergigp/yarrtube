@@ -37,7 +37,6 @@ pub struct ChannelVideoReconciler {
     channel_repository: Arc<dyn ChannelRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
-    #[allow(dead_code)]
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     channel_videos_repository: Arc<dyn ChannelVideosRepository>,
@@ -356,6 +355,7 @@ impl ChannelVideoReconciler {
                     .delete(&channel.id, &video.youtube_id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
+                self.video_summary_repository.delete(&video.id)?;
                 self.video_categories_repository.delete(&video.id)?;
                 self.event_publisher
                     .publish(&DomainEvent::VideoRemovedFromChannel(
