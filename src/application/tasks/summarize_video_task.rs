@@ -148,6 +148,33 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_send_the_saved_model_settings() {
+        let scene = Scene {
+            preferences: with_summaries(|settings| SummarySettings {
+                context_length: ContextLength::new(8192).unwrap(),
+                temperature: Temperature::new(0.5).unwrap(),
+                ..settings
+            }),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        scene.run().unwrap();
+
+        let chat = &scene.chats()[0];
+        assert_eq!(
+            (
+                chat.model.as_str(),
+                chat.context_length,
+                chat.temperature,
+                chat.max_output_tokens
+            ),
+            ("qwen3:4b", 8192, 0.5, 2192)
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
