@@ -52,15 +52,15 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             .connect_timeout(REQUEST_TIMEOUT)
             .timeout(CHAT_TIMEOUT)
             .build()?;
-        let _: ChatResponse = Self::read_json(
+        let response: ChatResponse = Self::read_json(
             "/api/chat",
             client
                 .post(format!("{url}/api/chat"))
                 .json(&Self::chat_body(chat)),
         )?;
         Ok(LlmReply {
-            content: String::new(),
-            input_tokens: 0,
+            content: response.message.content,
+            input_tokens: response.prompt_eval_count,
             stopped_at_limit: false,
         })
     }
@@ -148,8 +148,18 @@ struct ShowResponse {
     capabilities: Vec<String>,
 }
 
+/// `prompt_eval_count` is left out when the prompt came from Ollama's cache.
 #[derive(Deserialize)]
-struct ChatResponse {}
+struct ChatResponse {
+    message: ChatMessage,
+    #[serde(default)]
+    prompt_eval_count: u32,
+}
+
+#[derive(Deserialize)]
+struct ChatMessage {
+    content: String,
+}
 
 #[derive(Deserialize)]
 struct TagsModel {
@@ -257,6 +267,25 @@ mod tests {
 
         assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
         chat_mock.assert();
+    }
+
+    #[test]
+    fn it_should_read_the_answer_and_input_tokens() {
+        let mut server = mockito::Server::new();
+        let _chat = server.mock("POST", "/api/chat").with_body(ANSWER).create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply {
+                content: "Three games.".to_string(),
+                input_tokens: 120,
+                stopped_at_limit: false,
+            }
+        );
     }
 
     #[test]
