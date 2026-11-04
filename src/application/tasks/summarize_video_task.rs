@@ -318,6 +318,99 @@ mod tests {
     }
 
     #[test]
+    fn it_should_reduce_answers_in_groups_when_they_do_not_fit() {
+        // At 8192 the budget is ~20400 characters: two 8000-character answers
+        // fit together, a third doesn't.
+        let long_answer = "x".repeat(8000);
+        let scene = Scene {
+            srt: Some(srt_of(45, 60)),
+            video: with_chapters(vec![chapter(0, 2700, "Game 1")]),
+            preferences: Preferences {
+                summaries: SummarySettings {
+                    context_length: ContextLength::new(8192).unwrap(),
+                    ..summaries_on().summaries
+                },
+                ..summaries_on()
+            },
+            ..Scene::default()
+        }
+        .with_replies(vec![
+            reply(&long_answer),
+            reply(&long_answer),
+            reply(&long_answer),
+            reply("Both."),
+            reply("All of it."),
+        ])
+        .build();
+
+        scene.run().unwrap();
+
+        let chats = scene.chats();
+        assert_eq!(chats.len(), 5);
+        assert!(chats[3].system.starts_with("You write the final summary"));
+        assert!(!chats[3].user.contains("Game 1"));
+        assert!(chats[4].user.contains("Game 1"));
+        assert!(chats[4].user.contains("Both."));
+        assert_eq!(
+            scene.stored_summary().map(|summary| summary.text),
+            Some(SummaryText::new("All of it."))
+        );
+    }
+
+    #[test]
+    fn it_should_keep_reducing_until_the_answers_fit() {
+        // Every answer alone is over the ~20400-character budget at 8192.
+        let long_answer = "x".repeat(25000);
+        let scene = Scene {
+            srt: Some(srt_of(45, 60)),
+            preferences: Preferences {
+                summaries: SummarySettings {
+                    context_length: ContextLength::new(8192).unwrap(),
+                    ..summaries_on().summaries
+                },
+                ..summaries_on()
+            },
+            ..Scene::default()
+        }
+        .with_replies(vec![
+            reply(&long_answer),
+            reply(&long_answer),
+            reply(&long_answer),
+            reply(&long_answer),
+            reply("Both."),
+            reply("All of it."),
+        ])
+        .build();
+
+        scene.run().unwrap();
+
+        assert_eq!(scene.chats().len(), 6);
+        assert_eq!(
+            scene.stored_summary().map(|summary| summary.text),
+            Some(SummaryText::new("All of it."))
+        );
+    }
+
+    #[test]
+    fn it_should_list_a_chapter_starting_on_the_parts_last_line() {
+        let scene = Scene {
+            srt: Some(srt_of(45, 60)),
+            video: with_chapters(vec![
+                chapter(0, 1740, "Game 1"),
+                chapter(1740, 1800, "Short"),
+                chapter(1800, 2700, "Game 2"),
+            ]),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("First."), reply("Second."), reply("All of it.")])
+        .build();
+
+        scene.run().unwrap();
+
+        assert!(scene.chats()[0].user.contains("29:00 Short"));
+    }
+
+    #[test]
     fn it_should_cut_parts_at_chapter_starts() {
         let scene = Scene {
             srt: Some(srt_of(45, 60)),

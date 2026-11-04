@@ -2,7 +2,9 @@ use crate::domain::llm_server::{LlmChat, OllamaUrl};
 use crate::domain::preferences::{SummaryPrompt, SummarySettings};
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
 use crate::domain::video::{Video, VideoOwner};
-use crate::domain::video_summary::{SummaryInput, SummaryMessages, SummaryText, VideoSummary};
+use crate::domain::video_summary::{
+    PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
+};
 use crate::domain::video_transcript::TimedTranscript;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
@@ -238,7 +240,37 @@ impl VideoSummarizer {
                 self.ask(video, job, &call, input.part(&job.prompt, index))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        self.ask(video, job, "reduce", input.reduce(&job.prompt, &answers))
+        self.reduced(video, input, job, input.answers(answers))
+    }
+
+    /// The final answer: what doesn't fit one call is first reduced in
+    /// groups, round after round.
+    fn reduced(
+        &self,
+        video: &Video,
+        input: &SummaryInput,
+        job: &SummaryJob,
+        answers: Vec<PartAnswer>,
+    ) -> Result<SummaryText, Failure> {
+        if answers.len() == 1 || input.reduce_fits(&answers) {
+            return self.ask(video, job, "reduce", input.reduce(&job.prompt, &answers));
+        }
+        let groups = input.reduce_groups(&answers);
+        let total = groups.len();
+        let shrunk = groups
+            .iter()
+            .enumerate()
+            .map(|(index, group)| match group.as_slice() {
+                [only] => Ok(only.clone()),
+                _ => {
+                    let call = format!("reduce group {} of {total}", index + 1);
+                    let messages = input.reduce_group(&job.prompt, group);
+                    self.ask(video, job, &call, messages)
+                        .map(|summary| PartAnswer::merged(group, summary))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.reduced(video, input, job, shrunk)
     }
 
     fn ask(

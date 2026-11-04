@@ -17,6 +17,7 @@ Rust
 - `src/domain/video/video_sync_step.rs` — `Summarize` → `Task::SummarizeVideo`.
 - `src/domain/video_transcript/timed_line.rs` — new: one timed line of a transcript.
 - `src/domain/video_summary/summary_messages.rs` — new: a call's system and user messages.
+- `src/domain/video_summary/part_answer.rs` — new: an answer with the span it covers, so a reduce group keeps its `{span}`.
 - `src/domain/video_transcript/timed_transcript.rs` — new: SRT cues as `(start, text)` lines, same cleaning as `TranscriptText::from_srt`; `parts`.
 - `src/domain/video_transcript/transcript_part.rs` — new: one consecutive part of a timed transcript.
 - `src/domain/video_transcript/transcript_text.rs` — share cue cleaning with `TimedTranscript`.
@@ -178,14 +179,15 @@ impl SummaryInput {
     /// `map system` + `map user` for the 0-based `index`.
     pub fn part(&self, prompt: &SummaryPrompt, index: usize) -> SummaryMessages;
     /// `reduce system` + `reduce user`, one `reduce part` per answer.
-    pub fn reduce(&self, prompt: &SummaryPrompt, answers: &[SummaryText]) -> SummaryMessages;
+    pub fn answers(&self, summaries: Vec<SummaryText>) -> Vec<PartAnswer>;
+    pub fn reduce(&self, prompt: &SummaryPrompt, answers: &[PartAnswer]) -> SummaryMessages;
     /// A reduce of `answers` without the chapters.
-    pub fn reduce_group(&self, prompt: &SummaryPrompt, answers: &[SummaryText]) -> SummaryMessages;
+    pub fn reduce_group(&self, prompt: &SummaryPrompt, answers: &[PartAnswer]) -> SummaryMessages;
     /// Whether `answers` and the chapters fit the budget together.
-    pub fn reduce_fits(&self, answers: &[SummaryText]) -> bool;
+    pub fn reduce_fits(&self, answers: &[PartAnswer]) -> bool;
     /// Consecutive groups within the budget, at least two answers each
     /// (a lone last answer stays alone), so each round shrinks.
-    pub fn reduce_groups(&self, answers: &[SummaryText]) -> Vec<Vec<SummaryText>>;
+    pub fn reduce_groups(&self, answers: &[PartAnswer]) -> Vec<Vec<PartAnswer>>;
 }
 
 // domain/services/video_summarizer.rs
