@@ -112,11 +112,13 @@ impl VideoSearcherApi for VideoSearcher {
         &self,
         playlist_id: &PlaylistId,
     ) -> Result<Vec<VideoView>, ListVideosError> {
-        self.playlist_repository
+        let playlist = self
+            .playlist_repository
             .find(playlist_id)
             .map_err(ListVideosError::Repository)?
             .ok_or_else(|| ListVideosError::PlaylistNotFound(playlist_id.clone()))?;
-        let summaries_shown = self.find_preferences()?.summaries_available();
+        let summaries_shown =
+            self.find_preferences()?.summaries_available() && playlist.summaries_enabled;
 
         let playlist_videos = self
             .playlist_video_repository

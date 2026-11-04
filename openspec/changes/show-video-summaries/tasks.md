@@ -9,7 +9,7 @@
 - [x] 2.1 `it_should_include_the_summary_when_listing_playlist_videos`: a listed playlist video carries its stored summary.
 - [x] 2.2 `it_should_hide_the_summary_when_ai_is_off`: AI off hides it, the row stays stored.
 - [x] 2.3 `it_should_hide_the_summary_when_summaries_are_off`: summaries off hides it.
-- [ ] 2.4 `it_should_hide_the_summary_of_a_playlist_with_summaries_off`: the playlist's toggle hides it.
+- [x] 2.4 `it_should_hide_the_summary_of_a_playlist_with_summaries_off`: the playlist's toggle hides it.
 - [ ] 2.5 `it_should_include_the_summary_when_listing_channel_videos`: a listed channel video carries its stored summary.
 - [ ] 2.6 `it_should_hide_the_summary_of_a_channel_with_summaries_off`: the channel's toggle hides it.
 - [ ] 2.7 `it_should_report_no_summary_for_a_video_without_one`: no stored summary reports `None`.
