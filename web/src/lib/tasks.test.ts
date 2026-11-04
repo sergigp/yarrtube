@@ -224,6 +224,18 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskTabs(false)).toEqual(['active', 'downloads', 'syncs', 'other'])
   })
 
+  it('counts every task once across tabs while AI is on', () => {
+    const tasks = [
+      aTask({ id: 1, task_type: 'summarize_video', status: 'running' }),
+      aTask({ id: 2, task_type: 'summarize_video' }),
+      aTask({ id: 3, task_type: 'download_video' }),
+      aTask({ id: 4, task_type: 'reconcile_channel' }),
+      aTask({ id: 5, task_type: 'update_ytdlp' }),
+    ]
+
+    expect(tabCounts(tasks, true)).toEqual({ active: 1, downloads: 1, syncs: 1, ai: 2, other: 1 })
+  })
+
   it('puts Plex label syncs in the other family', () => {
     expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }), false)).toBe('other')
   })
