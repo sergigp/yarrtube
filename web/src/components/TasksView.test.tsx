@@ -142,6 +142,17 @@ describe('TasksView', () => {
     expect(screen.getByText('No tasks here')).toBeInTheDocument()
   })
 
+  it('shows an AI tab with no tasks while AI is on', async () => {
+    mockApi({
+      'GET /api/tasks': [aTask({ task_type: 'download_video' })],
+      'GET /api/preferences': aPreferences({ ai_enabled: true }),
+    })
+
+    renderWithProviders(<TasksView />)
+
+    expect(await screen.findByRole('tab', { name: /^AI/ })).toHaveTextContent('AI0')
+  })
+
   it('shows a live indicator on the Active tab only while a task is running', async () => {
     mockApi({ 'GET /api/tasks': aMixOfTasks() })
     const { unmount } = renderWithProviders(<TasksView />)

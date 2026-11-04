@@ -12,7 +12,7 @@
 - [x] 2.4 `counts every task once across tabs while AI is on`.
 - [x] 2.5 `gives video summaries the ai kind`.
 - [x] 2.6 `lists video summaries under AI while AI is on`: drives `aiEnabled` reading the preferences.
-- [ ] 2.7 `shows an AI tab with no tasks while AI is on`: count 0.
+- [x] 2.7 `shows an AI tab with no tasks while AI is on`: count 0.
 - [ ] 2.8 `shows no AI tab and lists summaries under Other while AI is off`.
 - [ ] 2.9 `shows no AI tab when preferences fail to load`.
 
