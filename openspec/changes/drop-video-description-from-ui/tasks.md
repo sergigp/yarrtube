@@ -10,7 +10,7 @@
 - [x] 2.2 Remove `description` from `VideoResponse` and update its whole-value listing tests; `cargo test --locked` passes.
 - [x] 2.3 VideoDetail `shows the storage location with no More control`: remove the toggle and the `Description` component, then `description` from `web/src/api/types.ts` and `aVideo`, deleting the tests they made obsolete; test passes.
 - [x] 2.4 VideoDetail `shows the status of a video that is not downloaded`: test passes.
-- [ ] 2.5 Replace the "start collapsed" test in `e2e-tests/tests/mobileWatch.spec.js` with one asserting the storage location is visible and no "More" button exists; `scripts/run-tests.sh --only e2e` passes.
+- [x] 2.5 Replace the "start collapsed" test in `e2e-tests/tests/mobileWatch.spec.js` with one asserting the storage location is visible and no "More" button exists; `scripts/run-tests.sh --only e2e` passes.
 
 ## 3. Infrastructure adapters (TDD)
 
