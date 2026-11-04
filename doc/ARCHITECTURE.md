@@ -112,6 +112,13 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    yet. `FetchChapters` (subtitles lane) reads a `DOWNLOADED` video's
    chapters with `yt-dlp` when they were never checked, downloading nothing. Only then does
    it sweep files of the show folder that no stored video accounts for.
+7. `VideoSubtitlesFetched` also has `SyncVideoOnVideoSubtitlesFetched`, which
+   schedules a `SyncVideo` task. When AI and summaries are on and the channel
+   opted in, its reconciler schedules a `SummarizeVideo` task (own `Summaries`
+   lane, one at a time), and so does every later pass for each stored video
+   still without a summary. `VideoSummarizer` fills the prompt and asks Ollama,
+   by map-reduce when the transcript doesn't fit, and stores the result
+   (`video_summaries`). See [AI features](AI.md).
 
 ```mermaid
 sequenceDiagram

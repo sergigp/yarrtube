@@ -66,9 +66,27 @@ spec: decisions here feed OpenSpec changes later.
   update, or be busy. LLM work goes through background tasks that retry
   later; the rest of the app never depends on Ollama being up. Show
   "Ollama reachable?" in status.
-- Use the **OpenAI-compatible API** Ollama exposes (`/v1/chat/completions`,
-  `/v1/embeddings`), so moving to a bigger box or a cloud provider later is a
-  URL and model change.
+- Summaries use Ollama's **native API** (`POST /api/chat`): the
+  OpenAI-compatible one (`/v1/chat/completions`) can't set `num_ctx`, and
+  Ollama truncates input silently at its small default.
+
+### How a summary is generated
+
+- The video sync (`VideoReconciler`) schedules a `summarize_video` task for a
+  downloaded video with fetched subtitles, when AI and summaries are on and
+  its channel or playlist opted in. That backfills a source's stored videos.
+  Tasks run one at a time in their own lane, so a backlog delays nothing else.
+- The task checks all that again when it runs, then fills the prompt with the
+  video's title, duration, language, chapters and transcript. Timed lines come
+  from the `.srt` on disk: the stored transcript has no timings.
+- A transcript over ~73% of the context length is cut into parts, at chapter
+  starts when it can be, and summarized by map-reduce.
+- Ollama down, or the model not installed, changes nothing: a later sync tries
+  again. Any other failure is retried a day later, and the third one marks the
+  video's summary `UNAVAILABLE`. A summary is never regenerated.
+- Everything is logged at info level: the full messages sent, each answer, how
+  long each call and the whole summary took, and the video's length. A full
+  prompt holds the whole transcript, tens of KB per call.
 
 ## Glossary
 

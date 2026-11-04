@@ -29,6 +29,7 @@ pub struct PlaylistDeleter {
 }
 
 impl PlaylistDeleter {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
