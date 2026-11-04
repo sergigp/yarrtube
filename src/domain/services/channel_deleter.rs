@@ -8,6 +8,7 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::Channe
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::sync::Arc;
@@ -19,6 +20,7 @@ pub struct ChannelDeleter {
     repository: Arc<dyn ChannelRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+    video_summary_repository: Arc<dyn VideoSummaryRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     avatar_repository: Arc<dyn ChannelAvatarRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -32,6 +34,7 @@ impl ChannelDeleter {
         repository: Arc<dyn ChannelRepository>,
         video_repository: Arc<dyn VideoRepository>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+        video_summary_repository: Arc<dyn VideoSummaryRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         avatar_repository: Arc<dyn ChannelAvatarRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -42,6 +45,7 @@ impl ChannelDeleter {
             repository,
             video_repository,
             video_transcript_repository,
+            video_summary_repository,
             channel_video_repository,
             avatar_repository,
             event_publisher,
@@ -91,6 +95,9 @@ impl ChannelDeleter {
                 .delete(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
             self.video_transcript_repository
+                .delete(&channel_video.video_id)
+                .map_err(DeleteChannelError::Repository)?;
+            self.video_summary_repository
                 .delete(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
             self.video_categories_repository

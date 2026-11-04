@@ -9,6 +9,7 @@ pub mod fetch_thumbnail_task;
 pub(crate) mod log_capture;
 pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
+pub mod summarize_video_task;
 pub mod sync_plex_labels_task;
 pub mod sync_video_task;
 pub mod update_ytdlp_task;
@@ -17,7 +18,7 @@ pub mod upgrade_quality_task;
 use crate::domain::services::{
     ChannelVideoReconciler, ChapterFetcher, PlaylistVideoReconciler, PlexLabelSyncer,
     QualityUpgrader, SubtitleFetcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
-    VideoReconciler,
+    VideoReconciler, VideoSummarizer,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -36,6 +37,7 @@ use reconcile_playlist_task::ReconcilePlaylistTask;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use summarize_video_task::SummarizeVideoTask;
 use sync_plex_labels_task::SyncPlexLabelsTask;
 use sync_video_task::SyncVideoTask;
 use update_ytdlp_task::UpdateYtdlpTask;
@@ -52,6 +54,7 @@ pub fn registry(
     subtitle_fetcher: Arc<SubtitleFetcher>,
     chapter_fetcher: Arc<ChapterFetcher>,
     quality_upgrader: Arc<QualityUpgrader>,
+    video_summarizer: Arc<VideoSummarizer>,
     video_reconciler: VideoReconciler,
     video_repository: Arc<dyn VideoRepository>,
     video_file_deleter: VideoFileDeleter,
@@ -91,7 +94,14 @@ pub fn registry(
     );
     registry.insert(
         "fetch_chapters".to_string(),
-        Arc::new(FetchChaptersTask::new(video_repository, chapter_fetcher)),
+        Arc::new(FetchChaptersTask::new(
+            video_repository.clone(),
+            chapter_fetcher,
+        )),
+    );
+    registry.insert(
+        "summarize_video".to_string(),
+        Arc::new(SummarizeVideoTask::new(video_repository, video_summarizer)),
     );
     registry.insert(
         "upgrade_quality".to_string(),

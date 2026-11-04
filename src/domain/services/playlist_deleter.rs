@@ -9,6 +9,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::sync::Arc;
@@ -20,6 +21,7 @@ pub struct PlaylistDeleter {
     repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+    video_summary_repository: Arc<dyn VideoSummaryRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
@@ -27,10 +29,12 @@ pub struct PlaylistDeleter {
 }
 
 impl PlaylistDeleter {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+        video_summary_repository: Arc<dyn VideoSummaryRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
@@ -40,6 +44,7 @@ impl PlaylistDeleter {
             repository,
             video_repository,
             video_transcript_repository,
+            video_summary_repository,
             playlist_video_repository,
             event_publisher,
             task_repository,
@@ -85,6 +90,9 @@ impl PlaylistDeleter {
                 .delete(&playlist_video.video_id)
                 .map_err(DeletePlaylistError::Repository)?;
             self.video_transcript_repository
+                .delete(&playlist_video.video_id)
+                .map_err(DeletePlaylistError::Repository)?;
+            self.video_summary_repository
                 .delete(&playlist_video.video_id)
                 .map_err(DeletePlaylistError::Repository)?;
             self.video_categories_repository

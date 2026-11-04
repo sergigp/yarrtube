@@ -5,7 +5,9 @@ use chrono::{DateTime, Utc};
 /// fetch while it has none and is neither being downloaded (the download
 /// records its own) nor Excluded/Errored, a download until it settles, and a
 /// subtitle, chapters or quality check while that late data is unsettled and
-/// due (see the `late-video-data` capability). The thumbnail comes first so
+/// due (see the `late-video-data` capability), and a summary while
+/// `summaries_wanted` and the video needs one (see `video-summaries`). The
+/// thumbnail comes first so
 /// its task gets the lower id and runs before the download holds the video's
 /// key. A step already queued or running is left to `TaskRepository`'s
 /// dedupe.
@@ -15,7 +17,7 @@ pub struct VideoSyncPlan {
 }
 
 impl VideoSyncPlan {
-    pub fn for_video(video: &Video, now: DateTime<Utc>) -> Self {
+    pub fn for_video(video: &Video, summaries_wanted: bool, now: DateTime<Utc>) -> Self {
         let steps = [
             (
                 VideoSyncStep::FetchThumbnail,
@@ -35,6 +37,10 @@ impl VideoSyncPlan {
             (
                 VideoSyncStep::UpgradeQuality,
                 video.is_quality_checkable() && video.quality_checks.is_due(now),
+            ),
+            (
+                VideoSyncStep::Summarize,
+                summaries_wanted && video.is_summarizable(),
             ),
         ]
         .into_iter()

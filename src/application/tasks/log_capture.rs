@@ -7,7 +7,7 @@ use std::sync::Once;
 thread_local! {
     /// The messages captured on this thread while `captured_log_messages`
     /// runs; `None` outside it, so other tests' events are dropped.
-    static CAPTURED: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
+    static CAPTURED: RefCell<Option<Vec<CapturedEvent>>> = const { RefCell::new(None) };
 }
 
 /// Runs `body` capturing the `message` field of each event it logs on this
@@ -15,12 +15,35 @@ thread_local! {
 /// holds) and returns the captured messages — the only way to assert a pure
 /// logging side effect (e.g. a warn event) fires or not.
 pub(crate) fn captured_log_messages(body: impl FnOnce()) -> Vec<String> {
+    captured_events(body)
+        .into_iter()
+        .map(|event| event.message)
+        .collect()
+}
+
+/// Like `captured_log_messages`, each event as
+/// `<LEVEL> <message> <field>=<value>...`, for asserting what a log entry
+/// carries.
+pub(crate) fn captured_log_lines(body: impl FnOnce()) -> Vec<String> {
+    captured_events(body)
+        .into_iter()
+        .map(|event| event.line)
+        .collect()
+}
+
+fn captured_events(body: impl FnOnce()) -> Vec<CapturedEvent> {
     install_capture_subscriber();
     let outer = CAPTURED.with(|captured| captured.replace(Some(Vec::new())));
     body();
     CAPTURED
         .with(|captured| captured.replace(outer))
         .unwrap_or_default()
+}
+
+/// One event: its `message` field alone, and the whole entry.
+struct CapturedEvent {
+    message: String,
+    line: String,
 }
 
 /// Installs, once per test process, a global subscriber interested in every
@@ -50,13 +73,18 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CaptureLayer {
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        struct MessageVisitor<'a>(&'a mut String);
-        impl tracing::field::Visit for MessageVisitor<'_> {
+        #[derive(Default)]
+        struct EventVisitor {
+            message: String,
+            fields: String,
+        }
+        impl tracing::field::Visit for EventVisitor {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-                if field.name() == "message" {
-                    use std::fmt::Write;
-                    let _ = write!(self.0, "{value:?}");
-                }
+                use std::fmt::Write;
+                let _ = match field.name() {
+                    "message" => write!(self.message, "{value:?}"),
+                    name => write!(self.fields, " {name}={value:?}"),
+                };
             }
         }
 
@@ -64,10 +92,18 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CaptureLayer {
             if captured.borrow().is_none() {
                 return;
             }
-            let mut message = String::new();
-            event.record(&mut MessageVisitor(&mut message));
-            if let Some(messages) = captured.borrow_mut().as_mut() {
-                messages.push(message);
+            let mut visitor = EventVisitor::default();
+            event.record(&mut visitor);
+            if let Some(events) = captured.borrow_mut().as_mut() {
+                events.push(CapturedEvent {
+                    line: format!(
+                        "{} {}{}",
+                        event.metadata().level(),
+                        visitor.message,
+                        visitor.fields
+                    ),
+                    message: visitor.message,
+                });
             }
         });
     }

@@ -3,6 +3,7 @@ use super::late_data_checks::LateDataChecks;
 use super::late_data_outcome::LateDataOutcome;
 use super::playback_position::PlaybackPosition;
 use super::subtitle_state::SubtitleState;
+use super::summary_state::SummaryState;
 use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
@@ -72,6 +73,7 @@ pub struct Video {
     pub quality_checks: LateDataChecks,
     /// Whether the downloaded quality is final: never checked again.
     pub quality_settled: bool,
+    pub summary_state: SummaryState,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -105,6 +107,7 @@ impl Video {
             downloaded_height: None,
             quality_checks: LateDataChecks::default(),
             quality_settled: false,
+            summary_state: SummaryState::Missing,
         }
     }
 
@@ -363,6 +366,30 @@ impl Video {
     /// chapters unsettled.
     pub fn is_chapters_fetchable(&self) -> bool {
         self.is_downloaded() && !self.chapters_settled
+    }
+
+    /// Downloaded, subtitles Fetched, summary Missing.
+    pub fn is_summarizable(&self) -> bool {
+        self.is_downloaded()
+            && self.subtitle_state == SubtitleState::Fetched
+            && self.summary_state == SummaryState::Missing
+    }
+
+    pub fn mark_summary_generated(self, now: DateTime<Utc>) -> Self {
+        Self {
+            summary_state: SummaryState::Generated,
+            updated_at: now,
+            ..self
+        }
+    }
+
+    /// The generation is given up: only new summary settings bring it back.
+    pub fn mark_summary_unavailable(self, now: DateTime<Utc>) -> Self {
+        Self {
+            summary_state: SummaryState::Unavailable,
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Test fixture: sets the chapters alone, without recording a check
@@ -797,6 +824,40 @@ mod tests {
             unavailable,
             Video {
                 subtitle_state: SubtitleState::Unavailable,
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_record_its_generated_summary() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video();
+
+        let generated = video.clone().mark_summary_generated(now);
+
+        assert_eq!(
+            generated,
+            Video {
+                summary_state: SummaryState::Generated,
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_give_up_on_a_summary() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video();
+
+        let unavailable = video.clone().mark_summary_unavailable(now);
+
+        assert_eq!(
+            unavailable,
+            Video {
+                summary_state: SummaryState::Unavailable,
                 updated_at: now,
                 ..video
             }

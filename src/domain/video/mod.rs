@@ -14,6 +14,7 @@ pub mod playback_position;
 pub mod playlist_episode_number;
 pub mod sourced_video;
 pub mod subtitle_state;
+pub mod summary_state;
 #[allow(clippy::module_inception)]
 pub mod video;
 pub mod video_chapter;
@@ -47,6 +48,7 @@ pub use playback_position::PlaybackPosition;
 pub use playlist_episode_number::PlaylistEpisodeNumber;
 pub use sourced_video::{SourcedVideo, VideoSource};
 pub use subtitle_state::SubtitleState;
+pub use summary_state::SummaryState;
 pub use video::Video;
 pub use video_chapter::VideoChapter;
 pub use video_duration::VideoDuration;

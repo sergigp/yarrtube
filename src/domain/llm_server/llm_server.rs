@@ -6,3 +6,10 @@ pub struct LlmServer {
     pub version: String,
     pub models: Vec<LlmModel>,
 }
+
+impl LlmServer {
+    /// The installed model called `name`.
+    pub fn model(&self, name: &str) -> Option<&LlmModel> {
+        self.models.iter().find(|model| model.name == name)
+    }
+}

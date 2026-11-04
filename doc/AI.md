@@ -56,8 +56,9 @@ spec: decisions here feed OpenSpec changes later.
   tokens, ~¾ of a word. A 30 min transcript ≈ 7k tokens, 1 h ≈ 15k. Longer
   context costs more RAM, so long videos won't fit in one call on 8GB.
 - Rough speed: reading the input runs at a few hundred tokens/s, writing at
-  ~15–30 tokens/s. Summarizing a 10k-token transcript ≈ 1 min. Fine for
-  background work; a backlog of 2,000 videos is a night of work.
+  ~15–30 tokens/s. A summary takes about 1 min without thinking; with
+  `qwen3:4b` and thinking on, the default, the evals average ~5 min. Fine for
+  background work, but a backlog of 2,000 videos is about a week.
 
 ### Topology
 
@@ -66,9 +67,46 @@ spec: decisions here feed OpenSpec changes later.
   update, or be busy. LLM work goes through background tasks that retry
   later; the rest of the app never depends on Ollama being up. Show
   "Ollama reachable?" in status.
-- Use the **OpenAI-compatible API** Ollama exposes (`/v1/chat/completions`,
-  `/v1/embeddings`), so moving to a bigger box or a cloud provider later is a
-  URL and model change.
+- Summaries use Ollama's **native API** (`POST /api/chat`): the
+  OpenAI-compatible one (`/v1/chat/completions`) can't set `num_ctx`, and
+  Ollama truncates input silently at its small default.
+- Summaries send `truncate: false` and `shift: false`. Otherwise Ollama cuts an
+  oversized prompt to about half the context (0.40.13) and reports only what it
+  kept, so nothing shows the summary covers a fragment. Refused, it answers
+  400 at once with the exact token count.
+
+### How a summary is generated
+
+- The video sync (`VideoReconciler`) schedules a `summarize_video` task for a
+  downloaded video with fetched subtitles, when AI and summaries are on and
+  its channel or playlist opted in. That backfills a source's stored videos.
+  Tasks run one at a time in their own lane, so a backlog doesn't hold other
+  lanes back. Like any running task, a summary does hold back an exclusive
+  task (`update_ytdlp`, hourly), and whatever waits behind it, until it ends.
+- The task checks all that again when it runs, then fills the prompt with the
+  video's title, duration, language, chapters and transcript. Timed lines come
+  from the `.srt` on disk: the stored transcript has no timings.
+- A transcript over ~73% of the context length is cut into parts, at chapter
+  starts when it can be, and summarized by map-reduce. Size is estimated at 4.3
+  characters per token for English, 1.5 for Japanese, Chinese and Korean, and
+  3.4 otherwise. Answers that don't fit one reduce are reduced in groups first.
+- Ollama down, or the model not installed, skips the run and changes nothing:
+  a later sync tries again.
+- Any other failure fails the task, and the queue retries it with its usual
+  backoff. When the retries run out, a rejected call (cut off at the output
+  cap, empty, refused as too long, past the 30-minute timeout) or an unreadable
+  transcript marks the video's summary `UNAVAILABLE`, while a server fault
+  (connection error, 5xx, 404) leaves it for a later sync.
+- Changing the Ollama URL or any summary setting puts every `UNAVAILABLE` video
+  back in line: the new settings may work. A stored summary is never
+  regenerated.
+- Context length is the user's call. A low one leaves little room to think, so
+  summaries will fail, each logged at error level with its reason, until it is
+  raised.
+- Everything is logged at info level: the full messages sent, each answer, how
+  long each call and the whole summary took, and the video's length. A full
+  prompt holds the whole transcript, tens of KB per call. Failures are logged
+  at error level.
 
 ## Glossary
 

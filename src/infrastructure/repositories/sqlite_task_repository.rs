@@ -904,6 +904,23 @@ mod tests {
         assert_eq!(found, None);
     }
 
+    #[test]
+    fn it_should_not_queue_a_second_summary() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let task = Task::SummarizeVideo {
+            video_id: "rec1".to_string(),
+        };
+
+        repo.schedule(&task, now).unwrap();
+        repo.schedule(&task, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &task, now, now)]
+        );
+    }
+
     fn download_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),

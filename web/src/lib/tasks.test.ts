@@ -97,6 +97,20 @@ describe('describeTask', () => {
     expect(taskKind(aTask({ task_type: 'fetch_chapters' }))).toBe('download')
   })
 
+  it('describes a summarize task', () => {
+    expect(
+      describeTask(
+        aTask({
+          task_type: 'summarize_video',
+          payload: { video_title: 'Intro', channel_name: 'Chan' },
+        }),
+      ),
+    ).toBe('Summarizing Intro in Chan')
+    expect(describeTask(aTask({ task_type: 'summarize_video', payload: {} }))).toBe(
+      'Summarizing a video in an unknown playlist or channel',
+    )
+  })
+
   it('describes a quality check under downloads', () => {
     expect(
       describeTask(

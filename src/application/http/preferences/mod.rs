@@ -83,10 +83,16 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 mod tests {
     use super::*;
     use crate::domain::preferences::{Preferences, SummarySettings};
+    use crate::domain::video::{SummaryState, Video, VideoId};
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Duration, Utc};
     use rusqlite::Connection;
     use std::sync::Arc;
 
@@ -127,10 +133,91 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_reset_unavailable_summaries_when_the_summary_settings_change() {
+        let requests = [
+            UpdatePreferencesRequest {
+                ollama_url: Some("http://other.local:11434".to_string()),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_model: Some("gemma3:4b".to_string()),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_context_length: Some(16384),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_temperature: Some(0.5),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_thinking: Some(false),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_prompt: Some(Some(edited_prompt())),
+                ..UpdatePreferencesRequest::default()
+            },
+        ];
+
+        for request in requests {
+            let db = TestDatabase::new();
+            let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let video_repository = SqliteVideoRepository::new(db.database());
+            let video = unavailable_video();
+            video_repository.save(&video).unwrap();
+            let preferences_updater = preferences_updater(&db, repository.clone());
+
+            update(preferences_updater, request).await.unwrap();
+
+            assert_eq!(
+                video_repository.find(&video.id).unwrap(),
+                Some(Video {
+                    summary_state: SummaryState::Missing,
+                    updated_at: fixed_timestamp(),
+                    ..video
+                })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_unavailable_summaries_on_an_unrelated_change() {
+        let requests = [
+            UpdatePreferencesRequest {
+                categories_enabled: Some(false),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_enabled: Some(true),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_context_length: Some(12288),
+                ..UpdatePreferencesRequest::default()
+            },
+        ];
+
+        for request in requests {
+            let db = TestDatabase::new();
+            let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let video_repository = SqliteVideoRepository::new(db.database());
+            let video = unavailable_video();
+            video_repository.save(&video).unwrap();
+            let preferences_updater = preferences_updater(&db, repository.clone());
+
+            update(preferences_updater, request).await.unwrap();
+
+            assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+        }
+    }
+
+    #[tokio::test]
     async fn it_should_save_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             categories_enabled: Some(false),
             ..UpdatePreferencesRequest::default()
@@ -164,7 +251,7 @@ mod tests {
                 ..Preferences::default()
             })
             .unwrap();
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             categories_enabled: Some(false),
             ..UpdatePreferencesRequest::default()
@@ -200,7 +287,7 @@ mod tests {
                 ..Preferences::default()
             })
             .unwrap();
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
 
         let response = update(preferences_updater, UpdatePreferencesRequest::default()).await;
 
@@ -224,7 +311,7 @@ mod tests {
     async fn it_should_save_the_ollama_url_without_trailing_slash() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             ollama_url: Some("http://mac.local:11434/".to_string()),
             ..UpdatePreferencesRequest::default()
@@ -258,7 +345,7 @@ mod tests {
                 ..Preferences::default()
             })
             .unwrap();
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             ollama_url: Some(String::new()),
             ..UpdatePreferencesRequest::default()
@@ -274,7 +361,7 @@ mod tests {
     async fn it_should_enable_ai_with_a_url() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             ai_enabled: Some(true),
             ollama_url: Some("http://mac.local:11434".to_string()),
@@ -305,7 +392,7 @@ mod tests {
     async fn it_should_fail_to_enable_ai_without_a_url() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             ai_enabled: Some(true),
             ..UpdatePreferencesRequest::default()
@@ -330,7 +417,7 @@ mod tests {
             ..Preferences::default()
         };
         repository.save(&saved).unwrap();
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             ollama_url: Some(String::new()),
             ..UpdatePreferencesRequest::default()
@@ -349,7 +436,7 @@ mod tests {
     async fn it_should_save_the_summary_settings() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             summaries_enabled: Some(true),
             summaries_model: Some("gemma3:4b".to_string()),
@@ -392,7 +479,7 @@ mod tests {
     async fn it_should_fail_if_temperature_out_of_range() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             categories_enabled: Some(false),
             summaries_temperature: Some(5.0),
@@ -414,7 +501,7 @@ mod tests {
     async fn it_should_save_an_edited_prompt() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let prompt = edited_prompt();
         let request = UpdatePreferencesRequest {
             summaries_prompt: Some(Some(prompt.clone())),
@@ -447,7 +534,7 @@ mod tests {
     async fn it_should_not_store_the_prompt_when_saving_other_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             summaries_enabled: Some(true),
             ..UpdatePreferencesRequest::default()
@@ -488,7 +575,7 @@ mod tests {
                 ..Preferences::default()
             })
             .unwrap();
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request: UpdatePreferencesRequest =
             serde_json::from_str(r#"{"summaries_prompt": null}"#).unwrap();
 
@@ -527,7 +614,7 @@ mod tests {
             ..Preferences::default()
         };
         repository.save(&saved).unwrap();
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             theme: Some("dark".to_string()),
             ..UpdatePreferencesRequest::default()
@@ -557,7 +644,7 @@ mod tests {
     async fn it_should_save_the_theme() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             theme: Some("dark".to_string()),
             ..UpdatePreferencesRequest::default()
@@ -642,9 +729,33 @@ mod tests {
     /// repository sits on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
     fn any_preferences_updater() -> PreferencesUpdater {
-        PreferencesUpdater::new(Arc::new(SqlitePreferencesRepository::new(
-            Database::single(Connection::open_in_memory().unwrap()),
-        )))
+        let database = || Database::single(Connection::open_in_memory().unwrap());
+        PreferencesUpdater::new(
+            Arc::new(SqlitePreferencesRepository::new(database())),
+            Arc::new(SqliteVideoRepository::new(database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    fn preferences_updater(
+        db: &TestDatabase,
+        repository: Arc<SqlitePreferencesRepository>,
+    ) -> PreferencesUpdater {
+        PreferencesUpdater::new(
+            repository,
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn unavailable_video() -> Video {
+        let created = fixed_timestamp() - Duration::days(1);
+        Video::create(VideoId::new("yt1").unwrap(), "A video", created)
+            .mark_summary_unavailable(created)
     }
 
     /// The shipped prompt with one rule added to its `system` section.

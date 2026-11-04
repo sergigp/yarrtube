@@ -1,5 +1,6 @@
-use crate::domain::llm_server::{LlmModel, LlmServer, OllamaUrl};
+use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
 use anyhow::Context;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
@@ -8,26 +9,41 @@ use std::time::Duration;
 /// doesn't answer fails it quickly.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// A summary takes minutes on a small machine, and thinking can loop for an
+/// hour: past this, the call has failed.
+const CHAT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
 /// Port to an LLM server's HTTP API.
 pub trait LlmServerRepository: Send + Sync {
     /// The server at `url`: its version and installed models, each with
     /// whether it can think.
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer>;
+    /// What the model says to `chat`: `POST /api/chat`, unstreamed.
+    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply>;
 }
 
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
-#[derive(Default)]
-pub struct OllamaLlmServerRepository;
+pub struct OllamaLlmServerRepository {
+    chat_timeout: Duration,
+}
 
 impl OllamaLlmServerRepository {
     pub fn new() -> Self {
-        Self
+        Self {
+            chat_timeout: CHAT_TIMEOUT,
+        }
+    }
+}
+
+impl Default for OllamaLlmServerRepository {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl LlmServerRepository for OllamaLlmServerRepository {
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer> {
-        let client = Self::client()?;
+        let client = Self::client(REQUEST_TIMEOUT)?;
         let version: VersionResponse = Self::get_json(&client, url, "/api/version")?;
         let tags: TagsResponse = Self::get_json(&client, url, "/api/tags")?;
         let models = tags
@@ -40,15 +56,72 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             models,
         })
     }
+
+    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
+        let client = Self::client(self.chat_timeout)?;
+        let sent = client
+            .post(format!("{url}/api/chat"))
+            .json(&Self::chat_body(chat))
+            .send();
+        let response = match sent {
+            Err(e) if e.is_timeout() && !e.is_connect() => {
+                let minutes = self.chat_timeout.as_secs() / 60;
+                return Ok(LlmReply::refused(format!(
+                    "no answer within {minutes} minutes"
+                )));
+            }
+            sent => sent?,
+        };
+        if response.status() == StatusCode::BAD_REQUEST {
+            return Ok(LlmReply::refused(Self::refusal(response)?));
+        }
+        let response: ChatResponse = response
+            .error_for_status()?
+            .json()
+            .context("/api/chat didn't answer as Ollama does")?;
+        Ok(LlmReply {
+            content: response.message.content,
+            input_tokens: response.prompt_eval_count,
+            stopped_at_limit: response.done_reason.as_deref() == Some("length"),
+            refusal: None,
+        })
+    }
 }
 
 impl OllamaLlmServerRepository {
     /// A fresh client per check, as for Plex: a blocking client whose
     /// private thread died would fail every later request.
-    fn client() -> anyhow::Result<reqwest::blocking::Client> {
+    fn client(timeout: Duration) -> anyhow::Result<reqwest::blocking::Client> {
         Ok(reqwest::blocking::Client::builder()
-            .timeout(REQUEST_TIMEOUT)
+            .connect_timeout(REQUEST_TIMEOUT)
+            .timeout(timeout)
             .build()?)
+    }
+
+    fn refusal(response: reqwest::blocking::Response) -> anyhow::Result<String> {
+        let refusal: ChatRefusal = response
+            .json()
+            .context("/api/chat didn't answer as Ollama does")?;
+        Ok(refusal.error)
+    }
+
+    fn chat_body(chat: &LlmChat) -> serde_json::Value {
+        serde_json::json!({
+            "model": chat.model,
+            "stream": false,
+            "truncate": false,
+            "shift": false,
+            "think": chat.thinking,
+            "options": {
+                "num_ctx": chat.context_length,
+                "temperature": chat.temperature,
+                "num_predict": chat.max_output_tokens,
+            },
+            "messages": [
+                {"role": "system", "content": chat.system},
+                {"role": "user", "content": chat.user},
+            ],
+        })
     }
 
     /// `model` with its capabilities (`POST /api/show`).
@@ -108,6 +181,24 @@ struct ShowResponse {
 }
 
 #[derive(Deserialize)]
+struct ChatRefusal {
+    error: String,
+}
+
+#[derive(Deserialize)]
+struct ChatResponse {
+    message: ChatMessage,
+    #[serde(default)]
+    prompt_eval_count: u32,
+    done_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ChatMessage {
+    content: String,
+}
+
+#[derive(Deserialize)]
 struct TagsModel {
     name: String,
     size: u64,
@@ -117,19 +208,51 @@ struct TagsModel {
 #[cfg(test)]
 pub struct FakeLlmServerRepository {
     server: Option<LlmServer>,
+    /// The answers `chat` gives, in order; once used up, it fails.
+    replies: std::sync::Mutex<std::collections::VecDeque<anyhow::Result<LlmReply>>>,
+    chats: std::sync::Mutex<Vec<LlmChat>>,
+    on_chat: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
 #[cfg(test)]
 impl FakeLlmServerRepository {
     pub fn new(server: LlmServer) -> Self {
-        Self {
-            server: Some(server),
-        }
+        Self::with(Some(server))
     }
 
     /// A server that is down: every call fails.
     pub fn failing() -> Self {
-        Self { server: None }
+        Self::with(None)
+    }
+
+    /// Answers `chat` with `replies`, in order.
+    pub fn with_replies(self, replies: Vec<anyhow::Result<LlmReply>>) -> Self {
+        Self {
+            replies: std::sync::Mutex::new(replies.into()),
+            ..self
+        }
+    }
+
+    /// Runs `hook` while `chat` is in flight.
+    pub fn with_on_chat(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            on_chat: Some(Box::new(hook)),
+            ..self
+        }
+    }
+
+    /// The chats received, in order.
+    pub fn chats(&self) -> Vec<LlmChat> {
+        self.chats.lock().unwrap().clone()
+    }
+
+    fn with(server: Option<LlmServer>) -> Self {
+        Self {
+            server,
+            replies: Default::default(),
+            chats: Default::default(),
+            on_chat: None,
+        }
     }
 }
 
@@ -140,12 +263,168 @@ impl LlmServerRepository for FakeLlmServerRepository {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("connection refused"))
     }
+
+    fn chat(&self, _url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
+        self.chats.lock().unwrap().push(chat.clone());
+        if let Some(hook) = &self.on_chat {
+            hook();
+        }
+        self.replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| Err(anyhow::anyhow!("no reply left")))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::llm_server::LlmModel;
+
+    #[test]
+    fn it_should_post_the_chat_with_its_options() {
+        let mut server = mockito::Server::new();
+        let chat_mock = server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::Json(serde_json::json!({
+                "model": "qwen3:4b",
+                "stream": false,
+                "truncate": false,
+                "shift": false,
+                "think": true,
+                "options": {"num_ctx": 12288, "temperature": 0.3, "num_predict": 3288},
+                "messages": [
+                    {"role": "system", "content": "Be brief."},
+                    {"role": "user", "content": "Title: Sicilian"},
+                ],
+            })))
+            .with_body(ANSWER)
+            .create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
+        chat_mock.assert();
+    }
+
+    #[test]
+    fn it_should_read_the_answer_and_input_tokens() {
+        let mut server = mockito::Server::new();
+        let _chat = server.mock("POST", "/api/chat").with_body(ANSWER).create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply {
+                content: "Three games.".to_string(),
+                input_tokens: 120,
+                stopped_at_limit: false,
+                refusal: None,
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_reply_stopped_at_the_limit() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_body(r#"{"message": {"content": "Three"}, "done_reason": "length"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert!(reply.stopped_at_limit);
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_on_a_bad_request() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_status(400)
+            .with_body(r#"{"error": "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused(
+                "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_when_the_answer_takes_too_long() {
+        // Connections queue in the backlog but nobody ever answers.
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = OllamaUrl::new(format!("http://{}", silent.local_addr().unwrap())).unwrap();
+        let repository = OllamaLlmServerRepository {
+            chat_timeout: Duration::from_millis(100),
+        };
+
+        let reply = repository.chat(&url, &chat()).unwrap();
+
+        assert_eq!(reply, LlmReply::refused("no answer within 0 minutes"));
+    }
+
+    #[test]
+    fn it_should_fail_on_an_error_status() {
+        let mut server = mockito::Server::new();
+        let _chat = server.mock("POST", "/api/chat").with_status(500).create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "HTTP status server error (500 Internal Server Error) for url ({}/api/chat)",
+                server.url()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_fail_if_the_model_is_not_found() {
+        let mut server = mockito::Server::new();
+        let _chat = server.mock("POST", "/api/chat").with_status(404).create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "HTTP status client error (404 Not Found) for url ({}/api/chat)",
+                server.url()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_fail_on_an_answer_that_is_not_ollamas() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_body("<html>not ollama</html>")
+            .create();
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err("/api/chat didn't answer as Ollama does".to_string())
+        );
+    }
 
     #[test]
     fn it_should_read_the_version_and_models() {
@@ -272,5 +551,19 @@ mod tests {
 
     fn url(server: &mockito::Server) -> OllamaUrl {
         OllamaUrl::new(server.url()).unwrap()
+    }
+
+    const ANSWER: &str = r#"{"message": {"role": "assistant", "content": "Three games."}, "done_reason": "stop", "prompt_eval_count": 120}"#;
+
+    fn chat() -> LlmChat {
+        LlmChat {
+            model: "qwen3:4b".to_string(),
+            system: "Be brief.".to_string(),
+            user: "Title: Sicilian".to_string(),
+            context_length: 12288,
+            temperature: 0.3,
+            thinking: true,
+            max_output_tokens: 3288,
+        }
     }
 }

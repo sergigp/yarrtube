@@ -18,6 +18,7 @@ pub mod sqlite_task_repository;
 pub mod sqlite_video_categories_repository;
 pub mod sqlite_video_metadata_repository;
 pub mod sqlite_video_repository;
+pub mod sqlite_video_summary_repository;
 pub mod sqlite_video_transcript_repository;
 pub mod task_executor;
 pub mod task_handler;
