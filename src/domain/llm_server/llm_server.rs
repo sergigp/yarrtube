@@ -9,7 +9,7 @@ pub struct LlmServer {
 
 impl LlmServer {
     /// The installed model called `name`.
-    pub fn model(&self, _name: &str) -> Option<&LlmModel> {
-        None
+    pub fn model(&self, name: &str) -> Option<&LlmModel> {
+        self.models.iter().find(|model| model.name == name)
     }
 }

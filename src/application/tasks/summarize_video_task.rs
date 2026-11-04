@@ -263,6 +263,33 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_ask_for_thinking_only_when_the_model_supports_it() {
+        let thinking_asked = [(true, true), (true, false), (false, true), (false, false)].map(
+            |(setting, capable)| {
+                let scene = Scene {
+                    preferences: with_summaries(|settings| SummarySettings {
+                        thinking: setting,
+                        ..settings
+                    }),
+                    llm: FakeLlmServerRepository::new(server_with(LlmModel {
+                        thinking: capable,
+                        ..thinking_model()
+                    })),
+                    ..Scene::default()
+                }
+                .with_replies(vec![reply("Three games.")])
+                .build();
+
+                scene.run().unwrap();
+
+                scene.chats()[0].thinking
+            },
+        );
+
+        assert_eq!(thinking_asked, [true, false, false, false]);
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

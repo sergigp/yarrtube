@@ -78,6 +78,11 @@ impl VideoSummarizer {
             .video_owner_finder
             .find(video)?
             .context("video has no owner")?;
+        let server = self.llm_server_repository.find(&url)?;
+        let thinking = settings.thinking
+            && server
+                .model(settings.model.as_str())
+                .is_some_and(|model| model.thinking);
         let prompt = settings.effective_prompt();
         let input = self.summary_input(video, &owner, &settings)?;
         let messages = input.whole(&prompt);
@@ -87,7 +92,7 @@ impl VideoSummarizer {
             user: messages.user,
             context_length: settings.context_length.value(),
             temperature: settings.temperature.value(),
-            thinking: settings.thinking,
+            thinking,
             max_output_tokens: settings.context_length.output_budget_tokens(),
         };
         let reply = self.llm_server_repository.chat(&url, &chat)?;
