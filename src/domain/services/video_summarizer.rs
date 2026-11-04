@@ -138,16 +138,22 @@ impl VideoSummarizer {
 
     fn generate(&self, video: &Video, job: &SummaryJob) {
         if let Err(e) = self.try_generate(video, job) {
-            warn!(video_id = %video.id, error = %e, "failed to summarize video");
-            self.record_failure(video);
+            let failed = video.clone().record_summary_failure(self.clock.now());
+            warn!(
+                video_id = %video.id,
+                error = format!("{e:#}"),
+                failed_attempts = failed.summary_checks.failed_attempts,
+                state = failed.summary_state.as_str(),
+                "failed to summarize video"
+            );
+            self.record_failure(video, &failed);
         }
     }
 
     /// Best effort, like the generation: a failure to record it is only
     /// logged.
-    fn record_failure(&self, video: &Video) {
-        let failed = video.clone().record_summary_failure(self.clock.now());
-        if let Err(e) = self.video_repository.update_summary(&failed) {
+    fn record_failure(&self, video: &Video, failed: &Video) {
+        if let Err(e) = self.video_repository.update_summary(failed) {
             warn!(video_id = %video.id, error = %e, "failed to record a failed summary");
         }
     }

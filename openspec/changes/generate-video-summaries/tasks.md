@@ -57,7 +57,7 @@
 - [x] 2.49 `web/src/lib/tasks.test.ts`: `describes a summarize task` — `Summarizing <video>`; fallback without a title. Verify: test red, then green.
 - [x] 2.50 `src/application/tasks/summarize_video_task.rs (logging)`: `it_should_log_each_calls_prompt_answer_and_duration` — captured info logs hold both messages, the answer and `duration_seconds`. Verify: test red, then green.
 - [x] 2.51 `src/application/tasks/summarize_video_task.rs (logging)`: `it_should_log_the_summary_total_time_and_video_length` — final entry fields. Verify: test red, then green.
-- [ ] 2.52 `src/application/tasks/summarize_video_task.rs (logging)`: `it_should_log_why_a_generation_was_skipped_or_failed` — info reason on skip, warn reason on failure. Verify: test red, then green.
+- [x] 2.52 `src/application/tasks/summarize_video_task.rs (logging)`: `it_should_log_why_a_generation_was_skipped_or_failed` — info reason on skip, warn reason on failure. Verify: test red, then green.
 
 ## 3. Infrastructure adapters (TDD)
 

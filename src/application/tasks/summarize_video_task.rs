@@ -768,6 +768,35 @@ mod tests {
         assert!(generated.contains("duration_seconds="));
     }
 
+    #[test]
+    fn it_should_log_why_a_generation_was_skipped_or_failed() {
+        let opted_out = Scene {
+            summaries_enabled: false,
+            ..Scene::default()
+        }
+        .build();
+        let failing = Scene::default()
+            .with_replies(vec![Err(anyhow::anyhow!("model crashed"))])
+            .build();
+
+        let skipped = captured_log_lines(|| opted_out.run().unwrap());
+        let failed = captured_log_lines(|| failing.run().unwrap());
+
+        assert!(
+            skipped
+                .iter()
+                .any(|line| line.starts_with("INFO skipped video summary")
+                    && line.contains("its channel or playlist has summaries off"))
+        );
+        assert!(
+            failed
+                .iter()
+                .any(|line| line.starts_with("WARN failed to summarize video")
+                    && line.contains("model crashed")
+                    && line.contains("failed_attempts=1"))
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
