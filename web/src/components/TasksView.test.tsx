@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
-import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
+import {
+  aPreferences,
+  aTask,
+  mockApi,
+  pendingForever,
+  renderWithProviders,
+} from '@/test/helpers'
 
 // A spread of tasks across every family, with one running task per the Active tab.
 function aMixOfTasks() {
@@ -42,6 +48,13 @@ function aMixOfTasks() {
       payload: {},
     }),
   ]
+}
+
+function aSummaryTask() {
+  return aTask({
+    task_type: 'summarize_video',
+    payload: { video_title: 'Intro', channel_name: 'Chan' },
+  })
 }
 
 describe('TasksView', () => {
@@ -112,6 +125,21 @@ describe('TasksView', () => {
       'Syncs1',
       'Other2',
     ])
+  })
+
+  it('lists video summaries under AI while AI is on', async () => {
+    mockApi({
+      'GET /api/tasks': [aSummaryTask()],
+      'GET /api/preferences': aPreferences({ ai_enabled: true }),
+    })
+    renderWithProviders(<TasksView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('tab', { name: /^AI/ }))
+    expect(screen.getByText('Summarizing Intro in Chan')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^Other/ }))
+    expect(screen.getByText('No tasks here')).toBeInTheDocument()
   })
 
   it('shows a live indicator on the Active tab only while a task is running', async () => {
