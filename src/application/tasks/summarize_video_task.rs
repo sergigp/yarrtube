@@ -428,6 +428,40 @@ mod tests {
         assert_eq!((chats_with("en-US"), chats_with("es")), (1, 3));
     }
 
+    #[test]
+    fn it_should_do_nothing_when_summaries_are_no_longer_available() {
+        let changed: Vec<(Vec<LlmChat>, SummaryState)> = [
+            Preferences {
+                ai_enabled: false,
+                ..summaries_on()
+            },
+            with_summaries(|settings| SummarySettings {
+                enabled: false,
+                ..settings
+            }),
+        ]
+        .into_iter()
+        .map(|preferences| {
+            let scene = Scene {
+                preferences,
+                ..Scene::default()
+            }
+            .with_replies(vec![reply("Three games.")])
+            .build();
+            scene.run().unwrap();
+            (scene.chats(), scene.stored_video().summary_state)
+        })
+        .collect();
+
+        assert_eq!(
+            changed,
+            vec![
+                (vec![], SummaryState::Missing),
+                (vec![], SummaryState::Missing)
+            ]
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

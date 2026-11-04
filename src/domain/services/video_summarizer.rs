@@ -13,7 +13,7 @@ use crate::infrastructure::repositories::sqlite_video_transcript_repository::Vid
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// What every call of one generation shares.
 struct SummaryJob {
@@ -21,6 +21,21 @@ struct SummaryJob {
     settings: SummarySettings,
     thinking: bool,
     prompt: SummaryPrompt,
+    owner: VideoOwner,
+}
+
+/// Why a video isn't summarized now. Nothing about the video changes.
+enum Skip {
+    /// It shouldn't be, for now or for good.
+    NotWanted(&'static str),
+    /// It should be, but something outside the video stops it.
+    Blocked(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Skip {
+    fn from(error: anyhow::Error) -> Self {
+        Self::Blocked(error)
+    }
 }
 
 /// Writes a video's AI summary through the LLM server — see the
@@ -71,15 +86,26 @@ pub trait VideoSummarizerApi: Send + Sync {
 
 impl VideoSummarizerApi for VideoSummarizer {
     fn summarize(&self, video: &Video) {
-        if let Err(e) = self.generate(video) {
-            warn!(video_id = %video.id, error = %e, "failed to summarize video");
+        match self.prepare(video) {
+            Ok(job) => self.generate(video, &job),
+            Err(Skip::NotWanted(reason)) => {
+                info!(video_id = %video.id, reason, "skipped video summary");
+            }
+            Err(Skip::Blocked(reason)) => {
+                warn!(video_id = %video.id, %reason, "couldn't summarize video");
+            }
         }
     }
 }
 
 impl VideoSummarizer {
-    fn generate(&self, video: &Video) -> anyhow::Result<()> {
+    /// What the generation needs, unless the video shouldn't or can't be
+    /// summarized now.
+    fn prepare(&self, video: &Video) -> Result<SummaryJob, Skip> {
         let preferences = self.preferences_repository.find()?.unwrap_or_default();
+        if !preferences.summaries_available() {
+            return Err(Skip::NotWanted("AI summaries are off"));
+        }
         let url = preferences.ollama_url.context("no Ollama URL is saved")?;
         let settings = preferences.summaries;
         let owner = self
@@ -92,14 +118,24 @@ impl VideoSummarizer {
                 .model(settings.model.as_str())
                 .is_some_and(|model| model.thinking);
         let prompt = settings.effective_prompt();
-        let input = self.summary_input(video, &owner, &settings)?;
-        let job = SummaryJob {
+        Ok(SummaryJob {
             url,
             settings,
             thinking,
             prompt,
-        };
-        let text = self.write_summary(&input, &job)?;
+            owner,
+        })
+    }
+
+    fn generate(&self, video: &Video, job: &SummaryJob) {
+        if let Err(e) = self.try_generate(video, job) {
+            warn!(video_id = %video.id, error = %e, "failed to summarize video");
+        }
+    }
+
+    fn try_generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<()> {
+        let input = self.summary_input(video, job)?;
+        let text = self.write_summary(&input, job)?;
         let now = self.clock.now();
         self.video_summary_repository.save(&VideoSummary::create(
             video.id.clone(),
@@ -140,12 +176,7 @@ impl VideoSummarizer {
         Ok(SummaryText::from_answer(&reply.content)?)
     }
 
-    fn summary_input(
-        &self,
-        video: &Video,
-        owner: &VideoOwner,
-        settings: &SummarySettings,
-    ) -> anyhow::Result<SummaryInput> {
+    fn summary_input(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<SummaryInput> {
         let transcript = self
             .video_transcript_repository
             .find(&video.id)?
@@ -156,13 +187,13 @@ impl VideoSummarizer {
             .context("video has no subtitle file")?;
         let srt = self
             .video_file_repository
-            .read_to_string(&owner.target.output_dir, filename)?
+            .read_to_string(&job.owner.target.output_dir, filename)?
             .context("video's subtitle file is gone")?;
         Ok(SummaryInput::new(
             video,
             &transcript.language,
             &TimedTranscript::from_srt(&srt),
-            &settings.context_length,
+            &job.settings.context_length,
         ))
     }
 }
