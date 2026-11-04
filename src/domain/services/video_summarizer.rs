@@ -1,7 +1,9 @@
 use crate::domain::llm_server::LlmChat;
-use crate::domain::services::VideoOwnerFinder;
-use crate::domain::video::Video;
-use crate::domain::video_summary::{SummaryText, VideoSummary};
+use crate::domain::preferences::SummarySettings;
+use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::video::{Video, VideoOwner};
+use crate::domain::video_summary::{SummaryInput, SummaryText, VideoSummary};
+use crate::domain::video_transcript::TimedTranscript;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
@@ -72,10 +74,17 @@ impl VideoSummarizer {
         let preferences = self.preferences_repository.find()?.unwrap_or_default();
         let settings = preferences.summaries;
         let url = preferences.ollama_url.context("no Ollama URL is saved")?;
+        let owner = self
+            .video_owner_finder
+            .find(video)?
+            .context("video has no owner")?;
+        let prompt = settings.effective_prompt();
+        let input = self.summary_input(video, &owner, &settings)?;
+        let messages = input.whole(&prompt);
         let chat = LlmChat {
             model: settings.model.as_str().to_string(),
-            system: String::new(),
-            user: String::new(),
+            system: messages.system,
+            user: messages.user,
             context_length: settings.context_length.value(),
             temperature: settings.temperature.value(),
             thinking: settings.thinking,
@@ -92,5 +101,31 @@ impl VideoSummarizer {
         ))?;
         self.video_repository
             .update_summary(&video.clone().mark_summary_generated(now))
+    }
+
+    fn summary_input(
+        &self,
+        video: &Video,
+        owner: &VideoOwner,
+        settings: &SummarySettings,
+    ) -> anyhow::Result<SummaryInput> {
+        let transcript = self
+            .video_transcript_repository
+            .find(&video.id)?
+            .context("video has no stored transcript")?;
+        let filename = video
+            .subtitle_filename
+            .as_deref()
+            .context("video has no subtitle file")?;
+        let srt = self
+            .video_file_repository
+            .read_to_string(&owner.target.output_dir, filename)?
+            .context("video's subtitle file is gone")?;
+        Ok(SummaryInput::new(
+            video,
+            &transcript.language,
+            &TimedTranscript::from_srt(&srt),
+            &settings.context_length,
+        ))
     }
 }

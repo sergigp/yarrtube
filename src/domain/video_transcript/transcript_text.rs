@@ -30,25 +30,28 @@ impl TranscriptText {
 
 /// A cue's text lines: without its leading index line, then its timing
 /// line.
-fn cue_text<'a>(cue: &'a [&'a str]) -> &'a [&'a str] {
+pub(super) fn cue_text<'a>(cue: &'a [&'a str]) -> &'a [&'a str] {
     let without_index = without_first_if(cue, is_cue_index);
     without_first_if(without_index, |line| line.contains("-->"))
 }
 
-fn without_first_if<'a>(lines: &'a [&'a str], drop: impl Fn(&str) -> bool) -> &'a [&'a str] {
+pub(super) fn without_first_if<'a>(
+    lines: &'a [&'a str],
+    drop: impl Fn(&str) -> bool,
+) -> &'a [&'a str] {
     match lines.split_first() {
         Some((first, rest)) if drop(first) => rest,
         _ => lines,
     }
 }
 
-fn is_cue_index(line: &str) -> bool {
+pub(super) fn is_cue_index(line: &str) -> bool {
     !line.is_empty() && line.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// `line` without its tag-like markup (`<i>`, `</i>`, `<font ...>`, `<c>`,
 /// `<00:01:02.345>`), trimmed. A `<` not opening such a tag is text.
-fn strip_tags(line: &str) -> String {
+pub(super) fn strip_tags(line: &str) -> String {
     let mut text = String::new();
     let mut rest = line;
     while let Some(start) = rest.find('<') {

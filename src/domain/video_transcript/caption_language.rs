@@ -1,5 +1,34 @@
 use crate::domain::shared::ValidationError;
 
+/// The English names of the languages summaries are likeliest to be written
+/// in, by base language code.
+const LANGUAGE_NAMES: [(&str, &str); 24] = [
+    ("ar", "Arabic"),
+    ("ca", "Catalan"),
+    ("cs", "Czech"),
+    ("da", "Danish"),
+    ("de", "German"),
+    ("el", "Greek"),
+    ("en", "English"),
+    ("es", "Spanish"),
+    ("fi", "Finnish"),
+    ("fr", "French"),
+    ("hi", "Hindi"),
+    ("id", "Indonesian"),
+    ("it", "Italian"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("nl", "Dutch"),
+    ("no", "Norwegian"),
+    ("pl", "Polish"),
+    ("pt", "Portuguese"),
+    ("ro", "Romanian"),
+    ("ru", "Russian"),
+    ("sv", "Swedish"),
+    ("tr", "Turkish"),
+    ("zh", "Chinese"),
+];
+
 /// A caption track's language code as YouTube reports it, e.g. `en` or
 /// `pt-BR`; never carries yt-dlp's `-orig` marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,7 +55,10 @@ impl CaptionLanguage {
 
     /// `Spanish` for `es-US`; the code itself when unknown.
     pub fn english_name(&self) -> String {
-        self.0.clone()
+        LANGUAGE_NAMES
+            .iter()
+            .find(|(code, _)| *code == self.base())
+            .map_or_else(|| self.0.clone(), |(_, name)| name.to_string())
     }
 
     /// 4.3 for `en`, 3.4 otherwise (measured on the eval golden set).

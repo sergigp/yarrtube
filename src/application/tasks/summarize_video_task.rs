@@ -102,6 +102,26 @@ mod tests {
         assert_eq!(scene.chats().len(), 1);
     }
 
+    #[test]
+    fn it_should_send_the_shipped_prompt_filled_with_the_videos_data() {
+        let scene = Scene::default()
+            .with_replies(vec![reply("Three games.")])
+            .build();
+
+        scene.run().unwrap();
+
+        let chat = &scene.chats()[0];
+        assert!(
+            chat.system
+                .contains("- Write in Spanish, the language of the video.")
+        );
+        assert!(!chat.system.contains('{'));
+        assert_eq!(
+            chat.user,
+            "Title: Sicilian\nDuration: 30 minutes\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences."
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
