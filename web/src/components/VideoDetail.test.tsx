@@ -54,7 +54,7 @@ describe('VideoDetail', () => {
     expect(screen.queryByText(/S2026E031501/)).not.toBeInTheDocument()
   })
 
-  it('badges a video that is not downloaded yet', () => {
+  it('shows the status of a video that is not downloaded', () => {
     const video = aVideo({ status: 'ERRORED_RETRYING', filename: null })
     renderWithProviders(
       <VideoDetail
