@@ -38,6 +38,7 @@ pub struct VideoResponse {
     pub channel_name: Option<String>,
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
+    pub summary: Option<String>,
 }
 
 /// One of a video's chapters, in whole seconds from the start of the video.
@@ -87,6 +88,7 @@ impl From<VideoView> for VideoResponse {
                 .into_iter()
                 .map(ChapterResponse::from)
                 .collect(),
+            summary: None,
         }
     }
 }
@@ -189,6 +191,7 @@ pub struct CategoryVideoResponse {
     pub channel_name: Option<String>,
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
+    pub summary: Option<String>,
     pub source: HomeVideoSourceResponse,
     pub category_ids: Vec<String>,
 }
@@ -199,6 +202,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
         let video = VideoResponse::from(VideoView {
             video: view.video,
             metadata: view.metadata,
+            summary: view.summary,
         });
         Self {
             id: video.id,
@@ -217,6 +221,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
             channel_name: video.channel_name,
             subtitle_language: video.subtitle_language,
             chapters: video.chapters,
+            summary: video.summary,
             source: HomeVideoSourceResponse::from(view.source),
             category_ids: view
                 .category_ids

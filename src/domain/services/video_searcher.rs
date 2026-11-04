@@ -15,6 +15,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -33,6 +34,7 @@ pub struct VideoSearcher {
     category_repository: Arc<dyn CategoryRepository>,
     category_video_collector: CategoryVideoCollector,
     preferences_repository: Arc<dyn PreferencesRepository>,
+    video_summary_repository: Arc<dyn VideoSummaryRepository>,
 }
 
 impl VideoSearcher {
@@ -48,6 +50,7 @@ impl VideoSearcher {
         category_repository: Arc<dyn CategoryRepository>,
         category_video_collector: CategoryVideoCollector,
         preferences_repository: Arc<dyn PreferencesRepository>,
+        video_summary_repository: Arc<dyn VideoSummaryRepository>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -60,6 +63,7 @@ impl VideoSearcher {
             category_repository,
             category_video_collector,
             preferences_repository,
+            video_summary_repository,
         }
     }
 }
@@ -121,7 +125,7 @@ impl VideoSearcherApi for VideoSearcher {
             .iter()
             .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
             .filter(|video| !is_excluded(video))
-            .map(|video| video.and_then(|video| self.view(video)))
+            .map(|video| video.and_then(|video| self.view(video, false)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -143,7 +147,7 @@ impl VideoSearcherApi for VideoSearcher {
             .iter()
             .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
             .filter(|video| !is_excluded(video))
-            .map(|video| video.and_then(|video| self.view(video)))
+            .map(|video| video.and_then(|video| self.view(video, false)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -190,7 +194,7 @@ impl VideoSearcherApi for VideoSearcher {
             .map_err(ListVideosError::Repository)?;
         videos
             .into_iter()
-            .map(|sourced| self.category_view(sourced, &by_video))
+            .map(|sourced| self.category_view(sourced, &by_video, false))
             .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -238,9 +242,14 @@ impl VideoSearcher {
             .ok_or_else(|| ListVideosError::CategoryNotFound(id.clone()))
     }
 
-    fn view(&self, video: Video) -> anyhow::Result<VideoView> {
+    /// `video` with its metadata, and its summary when `summaries_shown`.
+    fn view(&self, video: Video, _summaries_shown: bool) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
-        Ok(VideoView { video, metadata })
+        Ok(VideoView {
+            video,
+            metadata,
+            summary: None,
+        })
     }
 
     /// `sourced` as a category video: with its metadata and the categories
@@ -249,15 +258,26 @@ impl VideoSearcher {
         &self,
         sourced: SourcedVideo,
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        _summaries_available: bool,
     ) -> anyhow::Result<CategoryVideoView> {
-        let VideoView { video, metadata } = self.view(sourced.video)?;
+        let VideoView {
+            video,
+            metadata,
+            summary,
+        } = self.view(sourced.video, false)?;
         let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
         Ok(CategoryVideoView {
             video,
             metadata,
+            summary,
             source: sourced.source,
             category_ids,
         })
+    }
+
+    /// Whether `source` opted in; false when it is no longer stored.
+    fn source_summaries_enabled(&self, _source: &VideoSource) -> anyhow::Result<bool> {
+        Ok(false)
     }
 
     /// `videos` as home cards, each with its publish date when its metadata

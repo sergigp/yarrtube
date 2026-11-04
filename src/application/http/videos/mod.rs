@@ -239,6 +239,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
@@ -274,6 +275,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -317,6 +319,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -363,6 +366,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -417,6 +421,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -461,6 +466,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -500,6 +506,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -549,6 +556,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -613,6 +621,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -649,6 +658,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -694,6 +704,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -720,6 +731,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL404").await;
@@ -774,6 +786,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -827,6 +840,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -880,6 +894,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -944,6 +959,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -982,6 +998,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -1031,6 +1048,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -1057,6 +1075,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_channel(video_searcher, "@missing").await;
@@ -1103,6 +1122,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1148,6 +1168,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1188,6 +1209,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1231,6 +1253,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1284,6 +1307,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1325,6 +1349,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1354,6 +1379,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1402,6 +1428,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1452,6 +1479,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1520,6 +1548,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1570,6 +1599,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1620,6 +1650,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1669,6 +1700,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1738,6 +1770,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1808,6 +1841,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1851,6 +1885,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1898,6 +1933,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -1951,6 +1987,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2010,6 +2047,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2047,6 +2085,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2091,6 +2130,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2135,6 +2175,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2194,6 +2235,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2247,6 +2289,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2309,6 +2352,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2363,6 +2407,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2420,6 +2465,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2484,6 +2530,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2530,6 +2577,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2582,6 +2630,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2626,6 +2675,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2668,6 +2718,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2721,6 +2772,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = home(video_searcher).await;
@@ -2793,6 +2845,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let responses = [
@@ -2836,6 +2889,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = search(video_searcher, Some("falcon")).await;
@@ -2879,6 +2933,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = search(video_searcher, Some("tactics")).await;
@@ -2925,6 +2980,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = search(video_searcher, Some("tactics")).await;
@@ -2963,6 +3019,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = search(video_searcher, Some("tactics")).await;
@@ -3012,6 +3069,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = search(video_searcher, Some("tactics")).await;
@@ -3941,6 +3999,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -4723,6 +4782,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -4803,6 +4863,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -4858,6 +4919,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -4909,6 +4971,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -4973,6 +5036,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5029,6 +5093,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5101,6 +5166,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5350,6 +5416,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5394,6 +5461,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5446,6 +5514,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5510,6 +5579,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5558,6 +5628,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5606,6 +5677,7 @@ mod tests {
             category_repository,
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, chess.id.as_str()).await;
@@ -5627,6 +5699,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(&db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         );
 
         let response = list_for_category(video_searcher, "missing").await;
@@ -5655,6 +5728,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
             any_category_video_collector(),
             Arc::new(SqlitePreferencesRepository::new(unused_connection())),
+            Arc::new(SqliteVideoSummaryRepository::new(unused_connection())),
         )
     }
 
@@ -5878,6 +5952,7 @@ mod tests {
             channel_name: None,
             subtitle_language: None,
             chapters: vec![],
+            summary: None,
         }
     }
 
@@ -5933,6 +6008,7 @@ mod tests {
             channel_name: None,
             subtitle_language: None,
             chapters: vec![],
+            summary: None,
             source,
             category_ids: vec![],
         }
@@ -6023,6 +6099,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             category_video_collector(db),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
         )
     }
 

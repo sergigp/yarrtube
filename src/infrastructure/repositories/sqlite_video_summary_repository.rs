@@ -9,8 +9,6 @@ use rusqlite::{OptionalExtension, Row, params};
 pub trait VideoSummaryRepository: Send + Sync {
     /// Inserts the summary, replacing the video's previous one.
     fn save(&self, summary: &VideoSummary) -> anyhow::Result<()>;
-    /// No production reader yet: nothing displays summaries.
-    #[allow(dead_code)]
     fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoSummary>>;
     fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
 }

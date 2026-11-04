@@ -75,6 +75,8 @@ export interface Video {
   subtitle_language: string | null
   /** YouTube chapters in playback order; empty when none or not checked yet. */
   chapters: Chapter[]
+  /** The AI summary; null when the video has none or it is hidden. */
+  summary: string | null
 }
 
 /** One of a video's chapters, in whole seconds from the start of the video. */
