@@ -213,10 +213,12 @@ impl VideoSummarizer {
             .video_file_repository
             .read_to_string(&job.owner.target.output_dir, filename)?
             .context("video's subtitle file is gone")?;
+        let timed = TimedTranscript::from_srt(&srt);
+        anyhow::ensure!(!timed.is_empty(), "video's subtitle file has no text");
         Ok(SummaryInput::new(
             video,
             &transcript.language,
-            &TimedTranscript::from_srt(&srt),
+            &timed,
             &job.settings.context_length,
         ))
     }

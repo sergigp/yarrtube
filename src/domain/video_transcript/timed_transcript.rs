@@ -30,8 +30,8 @@ impl TimedTranscript {
         Self(timed)
     }
 
-    pub fn text(&self) -> String {
-        Self::joined(&self.0)
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// The whole transcript as one part when it fits `max_chars`, else cut
