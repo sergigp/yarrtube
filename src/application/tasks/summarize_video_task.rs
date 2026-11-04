@@ -210,6 +210,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_keep_braces_in_values_unfilled() {
+        let scene = Scene {
+            video: Video {
+                title: "{transcript} explained".to_string(),
+                ..subtitled_video()
+            },
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        scene.run().unwrap();
+
+        assert!(
+            scene.chats()[0]
+                .user
+                .starts_with("Title: {transcript} explained\n")
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.
