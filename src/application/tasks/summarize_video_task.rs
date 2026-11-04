@@ -40,6 +40,7 @@ impl TaskHandler for SummarizeVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_log_lines;
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
@@ -712,6 +713,32 @@ mod tests {
 
         assert_eq!(scene.chats(), vec![]);
         assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
+    }
+
+    #[test]
+    fn it_should_log_each_calls_prompt_answer_and_duration() {
+        let scene = Scene::default()
+            .with_replies(vec![reply("Three games.")])
+            .build();
+
+        let lines = captured_log_lines(|| scene.run().unwrap());
+
+        let sent = lines
+            .iter()
+            .find(|line| line.contains("sending prompt"))
+            .unwrap();
+        let answered = lines
+            .iter()
+            .find(|line| line.contains("model answered"))
+            .unwrap();
+        assert!(sent.starts_with("INFO "));
+        assert!(sent.contains("- Write in Spanish, the language of the video."));
+        assert!(sent.contains("Title: Sicilian\nDuration: 30 minutes"));
+        assert!(sent.contains("Hola a todos"));
+        assert!(answered.starts_with("INFO "));
+        assert!(answered.contains("answer=Three games."));
+        assert!(answered.contains("input_tokens=100"));
+        assert!(answered.contains("duration_seconds="));
     }
 
     /// What a test changes about the default situation: a downloaded,

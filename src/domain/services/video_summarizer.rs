@@ -13,6 +13,7 @@ use crate::infrastructure::repositories::sqlite_video_transcript_repository::Vid
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::{info, warn};
 
 /// What every call of one generation shares.
@@ -153,7 +154,7 @@ impl VideoSummarizer {
 
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<()> {
         let input = self.summary_input(video, job)?;
-        let text = self.write_summary(&input, job)?;
+        let text = self.write_summary(video, &input, job)?;
         if self.video_repository.find(&video.id)?.is_none() {
             return Ok(());
         }
@@ -170,17 +171,40 @@ impl VideoSummarizer {
 
     /// One call for a whole transcript; for one in parts, a call per part
     /// and one over their answers. Stops at the first failed call.
-    fn write_summary(&self, input: &SummaryInput, job: &SummaryJob) -> anyhow::Result<SummaryText> {
-        if input.parts() == 1 {
-            return self.ask(job, input.whole(&job.prompt));
+    fn write_summary(
+        &self,
+        video: &Video,
+        input: &SummaryInput,
+        job: &SummaryJob,
+    ) -> anyhow::Result<SummaryText> {
+        let parts = input.parts();
+        if parts == 1 {
+            return self.ask(video, job, "whole", input.whole(&job.prompt));
         }
-        let answers = (0..input.parts())
-            .map(|index| self.ask(job, input.part(&job.prompt, index)))
+        let answers = (0..parts)
+            .map(|index| {
+                let call = format!("part {} of {parts}", index + 1);
+                self.ask(video, job, &call, input.part(&job.prompt, index))
+            })
             .collect::<anyhow::Result<Vec<_>>>()?;
-        self.ask(job, input.reduce(&job.prompt, &answers))
+        self.ask(video, job, "reduce", input.reduce(&job.prompt, &answers))
     }
 
-    fn ask(&self, job: &SummaryJob, messages: SummaryMessages) -> anyhow::Result<SummaryText> {
+    fn ask(
+        &self,
+        video: &Video,
+        job: &SummaryJob,
+        call: &str,
+        messages: SummaryMessages,
+    ) -> anyhow::Result<SummaryText> {
+        info!(
+            video_id = %video.id,
+            call,
+            system = %messages.system,
+            user = %messages.user,
+            "sending prompt to the model"
+        );
+        let started = Instant::now();
         let context_length = job.settings.context_length;
         let reply = self.llm_server_repository.chat(
             &job.url,
@@ -194,6 +218,15 @@ impl VideoSummarizer {
                 max_output_tokens: context_length.output_budget_tokens(),
             },
         )?;
+        info!(
+            video_id = %video.id,
+            call,
+            answer = %reply.content,
+            input_tokens = reply.input_tokens,
+            stopped_at_limit = reply.stopped_at_limit,
+            duration_seconds = started.elapsed().as_secs_f64(),
+            "model answered"
+        );
         if reply.is_incomplete(context_length.value()) {
             anyhow::bail!("the model's answer is incomplete");
         }
