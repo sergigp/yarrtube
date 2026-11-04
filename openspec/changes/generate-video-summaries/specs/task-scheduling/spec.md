@@ -50,7 +50,7 @@ A lane SHALL start a new eligible task whenever it has fewer tasks running than 
 - **THEN** the system runs one, and starts the other only after the first finishes
 
 #### Scenario: Summary backlog does not block other work
-- **WHEN** many video summaries are queued, one of them is running, and a task of any other lane becomes eligible
+- **WHEN** many video summaries are queued, one of them is running, no exclusive task is eligible, and a video download, thumbnail fetch, reconcile or file-deletion task becomes eligible
 - **THEN** that task starts without waiting for any of the summaries to finish
 
 #### Scenario: Summary lane runs one summary at a time

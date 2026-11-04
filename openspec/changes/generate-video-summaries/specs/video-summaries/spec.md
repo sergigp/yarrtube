@@ -7,11 +7,11 @@ Generates a short AI summary of each video from its transcript, through the user
 ## ADDED Requirements
 
 ### Requirement: Summary State
-Every stored video SHALL have a summary state: Missing, Generated or Unavailable. Videos stored before this state existed SHALL be Missing. Generated and Unavailable are final.
+Every stored video SHALL have a summary state: Missing, Generated or Unavailable. Videos stored before this state existed SHALL be Missing. Generated is final. Unavailable lasts until the summary settings change.
 
 #### Scenario: Existing videos after upgrade
 - **WHEN** the daemon starts on a database with videos stored before summaries existed
-- **THEN** every one of them has summary state Missing and no recorded check
+- **THEN** every one of them has summary state Missing
 
 ### Requirement: Summary Generation Conditions
 A summary SHALL be generated for a video only when, at the moment it runs, AI and summaries are on, the video's channel or playlist has `summaries_enabled` `true`, the video is Downloaded, its subtitles are Fetched and its summary state is Missing. Otherwise the run SHALL do nothing and change nothing.
@@ -29,7 +29,7 @@ A summary SHALL be generated for a video only when, at the moment it runs, AI an
 - **THEN** Ollama is not called and the stored summary is unchanged
 
 ### Requirement: Summary Prompt Used
-Generation SHALL use the saved prompt, or the prompt shipped with the running version when none is saved. A saved prompt that no longer passes prompt validation SHALL stop the generation with a logged warning, without counting a failed attempt.
+Generation SHALL use the saved prompt, or the prompt shipped with the running version when none is saved. A saved prompt that no longer passes prompt validation SHALL stop the generation with a logged warning, changing nothing, and the task SHALL complete.
 
 #### Scenario: Prompt never saved
 - **WHEN** no prompt was saved and a summary is generated
@@ -41,7 +41,7 @@ Generation SHALL use the saved prompt, or the prompt shipped with the running ve
 
 #### Scenario: Saved prompt invalid under newer rules
 - **WHEN** the saved prompt is missing a section the running version requires
-- **THEN** Ollama is not asked to summarize, no failed attempt is counted and the video stays Missing
+- **THEN** Ollama is not asked to summarize, the task completes and the video stays Missing
 
 ### Requirement: Prompt Variables Filled
 Each message SHALL be the prompt's section with its variables replaced in one pass, so braces inside a value stay as they are: `{title}`, `{minutes}` (whole minutes), `{lang}` (the transcript language's English name, or its code when the name isn't known) and `{transcript}`.
@@ -70,7 +70,11 @@ For a video with chapters, `{chapters}` SHALL be the `chapters` section with `{c
 - **THEN** nothing is inserted for `{chapters}`
 
 ### Requirement: Summary Settings Sent To Ollama
-Every request SHALL use the saved `summaries_model`, `summaries_context_length` and `summaries_temperature`, and cap the output at the context left over by the input budget. Thinking SHALL be requested only when `summaries_thinking` is on and Ollama lists `thinking` among the model's capabilities.
+Every request SHALL use the saved `summaries_model`, `summaries_context_length` and `summaries_temperature`, and cap the output at the context left over by the input budget. Thinking SHALL be requested only when `summaries_thinking` is on and Ollama lists `thinking` among the model's capabilities. Every request SHALL tell Ollama neither to truncate the prompt nor to shift the context, because by default it silently cuts an oversized prompt and reports only what it kept.
+
+#### Scenario: Never truncated
+- **WHEN** any request is sent
+- **THEN** it asks Ollama not to truncate and not to shift
 
 #### Scenario: Model able to think
 - **WHEN** thinking is on and the saved model supports it
@@ -81,11 +85,15 @@ Every request SHALL use the saved `summaries_model`, `summaries_context_length` 
 - **THEN** requests don't ask for thinking and the summary is generated
 
 ### Requirement: Input Budget
-A transcript SHALL be summarized in one call when its estimated size fits the input budget, about 73% of the context length (9000 tokens at the default 12288). Size is estimated at 4.3 characters per token for English and 3.4 for other languages.
+A transcript SHALL be summarized in one call when its estimated size fits the input budget, about 73% of the context length (9000 tokens at the default 12288). Size is estimated at 4.3 characters per token for English, 1.5 for Japanese, Chinese and Korean, and 3.4 for other languages.
 
 #### Scenario: Transcript fits
 - **WHEN** the context length is 12288 and a Spanish transcript has 20000 characters
 - **THEN** one call is made, with the `system` and `user` sections
+
+#### Scenario: Japanese transcript
+- **WHEN** the context length is 12288 and a Japanese transcript has 20000 characters
+- **THEN** the transcript is summarized in parts
 
 #### Scenario: Smaller context length
 - **WHEN** the context length is 6144 and a Spanish transcript has 20000 characters
@@ -106,12 +114,23 @@ A transcript over the budget SHALL be cut into consecutive parts under it, at ch
 - **WHEN** one chapter's text alone is over the budget
 - **THEN** that chapter is cut by size and the others stay whole
 
+### Requirement: Answers Reduced In Groups
+When the answers and the chapters don't fit the budget together, consecutive answers SHALL first be reduced in groups of at least two, without the chapters, and the results reduced the same way, until they fit or one answer is left. The last reduce SHALL list the chapters.
+
+#### Scenario: Answers over the budget
+- **WHEN** the answers of 30 parts don't fit the budget together
+- **THEN** groups of them are reduced first, and the last call reduces those results and lists the chapters
+
 ### Requirement: Part Variables Filled
 A part's message SHALL fill `{part}`, `{parts}`, `{span}` (the times of its first and last line, as `<start>–<end>`), `{transcript}` with that part's text and `{chapters}` from `map chapters`, listing only the chapters overlapping the part. Each answer SHALL be added to `{part_summaries}` through `reduce part`, in order.
 
 #### Scenario: Second part of three
 - **WHEN** the second of 3 parts runs from 45:00 to 1:30:10
 - **THEN** its user message has part `2` of `3`, span `45:00–1:30:10` and only the chapters overlapping that span
+
+#### Scenario: Chapter starting on the part's last line
+- **WHEN** a part's last line starts at 29:00 and a chapter starts at 29:00
+- **THEN** that part lists the chapter
 
 #### Scenario: Reduce
 - **WHEN** all 3 parts are answered
@@ -125,23 +144,23 @@ Everything up to and including the last `</think>` in an answer SHALL be dropped
 - **THEN** the answer used is `Three games.`
 
 ### Requirement: Incomplete Answers Rejected
-A call SHALL count as failed when its answer is empty once cleaned, when Ollama stopped at the output cap, or when the input reached within 64 tokens of the context length, since Ollama truncates input silently. A failed call SHALL fail the whole generation, storing nothing.
+A call SHALL be rejected when its answer is empty once cleaned, when Ollama stopped at the output cap, when Ollama refuses the prompt as too long, or when it runs past the 30-minute timeout. A rejected call SHALL fail the whole generation, storing nothing.
 
 #### Scenario: Stopped at the output cap
 - **WHEN** Ollama reports it stopped because of the length limit
-- **THEN** no summary is stored and one failed attempt is counted
+- **THEN** no summary is stored and the generation fails
 
-#### Scenario: Input truncated
-- **WHEN** Ollama reports 12250 input tokens with a context length of 12288
-- **THEN** no summary is stored and one failed attempt is counted
+#### Scenario: Prompt too long
+- **WHEN** Ollama answers 400 because the prompt exceeds the context length
+- **THEN** no summary is stored and the generation fails
 
 #### Scenario: Reasoning only
 - **WHEN** Ollama's answer is only `<think>hmm</think>`
-- **THEN** no summary is stored and one failed attempt is counted
+- **THEN** no summary is stored and the generation fails
 
 #### Scenario: Part fails
 - **WHEN** the second of 3 parts fails
-- **THEN** no further calls are made, no summary is stored and one failed attempt is counted
+- **THEN** no further calls are made, no summary is stored and the generation fails
 
 ### Requirement: Summary Stored
 A successful generation SHALL store the summary with the model that wrote it and when, and set the summary state to Generated. A video SHALL have at most one summary. A stored summary SHALL NOT be regenerated, including when the prompt or model changes or the video is redownloaded, and SHALL be kept when summaries are turned off.
@@ -159,30 +178,45 @@ A successful generation SHALL store the summary with the model that wrote it and
 - **THEN** nothing is stored
 
 ### Requirement: Ollama Unavailable
-When Ollama can't be reached before generating, or the saved model isn't installed on it, the generation SHALL stop with a logged warning, recording no check and no failed attempt, so a later sync tries again.
+When Ollama can't be reached before generating, or the saved model isn't installed on it, the generation SHALL stop with a logged warning, changing nothing, and the task SHALL complete, so a later sync tries again.
 
 #### Scenario: Ollama down
 - **WHEN** a summary task runs while nothing answers at the Ollama URL
-- **THEN** the video stays Missing, no check is recorded and the task completes
+- **THEN** the video stays Missing and the task completes
 
 #### Scenario: Model not installed
 - **WHEN** the saved model isn't among those Ollama lists
-- **THEN** the video stays Missing, no check is recorded and the task completes
+- **THEN** the video stays Missing and the task completes
 
-### Requirement: Failed Summaries Bounded
-A generation that fails after Ollama was reached, or whose transcript can't be read, SHALL record a check and count a failed attempt. The third failed attempt SHALL set the summary state to Unavailable. The task itself SHALL complete, never retried by the task queue.
+### Requirement: Failed Summaries Retried
+A generation that fails SHALL fail its task, so the task queue retries it with its usual backoff. On the last attempt, a rejected call or an unreadable transcript SHALL set the summary state to Unavailable, while a server fault (Ollama unreachable, or answering an error other than 400) SHALL leave the video Missing for a later sync.
 
-#### Scenario: First failure
-- **WHEN** a generation fails for a video with no failed attempts
-- **THEN** the video stays Missing with 1 failed attempt and its check time recorded
+#### Scenario: Failure before the last attempt
+- **WHEN** a generation fails on an attempt that isn't the last
+- **THEN** the task fails and the video stays Missing
 
-#### Scenario: Third failure
-- **WHEN** a generation fails for a video with 2 failed attempts
-- **THEN** the video's summary state is Unavailable
+#### Scenario: Rejected on the last attempt
+- **WHEN** Ollama stops at the output cap on the last attempt
+- **THEN** the task fails and the video's summary state is Unavailable
+
+#### Scenario: Server fault on the last attempt
+- **WHEN** Ollama answers 500 on the last attempt
+- **THEN** the task fails and the video stays Missing
 
 #### Scenario: Subtitle file missing
-- **WHEN** a video's recorded subtitle file is no longer on disk
-- **THEN** Ollama is not asked to summarize and one failed attempt is counted
+- **WHEN** a video's recorded subtitle file is no longer on disk on the last attempt
+- **THEN** Ollama is not asked to summarize and the video's summary state is Unavailable
+
+### Requirement: Unavailable Summaries Reset
+Saving a change to the Ollama URL or to any summary setting (model, context length, temperature, thinking, prompt) SHALL put every video with summary state Unavailable back to Missing, because the new settings may succeed. Saving the same values SHALL change nothing.
+
+#### Scenario: Context length raised
+- **WHEN** a video is Unavailable and the context length is changed
+- **THEN** the video is Missing and a later sync schedules its summary
+
+#### Scenario: Unrelated change
+- **WHEN** a video is Unavailable and a preference unrelated to summaries is changed
+- **THEN** the video stays Unavailable
 
 ### Requirement: Summary Deleted With Its Video
 A video's summary SHALL be deleted whenever the video's record is deleted, including when its whole playlist or channel is deleted.
@@ -196,7 +230,7 @@ A video's summary SHALL be deleted whenever the video's record is deleted, inclu
 - **THEN** those summaries are deleted too
 
 ### Requirement: Summary Generation Logged
-Generation SHALL be logged at info level from start to end: the start with the video and its length in seconds; each call with its full system and user messages, then its full answer, tokens and duration; and the end with the summary, total duration, video length and model. Skips SHALL be logged with their reason at info level, and failures at warn level.
+Generation SHALL be logged at info level from start to end: the start with the video and its length in seconds; each call with its full system and user messages, then its full answer, tokens and duration; and the end with the summary, total duration, video length and model. Skips SHALL be logged with their reason at info level, and failures at error level with the specific reason: the output cap, context and input tokens, or Ollama's refusal.
 
 #### Scenario: Successful generation
 - **WHEN** a 30-minute video is summarized in one call at info verbosity
@@ -212,4 +246,4 @@ Generation SHALL be logged at info level from start to end: the start with the v
 
 #### Scenario: Failed
 - **WHEN** a generation fails
-- **THEN** the logs hold the reason, at warn level, with the failed attempts so far
+- **THEN** the logs hold the specific reason, at error level

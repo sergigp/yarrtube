@@ -3,24 +3,27 @@
 ## Files
 
 Rust
-- `migrations/0023_video_summaries.sql` — new: `video_summaries` table; `summary_state` (default `MISSING`), `summary_last_checked_at`, `summary_failed_attempts` on `videos`.
+- `migrations/0023_video_summaries.sql` — new: `video_summaries` table; `summary_state` (default `MISSING`) on `videos`.
 - `src/infrastructure/shared/sqlite_migrations.rs` — register `0023`.
 - `src/domain/video_summary/mod.rs` — new aggregate.
 - `src/domain/video_summary/video_summary.rs` — new: the stored entity.
 - `src/domain/video_summary/summary_text.rs` — new: a cleaned model answer (drops `</think>` prefix, rejects empty).
 - `src/domain/video_summary/summary_input.rs` — new: pure rendering of the single, map and reduce messages.
 - `src/domain/video/summary_state.rs` — new: `Missing`/`Generated`/`Unavailable`.
-- `src/domain/video/video.rs` — `summary_state`, `summary_checks`; `is_summarizable`, `mark_summary_generated`, `record_summary_failure`.
-- `src/domain/video/late_data_checks.rs` — `failures_exhausted()`.
+- `src/domain/video/video.rs` — `summary_state`; `is_summarizable`, `mark_summary_generated`, `mark_summary_unavailable`.
+- `src/domain/video/late_data_checks.rs` — `failures_exhausted()`, shared by `settles`.
 - `src/domain/video/video_owner.rs` — `summaries_enabled`.
 - `src/domain/video/video_sync_plan.rs` — `for_video` takes `summaries_wanted`; `Summarize` step.
 - `src/domain/video/video_sync_step.rs` — `Summarize` → `Task::SummarizeVideo`.
+- `src/domain/video_transcript/timed_line.rs` — new: one timed line of a transcript.
+- `src/domain/video_summary/summary_messages.rs` — new: a call's system and user messages.
 - `src/domain/video_transcript/timed_transcript.rs` — new: SRT cues as `(start, text)` lines, same cleaning as `TranscriptText::from_srt`; `parts`.
 - `src/domain/video_transcript/transcript_part.rs` — new: one consecutive part of a timed transcript.
 - `src/domain/video_transcript/transcript_text.rs` — share cue cleaning with `TimedTranscript`.
 - `src/domain/video_transcript/caption_language.rs` — `english_name()`.
 - `src/domain/llm_server/llm_chat.rs` — new: request to the chat port.
-- `src/domain/llm_server/llm_reply.rs` — new: raw answer, `input_tokens`, `stopped_at_limit`; `is_incomplete`.
+- `src/domain/llm_server/llm_reply.rs` — new: raw answer, `input_tokens`, `stopped_at_limit`.
+- `src/domain/llm_server/llm_chat_error.rs` — new: `ServerFault` or `Refused`.
 - `src/domain/llm_server/llm_server.rs` — `model(name)`.
 - `src/domain/preferences/summary_prompt.rs` — `validated`, `render`.
 - `src/domain/preferences/context_length.rs` — `input_budget_tokens`, `output_budget_tokens`.
@@ -31,7 +34,8 @@ Rust
 - `src/domain/services/task_view_searcher.rs` — resolve `summarize_video` context.
 - `src/domain/task/task.rs` — `SummarizeVideo`, lane, exclusivity key, payload decode.
 - `src/domain/task/task_lane.rs` — `Summaries`.
-- `src/application/tasks/summarize_video_task.rs` — new: best-effort handler, always `Ok`.
+- `src/application/tasks/summarize_video_task.rs` — new: fails with the generation; passes `is_last_attempt`.
+- `src/domain/services/preferences_updater.rs` — reset Unavailable summaries when summary settings or the URL change.
 - `src/application/tasks/mod.rs` — register the handler.
 - `src/application/subscribers/sync_video_on_video_subtitles_fetched.rs` — new, mirrors `SyncVideoOnVideoDownloaded`.
 - `src/application/subscribers/mod.rs` — second subscriber on `VideoSubtitlesFetched`.
@@ -55,7 +59,7 @@ Docs
 pub enum SummaryState { Missing, Generated, Unavailable }
 
 // domain/video/video.rs
-pub struct Video { /* ... */ pub summary_state: SummaryState, pub summary_checks: LateDataChecks }
+pub struct Video { /* ... */ pub summary_state: SummaryState }
 impl Video {
     /// Downloaded, subtitles Fetched, summary Missing.
     pub fn is_summarizable(&self) -> bool;
@@ -81,7 +85,10 @@ Task::SummarizeVideo { video_id: String } // "summarize_video", lane Summaries, 
 impl Task { pub fn decode_summarize_video_payload(payload: &str) -> Result<String, TaskError>; }
 
 // domain/video_transcript/timed_transcript.rs
+// domain/video_transcript/timed_line.rs
 pub struct TimedLine { pub start_seconds: i64, pub text: String }
+
+// domain/video_transcript/timed_transcript.rs
 pub struct TimedTranscript(Vec<TimedLine>);
 impl TimedTranscript {
     pub fn from_srt(srt: &str) -> Self;
@@ -95,7 +102,7 @@ impl CaptionLanguage {
     /// `Spanish` for `es-US`; the code itself when unknown.
     pub fn english_name(&self) -> String;
     /// 4.3 for `en`, 3.4 otherwise (measured on the eval golden set).
-    pub fn chars_per_token(&self) -> f64;
+    pub fn chars_per_token(&self) -> f64;  // 4.3 en, 1.5 ja/zh/ko, 3.4 otherwise
 }
 
 // domain/video_transcript/transcript_part.rs
@@ -127,11 +134,15 @@ pub struct LlmChat {
 }
 
 // domain/llm_server/llm_reply.rs
-pub struct LlmReply { pub content: String, pub input_tokens: u32, pub stopped_at_limit: bool }
-impl LlmReply {
-    /// Stopped at the output cap, or input within 64 tokens of `context_length`.
-    pub fn is_incomplete(&self, context_length: u32) -> bool;
+/// Why a chat failed.
+pub enum LlmChatError {
+    /// Ollama's fault: a later sync can try again.
+    ServerFault(String),
+    /// This request can't work as it is: too long, or past the timeout.
+    Refused(String),
 }
+
+pub struct LlmReply { pub content: String, pub input_tokens: u32, pub stopped_at_limit: bool }
 
 // domain/llm_server/llm_server.rs
 impl LlmServer { pub fn model(&self, name: &str) -> Option<&LlmModel>; }
@@ -157,7 +168,10 @@ impl VideoSummary {
 }
 
 // domain/video_summary/summary_input.rs
+// domain/video_summary/summary_messages.rs
 pub struct SummaryMessages { pub system: String, pub user: String }
+
+// domain/video_summary/summary_input.rs
 pub struct SummaryInput { /* title, minutes, lang, chapters, parts */ }
 impl SummaryInput {
     pub fn new(video: &Video, language: &CaptionLanguage, transcript: &TimedTranscript, budget: &ContextLength) -> Self;
@@ -168,6 +182,13 @@ impl SummaryInput {
     pub fn part(&self, prompt: &SummaryPrompt, index: usize) -> SummaryMessages;
     /// `reduce system` + `reduce user`, one `reduce part` per answer.
     pub fn reduce(&self, prompt: &SummaryPrompt, answers: &[SummaryText]) -> SummaryMessages;
+    /// A reduce of `answers` without the chapters.
+    pub fn reduce_group(&self, prompt: &SummaryPrompt, answers: &[SummaryText]) -> SummaryMessages;
+    /// Whether `answers` and the chapters fit the budget together.
+    pub fn reduce_fits(&self, answers: &[SummaryText]) -> bool;
+    /// Consecutive groups within the budget, at least two answers each
+    /// (a lone last answer stays alone), so each round shrinks.
+    pub fn reduce_groups(&self, answers: &[SummaryText]) -> Vec<Vec<SummaryText>>;
 }
 
 // domain/services/video_summarizer.rs
@@ -182,16 +203,18 @@ pub struct VideoSummarizer {
     clock: Arc<dyn Clock>,
 }
 pub trait VideoSummarizerApi: Send + Sync {
-    /// Best effort: see the `video-summaries` capability. Never returns an
-    /// error to its caller. Holds no `VideoLock`: generation takes minutes.
-    fn summarize(&self, video: &Video);
+    /// See the `video-summaries` capability. An error fails the task, for the
+    /// queue to retry. Holds no `VideoLock`: generation takes minutes.
+    fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()>;
 }
 
 // infrastructure/repositories/ollama_llm_server_repository.rs
 pub trait LlmServerRepository: Send + Sync {
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer>;
-    /// `POST /api/chat`, `stream: false`, 30-minute timeout.
-    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply>;
+    /// `POST /api/chat`, `stream: false`, `truncate: false`, `shift: false`,
+    /// 30-minute timeout. 400 or a timeout is `Refused`; anything else that
+    /// fails is `ServerFault`.
+    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> Result<LlmReply, LlmChatError>;
 }
 
 // infrastructure/repositories/sqlite_video_summary_repository.rs
@@ -205,8 +228,10 @@ pub trait VideoSummaryRepository: Send + Sync {
 
 // infrastructure/repositories/sqlite_video_repository.rs
 pub trait VideoRepository { /* ... */
-    /// Writes only the `summary_*` columns.
+    /// Writes only `summary_state` and `updated_at`.
     fn update_summary(&self, video: &Video) -> anyhow::Result<()>;
+    /// Puts every Unavailable summary back to Missing.
+    fn reset_unavailable_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()>;
 }
 ```
 
@@ -218,7 +243,9 @@ CREATE TABLE video_summaries (
 
 Notes:
 - Timed lines come from the SRT on disk: `video_transcripts.text` has no timings, and chapter cuts and `{span}` need them. The transcript row supplies the language.
-- The existing `find` (5 s timeout) doubles as the reachability and model check, so "Ollama unavailable" needs no error type and doesn't count; any failure after it counts.
+- The existing `find` (5 s timeout) doubles as the reachability and model check, so "Ollama unavailable" is a skip, not a failure.
+- `truncate: false` is the truncation check: Ollama 0.40.13 otherwise cuts an oversized prompt to about half the context and reports only what it kept, so no token count can reveal it. Refused, it answers 400 at once with the exact count. `shift: false` keeps the output from pushing the prompt out of the context.
+- Failures use the task queue's retries (`is_last_attempt`, as `DownloadVideoTask` does), so summaries need no attempt counter. The only state of their own is the final Unavailable.
 - Thinking uses `LlmModel::thinking`: Ollama rejects `think: true` for models without the capability, and the UI keeps the saved value for them.
 - Logs live in `VideoSummarizer` (domain), not the Ollama adapter; `ask` times each call with `Instant`, and full prompts stay at info as the user chose.
 - The task must keep its exclusivity key: without one, the queue doesn't dedupe and each pass would add a duplicate.
@@ -229,7 +256,7 @@ Scheduling (reconcile pass or `SyncVideoTask`):
 ```
 VideoReconciler::reconcile(video_id)
   ... existing steps ...
-  summaries_wanted(&owner)                 // preferences.summaries_available() && owner.summaries_enabled
+  video.is_summarizable() && summaries_wanted(&owner)  // read preferences only when needed
   schedule_steps(&video, &owner.target, summaries_wanted)
     VideoSyncPlan::for_video(video, summaries_wanted, now)
     TaskRepository::schedule(Task::SummarizeVideo { video_id }, now)
@@ -254,7 +281,7 @@ SummarizeVideoTask::handle(payload, _)
     effective_prompt().validated()         // Err -> warn, return
     LlmServerRepository::find(url)         // Err -> warn, return
     LlmServer::model(name)                 // None -> warn, return
-    --- failures below: record_summary_failure + update_summary ---
+    --- failures below: error!(reason); on the last attempt, unless ServerFault: mark_summary_unavailable + update_summary; return Err ---
     VideoTranscriptRepository::find(id)    // None -> failure
     VideoFileRepository::read_to_string(output_dir, subtitle_filename) // None -> failure
     TimedTranscript::from_srt(srt)         // no lines -> failure
@@ -264,17 +291,27 @@ SummarizeVideoTask::handle(payload, _)
       ask(input.whole(prompt))
     parts > 1:
       ask(input.part(prompt, i))           // each, stop at the first failure
-      ask(input.reduce(prompt, answers))
+      reduced(answers)
     ask(messages)
       info!(part, system, user)            // full messages
       LlmServerRepository::chat(url, LlmChat { .. })
       info!(answer, input_tokens, duration_seconds)
-      LlmReply::is_incomplete(context_length)
+      reply.stopped_at_limit -> failure
       SummaryText::from_answer(content)
+    reduced(answers)
+      input.reduce_fits(answers) or one left: ask(input.reduce(prompt, answers))
+      else: ask(input.reduce_group(prompt, group)) for each input.reduce_groups(answers), then reduced(results)
     VideoRepository::find(id)              // gone -> return
     VideoSummaryRepository::save(VideoSummary::create(..))
     VideoRepository::update_summary(video.mark_summary_generated(now))
     info!(video_id, summary, duration_seconds, video_seconds, model)
+```
+
+Reset:
+```
+PreferencesUpdater::update(change)
+  PreferencesRepository::save(updated)
+  summary settings or ollama_url changed: VideoRepository::reset_unavailable_summaries(now)
 ```
 
 Deletion:
@@ -285,6 +322,8 @@ Deletion:
 ```
 
 ## Test Plan
+
+Added by the audit: see tasks section 5.
 
 Behaviour (application layer):
 
@@ -304,30 +343,29 @@ Behaviour (application layer):
 13. `it_should_cut_by_size_without_chapters` — parts under the budget, no text lost.
 14. `it_should_cut_a_chapter_too_long_on_its_own_by_size` — others whole.
 15. `it_should_scale_the_budget_with_the_context_length` — same text single at 12288, parts at 6144.
-16. `it_should_do_nothing_when_summaries_are_no_longer_available` — table AI/summaries off; no chat.
-17. `it_should_do_nothing_when_the_source_opted_out` — no chat, Missing.
-18. `it_should_do_nothing_for_a_video_already_summarized` — no chat, summary unchanged.
-19. `it_should_do_nothing_for_a_missing_video` — `Ok`.
-20. `it_should_skip_without_counting_when_the_saved_prompt_is_invalid` — no chat, 0 attempts, no check.
-21. `it_should_skip_without_counting_when_ollama_is_unreachable` — task `Ok`, no check.
-22. `it_should_skip_without_counting_when_the_model_is_not_installed` — same.
-23. `it_should_count_a_failed_attempt_when_the_chat_fails` — 1 attempt, check recorded, nothing stored.
-24. `it_should_count_a_failed_attempt_when_the_answer_stopped_at_the_limit` — nothing stored.
-25. `it_should_count_a_failed_attempt_when_the_input_was_truncated` — prompt tokens 12250.
-26. `it_should_count_a_failed_attempt_when_the_answer_is_only_reasoning` — nothing stored.
-27. `it_should_stop_at_the_first_failed_part` — no later chats, 1 attempt.
-28. `it_should_count_a_failed_attempt_when_the_subtitle_file_is_gone` — no chat.
-29. `it_should_become_unavailable_on_the_third_failure` — state Unavailable.
-30. `it_should_store_nothing_when_the_video_is_deleted_while_generating` — fake chat hook deletes it.
+16. `it_should_skip_if_summaries_are_unavailable` — table AI/summaries off; no chat.
+17. `it_should_skip_if_the_source_opted_out` — no chat, Missing.
+18. `it_should_skip_a_video_already_summarized` — no chat, summary unchanged.
+19. `it_should_ignore_a_missing_video` — `Ok`.
+20. `it_should_skip_when_the_saved_prompt_is_invalid` — no chat, Missing, `Ok`.
+21. `it_should_skip_when_ollama_is_unreachable` — task `Ok`, Missing.
+22. `it_should_skip_when_the_model_is_not_installed` — same.
+23. `it_should_fail_the_task_and_stay_missing_on_a_server_fault` — even on the last attempt; nothing stored.
+24. `it_should_fail_the_task_when_the_answer_stopped_at_the_limit` — Missing before the last attempt; nothing stored.
+25. `it_should_fail_the_task_when_ollama_refuses_the_prompt` — `Refused`; nothing stored.
+26. `it_should_fail_the_task_when_the_answer_is_only_reasoning` — nothing stored.
+27. `it_should_stop_at_the_first_failed_part` — no later chats, task fails.
+28. `it_should_fail_the_task_when_the_subtitle_file_is_gone` — no chat.
+29. `it_should_become_unavailable_when_rejected_on_the_last_attempt` — state Unavailable, task fails.
+30. `it_should_ignore_a_video_deleted_while_generating` — fake chat hook deletes it.
 
 `src/application/tasks/sync_video_task.rs`
 31. `it_should_schedule_a_summary_for_a_subtitled_video_in_an_opted_in_source` — one `summarize_video`.
 32. `it_should_not_schedule_a_summary_when_the_source_opted_out` — none.
 33. `it_should_not_schedule_a_summary_while_ai_summaries_are_off` — table.
 34. `it_should_not_schedule_a_summary_without_fetched_subtitles` — Missing, Unavailable.
-35. `it_should_space_summary_retries_by_a_day` — 3 h no, 25 h yes.
 36. `it_should_not_schedule_a_settled_summary` — Generated, Unavailable.
-37. `it_should_not_queue_a_second_summary` — dedupe.
+37. `it_should_not_queue_a_second_summary` — dedupe, in `sqlite_task_repository`.
 
 `src/application/tasks/reconcile_channel_task.rs`
 38. `it_should_schedule_summaries_for_the_stored_videos_of_an_opted_in_channel` — one per video.
@@ -360,15 +398,15 @@ Behaviour (application layer):
 `src/application/tasks/summarize_video_task.rs` (logging)
 50. `it_should_log_each_calls_prompt_answer_and_duration` — captured info logs hold both messages, the answer and `duration_seconds`.
 51. `it_should_log_the_summary_total_time_and_video_length` — final entry fields.
-52. `it_should_log_why_a_generation_was_skipped_or_failed` — info reason on skip, warn reason on failure.
+52. `it_should_log_why_a_generation_was_skipped_or_failed` — info reason on skip, error reason on failure.
 
 Infrastructure:
 
 `ollama_llm_server_repository`
-53. `it_should_post_the_chat_with_its_options` — mockito body: model, messages, `stream: false`, `think`, `num_ctx`, `temperature`, `num_predict`.
+53. `it_should_post_the_chat_with_its_options` — mockito body: model, messages, `stream: false`, `truncate: false`, `shift: false`, `think`, `num_ctx`, `temperature`, `num_predict`.
 54. `it_should_read_the_answer_and_input_tokens`.
 55. `it_should_report_a_reply_stopped_at_the_limit` — `done_reason: "length"`.
-56. `it_should_fail_on_an_error_status`.
+56. `it_should_report_a_server_fault_on_an_error_status` — 500 and 404; 400 is `it_should_report_a_refusal_on_a_bad_request`.
 57. `it_should_fail_on_an_answer_that_is_not_ollamas`.
 
 `sqlite_video_summary_repository`

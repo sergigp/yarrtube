@@ -3,10 +3,10 @@
 ## ADDED Requirements
 
 ### Requirement: Sync Schedules the Summary
-A video sync SHALL schedule a summary of the video when AI and summaries are on, its channel or playlist has `summaries_enabled` `true`, it is Downloaded, its subtitles are Fetched, its summary state is Missing and its summary is due (never checked, or last checked at least 24 hours earlier), unless one is already pending or running for it.
+A video sync SHALL schedule a summary of the video when AI and summaries are on, its channel or playlist has `summaries_enabled` `true`, it is Downloaded, its subtitles are Fetched, its summary state is Missing, unless one is already pending or running for it.
 
 #### Scenario: Video with subtitles in an opted-in source
-- **WHEN** a video sync runs for a Downloaded video with Fetched subtitles and summary state Missing, never checked, in a channel with summaries on, while AI and summaries are on
+- **WHEN** a video sync runs for a Downloaded video with Fetched subtitles and summary state Missing in a channel with summaries on, while AI and summaries are on
 - **THEN** a summary of the video is scheduled to run immediately
 
 #### Scenario: Source not opted in
@@ -20,14 +20,6 @@ A video sync SHALL schedule a summary of the video when AI and summaries are on,
 #### Scenario: No subtitles yet
 - **WHEN** a video sync runs for a Downloaded video whose subtitles are Missing or Unavailable, in an opted-in source
 - **THEN** no summary is scheduled
-
-#### Scenario: Failed recently
-- **WHEN** a video sync runs for a video whose summary failed 3 hours ago
-- **THEN** no summary is scheduled
-
-#### Scenario: Failed over a day ago
-- **WHEN** a video sync runs for a video in an opted-in source whose summary failed 25 hours ago and is still Missing
-- **THEN** a summary is scheduled
 
 #### Scenario: Summary settled
 - **WHEN** a video sync runs for a video whose summary state is Generated or Unavailable

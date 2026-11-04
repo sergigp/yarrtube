@@ -79,3 +79,34 @@
 - [x] 4.2 Run `scripts/run-tests.sh --only web --only rust`. Verify: fmt, clippy and tests pass.
 - [x] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, enable AI and summaries against a reachable Ollama via `PATCH /api/preferences`, add a short channel or playlist with `summaries_enabled` `true`, wait for download and subtitles. Verify: `/api/tasks` and the Tasks page (Playwright) show `Summarizing <title>`, and `video_summaries` holds one row with the video `GENERATED`. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): read a generated summary for a video with chapters and a long one over the budget, on the real `qwen3:4b` Ollama server, and judge the quality. Verify: both are 3 to 5 sentences in the video's language, with no reasoning leaked.
+
+## 5. Audit fixes
+
+Behaviour tasks are TDD like section 2. Refactor tasks change no behaviour: Verify: `cargo test --locked` passes before and after. Commit the uncommitted audit tests and cleanups first.
+
+- [ ] 5.1 Commit the audit's added tests and cleanups as they stand. Verify: `cargo test --locked` passes; `git status` clean.
+- [ ] 5.2 `ollama_llm_server_repository`: `it_should_post_the_chat_with_its_options` gains `truncate: false` and `shift: false`. Verify: test red, then green.
+- [ ] 5.3 `ollama_llm_server_repository`: `it_should_report_a_refusal_on_a_bad_request` — `chat` returns `Result<LlmReply, LlmChatError>`, 400 is `Refused` with Ollama's message. Verify: test red, then green.
+- [ ] 5.4 `ollama_llm_server_repository`: `it_should_report_a_server_fault_on_an_error_status` — 500 and 404 are `ServerFault`; unreachable too. Verify: test red, then green.
+- [ ] 5.5 Remove `LlmReply::is_incomplete` and `TRUNCATION_MARGIN`, the false `prompt_eval_count` comment, `it_should_count_a_failed_attempt_when_the_input_was_truncated`; fix `evals/summaries/eval.py` (send `truncate: false`, drop the `truncated` flag). Verify: `cargo test --locked` passes.
+- [ ] 5.6 `caption_language`: `it_should_estimate_japanese_chinese_and_korean_at_fewer_characters_per_token`. Verify: test red, then green.
+- [ ] 5.7 `summarize_video_task`: `it_should_fail_the_task_when_the_answer_stopped_at_the_limit` — handler returns `Err`, `summarize(video, is_last_attempt)`. Verify: test red, then green.
+- [ ] 5.8 `summarize_video_task`: `it_should_become_unavailable_when_rejected_on_the_last_attempt`. Verify: test red, then green.
+- [ ] 5.9 `summarize_video_task`: `it_should_fail_the_task_and_stay_missing_on_a_server_fault` — also on the last attempt. Verify: test red, then green.
+- [ ] 5.10 `summarize_video_task`: `it_should_fail_the_task_when_ollama_refuses_the_prompt`. Verify: test red, then green.
+- [ ] 5.11 Remove the attempt counting: `summary_checks`, `record_summary_failure`, the two `summary_*` columns from migration `0023`, `is_due` from the summary step in `VideoSyncPlan`, `it_should_space_summary_retries_by_a_day`, and `sqlite_video_repository` mappings. Verify: `cargo test --locked` passes.
+- [ ] 5.12 `summarize_video_task` (logging): failures log at error with the specific reason, per `it_should_log_why_a_generation_was_skipped_or_failed`. Verify: test red, then green.
+- [ ] 5.13 `sqlite_video_repository`: `it_should_reset_unavailable_summaries_to_missing`. Verify: test red, then green.
+- [ ] 5.14 `preferences_updater` via `http/preferences`: `it_should_reset_unavailable_summaries_when_the_summary_settings_change` — table of the URL and each setting. Verify: test red, then green.
+- [ ] 5.15 `preferences_updater`: `it_should_keep_unavailable_summaries_on_an_unrelated_change`, including saving the same values. Verify: test red, then green.
+- [ ] 5.16 `summarize_video_task`: `it_should_reduce_answers_in_groups_when_they_do_not_fit` — group calls without chapters, last call with them. Verify: test red, then green.
+- [ ] 5.17 `summarize_video_task`: `it_should_keep_reducing_until_the_answers_fit`, including a budget smaller than two answers, which still ends. Verify: test red, then green.
+- [ ] 5.18 `summarize_video_task`: `it_should_list_a_chapter_starting_on_the_parts_last_line` — `<=` in `part_chapter_block`. Verify: test red, then green.
+- [ ] 5.19 Lazy `summaries_wanted` in `VideoReconciler`. Verify: `it_should_keep_syncing_a_video_that_needs_no_summary_when_preferences_are_unreadable` red, then green.
+- [ ] 5.20 Refactor: `TimedLine` to `timed_line.rs`, `SummaryMessages` to `summary_messages.rs`, re-exported. Verify: `cargo test --locked` passes.
+- [ ] 5.21 Refactor: `cut_by_size` keeps a running size and uses a fold. Verify: `cargo test --locked` passes.
+- [ ] 5.22 Refactor: rename the tests per design.md's Test Plan. Verify: `cargo test --locked` passes.
+- [ ] 5.23 Refactor tests: remove `Scene`/`BuiltScene` from `summarize_video_task.rs` and `summaries_scheduled` from `sync_video_task.rs`, per `/rust-architect`; assert whole values; move `it_should_not_queue_a_second_summary` to `sqlite_task_repository`. Verify: `cargo test --locked` passes.
+- [ ] 5.24 Docs: `doc/AI.md` (the backlog wording, retries, Unavailable reset, `truncate: false`, generation time) and `doc/ARCHITECTURE.md`. Verify: both describe the implemented flow.
+- [ ] 5.25 Run `scripts/run-tests.sh --only web --only rust`. Verify: all pass.
+- [ ] 5.26 Manual (agent): against real Ollama, an oversized prompt fails with Ollama's refusal logged at error and a long enough video summarizes end to end. Verify: observed in the logs.
