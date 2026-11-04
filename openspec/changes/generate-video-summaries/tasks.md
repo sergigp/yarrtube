@@ -46,7 +46,7 @@
 - [x] 2.38 `src/application/tasks/reconcile_channel_task.rs`: `it_should_schedule_summaries_for_the_stored_videos_of_an_opted_in_channel` — one per video. Verify: test red, then green.
 - [x] 2.39 `src/application/subscribers/sync_video_on_video_subtitles_fetched.rs`: `it_should_schedule_a_video_sync` — `sync_video` now. Verify: test red, then green.
 - [x] 2.40 `src/application/http/tasks/mod.rs`: `it_should_list_a_summarize_video_task_with_video_and_channel_names`. Verify: test red, then green.
-- [ ] 2.41 `src/application/http/tasks/mod.rs`: `it_should_list_a_summarize_video_task_whose_video_is_gone` — no title. Verify: test red, then green.
+- [x] 2.41 `src/application/http/tasks/mod.rs`: `it_should_list_a_summarize_video_task_whose_video_is_gone` — no title. Verify: test red, then green.
 - [x] 2.42 `src/application/http/playlists/mod.rs, channels/mod.rs`: `it_should_delete_the_summaries_of_a_deleted_playlist`. Verify: test red, then green.
 - [x] 2.43 `src/application/http/playlists/mod.rs, channels/mod.rs`: `it_should_delete_the_summaries_of_a_deleted_channel`. Verify: test red, then green.
 - [x] 2.44 `src/application/tasks/reconcile_channel_task.rs, reconcile_playlist_task.rs`: `it_should_delete_the_summary_of_a_video_removed_from_the_channel`. Verify: test red, then green.

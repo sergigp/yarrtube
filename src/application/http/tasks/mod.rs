@@ -553,6 +553,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_summarize_video_task_whose_video_is_gone() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        task_repository
+            .schedule(
+                &Task::SummarizeVideo {
+                    video_id: "rec1".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        );
+
+        let response = list(task_view_searcher).await;
+
+        assert_eq!(response, Ok(vec![pending_task("summarize_video", &[])]));
+    }
+
+    #[tokio::test]
     async fn it_should_list_an_upgrade_quality_task_with_its_video_context() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
