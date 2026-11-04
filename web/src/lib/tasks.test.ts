@@ -236,6 +236,10 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(tabCounts(tasks, true)).toEqual({ active: 1, downloads: 1, syncs: 1, ai: 2, other: 1 })
   })
 
+  it('gives video summaries the ai kind', () => {
+    expect(taskKind(aTask({ task_type: 'summarize_video' }))).toBe('ai')
+  })
+
   it('puts Plex label syncs in the other family', () => {
     expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }), false)).toBe('other')
   })

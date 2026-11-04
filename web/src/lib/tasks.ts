@@ -112,6 +112,7 @@ const KIND_BY_TYPE: Record<string, TaskKind> = {
   reconcile_playlist: 'sync',
   reconcile_channel: 'sync',
   sync_video: 'sync',
+  summarize_video: 'ai',
   delete_video_file: 'delete',
   delete_playlist_files: 'delete',
   delete_channel_files: 'delete',
