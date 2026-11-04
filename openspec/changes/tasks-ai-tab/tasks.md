@@ -22,5 +22,5 @@ No adapter changes.
 
 ## 4. Verification
 
-- [ ] 4.1 `scripts/run-tests.sh --only web --only rust` passes.
+- [x] 4.1 `scripts/run-tests.sh --only web --only rust` passes.
 - [ ] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, turn AI on through the HTTP API, insert a pending `summarize_video` task with `sqlite3`. With the Playwright MCP browser check the AI tab shows between Syncs and Other and lists "Summarizing <title> in <source>"; turn AI off in AI settings, go back and check there's no AI tab and Other lists it. Then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
