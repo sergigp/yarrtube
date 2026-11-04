@@ -214,6 +214,10 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskFamily(aTask({ task_type: 'summarize_video' }), true)).toBe('ai')
   })
 
+  it('puts video summaries in the other family while AI is off', () => {
+    expect(taskFamily(aTask({ task_type: 'summarize_video' }), false)).toBe('other')
+  })
+
   it('puts Plex label syncs in the other family', () => {
     expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }), false)).toBe('other')
   })

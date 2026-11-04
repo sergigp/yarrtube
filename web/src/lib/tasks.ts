@@ -76,8 +76,9 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
 }
 
 /** A task's family; AI tasks are 'other' unless `aiEnabled`. */
-export function taskFamily(task: Task, _aiEnabled: boolean): TaskFamily {
-  return FAMILY_BY_TYPE[task.task_type] ?? 'other'
+export function taskFamily(task: Task, aiEnabled: boolean): TaskFamily {
+  const family = FAMILY_BY_TYPE[task.task_type] ?? 'other'
+  return family === 'ai' && !aiEnabled ? 'other' : family
 }
 
 export function tasksForTab(tasks: Task[], tab: TaskTab, aiEnabled: boolean): Task[] {
