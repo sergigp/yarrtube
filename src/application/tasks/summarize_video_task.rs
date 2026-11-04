@@ -544,6 +544,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_skip_without_counting_when_the_model_is_not_installed() {
+        let scene = Scene {
+            llm: FakeLlmServerRepository::new(server_with(LlmModel {
+                name: "gemma3:4b".to_string(),
+                ..thinking_model()
+            })),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        assert_eq!(scene.run(), Ok(()));
+
+        assert_eq!(scene.chats(), vec![]);
+        assert_eq!(
+            scene.stored_video().summary_checks,
+            LateDataChecks::default()
+        );
+    }
+
     /// What a test changes about the default situation: a downloaded,
     /// subtitled, 30-minute Spanish video in a channel with summaries on,
     /// and AI and summaries on, with `qwen3:4b` installed.

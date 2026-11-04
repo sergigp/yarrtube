@@ -118,10 +118,10 @@ impl VideoSummarizer {
             return Err(Skip::NotWanted("its channel or playlist has summaries off"));
         }
         let server = self.llm_server_repository.find(&url)?;
-        let thinking = settings.thinking
-            && server
-                .model(settings.model.as_str())
-                .is_some_and(|model| model.thinking);
+        let model = server
+            .model(settings.model.as_str())
+            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?;
+        let thinking = settings.thinking && model.thinking;
         let prompt = settings
             .effective_prompt()
             .validated()
