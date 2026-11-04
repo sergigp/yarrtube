@@ -11,10 +11,10 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::system_clock::Clock;
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 /// What every call of one generation shares.
 struct SummaryJob {
@@ -31,6 +31,20 @@ enum Skip {
     NotWanted(&'static str),
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
+}
+
+/// Why a generation failed.
+enum Failure {
+    /// The server's fault: a later sync can try again.
+    Server(anyhow::Error),
+    /// This video didn't get a summary out of the settings as they are.
+    Rejected(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Failure {
+    fn from(error: anyhow::Error) -> Self {
+        Self::Rejected(error)
+    }
 }
 
 impl From<anyhow::Error> for Skip {
@@ -80,20 +94,22 @@ impl VideoSummarizer {
 }
 
 pub trait VideoSummarizerApi: Send + Sync {
-    /// Best effort: see the `video-summaries` capability. Never returns an
-    /// error to its caller. Holds no `VideoLock`: generation takes minutes.
-    fn summarize(&self, video: &Video);
+    /// See the `video-summaries` capability. An error fails the task, for the
+    /// queue to retry. Holds no `VideoLock`: generation takes minutes.
+    fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()>;
 }
 
 impl VideoSummarizerApi for VideoSummarizer {
-    fn summarize(&self, video: &Video) {
+    fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()> {
         match self.prepare(video) {
-            Ok(job) => self.generate(video, &job),
+            Ok(job) => self.generate(video, &job, is_last_attempt),
             Err(Skip::NotWanted(reason)) => {
                 info!(video_id = %video.id, reason, "skipped video summary");
+                Ok(())
             }
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't summarize video");
+                Ok(())
             }
         }
     }
@@ -136,29 +152,40 @@ impl VideoSummarizer {
         })
     }
 
-    fn generate(&self, video: &Video, job: &SummaryJob) {
-        if let Err(e) = self.try_generate(video, job) {
-            let failed = video.clone().record_summary_failure(self.clock.now());
-            warn!(
+    fn generate(
+        &self,
+        video: &Video,
+        job: &SummaryJob,
+        is_last_attempt: bool,
+    ) -> anyhow::Result<()> {
+        self.try_generate(video, job).map_err(|failure| {
+            let (cause, gives_up) = match failure {
+                Failure::Server(cause) => (cause, false),
+                Failure::Rejected(cause) => (cause, is_last_attempt),
+            };
+            error!(
                 video_id = %video.id,
-                error = format!("{e:#}"),
-                failed_attempts = failed.summary_checks.failed_attempts,
-                state = failed.summary_state.as_str(),
+                error = format!("{cause:#}"),
+                is_last_attempt,
+                gives_up,
                 "failed to summarize video"
             );
-            self.record_failure(video, &failed);
+            if gives_up {
+                self.give_up(video);
+            }
+            cause
+        })
+    }
+
+    /// Best effort: the error being reported matters more than this one.
+    fn give_up(&self, video: &Video) {
+        let unavailable = video.clone().mark_summary_unavailable(self.clock.now());
+        if let Err(e) = self.video_repository.update_summary(&unavailable) {
+            error!(video_id = %video.id, error = %e, "failed to give up on a summary");
         }
     }
 
-    /// Best effort, like the generation: a failure to record it is only
-    /// logged.
-    fn record_failure(&self, video: &Video, failed: &Video) {
-        if let Err(e) = self.video_repository.update_summary(failed) {
-            warn!(video_id = %video.id, error = %e, "failed to record a failed summary");
-        }
-    }
-
-    fn try_generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<()> {
+    fn try_generate(&self, video: &Video, job: &SummaryJob) -> Result<(), Failure> {
         let started = Instant::now();
         let input = self.summary_input(video, job)?;
         info!(
@@ -200,7 +227,7 @@ impl VideoSummarizer {
         video: &Video,
         input: &SummaryInput,
         job: &SummaryJob,
-    ) -> anyhow::Result<SummaryText> {
+    ) -> Result<SummaryText, Failure> {
         let parts = input.parts();
         if parts == 1 {
             return self.ask(video, job, "whole", input.whole(&job.prompt));
@@ -210,7 +237,7 @@ impl VideoSummarizer {
                 let call = format!("part {} of {parts}", index + 1);
                 self.ask(video, job, &call, input.part(&job.prompt, index))
             })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         self.ask(video, job, "reduce", input.reduce(&job.prompt, &answers))
     }
 
@@ -220,7 +247,7 @@ impl VideoSummarizer {
         job: &SummaryJob,
         call: &str,
         messages: SummaryMessages,
-    ) -> anyhow::Result<SummaryText> {
+    ) -> Result<SummaryText, Failure> {
         info!(
             video_id = %video.id,
             call,
@@ -230,18 +257,21 @@ impl VideoSummarizer {
         );
         let started = Instant::now();
         let context_length = job.settings.context_length;
-        let reply = self.llm_server_repository.chat(
-            &job.url,
-            &LlmChat {
-                model: job.settings.model.as_str().to_string(),
-                system: messages.system,
-                user: messages.user,
-                context_length: context_length.value(),
-                temperature: job.settings.temperature.value(),
-                thinking: job.thinking,
-                max_output_tokens: context_length.output_budget_tokens(),
-            },
-        )?;
+        let reply = self
+            .llm_server_repository
+            .chat(
+                &job.url,
+                &LlmChat {
+                    model: job.settings.model.as_str().to_string(),
+                    system: messages.system,
+                    user: messages.user,
+                    context_length: context_length.value(),
+                    temperature: job.settings.temperature.value(),
+                    thinking: job.thinking,
+                    max_output_tokens: context_length.output_budget_tokens(),
+                },
+            )
+            .map_err(Failure::Server)?;
         info!(
             video_id = %video.id,
             call,
@@ -251,15 +281,19 @@ impl VideoSummarizer {
             duration_seconds = started.elapsed().as_secs_f64(),
             "model answered"
         );
+        if let Some(refusal) = reply.refusal {
+            return Err(anyhow!("Ollama refused the call: {refusal}").into());
+        }
         if reply.stopped_at_limit {
-            anyhow::bail!(
+            return Err(anyhow!(
                 "the model stopped at the {}-token output cap (context {}, {} input tokens)",
                 context_length.output_budget_tokens(),
                 context_length.value(),
                 reply.input_tokens
-            );
+            )
+            .into());
         }
-        Ok(SummaryText::from_answer(&reply.content)?)
+        SummaryText::from_answer(&reply.content).map_err(|e| anyhow::Error::new(e).into())
     }
 
     fn summary_input(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<SummaryInput> {

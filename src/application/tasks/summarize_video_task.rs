@@ -27,13 +27,12 @@ impl SummarizeVideoTask {
 }
 
 impl TaskHandler for SummarizeVideoTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, payload: &str, is_last_attempt: bool) -> anyhow::Result<()> {
         let video_id = VideoRecordId::new(Task::decode_summarize_video_payload(payload)?)?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             return Ok(());
         };
-        self.video_summarizer.summarize(&video);
-        Ok(())
+        self.video_summarizer.summarize(&video, is_last_attempt)
     }
 }
 
@@ -522,10 +521,7 @@ mod tests {
         assert_eq!(scene.run(), Ok(()));
 
         assert_eq!(scene.chats(), vec![]);
-        assert_eq!(
-            scene.stored_video().summary_checks,
-            LateDataChecks::default()
-        );
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
     #[test]
@@ -539,10 +535,7 @@ mod tests {
         assert_eq!(scene.run(), Ok(()));
 
         assert_eq!(scene.chats(), vec![]);
-        assert_eq!(
-            scene.stored_video().summary_checks,
-            LateDataChecks::default()
-        );
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
     #[test]
@@ -560,36 +553,23 @@ mod tests {
         assert_eq!(scene.run(), Ok(()));
 
         assert_eq!(scene.chats(), vec![]);
-        assert_eq!(
-            scene.stored_video().summary_checks,
-            LateDataChecks::default()
-        );
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_when_the_chat_fails() {
+    fn it_should_fail_the_task_and_stay_missing_on_a_server_fault() {
         let scene = Scene::default()
             .with_replies(vec![Err(anyhow::anyhow!("model crashed"))])
             .build();
 
-        assert_eq!(scene.run(), Ok(()));
+        assert_eq!(scene.run_last_attempt(), Err("model crashed".to_string()));
 
         assert_eq!(scene.stored_summary(), None);
-        let video = scene.stored_video();
-        assert_eq!(
-            (video.summary_state, video.summary_checks),
-            (
-                SummaryState::Missing,
-                LateDataChecks {
-                    last_checked_at: Some(later()),
-                    failed_attempts: 1,
-                }
-            )
-        );
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_when_the_answer_stopped_at_the_limit() {
+    fn it_should_fail_the_task_when_the_answer_stopped_at_the_limit() {
         let scene = Scene::default()
             .with_replies(vec![Ok(LlmReply {
                 stopped_at_limit: true,
@@ -597,22 +577,43 @@ mod tests {
             })])
             .build();
 
-        scene.run().unwrap();
+        assert_eq!(
+            scene.run(),
+            Err(
+                "the model stopped at the 3288-token output cap (context 12288, 100 input tokens)"
+                    .to_string()
+            )
+        );
 
         assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_when_the_answer_is_only_reasoning() {
+    fn it_should_fail_the_task_when_ollama_refuses_the_prompt() {
+        let scene = Scene::default()
+            .with_replies(vec![Ok(LlmReply::refused("request too long"))])
+            .build();
+
+        assert_eq!(
+            scene.run(),
+            Err("Ollama refused the call: request too long".to_string())
+        );
+
+        assert_eq!(scene.stored_summary(), None);
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
+    }
+
+    #[test]
+    fn it_should_fail_the_task_when_the_answer_is_only_reasoning() {
         let scene = Scene::default()
             .with_replies(vec![reply("<think>hmm</think>\n")])
             .build();
 
-        scene.run().unwrap();
+        assert_eq!(scene.run(), Err("The model's answer is empty".to_string()));
 
         assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
     #[test]
@@ -628,43 +629,42 @@ mod tests {
         ])
         .build();
 
-        scene.run().unwrap();
+        assert_eq!(scene.run(), Err("model crashed".to_string()));
 
         assert_eq!(scene.chats().len(), 2);
         assert_eq!(scene.stored_summary(), None);
-        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_when_the_subtitle_file_is_gone() {
+    fn it_should_fail_the_task_when_the_subtitle_file_is_gone() {
         let scene = Scene {
             srt: None,
             ..Scene::default()
         }
         .build();
 
-        scene.run().unwrap();
+        assert_eq!(
+            scene.run_last_attempt(),
+            Err("video's subtitle file is gone".to_string())
+        );
 
         assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
+        assert_eq!(
+            scene.stored_video().summary_state,
+            SummaryState::Unavailable
+        );
     }
 
     #[test]
-    fn it_should_become_unavailable_on_the_third_failure() {
-        let scene = Scene {
-            video: Video {
-                summary_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 2,
-                },
-                ..subtitled_video()
-            },
-            ..Scene::default()
-        }
-        .with_replies(vec![Err(anyhow::anyhow!("model crashed"))])
-        .build();
+    fn it_should_become_unavailable_when_rejected_on_the_last_attempt() {
+        let scene = Scene::default()
+            .with_replies(vec![Ok(LlmReply::refused("request too long"))])
+            .build();
 
-        scene.run().unwrap();
+        assert_eq!(
+            scene.run_last_attempt(),
+            Err("Ollama refused the call: request too long".to_string())
+        );
 
         assert_eq!(
             scene.stored_video().summary_state,
@@ -687,17 +687,20 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_when_the_subtitle_file_is_empty() {
+    fn it_should_fail_the_task_when_the_subtitle_file_is_empty() {
         let scene = Scene {
             srt: Some(String::new()),
             ..Scene::default()
         }
         .build();
 
-        scene.run().unwrap();
+        assert_eq!(
+            scene.run(),
+            Err("video's subtitle file has no text".to_string())
+        );
 
         assert_eq!(scene.chats(), vec![]);
-        assert_eq!(scene.stored_video().summary_checks.failed_attempts, 1);
+        assert_eq!(scene.stored_video().summary_state, SummaryState::Missing);
     }
 
     #[test]
@@ -765,7 +768,9 @@ mod tests {
             .build();
 
         let skipped = captured_log_lines(|| opted_out.run().unwrap());
-        let failed = captured_log_lines(|| failing.run().unwrap());
+        let failed = captured_log_lines(|| {
+            failing.run().unwrap_err();
+        });
 
         assert!(
             skipped
@@ -776,9 +781,8 @@ mod tests {
         assert!(
             failed
                 .iter()
-                .any(|line| line.starts_with("WARN failed to summarize video")
-                    && line.contains("model crashed")
-                    && line.contains("failed_attempts=1"))
+                .any(|line| line.starts_with("ERROR failed to summarize video")
+                    && line.contains("model crashed"))
         );
     }
 
@@ -912,6 +916,13 @@ mod tests {
             let payload = serde_json::json!({ "video_id": self.video.id.as_str() }).to_string();
             self.task
                 .handle(&payload, false)
+                .map_err(|error| error.to_string())
+        }
+
+        fn run_last_attempt(&self) -> Result<(), String> {
+            let payload = serde_json::json!({ "video_id": self.video.id.as_str() }).to_string();
+            self.task
+                .handle(&payload, true)
                 .map_err(|error| error.to_string())
         }
 

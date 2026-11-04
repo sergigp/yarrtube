@@ -387,17 +387,10 @@ impl Video {
         }
     }
 
-    /// Records a failed generation: Unavailable once failures are exhausted.
-    /// Ignores the video's age, unlike `LateDataChecks::settles`: a summary
-    /// doesn't get better with time.
-    pub fn record_summary_failure(self, now: DateTime<Utc>) -> Self {
-        let summary_checks = self.summary_checks.record(LateDataOutcome::Failed, now);
+    /// The generation is given up: only new summary settings bring it back.
+    pub fn mark_summary_unavailable(self, now: DateTime<Utc>) -> Self {
         Self {
-            summary_state: match summary_checks.failures_exhausted() {
-                true => SummaryState::Unavailable,
-                false => self.summary_state,
-            },
-            summary_checks,
+            summary_state: SummaryState::Unavailable,
             updated_at: now,
             ..self
         }
@@ -863,19 +856,16 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_a_failed_summary() {
+    fn it_should_give_up_on_a_summary() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let video = video();
 
-        let failed = video.clone().record_summary_failure(now);
+        let unavailable = video.clone().mark_summary_unavailable(now);
 
         assert_eq!(
-            failed,
+            unavailable,
             Video {
-                summary_checks: LateDataChecks {
-                    last_checked_at: Some(now),
-                    failed_attempts: 1,
-                },
+                summary_state: SummaryState::Unavailable,
                 updated_at: now,
                 ..video
             }

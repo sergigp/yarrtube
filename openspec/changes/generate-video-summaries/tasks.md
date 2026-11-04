@@ -89,13 +89,13 @@ Behaviour tasks are TDD like section 2. Refactor tasks change no behaviour: Veri
 - [x] 5.3 `ollama_llm_server_repository`: `it_should_report_a_refusal_on_a_bad_request` — a reply with Ollama's message as `refusal`. Verify: test red, then green.
 - [x] 5.4 `ollama_llm_server_repository`: `it_should_fail_on_an_error_status` — 500 and 404 are `Err`. Verify: test red, then green.
 - [x] 5.5 Remove `LlmReply::is_incomplete` and `TRUNCATION_MARGIN`, the false `prompt_eval_count` comment, `it_should_count_a_failed_attempt_when_the_input_was_truncated`; fix `evals/summaries/eval.py` (send `truncate: false`, drop the `truncated` flag). Verify: `cargo test --locked` passes.
-- [ ] 5.6 `caption_language`: `it_should_estimate_japanese_chinese_and_korean_at_fewer_characters_per_token`. Verify: test red, then green.
-- [ ] 5.7 `summarize_video_task`: `it_should_fail_the_task_when_the_answer_stopped_at_the_limit` — handler returns `Err`, `summarize(video, is_last_attempt)`. Verify: test red, then green.
-- [ ] 5.8 `summarize_video_task`: `it_should_become_unavailable_when_rejected_on_the_last_attempt`. Verify: test red, then green.
-- [ ] 5.9 `summarize_video_task`: `it_should_fail_the_task_and_stay_missing_on_a_server_fault` — also on the last attempt. Verify: test red, then green.
-- [ ] 5.10 `summarize_video_task`: `it_should_fail_the_task_when_ollama_refuses_the_prompt`. Verify: test red, then green.
+- [x] 5.6 `caption_language`: `it_should_estimate_japanese_chinese_and_korean_at_fewer_characters_per_token`. Verify: test red, then green.
+- [x] 5.7 `summarize_video_task`: `it_should_fail_the_task_when_the_answer_stopped_at_the_limit` — handler returns `Err`, `summarize(video, is_last_attempt)`. Verify: test red, then green.
+- [x] 5.8 `summarize_video_task`: `it_should_become_unavailable_when_rejected_on_the_last_attempt`. Verify: test red, then green.
+- [x] 5.9 `summarize_video_task`: `it_should_fail_the_task_and_stay_missing_on_a_server_fault` — also on the last attempt. Verify: test red, then green.
+- [x] 5.10 `summarize_video_task`: `it_should_fail_the_task_when_ollama_refuses_the_prompt`. Verify: test red, then green.
 - [ ] 5.11 Remove the attempt counting: `summary_checks`, `record_summary_failure`, the two `summary_*` columns from migration `0023`, `is_due` from the summary step in `VideoSyncPlan`, `it_should_space_summary_retries_by_a_day`, and `sqlite_video_repository` mappings. Verify: `cargo test --locked` passes.
-- [ ] 5.12 `summarize_video_task` (logging): failures log at error with the specific reason, per `it_should_log_why_a_generation_was_skipped_or_failed`. Verify: test red, then green.
+- [x] 5.12 `summarize_video_task` (logging): failures log at error with the specific reason, per `it_should_log_why_a_generation_was_skipped_or_failed`. Verify: test red, then green.
 - [ ] 5.13 `sqlite_video_repository`: `it_should_reset_unavailable_summaries_to_missing`. Verify: test red, then green.
 - [ ] 5.14 `preferences_updater` via `http/preferences`: `it_should_reset_unavailable_summaries_when_the_summary_settings_change` — table of the URL and each setting. Verify: test red, then green.
 - [ ] 5.15 `preferences_updater`: `it_should_keep_unavailable_summaries_on_an_unrelated_change`, including saving the same values. Verify: test red, then green.

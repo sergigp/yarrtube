@@ -61,10 +61,13 @@ impl CaptionLanguage {
             .map_or_else(|| self.0.clone(), |(_, name)| name.to_string())
     }
 
-    /// 4.3 for `en`, 3.4 otherwise (measured on the eval golden set).
+    /// 4.3 for `en` and 3.4 by default (measured on the eval golden set),
+    /// 1.5 for `ja`, `zh` and `ko` (measured on `qwen3:4b`, about 1.9 on
+    /// written text, lowered as captions run denser).
     pub fn chars_per_token(&self) -> f64 {
         match self.base() {
             "en" => 4.3,
+            "ja" | "zh" | "ko" => 1.5,
             _ => 3.4,
         }
     }
@@ -78,6 +81,14 @@ impl CaptionLanguage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn it_should_estimate_japanese_chinese_and_korean_at_fewer_characters_per_token() {
+        let estimates = ["ja", "zh-Hans", "ko", "en-US", "es"]
+            .map(|code| CaptionLanguage::new(code).unwrap().chars_per_token());
+
+        assert_eq!(estimates, [1.5, 1.5, 1.5, 4.3, 3.4]);
+    }
 
     #[test]
     fn it_should_accept_a_language_code() {
