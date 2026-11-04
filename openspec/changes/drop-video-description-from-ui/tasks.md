@@ -18,6 +18,6 @@ No adapter changes.
 
 ## 4. Verification
 
-- [ ] 4.1 `scripts/run-tests.sh --only web --only rust` passes.
+- [x] 4.1 `scripts/run-tests.sh --only web --only rust` passes.
 - [ ] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a playlist through the HTTP API, and with the Playwright MCP browser check at desktop and mobile widths that the pane shows no description and no More/Less control, that the storage location is visible, and that the listing response has no `description`. Then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.3 Manual (human): check in Plex that a newly synced video's overview still shows its description.
