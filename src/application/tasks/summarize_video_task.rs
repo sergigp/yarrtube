@@ -44,7 +44,9 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
     use crate::domain::playlist::PlaylistPath;
-    use crate::domain::preferences::{Preferences, SummaryModel, SummarySettings};
+    use crate::domain::preferences::{
+        ContextLength, Preferences, SummaryModel, SummaryPrompt, SummarySettings, Temperature,
+    };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{SummaryState, Video, VideoId};
@@ -119,6 +121,30 @@ mod tests {
         assert_eq!(
             chat.user,
             "Title: Sicilian\nDuration: 30 minutes\n\nTranscript:\nHola a todos\n\nNow write the summary in Spanish, 3 to 5 sentences."
+        );
+    }
+
+    #[test]
+    fn it_should_send_the_saved_prompt_when_there_is_one() {
+        let saved = SummaryPrompt::shipped()
+            .as_str()
+            .replace("You summarize YouTube videos", "You digest YouTube videos");
+        let scene = Scene {
+            preferences: with_summaries(|settings| SummarySettings {
+                prompt: Some(SummaryPrompt::from_stored(saved.clone())),
+                ..settings
+            }),
+            ..Scene::default()
+        }
+        .with_replies(vec![reply("Three games.")])
+        .build();
+
+        scene.run().unwrap();
+
+        assert!(
+            scene.chats()[0]
+                .system
+                .starts_with("You digest YouTube videos")
         );
     }
 
@@ -264,6 +290,15 @@ mod tests {
                 ..SummarySettings::default()
             },
             ..Preferences::default()
+        }
+    }
+
+    /// The default preferences with their summary settings changed by `change`.
+    fn with_summaries(change: impl FnOnce(SummarySettings) -> SummarySettings) -> Preferences {
+        let preferences = summaries_on();
+        Preferences {
+            summaries: change(preferences.summaries.clone()),
+            ..preferences
         }
     }
 
