@@ -32,8 +32,10 @@ mod tests {
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::llm_server::OllamaUrl;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::preferences::{Preferences, SummarySettings};
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::services::VideoOwnerFinder;
@@ -61,7 +63,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
+    use crate::infrastructure::repositories::sqlite_preferences_repository::{
+        PreferencesRepository, SqlitePreferencesRepository,
+    };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -2351,6 +2355,97 @@ mod tests {
 
     const STRANDED_WARNING: &str = "stranded video found, scheduling its download";
     const DOWNLOADED_FILENAME: &str = "Season 2026/S2026E031501 - My Video.mp4";
+
+    #[test]
+    fn it_should_schedule_a_summary_for_a_subtitled_video_in_an_opted_in_source() {
+        assert_eq!(
+            summaries_scheduled(subtitled_video(), true, summaries_on()),
+            1
+        );
+    }
+
+    /// How many summaries a sync of `video` schedules, in a channel with
+    /// summaries on or off under `preferences`.
+    fn summaries_scheduled(video: Video, source_opted_in: bool, preferences: Preferences) -> usize {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        video_repository.save(&video).unwrap();
+        channel_repository
+            .insert(&my_channel().with_summaries_enabled(source_opted_in))
+            .unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        preferences_repository.save(&preferences).unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                channel_video_repository,
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                channel_repository,
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                DOWNLOADED_FILENAME.to_string(),
+            ])),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            video_category_assigner(db.database()),
+            preferences_repository,
+        ));
+        run(&task, &payload_for(&video)).unwrap();
+        task_repository
+            .list_non_completed()
+            .unwrap()
+            .iter()
+            .filter(|task| task.task_type == "summarize_video")
+            .count()
+    }
+
+    fn summaries_on() -> Preferences {
+        let preferences = Preferences::default();
+        Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+            summaries: SummarySettings {
+                enabled: true,
+                ..preferences.summaries
+            },
+            ..Preferences::default()
+        }
+    }
+
+    fn subtitled_video() -> Video {
+        Video {
+            subtitle_state: SubtitleState::Fetched,
+            ..downloaded_video()
+        }
+    }
 
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())

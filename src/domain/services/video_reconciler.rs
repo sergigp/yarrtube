@@ -35,7 +35,6 @@ pub struct VideoReconciler {
     video_lock: Arc<VideoLock>,
     clock: Arc<dyn Clock>,
     video_category_assigner: VideoCategoryAssigner,
-    #[allow(dead_code)]
     preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
@@ -93,7 +92,8 @@ impl VideoReconcilerApi for VideoReconciler {
         let video = self.recover_if_due(video)?;
         self.repair_metadata(&video, &owner);
         self.warn_if_stranded(&video)?;
-        self.schedule_steps(&video, &owner.target)
+        let summaries_wanted = self.summaries_wanted(&owner)?;
+        self.schedule_steps(&video, &owner.target, summaries_wanted)
     }
 }
 
@@ -234,8 +234,23 @@ impl VideoReconciler {
         Ok(())
     }
 
-    fn schedule_steps(&self, video: &Video, target: &VideoTarget) -> anyhow::Result<()> {
-        VideoSyncPlan::for_video(video, false, self.clock.now())
+    /// Whether the videos of `owner` get an AI summary.
+    fn summaries_wanted(&self, owner: &VideoOwner) -> anyhow::Result<bool> {
+        Ok(owner.summaries_enabled
+            && self
+                .preferences_repository
+                .find()?
+                .unwrap_or_default()
+                .summaries_available())
+    }
+
+    fn schedule_steps(
+        &self,
+        video: &Video,
+        target: &VideoTarget,
+        summaries_wanted: bool,
+    ) -> anyhow::Result<()> {
+        VideoSyncPlan::for_video(video, summaries_wanted, self.clock.now())
             .steps
             .iter()
             .try_for_each(|step| {
