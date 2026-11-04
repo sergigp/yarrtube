@@ -23,6 +23,23 @@ describe('VideoDetail', () => {
     expect(screen.queryByRole('button', { name: /More/ })).not.toBeInTheDocument()
   })
 
+  it('shows the AI summary', () => {
+    const video = aVideo({ summary: 'What the video says.' })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: 'AI summary' })).toHaveTextContent(
+      'AI summaryWhat the video says.',
+    )
+  })
+
   it('links the video on YouTube from the title row, in a new tab', () => {
     const video = aVideo({ id: 'abc' })
     renderWithProviders(

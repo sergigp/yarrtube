@@ -75,6 +75,7 @@ export function VideoDetail({
         </div>
       </div>
       <MetaLine video={video} showChannelName={!channel} />
+      {video.summary && <AiSummary summary={video.summary} />}
       <div className="mt-2">
         {video.status !== 'DOWNLOADED' && (
           <Badge variant="outline" className="mb-2">
@@ -84,6 +85,17 @@ export function VideoDetail({
         <p className="text-xs break-words text-muted-foreground">{location}</p>
       </div>
     </div>
+  )
+}
+
+/** The video's AI summary, in full; its line breaks are kept. */
+function AiSummary({ summary }: { summary: string }) {
+  const label = 'AI summary'
+  return (
+    <section aria-label={label} className="mt-3">
+      <h4 className="text-xs font-medium text-muted-foreground">{label}</h4>
+      <p className="mt-1 text-sm break-words whitespace-pre-line text-foreground">{summary}</p>
+    </section>
   )
 }
 
