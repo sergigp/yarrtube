@@ -281,6 +281,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_go_back_to_the_shipped_categorization_prompt() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let saved = Preferences {
+            categorization: CategorizationSettings {
+                prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        };
+        repository.save(&saved).unwrap();
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_prompt: Some(None),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(response, Ok(all_on_response()));
+        assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
+
+    #[tokio::test]
     async fn it_should_save_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
