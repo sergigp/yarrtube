@@ -9,6 +9,7 @@ pub enum CreatePlaylistError {
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
     SummariesUnavailable,
+    CategorizationUnavailable,
 }
 
 impl fmt::Display for CreatePlaylistError {
@@ -32,6 +33,12 @@ impl fmt::Display for CreatePlaylistError {
                 write!(
                     f,
                     "Turn on AI summaries before enabling them for a playlist"
+                )
+            }
+            Self::CategorizationUnavailable => {
+                write!(
+                    f,
+                    "Turn on AI categorization before enabling it for a playlist"
                 )
             }
         }
@@ -62,6 +69,7 @@ pub enum UpdatePlaylistError {
     NotFound(PlaylistId),
     Repository(anyhow::Error),
     SummariesUnavailable,
+    CategorizationUnavailable,
 }
 
 impl fmt::Display for UpdatePlaylistError {
@@ -73,6 +81,12 @@ impl fmt::Display for UpdatePlaylistError {
                 write!(
                     f,
                     "Turn on AI summaries before enabling them for a playlist"
+                )
+            }
+            Self::CategorizationUnavailable => {
+                write!(
+                    f,
+                    "Turn on AI categorization before enabling it for a playlist"
                 )
             }
         }

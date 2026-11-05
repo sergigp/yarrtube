@@ -70,6 +70,9 @@ pub async fn create_playlist(
         Err(e @ CreatePlaylistError::SummariesUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
+        Err(e @ CreatePlaylistError::CategorizationUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
         Err(e @ CreatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -126,6 +129,9 @@ pub async fn update_playlist(
         Ok(playlist) => Ok(Json(PlaylistResponse::from(playlist))),
         Err(e @ UpdatePlaylistError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
         Err(e @ UpdatePlaylistError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
+        Err(e @ UpdatePlaylistError::CategorizationUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
         Err(e @ UpdatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
@@ -413,6 +419,41 @@ mod tests {
         );
         assert_eq!(playlist_repository.list().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_a_playlist_with_categorization_if_unavailable() {
+        for preferences in categorization_unavailable() {
+            let db = TestDatabase::new();
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences_repository.save(&preferences).unwrap();
+            let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+            let event_repository = SqliteEventRepository::new(db.database());
+            // Failing lookup: reaching YouTube would answer 502, not 409.
+            let playlist_creator = PlaylistCreator::new(
+                playlist_repository.clone(),
+                Arc::new(FailingYoutubePlaylistRepository),
+                event_publisher(&db),
+                Arc::new(FixedClock(fixed_timestamp())),
+                preferences_repository,
+            );
+
+            let request = CreatePlaylistRequest {
+                categorization_enabled: Some(true),
+                ..create_request("PL1")
+            };
+            let response = create(playlist_creator, request).await;
+
+            assert_eq!(
+                response,
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Turn on AI categorization before enabling it for a playlist"
+                ))
+            );
+            assert_eq!(playlist_repository.list().unwrap(), vec![]);
+            assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+        }
     }
 
     #[tokio::test]
@@ -4050,6 +4091,24 @@ mod tests {
             },
             ..Preferences::default()
         }
+    }
+
+    /// One of AI, categories and categorization off in each.
+    fn categorization_unavailable() -> [Preferences; 3] {
+        [
+            Preferences {
+                ai_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categories_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categorization: CategorizationSettings::default(),
+                ..categorization_on()
+            },
+        ]
     }
 
     fn summaries_on() -> Preferences {

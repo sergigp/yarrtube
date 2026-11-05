@@ -78,6 +78,7 @@ impl ChannelCreatorApi for ChannelCreator {
         categorization_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
         self.ensure_summaries_available(summaries_enabled)?;
+        self.ensure_categorization_available(categorization_enabled)?;
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreateChannelOutcome::AlreadyExisted(existing));
         }
@@ -105,6 +106,26 @@ impl ChannelCreatorApi for ChannelCreator {
 }
 
 impl ChannelCreator {
+    /// Enabling categorization needs it available in the preferences.
+    fn ensure_categorization_available(
+        &self,
+        categorization_enabled: bool,
+    ) -> Result<(), CreateChannelError> {
+        if !categorization_enabled {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(CreateChannelError::Repository)?
+            .unwrap_or_default();
+        if preferences.categorization_available() {
+            Ok(())
+        } else {
+            Err(CreateChannelError::CategorizationUnavailable)
+        }
+    }
+
     /// Enabling summaries needs AI and summaries on in the preferences.
     fn ensure_summaries_available(
         &self,

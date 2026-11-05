@@ -46,6 +46,12 @@ impl Preferences {
         self.ai_enabled && self.summaries.enabled
     }
 
+    /// Whether sources can have their videos categorized: AI, categories and
+    /// categorization on.
+    pub fn categorization_available(&self) -> bool {
+        self.ai_enabled && self.categories_enabled && self.categorization.enabled
+    }
+
     /// Whether `other` generates summaries differently: another server or
     /// other settings, not merely summaries turned on or off.
     pub fn changes_summaries(&self, other: &Self) -> bool {

@@ -70,6 +70,9 @@ pub async fn create_channel(
         Err(e @ CreateChannelError::SummariesUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
+        Err(e @ CreateChannelError::CategorizationUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
         Err(e @ CreateChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -126,6 +129,9 @@ pub async fn update_channel(
         Ok(channel) => Ok(Json(ChannelResponse::from(channel))),
         Err(e @ UpdateChannelError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
         Err(e @ UpdateChannelError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
+        Err(e @ UpdateChannelError::CategorizationUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
         Err(e @ UpdateChannelError::Repository(_)) => Err(ApiError::internal(e)),
@@ -431,6 +437,42 @@ mod tests {
         );
         assert_eq!(channel_repository.list().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_a_channel_with_categorization_if_unavailable() {
+        for preferences in categorization_unavailable() {
+            let db = TestDatabase::new();
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences_repository.save(&preferences).unwrap();
+            let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+            let event_repository = SqliteEventRepository::new(db.database());
+            // Failing lookup: reaching YouTube would answer 502, not 409.
+            let channel_creator = ChannelCreator::new(
+                channel_repository.clone(),
+                Arc::new(FailingYoutubeChannelRepository),
+                Arc::new(FakeChannelAvatarRepository::default()),
+                event_publisher(&db),
+                Arc::new(FixedClock(fixed_timestamp())),
+                preferences_repository,
+            );
+
+            let request = CreateChannelRequest {
+                categorization_enabled: Some(true),
+                ..create_request("@somechannel")
+            };
+            let response = create(channel_creator, request).await;
+
+            assert_eq!(
+                response,
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Turn on AI categorization before enabling it for a channel"
+                ))
+            );
+            assert_eq!(channel_repository.list().unwrap(), vec![]);
+            assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+        }
     }
 
     #[tokio::test]
@@ -3204,6 +3246,24 @@ mod tests {
             },
             ..Preferences::default()
         }
+    }
+
+    /// One of AI, categories and categorization off in each.
+    fn categorization_unavailable() -> [Preferences; 3] {
+        [
+            Preferences {
+                ai_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categories_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categorization: CategorizationSettings::default(),
+                ..categorization_on()
+            },
+        ]
     }
 
     fn summaries_on() -> Preferences {
