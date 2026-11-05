@@ -9,10 +9,10 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 No adapter changes (design.md, Test Plan). Verify: `git diff --stat` shows no change under `src/infrastructure/`.
+- [x] 3.1 No adapter changes (design.md, Test Plan). Verify: `git diff --stat` shows no change under `src/infrastructure/`.
 
 ## 4. Verification
 
-- [ ] 4.1 Update `doc/AI.md` (context limit wording) and `evals/summaries/decisions.md` (qwen3 output up to 3,551 tokens, `num_predict` gotcha). Verify: `grep -rn 'output cap' doc evals/summaries/decisions.md src` finds nothing.
-- [ ] 4.2 Run `scripts/run-tests.sh --only rust` and verify fmt, clippy and tests pass (no web files change).
+- [x] 4.1 Update `doc/AI.md` (context limit wording) and `evals/summaries/decisions.md` (qwen3 output up to 3,551 tokens, `num_predict` gotcha). Verify: `grep -rn 'output cap' doc evals/summaries/decisions.md src` finds nothing.
+- [x] 4.2 Run `scripts/run-tests.sh --only rust` and verify fmt, clippy and tests pass (no web files change).
 - [ ] 4.3 Manual (human): after deploying, check the next logs report for fewer context-limit failures, and read their `left to think and answer` values to decide whether the input budget needs retuning.
