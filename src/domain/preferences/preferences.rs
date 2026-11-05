@@ -71,6 +71,17 @@ impl Preferences {
             thinking: change.summaries_thinking.unwrap_or(self.summaries.thinking),
             prompt: change.summaries_prompt.unwrap_or(self.summaries.prompt),
         };
+        let categorization = CategorizationSettings {
+            enabled: change
+                .categorization_enabled
+                .unwrap_or(self.categorization.enabled),
+            model: change
+                .categorization_model
+                .unwrap_or(self.categorization.model),
+            prompt: change
+                .categorization_prompt
+                .unwrap_or(self.categorization.prompt),
+        };
         Self {
             categories_enabled: change.categories_enabled.unwrap_or(self.categories_enabled),
             home_show_continue_watching: change
@@ -87,7 +98,7 @@ impl Preferences {
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             summaries,
-            categorization: self.categorization,
+            categorization,
         }
         .ensure_ai_has_url()
     }

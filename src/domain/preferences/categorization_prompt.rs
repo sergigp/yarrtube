@@ -11,6 +11,12 @@ impl CategorizationPrompt {
         Ok(Self(value.into()))
     }
 
+    /// A prompt as it was saved, without checking it: rules that change later
+    /// must not lose the user's text.
+    pub fn from_stored(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
     pub fn shipped() -> Self {
         Self(SHIPPED.to_string())
     }

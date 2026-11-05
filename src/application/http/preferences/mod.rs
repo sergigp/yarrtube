@@ -91,7 +91,7 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::preferences::{Preferences, SummarySettings};
+    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
     use crate::domain::video::{SummaryState, Video, VideoId};
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
@@ -239,6 +239,43 @@ mod tests {
                     .to_string(),
                 categorization_prompt_is_default: true,
                 ..all_on_response()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_save_the_categorization_settings() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_enabled: Some(true),
+            categorization_model: Some("gemma3:4b".to_string()),
+            categorization_prompt: Some(Some("Answer yes or no.".to_string())),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_enabled: true,
+                categorization_model: "gemma3:4b".to_string(),
+                categorization_prompt: "Answer yes or no.".to_string(),
+                categorization_prompt_is_default: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                categorization: CategorizationSettings {
+                    enabled: true,
+                    model: CategorizationModel::new("gemma3:4b").unwrap(),
+                    prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+                },
+                ..Preferences::default()
             })
         );
     }
