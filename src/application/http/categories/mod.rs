@@ -56,7 +56,11 @@ pub async fn update_category(
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
     required(
-        request.name.as_ref().or(request.color.as_ref()),
+        request
+            .name
+            .as_ref()
+            .or(request.color.as_ref())
+            .or(request.ai_prompt.as_ref()),
         MISSING_CATEGORY_NAME_AND_COLOR,
     )?;
     let update = CategoryUpdate {
@@ -871,6 +875,45 @@ mod tests {
             repository.list().unwrap(),
             vec![Category {
                 color: color("#e9def8"),
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_set_the_ai_prompt_of_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+                ai_prompt: Some("  Chess games and openings  ".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                ai_prompt: CategoryPrompt::new("Chess games and openings").unwrap(),
                 ..chess
             }]
         );

@@ -1,4 +1,6 @@
-use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryMember, CategoryName};
+use crate::domain::category::{
+    Category, CategoryColor, CategoryId, CategoryMember, CategoryName, CategoryPrompt,
+};
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -31,7 +33,7 @@ impl CategoryRepository for SqliteCategoryRepository {
     fn find(&self, id: &CategoryId) -> anyhow::Result<Option<Category>> {
         let conn = self.db.read()?;
         conn.query_row(
-            "SELECT id, name, color, created_at FROM categories WHERE id = ?1",
+            "SELECT id, name, color, created_at, ai_prompt FROM categories WHERE id = ?1",
             params![id.as_str()],
             Self::read_row,
         )
@@ -46,7 +48,7 @@ impl CategoryRepository for SqliteCategoryRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, color, created_at FROM categories ORDER BY name COLLATE NOCASE, rowid",
+                "SELECT id, name, color, created_at, ai_prompt FROM categories ORDER BY name COLLATE NOCASE, rowid",
             )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare category list query"))
             .context("failed to prepare category list query")?;
@@ -69,12 +71,13 @@ impl CategoryRepository for SqliteCategoryRepository {
             .transaction()
             .context("failed to begin category insert")?;
         tx.execute(
-            "INSERT INTO categories (id, name, color, created_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO categories (id, name, color, created_at, ai_prompt) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 category.id.as_str(),
                 category.name.as_str(),
                 category.color.as_str(),
-                category.created_at.to_rfc3339()
+                category.created_at.to_rfc3339(),
+                category.ai_prompt.as_ref().map(CategoryPrompt::as_str)
             ],
         )
         .inspect_err(
@@ -91,11 +94,12 @@ impl CategoryRepository for SqliteCategoryRepository {
             .transaction()
             .context("failed to begin category update")?;
         tx.execute(
-            "UPDATE categories SET name = ?2, color = ?3 WHERE id = ?1",
+            "UPDATE categories SET name = ?2, color = ?3, ai_prompt = ?4 WHERE id = ?1",
             params![
                 category.id.as_str(),
                 category.name.as_str(),
-                category.color.as_str()
+                category.color.as_str(),
+                category.ai_prompt.as_ref().map(CategoryPrompt::as_str)
             ],
         )
         .inspect_err(
@@ -129,6 +133,7 @@ impl SqliteCategoryRepository {
             name: row.get(1)?,
             color: row.get(2)?,
             created_at: row.get(3)?,
+            ai_prompt: row.get(4)?,
         })
     }
 
@@ -198,7 +203,11 @@ impl SqliteCategoryRepository {
             id,
             name: CategoryName::new(row.name)?,
             color: CategoryColor::new(row.color)?,
-            ai_prompt: None,
+            ai_prompt: row
+                .ai_prompt
+                .map(CategoryPrompt::new)
+                .transpose()?
+                .flatten(),
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
@@ -214,6 +223,7 @@ struct CategoryRow {
     name: String,
     color: String,
     created_at: String,
+    ai_prompt: Option<String>,
 }
 
 #[cfg(test)]

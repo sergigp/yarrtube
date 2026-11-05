@@ -38,6 +38,10 @@ impl Category {
         Self { color, ..self }
     }
 
+    pub fn with_ai_prompt(self, ai_prompt: Option<CategoryPrompt>) -> Self {
+        Self { ai_prompt, ..self }
+    }
+
     /// Replaces the members, keeping each once (first occurrence wins).
     pub fn with_members(self, members: Vec<CategoryMember>) -> Self {
         let members = members.into_iter().fold(Vec::new(), |mut kept, member| {

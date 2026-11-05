@@ -7,7 +7,7 @@ pub struct CategoryPrompt(String);
 impl CategoryPrompt {
     /// `None` when blank.
     pub fn new(value: impl Into<String>) -> Result<Option<Self>, ValidationError> {
-        Ok(Some(Self(value.into())))
+        Ok(Some(Self(value.into().trim().to_string())))
     }
 
     pub fn as_str(&self) -> &str {

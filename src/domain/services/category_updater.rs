@@ -144,8 +144,12 @@ impl CategoryUpdater {
             Some(name) => category.with_name(name),
             None => category,
         };
-        match update.color {
+        let category = match update.color {
             Some(color) => category.with_color(color),
+            None => category,
+        };
+        match update.ai_prompt {
+            Some(ai_prompt) => category.with_ai_prompt(ai_prompt),
             None => category,
         }
     }
