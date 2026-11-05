@@ -29,8 +29,8 @@
 - [x] 2.23 `Web AiSettingsView.test.tsx`: shows the shipped prompt under Advanced with `Using the default prompt`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.24 `Web AiSettingsView.test.tsx`: saves only the changed categorization fields. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.25 `Web AiSettingsView.test.tsx`: resets a saved categorization prompt. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.26 `Web AiSettingsView.test.tsx`: lists the server's models in the categorization Model independently of summaries. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.27 `Web aiSettingsForm.test.ts, preferences.test.ts`: `changedFields` includes categorization fields only when changed. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.26 `Web AiSettingsView.test.tsx`: lists the server's models in the categorization Model independently of summaries. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.27 `Web aiSettingsForm.test.ts, preferences.test.ts`: `changedFields` includes categorization fields only when changed. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.28 `Web aiSettingsForm.test.ts, preferences.test.ts`: `categorizationAvailable` needs AI, categories and categorization. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.29 `Web source dialogs`: `AddChannelDialog`: "Summarize videos" and "Categorize videos" sit in the "AI" group. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.30 `Web source dialogs`: `AddChannelDialog`: creates with `categorization_enabled` false by default, true when checked. Verify: the test goes red on an assertion, then green with the full suite.
