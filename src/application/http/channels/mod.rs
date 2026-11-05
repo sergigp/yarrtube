@@ -782,6 +782,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_the_existing_source_when_categorization_differs_on_create() {
+        let db = TestDatabase::new();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let existing = channel("@somechannel");
+        channel_repository.insert(&existing).unwrap();
+        let channel_creator = ChannelCreator::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+        let request = CreateChannelRequest {
+            categorization_enabled: Some(true),
+            ..create_request("@somechannel")
+        };
+
+        let response = create(channel_creator, request).await;
+
+        assert_eq!(response, Ok((StatusCode::OK, some_channel_response())));
+        assert_eq!(channel_repository.list().unwrap(), vec![existing]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_existing_channel_if_handle_differs_in_case() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
