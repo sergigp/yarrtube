@@ -41,6 +41,26 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('group', { name: 'Categorization' })).not.toBeInTheDocument()
   })
 
+  it('shows the shipped categorization prompt under its Advanced', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    const advanced = await screen.findByRole('button', { name: 'Advanced categorization settings' })
+    expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('textbox', { name: 'Categorization prompt' })).not.toBeInTheDocument()
+
+    await user.click(advanced)
+
+    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
+      aPreferences().categorization_prompt,
+    )
+    expect(screen.getByText('Using the default prompt')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reset/i })).not.toBeInTheDocument()
+  })
+
   it('keeps the model disabled while summaries are off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ ai_enabled: true }) })
     renderWithProviders(<AiSettingsView />)

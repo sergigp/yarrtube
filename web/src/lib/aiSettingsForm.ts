@@ -12,6 +12,7 @@ export interface AiSettingsForm {
   summaries_prompt: string
   categorization_enabled: boolean
   categorization_model: string
+  categorization_prompt: string
 }
 
 /** The form showing `preferences`. */
@@ -27,6 +28,7 @@ export function formFrom(preferences: Preferences): AiSettingsForm {
     summaries_prompt: preferences.summaries_prompt,
     categorization_enabled: preferences.categorization_enabled,
     categorization_model: preferences.categorization_model,
+    categorization_prompt: preferences.categorization_prompt,
   }
 }
 
