@@ -45,10 +45,10 @@
 - [ ] 2.39 `Web category settings`: `CategorySettingsDialog`: shows "AI prompt" prefilled while available. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.40 `Web category settings`: `CategorySettingsDialog`: hides it otherwise and saves sources without `ai_prompt`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.41 `Web category settings`: `CategorySettingsDialog`: saving only the prompt doesn't send members. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.42 `Web category settings`: `CategorySettingsDialog`: saving both sends both, then closes. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.43 `Web category settings`: `CategorySettingsDialog`: emptying the prompt sends `ai_prompt: ""`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.44 `Web category settings`: `CategorySettingsDialog`: an edited prompt enables Save and asks to discard on cancel. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.45 `Web category settings`: `CategorySettingsDialog`: a failed save stays open and keeps the text. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.42 `Web category settings`: `CategorySettingsDialog`: saving both sends both, then closes. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.43 `Web category settings`: `CategorySettingsDialog`: emptying the prompt sends `ai_prompt: ""`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.44 `Web category settings`: `CategorySettingsDialog`: an edited prompt enables Save and asks to discard on cancel. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.45 `Web category settings`: `CategorySettingsDialog`: a failed save stays open and keeps the text. Verify: the test goes red on an assertion, then green with the full suite.
 
 ## 3. Infrastructure adapters (TDD)
 

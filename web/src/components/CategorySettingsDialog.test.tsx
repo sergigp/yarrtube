@@ -262,6 +262,77 @@ describe('CategorySettingsDialog', () => {
     expect(bodies(fetchMock, 'PUT')).toEqual([])
   })
 
+  it('saves both the AI prompt and the sources', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PATCH /api/categories/chess': () => null,
+      'PUT /api/categories/chess/members': () => null,
+    })
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), 'Chess games')
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([{ ai_prompt: 'Chess games' }])
+    expect(bodies(fetchMock, 'PUT')).toEqual([{ channels: ['@hikaru', '@gotham'], playlists: [] }])
+  })
+
+  it('removes the AI prompt when emptied', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(
+      aCategory({ ...chess, ai_prompt: 'Chess games' }),
+      {
+        ...library,
+        'GET /api/preferences': categorizationOn,
+        'PATCH /api/categories/chess': () => null,
+      },
+    )
+    const user = userEvent.setup()
+
+    await user.clear(await screen.findByRole('textbox', { name: 'AI prompt' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([{ ai_prompt: '' }])
+  })
+
+  it('counts an edited AI prompt as a change to save or discard', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+    })
+    const user = userEvent.setup()
+    const save = screen.getByRole('button', { name: 'Save' })
+
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), 'Chess')
+    expect(save).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    const confirm = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    expect(onOpenChange).not.toHaveBeenCalled()
+    await user.click(within(confirm).getByRole('button', { name: 'Discard' }))
+    expect(onOpenChange.mock.calls).toEqual([[false]])
+    expect(bodies(fetchMock, 'PATCH')).toEqual([])
+  })
+
+  it('keeps the AI prompt when saving it fails', async () => {
+    const { onOpenChange } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PATCH /api/categories/chess': { status: 400, error: 'too long' },
+    })
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), 'Chess games')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('too long')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'AI prompt' })).toHaveValue('Chess games')
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
   it('says when nothing is tracked', async () => {
     renderDialog(chess, {})
 
