@@ -305,6 +305,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_if_the_categorization_model_is_blank() {
+        let request = UpdatePreferencesRequest {
+            categorization_model: Some("  ".to_string()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Categorization model must be named (got \"  \")"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
