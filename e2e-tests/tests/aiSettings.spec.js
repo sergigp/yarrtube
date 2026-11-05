@@ -3,9 +3,9 @@ import { OLLAMA_VERSION } from '../ollama-stub.js'
 
 test('AI settings: point at Ollama, pick a model and save, then reset the prompt', async ({ page, daemon }) => {
   const enableAi = page.getByRole('switch', { name: 'Enable AI' })
-  const model = page.getByRole('combobox', { name: 'Model' })
+  const model = page.getByRole('combobox', { name: 'Model', exact: true })
   const temperature = page.getByRole('spinbutton', { name: 'Temperature' })
-  const prompt = page.getByRole('textbox', { name: 'Prompt' })
+  const prompt = page.getByRole('textbox', { name: 'Prompt', exact: true })
   const save = page.getByRole('button', { name: 'Save' })
 
   await test.step('the settings menu opens the AI page', async () => {
@@ -71,7 +71,7 @@ test.describe(() => {
     await page.getByRole('switch', { name: 'Enable AI' }).click()
     await page.getByRole('switch', { name: 'Summaries enabled' }).click()
     await page.getByRole('button', { name: 'Advanced' }).click()
-    const prompt = page.getByRole('textbox', { name: 'Prompt' })
+    const prompt = page.getByRole('textbox', { name: 'Prompt', exact: true })
     const shipped = await prompt.inputValue()
     await prompt.fill(shipped.replace('## map user', '## map usr'))
     await page.getByRole('button', { name: 'Save' }).click()
