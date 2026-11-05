@@ -7,13 +7,19 @@ import {
   aCategory,
   aChannel,
   aPlaylist,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
 } from '@/test/helpers'
 
 function renderDialog(category: Category, routes: Routes) {
-  const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
+  const fetchMock = mockApi({
+    'GET /api/channels': [],
+    'GET /api/playlists': [],
+    'GET /api/preferences': aPreferences(),
+    ...routes,
+  })
   const onOpenChange = vi.fn()
   renderWithProviders(
     <CategorySettingsDialog category={category} open onOpenChange={onOpenChange} />,
@@ -38,6 +44,15 @@ function shownChips(): string[] {
 }
 
 const chess = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] })
+
+const categorizationOn = aPreferences({ ai_enabled: true, categorization_enabled: true })
+
+/** The bodies sent with `method`, in order. */
+function bodies(fetchMock: ReturnType<typeof mockApi>, method: string): unknown[] {
+  return fetchMock.mock.calls
+    .filter(([, init]) => (init as RequestInit | undefined)?.method === method)
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string))
+}
 
 const library = {
   'GET /api/channels': [
@@ -202,6 +217,33 @@ describe('CategorySettingsDialog', () => {
     )
     expect(screen.getByText('+1 added')).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('shows the AI prompt prefilled while AI categorization is available', async () => {
+    renderDialog(aCategory({ ...chess, ai_prompt: 'Chess games' }), {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+    })
+
+    const prompt = await screen.findByRole('textbox', { name: 'AI prompt' })
+
+    expect(prompt).toHaveValue('Chess games')
+    expect(prompt).toHaveAccessibleDescription('Describe the videos that belong in this category.')
+  })
+
+  it('hides the AI prompt otherwise, leaving it out of a save', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(
+      aCategory({ ...chess, ai_prompt: 'Chess games' }),
+      { ...library, 'PUT /api/categories/chess/members': () => null },
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(screen.queryByRole('textbox', { name: 'AI prompt' })).not.toBeInTheDocument()
+    expect(bodies(fetchMock, 'PATCH')).toEqual([])
   })
 
   it('says when nothing is tracked', async () => {

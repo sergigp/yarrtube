@@ -1,7 +1,12 @@
 import { useId, useRef, useState } from 'react'
 import { Check, ListVideo, Plus, Search, X } from 'lucide-react'
 import { avatarMediaUrl, setCategoryMembers } from '@/api/client'
-import { useChannels, useInvalidateLibrary, usePlaylists } from '@/api/queries'
+import {
+  useCategorizationAvailable,
+  useChannels,
+  useInvalidateLibrary,
+  usePlaylists,
+} from '@/api/queries'
 import type { Category, CategoryMembers } from '@/api/types'
 import {
   isIn,
@@ -18,6 +23,7 @@ import { errorMessage } from '@/lib/errorMessage'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
@@ -49,6 +55,8 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
   const invalidateLibrary = useInvalidateLibrary()
   const saved = membersOf(category)
   const [staged, setStaged] = useState(saved)
+  const withPrompt = useCategorizationAvailable()
+  const [prompt, setPrompt] = useState(category.ai_prompt ?? '')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<SourceFilter>('all')
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
@@ -117,6 +125,23 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
         </Button>
       </div>
       <div className="flex flex-col gap-3 px-6 pb-4">
+        {withPrompt && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="category-ai-prompt">AI prompt</Label>
+            <textarea
+              id="category-ai-prompt"
+              rows={3}
+              maxLength={2000}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              aria-describedby="category-ai-prompt-hint"
+              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            />
+            <p id="category-ai-prompt-hint" className="text-xs text-muted-foreground">
+              Describe the videos that belong in this category.
+            </p>
+          </div>
+        )}
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
