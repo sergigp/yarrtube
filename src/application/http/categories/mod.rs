@@ -1199,6 +1199,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_if_the_ai_prompt_is_too_long() {
+        let response = update(
+            any_category_updater(),
+            "category-1",
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+                ai_prompt: Some("x".repeat(2001)),
+            },
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Category AI prompt must be at most 2000 characters (got 2001)"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_update_if_color_invalid() {
         let response = update(
             any_category_updater(),
