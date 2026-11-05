@@ -44,6 +44,20 @@ describe('changedFields', () => {
     ).toEqual({ summaries_prompt: 'edited' })
   })
 
+  it('has the categorization fields only when changed', () => {
+    const saved = aPreferences()
+    const form = {
+      ...formFrom(saved),
+      categorization_enabled: true,
+      categorization_prompt: 'Answer yes or no.',
+    }
+
+    expect(changedFields(saved, form)).toEqual({
+      categorization_enabled: true,
+      categorization_prompt: 'Answer yes or no.',
+    })
+  })
+
   it('sends the URL without surrounding spaces', () => {
     const saved = aPreferences({ ollama_url: 'http://mac.local:11434' })
 

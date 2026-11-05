@@ -317,6 +317,22 @@ describe('AiSettingsView', () => {
     expect(model).toHaveValue('qwen3:4b')
   })
 
+  it("lists the saved server's models in the categorization Model independently", async () => {
+    mockApi({
+      'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    const model = await screen.findByRole('combobox', { name: 'Categorization model' })
+    await user.selectOptions(model, 'gemma3:4b')
+
+    expect(optionTexts(model)).toEqual(['gemma3:4b', 'qwen3:4b'])
+    expect(model).toHaveValue('gemma3:4b')
+    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveValue('qwen3:4b')
+  })
+
   it('keeps a saved model the server no longer has', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
