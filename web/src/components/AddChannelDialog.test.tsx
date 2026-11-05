@@ -228,6 +228,27 @@ describe('AddChannelDialog', () => {
     })
   })
 
+  it('disables categorization while it is unavailable and links to the AI settings', async () => {
+    const { fetchMock } = renderDialog({})
+
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/preferences', expect.anything()),
+    )
+    expect(categorization).toBeDisabled()
+    expect(categorization).not.toBeChecked()
+    expect(categorization).toHaveAccessibleDescription('Turn on AI categorization in AI settings.')
+  })
+
+  it('hides categorization while categories are off', async () => {
+    renderDialog({ 'GET /api/preferences': aPreferences({ categories_enabled: false }) })
+
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: 'Categorize videos' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Summarize videos' })).toBeInTheDocument()
+  })
+
   it('disables summaries while AI is off and links to the AI settings', async () => {
     const fetchMock = mockApi(baseRoutes)
     const onOpenChange = vi.fn()
