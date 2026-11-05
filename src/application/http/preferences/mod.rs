@@ -322,6 +322,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_if_the_categorization_prompt_is_blank() {
+        let request = UpdatePreferencesRequest {
+            categorization_prompt: Some(Some("  ".to_string())),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Categorization prompt must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
