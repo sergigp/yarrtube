@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Category } from '@/api/types'
+import { queryKeys } from '@/api/queries'
 import { CategorySettingsDialog } from './CategorySettingsDialog'
 import {
   aCategory,
@@ -21,10 +22,13 @@ function renderDialog(category: Category, routes: Routes) {
     ...routes,
   })
   const onOpenChange = vi.fn()
-  renderWithProviders(
+  const { rerender, queryClient } = renderWithProviders(
     <CategorySettingsDialog category={category} open onOpenChange={onOpenChange} />,
   )
-  return { fetchMock, onOpenChange }
+  /** Delivers `refetched` to the open dialog, as a library refetch does. */
+  const refetch = (refetched: Category) =>
+    rerender(<CategorySettingsDialog category={refetched} open onOpenChange={onOpenChange} />)
+  return { fetchMock, onOpenChange, refetch, queryClient }
 }
 
 /** Each chip of a group as its name and whether it's pressed. */
@@ -330,6 +334,118 @@ describe('CategorySettingsDialog', () => {
 
     expect(await screen.findByText('too long')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'AI prompt' })).toHaveValue('Chess games')
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('leaves a prompt saved elsewhere alone when saving the sources', async () => {
+    const prompted = aCategory({ ...chess, ai_prompt: 'Chess games' })
+    const { fetchMock, onOpenChange, refetch } = renderDialog(prompted, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PUT /api/categories/chess/members': () => null,
+    })
+    const user = userEvent.setup()
+    await screen.findByRole('textbox', { name: 'AI prompt' })
+
+    refetch({ ...prompted, ai_prompt: 'Openings only' })
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([])
+  })
+
+  it('stages nothing when a hidden prompt changes elsewhere', async () => {
+    const prompted = aCategory({ ...chess, ai_prompt: 'Chess games' })
+    const { refetch } = renderDialog(prompted, library)
+    await screen.findByRole('button', { name: 'GothamChess' })
+
+    refetch({ ...prompted, ai_prompt: 'Openings only' })
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('leaves out an edited prompt once its field is hidden', async () => {
+    const { fetchMock, onOpenChange, queryClient } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PUT /api/categories/chess/members': () => null,
+    })
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), 'Chess games')
+    act(() => queryClient.setQueryData(queryKeys.preferences, aPreferences()))
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: 'AI prompt' })).not.toBeInTheDocument(),
+    )
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([])
+  })
+
+  it('sends a pasted prompt whole, for the daemon to judge its length', async () => {
+    const { fetchMock } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PATCH /api/categories/chess': { status: 400, error: 'too long' },
+    })
+    const user = userEvent.setup()
+    const pasted = 'x'.repeat(2500)
+
+    await user.click(await screen.findByRole('textbox', { name: 'AI prompt' }))
+    await user.paste(pasted)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('too long')).toBeInTheDocument()
+    expect(bodies(fetchMock, 'PATCH')).toEqual([{ ai_prompt: pasted }])
+  })
+
+  it('says the prompt was saved when only the sources failed, and retries the sources', async () => {
+    let failures = 1
+    const { fetchMock, onOpenChange } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PATCH /api/categories/chess': () => null,
+      'PUT /api/categories/chess/members': () =>
+        failures-- > 0 ? { status: 500, error: 'database is locked' } : null,
+    })
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), 'Chess games')
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findByText("The AI prompt was saved, but the sources weren't: database is locked"),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([{ ai_prompt: 'Chess games' }])
+    expect(bodies(fetchMock, 'PUT')).toHaveLength(2)
+  })
+
+  it('says the prompt stays saved when discarding after only the sources failed', async () => {
+    const { onOpenChange } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PATCH /api/categories/chess': () => null,
+      'PUT /api/categories/chess/members': { status: 500, error: 'database is locked' },
+    })
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), 'Chess games')
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByText(/database is locked/)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    const confirm = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    expect(confirm).toHaveTextContent(
+      "The AI prompt is already saved. Your changes to the sources in Chess won't be saved.",
+    )
     expect(onOpenChange).not.toHaveBeenCalled()
   })
 

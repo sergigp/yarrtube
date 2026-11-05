@@ -62,7 +62,7 @@ test('category lifecycle: create, edit settings, rename, assign from the add cha
   const dialog = page.getByRole('dialog')
   const categoryRows = sectionRows(page, 'Categories')
   const summary = page.locator('main').getByText(/^\d+ sources? · /)
-  const openManageSources = async (name) => {
+  const openCategorySettings = async (name) => {
     await page.getByRole('button', { name: 'Edit settings' }).click()
     await expect(dialog).toContainText(`Edit ${name} settings`)
   }
@@ -102,7 +102,7 @@ test('category lifecycle: create, edit settings, rename, assign from the add cha
   })
 
   await test.step('remove it and add it back with the chips', async () => {
-    await openManageSources('Board games')
+    await openCategorySettings('Board games')
     const chip = dialog.getByRole('button', { name: channelName, exact: true })
     await expect(chip).toHaveAttribute('aria-pressed', 'true')
     await chip.click()

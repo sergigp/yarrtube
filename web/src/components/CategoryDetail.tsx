@@ -31,7 +31,7 @@ export interface CategorySettingsState {
  * What an empty category shows instead of videos: what it is for, and the
  * way to fill it, the category settings dialog.
  */
-function EmptyCategory({ category, onManage }: { category: Category; onManage: () => void }) {
+function EmptyCategory({ category, onAddSources }: { category: Category; onAddSources: () => void }) {
   const headingId = useId()
   return (
     <section
@@ -49,7 +49,7 @@ function EmptyCategory({ category, onManage }: { category: Category; onManage: (
           Add channels and playlists to {category.name} to watch their videos here, newest first.
         </p>
       </div>
-      <Button type="button" onClick={onManage}>
+      <Button type="button" onClick={onAddSources}>
         <Plus />
         Add channels and playlists
       </Button>
@@ -154,20 +154,20 @@ export function CategoryDetail() {
   const refreshing = useLibraryAction()
   const markCategoryWatched = useMarkCategoryWatched()
   const theme = useTheme()
-  const [managing, setManaging] = useState(false)
+  const [editingSettings, setEditingSettings] = useState(false)
   // Arriving with CategorySettingsState opens the dialog once per navigation;
   // the state is then dropped from history so reload and back don't reopen it.
-  const arrivedManaging = (location.state as CategorySettingsState | null)?.editSettings === true
+  const arrivedEditing = (location.state as CategorySettingsState | null)?.editSettings === true
   const [openedFor, setOpenedFor] = useState<string | null>(null)
-  if (arrivedManaging && openedFor !== location.key) {
+  if (arrivedEditing && openedFor !== location.key) {
     setOpenedFor(location.key)
-    setManaging(true)
+    setEditingSettings(true)
   }
   useEffect(() => {
-    if (arrivedManaging) {
+    if (arrivedEditing) {
       navigate(location.pathname, { replace: true, state: null })
     }
-  }, [arrivedManaging, location.pathname, navigate])
+  }, [arrivedEditing, location.pathname, navigate])
   const [recoloring, setRecoloring] = useState(false)
   const [draftColor, setDraftColor] = useState<string | null>(null)
   const { data } = useCategories()
@@ -205,7 +205,7 @@ export function CategoryDetail() {
         onRename={refreshing((name: string) => updateCategory(category.id, { name }))}
         extraActions={[
           { label: 'Change color', icon: <Palette />, onSelect: () => setRecoloring(true) },
-          { label: 'Edit settings', icon: <Settings2 />, onSelect: () => setManaging(true) },
+          { label: 'Edit settings', icon: <Settings2 />, onSelect: () => setEditingSettings(true) },
         ]}
         onMarkWatched={sources > 0 ? () => markCategoryWatched(category.id) : undefined}
         onDelete={refreshing(async () => {
@@ -215,7 +215,7 @@ export function CategoryDetail() {
         deleteDescription={deleteCategoryDescription(category)}
       />
       {sources === 0 ? (
-        <EmptyCategory category={category} onManage={() => setManaging(true)} />
+        <EmptyCategory category={category} onAddSources={() => setEditingSettings(true)} />
       ) : playing ? (
         <CategoryPlayer key={category.id} videos={videos} error={error} />
       ) : !videos ? (
@@ -230,7 +230,7 @@ export function CategoryDetail() {
           />
         )
       )}
-      <CategorySettingsDialog category={category} open={managing} onOpenChange={setManaging} />
+      <CategorySettingsDialog category={category} open={editingSettings} onOpenChange={setEditingSettings} />
       <CategoryColorDialog
         open={recoloring}
         onOpenChange={setRecoloring}

@@ -57,6 +57,11 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
   const [staged, setStaged] = useState(saved)
   const withPrompt = useCategorizationAvailable()
   const [prompt, setPrompt] = useState(category.ai_prompt ?? '')
+  // What the field started from, or last saved here. Not the live category: a
+  // refetch while open must not make an untouched prompt look edited.
+  const [promptBase, setPromptBase] = useState(prompt)
+  // Saved by a save whose sources then failed: it can no longer be discarded.
+  const [promptSaved, setPromptSaved] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<SourceFilter>('all')
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
@@ -71,7 +76,7 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
   const inCount = allChips.filter((chip) => isIn(staged, chip.source)).length
   const summary = stagedSummary(saved, staged)
   const sourcesChanged = summary.added + summary.removed > 0
-  const promptChanged = prompt.trim() !== (category.ai_prompt ?? '')
+  const promptChanged = withPrompt && prompt.trim() !== promptBase
   const dirty = sourcesChanged || promptChanged
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
 
@@ -86,16 +91,24 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
   const save = async () => {
     setSaving(true)
     setError(null)
+    let promptStored = promptSaved
     try {
       if (promptChanged) {
         await updateCategory(category.id, { ai_prompt: prompt.trim() })
+        promptStored = true
+        setPromptSaved(true)
+        setPromptBase(prompt.trim())
       }
       if (sourcesChanged) {
         await setCategoryMembers(category.id, staged)
       }
       onClose()
     } catch (err) {
-      setError(errorMessage(err))
+      setError(
+        promptStored
+          ? `The AI prompt was saved, but the sources weren't: ${errorMessage(err)}`
+          : errorMessage(err),
+      )
     } finally {
       // Also after a failure: the prompt may be saved even if the sources aren't.
       invalidateLibrary()
@@ -132,74 +145,77 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
           <X />
         </Button>
       </div>
-      <div className="flex flex-col gap-3 px-6 pb-4">
+      {/* Everything between the header and the save controls scrolls together, so
+          the prompt can never push them out of a short dialog. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {withPrompt && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 px-6 pb-4">
             <Label htmlFor="category-ai-prompt">AI prompt</Label>
             <textarea
               id="category-ai-prompt"
               rows={3}
-              maxLength={2000}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               aria-describedby="category-ai-prompt-hint"
-              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              className="w-full resize-none rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
             />
             <p id="category-ai-prompt-hint" className="text-xs text-muted-foreground">
               Describe the videos that belong in this category.
             </p>
           </div>
         )}
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={searchRef}
-            type="search"
-            aria-label="Search channels and playlists"
-            placeholder="Search channels and playlists"
-            className="pl-8"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => {
-              // Enter picks the only match, so typing a name and Enter adds it.
-              const matches = [...shownChannels, ...shownPlaylists]
-              if (event.key === 'Enter' && matches.length === 1) {
-                event.preventDefault()
-                toggle(matches[0]!.source)
+        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-border bg-popover px-6 pb-4">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              type="search"
+              aria-label="Search channels and playlists"
+              placeholder="Search channels and playlists"
+              className="pl-8"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter picks the only match, so typing a name and Enter adds it.
+                const matches = [...shownChannels, ...shownPlaylists]
+                if (event.key === 'Enter' && matches.length === 1) {
+                  event.preventDefault()
+                  toggle(matches[0]!.source)
+                }
+              }}
+            />
+          </div>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            aria-label="Show"
+            className="flex-wrap"
+            value={filter}
+            onValueChange={(value) => {
+              if (value) {
+                setFilter(value as SourceFilter)
               }
             }}
-          />
+          >
+            <FilterItem value="all" label="All" />
+            <FilterItem value="in" label={`In ${category.name}`} count={inCount} />
+            <FilterItem
+              value="out"
+              label={`Not in ${category.name}`}
+              count={allChips.length - inCount}
+            />
+          </ToggleGroup>
         </div>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          aria-label="Show"
-          className="flex-wrap"
-          value={filter}
-          onValueChange={(value) => {
-            if (value) {
-              setFilter(value as SourceFilter)
-            }
-          }}
-        >
-          <FilterItem value="all" label="All" />
-          <FilterItem value="in" label={`In ${category.name}`} count={inCount} />
-          <FilterItem
-            value="out"
-            label={`Not in ${category.name}`}
-            count={allChips.length - inCount}
-          />
-        </ToggleGroup>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto border-t border-border px-6 py-4">
-        {channels?.length === 0 && playlists?.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            No channels or playlists to add yet. Track one from the sidebar, then come back.
-          </p>
-        )}
-        <ChipGroup title="Channels" chips={shownChannels} staged={staged} onToggle={toggle} />
-        <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
+        <div className="flex flex-col gap-5 px-6 py-4">
+          {channels?.length === 0 && playlists?.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No channels or playlists to add yet. Track one from the sidebar, then come back.
+            </p>
+          )}
+          <ChipGroup title="Channels" chips={shownChannels} staged={staged} onToggle={toggle} />
+          <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
+        </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-6 py-4">
         {error && <p className="w-full text-sm text-destructive">{error}</p>}
@@ -215,7 +231,11 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
         open={confirmingDiscard}
         onOpenChange={setConfirmingDiscard}
         title="Discard changes?"
-        description={`Your changes to ${category.name} won't be saved.`}
+        description={
+          promptSaved && !promptChanged
+            ? `The AI prompt is already saved. Your changes to the sources in ${category.name} won't be saved.`
+            : `Your changes to ${category.name} won't be saved.`
+        }
         cancelLabel="Keep editing"
         confirmLabel="Discard"
         onConfirm={onClose}

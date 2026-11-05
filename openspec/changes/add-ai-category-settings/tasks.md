@@ -49,6 +49,12 @@
 - [x] 2.43 `Web category settings`: `CategorySettingsDialog`: emptying the prompt sends `ai_prompt: ""`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.44 `Web category settings`: `CategorySettingsDialog`: an edited prompt enables Save and asks to discard on cancel. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.45 `Web category settings`: `CategorySettingsDialog`: a failed save stays open and keeps the text. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.46 `Web category settings`: `CategorySettingsDialog`: a prompt saved elsewhere is left alone when saving the sources. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.47 `Web category settings`: `CategorySettingsDialog`: a hidden prompt changed elsewhere stages nothing. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.48 `Web category settings`: `CategorySettingsDialog`: an edited prompt is left out once its field is hidden. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.49 `Web category settings`: `CategorySettingsDialog`: a pasted prompt is sent whole, for the daemon to judge its length. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.50 `Web category settings`: `CategorySettingsDialog`: says the prompt was saved when only the sources failed, and retries the sources. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.51 `Web category settings`: `CategorySettingsDialog`: says the prompt stays saved when discarding after only the sources failed. Verify: the test goes red on an assertion, then green with the full suite.
 
 ## 3. Infrastructure adapters (TDD)
 

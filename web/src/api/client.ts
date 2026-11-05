@@ -312,7 +312,7 @@ export function createCategory(name: string, color?: string): Promise<CreatedCat
   return request('/categories', { method: 'POST', body: { name, color }, label: '/categories' })
 }
 
-/** Renames and/or recolors; absent fields are kept. */
+/** Renames, recolors and/or sets the AI prompt; absent fields are kept. */
 export async function updateCategory(
   id: string,
   update: { name?: string; color?: string; ai_prompt?: string },

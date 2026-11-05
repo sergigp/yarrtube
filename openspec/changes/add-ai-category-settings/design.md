@@ -24,6 +24,8 @@
 - `web/src/components/{CategoryDetail,SidebarCategories,AddCategoryDialog}.tsx`: rename, `CategorySettingsState`.
 - `web/src/components/{AddChannel,EditChannel,AddPlaylist,EditPlaylist}Dialog.tsx`: `SourceAiSection`.
 - `e2e-tests/helpers/{seed,fixtures}.js`, `e2e-tests/tests/{channelVideoLimit,moveSources,deepLinks,mobile-sidebar,mobileLayout}.spec.js`: send `categorization_enabled: false`.
+- `e2e-tests/tests/aiSettings.spec.js`, `e2e-tests/tests/categories.spec.js`, `e2e-tests/README.md`: exact field names and the rename.
+- `web/src/components/DetailHeader.tsx`, `web/src/lib/categories.ts`: comments naming the rename.
 - `doc/AI.md`, `doc/CATEGORIES.md`, `doc/ARCHITECTURE.md` if it lists preferences: new settings and the rename.
 
 ## Types & Signatures
@@ -172,7 +174,7 @@ interface SourceAiSectionProps {
 
 **Update source**: `PATCH /api/channels/:id {categorization_enabled}` → `ChannelUpdater::update_settings(id, change)` → `ensure_categorization_available(change.categorization_enabled)` → apply → save. Playlists alike.
 
-**Edit settings dialog**: `CategoryDetail` (`managing`) → `CategorySettingsDialog` → `save()` → `updateCategory(id, { ai_prompt })` when the trimmed text differs → `setCategoryMembers(id, staged)` when sources differ → `invalidateLibrary()` → close. On failure stays open, and retrying resends the idempotent writes.
+**Edit settings dialog**: `CategoryDetail` (`managing`) → `CategorySettingsDialog` → `save()` → `updateCategory(id, { ai_prompt })` when the field shows and its trimmed text differs from `promptBase` (what it started from or last saved, never the live category) → `setCategoryMembers(id, staged)` when sources differ → close. `invalidateLibrary()` runs after failures too, since the prompt may be saved. On failure stays open; a retry doesn't resend a saved prompt.
 
 **AI page**: `AiSettings` → `changedFields(saved, form)` → `savePreferences(patch)`; `resetCategorizationPrompt` → `submit({ categorization_prompt: null })`.
 
@@ -240,19 +242,25 @@ Tests that share a name across `channels` and `playlists` are one cycle each.
 43. `CategorySettingsDialog`: emptying the prompt sends `ai_prompt: ""`.
 44. `CategorySettingsDialog`: an edited prompt enables Save and asks to discard on cancel.
 45. `CategorySettingsDialog`: a failed save stays open and keeps the text.
+46. `CategorySettingsDialog`: a prompt saved elsewhere is left alone when saving the sources.
+47. `CategorySettingsDialog`: a hidden prompt changed elsewhere stages nothing.
+48. `CategorySettingsDialog`: an edited prompt is left out once its field is hidden.
+49. `CategorySettingsDialog`: a pasted prompt is sent whole, for the daemon to judge its length.
+50. `CategorySettingsDialog`: says the prompt was saved when only the sources failed, and retries the sources.
+51. `CategorySettingsDialog`: says the prompt stays saved when discarding after only the sources failed.
 
 ### 2. Infrastructure
 
 **`SqlitePreferencesRepository`**
-46. `it_should_round_trip_the_categorization_settings`.
-47. `it_should_read_missing_categorization_keys_as_defaults`.
+52. `it_should_round_trip_the_categorization_settings`.
+53. `it_should_read_missing_categorization_keys_as_defaults`.
 
 **`SqliteCategoryRepository`**
-48. `it_should_round_trip_the_ai_prompt`: insert, update, clear, `list`.
+54. `it_should_round_trip_the_ai_prompt`: insert, update, clear, `list`.
 
 **`SqliteChannelRepository`, `SqlitePlaylistRepository`**
-49. `it_should_round_trip_the_channels_categorization_setting`.
-50. `it_should_round_trip_the_playlists_categorization_setting`.
+55. `it_should_round_trip_the_channels_categorization_setting`.
+56. `it_should_round_trip_the_playlists_categorization_setting`.
 
 **`sqlite_migrations`**
-51. `it_should_default_existing_sources_and_categories_after_the_ai_categorization_migration`: `false` and `NULL`.
+57. `it_should_default_existing_sources_and_categories_after_the_ai_categorization_migration`: `false` and `NULL`.

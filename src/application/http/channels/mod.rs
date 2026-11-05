@@ -3425,7 +3425,7 @@ mod tests {
         }
     }
 
-    /// Preferences with AI and summaries on, so sources can enable summaries.
+    /// Preferences with AI, categories and categorization on.
     fn categorization_on() -> Preferences {
         Preferences {
             ai_enabled: true,
@@ -3456,6 +3456,7 @@ mod tests {
         ]
     }
 
+    /// Preferences with AI and summaries on, so sources can enable summaries.
     fn summaries_on() -> Preferences {
         Preferences {
             ai_enabled: true,
