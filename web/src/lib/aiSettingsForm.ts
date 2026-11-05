@@ -53,6 +53,9 @@ export function changedFields(
     summaries_temperature: toNumber(form.summaries_temperature),
     summaries_thinking: thinking ? form.summaries_thinking : saved.summaries_thinking,
     summaries_prompt: form.summaries_prompt,
+    categorization_enabled: form.categorization_enabled,
+    categorization_model: form.categorization_model,
+    categorization_prompt: form.categorization_prompt,
   }
   const before: PreferencesPatch = { ...saved, ollama_url: saved.ollama_url ?? '' }
   return Object.fromEntries(

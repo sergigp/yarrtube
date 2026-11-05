@@ -117,6 +117,13 @@ function AiSettings({ saved }: { saved: Preferences }) {
     }
   }
 
+  const resetCategorizationPrompt = async () => {
+    const updated = await submit({ categorization_prompt: null })
+    if (updated) {
+      set('categorization_prompt', updated.categorization_prompt)
+    }
+  }
+
   return (
     <>
       <Section title="Ollama">
@@ -270,10 +277,10 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     saved.categorization_prompt_is_default &&
                     form.categorization_prompt === saved.categorization_prompt
                   }
-                  canReset={false}
+                  canReset={!saved.categorization_prompt_is_default}
                   resetDisabled={saving || aiOff}
                   onChange={(value) => set('categorization_prompt', value)}
-                  onReset={() => {}}
+                  onReset={() => void resetCategorizationPrompt()}
                 />
               )}
             </>
@@ -386,7 +393,6 @@ function PromptField({
   disabled,
   isDefault,
   canReset,
-  resetName,
   resetDisabled,
   onChange,
   onReset,
@@ -400,7 +406,6 @@ function PromptField({
   disabled: boolean
   isDefault: boolean
   canReset: boolean
-  resetName?: string
   resetDisabled: boolean
   onChange: (value: string) => void
   onReset: () => void
@@ -427,7 +432,6 @@ function PromptField({
           <Button
             variant="outline"
             size="sm"
-            aria-label={resetName}
             disabled={resetDisabled}
             onClick={onReset}
           >

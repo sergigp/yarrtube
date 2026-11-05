@@ -61,6 +61,62 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('button', { name: /reset/i })).not.toBeInTheDocument()
   })
 
+  it('saves only the changed categorization fields', async () => {
+    const saved = aPreferences({ ai_enabled: true, ollama_url: 'http://mac.local:11434' })
+    const fetchMock = mockApi({
+      'GET /api/preferences': saved,
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+      'PATCH /api/preferences': {
+        ...saved,
+        categorization_enabled: true,
+        categorization_model: 'gemma3:4b',
+      },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: 'Categorization enabled' }))
+    const model = screen.getByRole('textbox', { name: 'Categorization model' })
+    await user.clear(model)
+    await user.type(model, 'gemma3:4b')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(patchBodies(fetchMock)).toEqual([{ categorization_enabled: true, categorization_model: 'gemma3:4b' }])
+  })
+
+  it('resets a saved categorization prompt to the default', async () => {
+    const shipped = aPreferences().categorization_prompt
+    const saved = aPreferences({
+      ai_enabled: true,
+      categorization_enabled: true,
+      categorization_prompt: 'my prompt',
+      categorization_prompt_is_default: false,
+    })
+    const fetchMock = mockApi({
+      'GET /api/preferences': saved,
+      'PATCH /api/preferences': {
+        ...saved,
+        categorization_prompt: shipped,
+        categorization_prompt_is_default: true,
+      },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+    const prompt = screen.getByRole('textbox', { name: 'Categorization prompt' })
+    expect(prompt).toHaveValue('my prompt')
+    expect(screen.queryByText('Using the default prompt')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Reset to default' }))
+
+    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    expect(prompt).toHaveValue(shipped)
+    expect(patchBodies(fetchMock)).toEqual([{ categorization_prompt: null }])
+  })
+
   it('keeps the model disabled while summaries are off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ ai_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
