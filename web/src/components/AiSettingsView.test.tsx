@@ -33,6 +33,14 @@ describe('AiSettingsView', () => {
     expect(section.queryByRole('button', { name: /advanced/i })).not.toBeInTheDocument()
   })
 
+  it('hides the Categorization section while categories are off', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ categories_enabled: false }) })
+    renderWithProviders(<AiSettingsView />)
+
+    expect(await screen.findByRole('group', { name: 'Summaries' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Categorization' })).not.toBeInTheDocument()
+  })
+
   it('keeps the model disabled while summaries are off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ ai_enabled: true }) })
     renderWithProviders(<AiSettingsView />)

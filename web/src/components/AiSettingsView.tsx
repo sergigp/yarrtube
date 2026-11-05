@@ -257,24 +257,26 @@ function AiSettings({ saved }: { saved: Preferences }) {
           </>
         )}
       </Section>
-      <Section title="Categorization">
-        <SwitchRow
-          id="categorization-enabled"
-          label="Enabled"
-          name="Categorization enabled"
-          checked={form.categorization_enabled}
-          disabled={aiOff}
-          onChange={(value) => set('categorization_enabled', value)}
-        />
-        <ModelField
-          id="categorization-model"
-          name="Categorization model"
-          models={server?.models}
-          value={form.categorization_model}
-          disabled={aiOff || !form.categorization_enabled}
-          onChange={(value) => set('categorization_model', value)}
-        />
-      </Section>
+      {saved.categories_enabled && (
+        <Section title="Categorization">
+          <SwitchRow
+            id="categorization-enabled"
+            label="Enabled"
+            name="Categorization enabled"
+            checked={form.categorization_enabled}
+            disabled={aiOff}
+            onChange={(value) => set('categorization_enabled', value)}
+          />
+          <ModelField
+            id="categorization-model"
+            name="Categorization model"
+            models={server?.models}
+            value={form.categorization_model}
+            disabled={aiOff || !form.categorization_enabled}
+            onChange={(value) => set('categorization_model', value)}
+          />
+        </Section>
+      )}
       <div className="flex items-center justify-end gap-4">
         {saveError && (
           <p role="alert" className="mr-auto text-sm text-destructive">

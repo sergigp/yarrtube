@@ -25,7 +25,7 @@
 - [x] 2.19 `http/channels, then http/playlists`: `it_should_disable_categorization_on_a_channel_while_ai_is_off` / `…_playlist_…`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.20 `http/channels, then http/playlists`: `it_should_list_channels_with_their_categorization_setting` / `playlists`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.21 `Web AiSettingsView.test.tsx`: shows the Categorization section disabled on a fresh install. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.22 `Web AiSettingsView.test.tsx`: hides the Categorization section while categories are off. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.22 `Web AiSettingsView.test.tsx`: hides the Categorization section while categories are off. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.23 `Web AiSettingsView.test.tsx`: shows the shipped prompt under Advanced with `Using the default prompt`. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.24 `Web AiSettingsView.test.tsx`: saves only the changed categorization fields. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.25 `Web AiSettingsView.test.tsx`: resets a saved categorization prompt. Verify: the test goes red on an assertion, then green with the full suite.
