@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import { Check, ListVideo, Plus, Search, X } from 'lucide-react'
-import { avatarMediaUrl, setCategoryMembers } from '@/api/client'
+import { avatarMediaUrl, setCategoryMembers, updateCategory } from '@/api/client'
 import {
   useCategorizationAvailable,
   useChannels,
@@ -34,7 +34,7 @@ interface CategorySettingsDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-/** Every tracked channel and playlist as a chip, pressed when in the category. */
+/** A category's AI prompt and every tracked source as a chip, pressed when in it. */
 export function CategorySettingsDialog({ category, open, onOpenChange }: CategorySettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,9 +45,9 @@ export function CategorySettingsDialog({ category, open, onOpenChange }: Categor
 }
 
 /**
- * The chips and save controls. Toggling only stages a change; Save makes the
- * category's sources exactly the pressed chips in one request. Closing with
- * staged changes asks to discard them first.
+ * The AI prompt, the chips and the save controls. Editing only stages a change;
+ * Save sends what changed, making the category's sources exactly the pressed
+ * chips in one request. Closing with staged changes asks to discard them first.
  */
 function CategorySettingsContent({ category, onClose }: { category: Category; onClose: () => void }) {
   const { data: channels } = useChannels()
@@ -70,7 +70,9 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
   const shownPlaylists = shown(chips.playlists)
   const inCount = allChips.filter((chip) => isIn(staged, chip.source)).length
   const summary = stagedSummary(saved, staged)
-  const dirty = summary.added + summary.removed > 0
+  const sourcesChanged = summary.added + summary.removed > 0
+  const promptChanged = prompt.trim() !== (category.ai_prompt ?? '')
+  const dirty = sourcesChanged || promptChanged
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
 
   const requestClose = () => (dirty ? setConfirmingDiscard(true) : onClose())
@@ -85,12 +87,18 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
     setSaving(true)
     setError(null)
     try {
-      await setCategoryMembers(category.id, staged)
-      invalidateLibrary()
+      if (promptChanged) {
+        await updateCategory(category.id, { ai_prompt: prompt.trim() })
+      }
+      if (sourcesChanged) {
+        await setCategoryMembers(category.id, staged)
+      }
       onClose()
     } catch (err) {
       setError(errorMessage(err))
     } finally {
+      // Also after a failure: the prompt may be saved even if the sources aren't.
+      invalidateLibrary()
       setSaving(false)
     }
   }

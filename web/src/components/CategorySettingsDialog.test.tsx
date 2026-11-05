@@ -246,6 +246,22 @@ describe('CategorySettingsDialog', () => {
     expect(bodies(fetchMock, 'PATCH')).toEqual([])
   })
 
+  it('saves only the AI prompt when the sources are untouched', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'PATCH /api/categories/chess': () => null,
+    })
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), ' Chess games ')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([{ ai_prompt: 'Chess games' }])
+    expect(bodies(fetchMock, 'PUT')).toEqual([])
+  })
+
   it('says when nothing is tracked', async () => {
     renderDialog(chess, {})
 
