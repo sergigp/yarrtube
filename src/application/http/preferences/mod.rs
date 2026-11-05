@@ -339,6 +339,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_unavailable_summaries_when_the_categorization_settings_change() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = unavailable_video();
+        video_repository.save(&video).unwrap();
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_model: Some("gemma3:4b".to_string()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+    }
+
+    #[tokio::test]
     async fn it_should_save_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));

@@ -9,7 +9,7 @@
 - [x] 2.3 `http/preferences`: `it_should_go_back_to_the_shipped_categorization_prompt`: `null` drops the saved prompt. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.4 `http/preferences`: `it_should_fail_if_the_categorization_model_is_blank`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.5 `http/preferences`: `it_should_fail_if_the_categorization_prompt_is_blank`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.6 `http/preferences`: `it_should_keep_unavailable_summaries_when_the_categorization_settings_change`: summary stays `Unavailable`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.6 `http/preferences`: `it_should_keep_unavailable_summaries_when_the_categorization_settings_change`: summary stays `Unavailable`. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.7 `http/categories`: `it_should_set_the_ai_prompt_of_a_category`: stored trimmed; name, color, members kept. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.8 `http/categories`: `it_should_remove_the_ai_prompt_of_a_category`: `""` stores `None`. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.9 `http/categories`: `it_should_keep_the_ai_prompt_when_renaming_a_category`. Verify: the test goes red on an assertion, then green with the full suite.
