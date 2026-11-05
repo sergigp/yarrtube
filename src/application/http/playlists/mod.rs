@@ -1803,6 +1803,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_playlists_with_their_categorization_setting() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true))
+            .unwrap();
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteEventRepository::new(db.database())),
+            "/videos",
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![PlaylistListItemResponse {
+                categorization_enabled: true,
+                ..playlist_list_item_response("PL1", DEFAULT_PATH)
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlists_with_their_interval() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -2407,7 +2437,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_enable_categorization_on_a_playlist_if_summaries_are_off() {
+    async fn it_should_fail_to_enable_categorization_on_a_playlist_if_unavailable() {
         for preferences in categorization_unavailable() {
             let db = TestDatabase::new();
             let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

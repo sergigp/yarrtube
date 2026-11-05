@@ -1728,7 +1728,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_enable_categorization_on_a_channel_if_summaries_are_off() {
+    async fn it_should_fail_to_enable_categorization_on_a_channel_if_unavailable() {
         for preferences in categorization_unavailable() {
             let db = TestDatabase::new();
             let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -2309,6 +2309,46 @@ mod tests {
                     summaries_enabled: true,
                     ..some_channel_list_item_response()
                 },
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_channels_with_their_categorization_setting() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let categorized = Channel {
+            name: "Categorized Channel".to_string(),
+            path: PlaylistPath::new("creators/categorized").unwrap(),
+            ..channel("@categorized").with_categorization_enabled(true)
+        };
+        channel_repository.insert(&categorized).unwrap();
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteEventRepository::new(db.database())),
+            "/videos",
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                ChannelListItemResponse {
+                    id: "@categorized".to_string(),
+                    name: "Categorized Channel".to_string(),
+                    path: "creators/categorized".to_string(),
+                    categorization_enabled: true,
+                    ..some_channel_list_item_response()
+                },
+                some_channel_list_item_response(),
             ])
         );
     }
