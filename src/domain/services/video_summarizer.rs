@@ -299,7 +299,7 @@ impl VideoSummarizer {
                     context_length: context_length.value(),
                     temperature: job.settings.temperature.value(),
                     thinking: job.thinking,
-                    max_output_tokens: context_length.output_budget_tokens(),
+                    max_output_tokens: context_length.value(),
                 },
             )
             .map_err(Failure::Server)?;

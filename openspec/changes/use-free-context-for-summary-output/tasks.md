@@ -4,7 +4,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_send_the_saved_model_settings`: expect `max_output_tokens: 8192`, and `12288` in the `one_call_chat` fixture; send the context length from `VideoSummarizer::ask` and remove `ContextLength::output_budget_tokens`. Verify: `cargo test summarize_video` passes.
+- [x] 2.1 `it_should_send_the_saved_model_settings`: expect `max_output_tokens: 8192`, and `12288` in the `one_call_chat` fixture; send the context length from `VideoSummarizer::ask` and remove `ContextLength::output_budget_tokens`. Verify: `cargo test summarize_video` passes.
 - [ ] 2.2 `it_should_fail_the_task_when_the_answer_stopped_at_the_limit`: expect `the model ran out of context (12288 tokens: 100 of input, 12188 left to think and answer)`, using a saturating subtraction for the room left. Verify: `cargo test summarize_video` passes.
 
 ## 3. Infrastructure adapters (TDD)
