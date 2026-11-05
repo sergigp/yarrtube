@@ -63,5 +63,5 @@
 
 - [x] 4.1 Update `doc/AI.md` and `doc/CATEGORIES.md` (and `doc/ARCHITECTURE.md` if it lists these settings); verify `grep -rn "Manage sources" doc web/src` finds nothing.
 - [x] 4.2 Run `scripts/run-tests.sh --only web --only rust`; verify fmt, clippy and tests pass.
-- [ ] 4.3 Run `scripts/run-tests.sh --only e2e`, since the e2e helpers and specs changed; verify it passes.
+- [x] 4.3 Run `scripts/run-tests.sh --only e2e`, since the e2e helpers and specs changed; verify it passes.
 - [ ] 4.4 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a category and a channel through the HTTP API, then with the Playwright MCP browser: on `/ai` turn on AI and categorization, pick a model, edit and save the prompt, and reset it; in the category's "Edit settings" save an AI prompt and confirm `GET /api/categories` returns it; in the channel's "Edit settings" check "Categorize videos" under "AI" and confirm `GET /api/channels` returns `categorization_enabled: true`; turn categorization off and confirm "AI prompt" is gone while the saved prompt stays in the API. Take a screenshot of the dialog at phone width and check the chips still scroll. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
