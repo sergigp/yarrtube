@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
-use super::validation::{MISSING_QUALITY, MISSING_SUMMARIES, required};
+use super::validation::{MISSING_CATEGORIZATION, MISSING_QUALITY, MISSING_SUMMARIES, required};
 use super::videos::update_watch_state_error;
 use crate::domain::channel::{
     ChannelHandle, ChannelSettingsChange, CreateChannelError, DeleteChannelError,
@@ -43,7 +43,7 @@ pub async fn create_channel(
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
     let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
-    let categorization_enabled = request.categorization_enabled.unwrap_or(false);
+    let categorization_enabled = required(request.categorization_enabled, MISSING_CATEGORIZATION)?;
 
     let outcome = run_blocking(move || {
         channel_creator.create(
@@ -899,6 +899,23 @@ mod tests {
             response,
             Err(ApiError::bad_request(
                 "Summaries setting must be true or false (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_categorization_missing() {
+        let request = CreateChannelRequest {
+            categorization_enabled: None,
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Categorization setting must be true or false (missing)"
             ))
         );
     }
