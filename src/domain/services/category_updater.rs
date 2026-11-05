@@ -1,5 +1,6 @@
 use crate::domain::category::{
-    Category, CategoryColor, CategoryId, CategoryMember, CategoryName, UpdateCategoryError,
+    Category, CategoryColor, CategoryId, CategoryMember, CategoryName, CategoryPrompt,
+    UpdateCategoryError,
 };
 use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
@@ -12,6 +13,8 @@ use std::sync::Arc;
 pub struct CategoryUpdate {
     pub name: Option<CategoryName>,
     pub color: Option<CategoryColor>,
+    /// `Some(None)` removes the prompt.
+    pub ai_prompt: Option<Option<CategoryPrompt>>,
 }
 
 /// Renames and recolors categories and sets their members.

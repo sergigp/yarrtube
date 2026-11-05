@@ -112,6 +112,7 @@ impl ChannelViewSearcher {
             reconcile_interval: channel.reconcile_interval,
             avatar_filename: channel.avatar_filename,
             summaries_enabled: channel.summaries_enabled,
+            categorization_enabled: channel.categorization_enabled,
         }
     }
 }

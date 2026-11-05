@@ -142,6 +142,7 @@ describe('AddChannelDialog', () => {
       path: 'channels/chan',
       reconcile_interval_minutes: 180,
       summaries_enabled: false,
+      categorization_enabled: false,
     })
   })
 
@@ -275,6 +276,7 @@ describe('AddChannelDialog', () => {
       path: 'channels/chan',
       reconcile_interval_minutes: 30,
       summaries_enabled: false,
+      categorization_enabled: false,
     })
   })
 

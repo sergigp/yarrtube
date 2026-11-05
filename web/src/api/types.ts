@@ -21,6 +21,8 @@ export interface ChannelListItem {
   avatar_filename: string | null
   /** Whether the channel's videos get an AI summary. */
   summaries_enabled: boolean
+  /** Whether AI sorts the channel's videos into categories. */
+  categorization_enabled: boolean
   unwatched_count: number
   /** Still downloading or fetching something: it can't be moved yet. */
   work_in_progress: boolean
@@ -38,6 +40,8 @@ export interface PlaylistListItem {
   reconcile_interval_minutes: number
   /** Whether the playlist's videos get an AI summary. */
   summaries_enabled: boolean
+  /** Whether AI sorts the playlist's videos into categories. */
+  categorization_enabled: boolean
   created_at: string
   unwatched_count: number
   /** Still downloading or fetching something: it can't be moved yet. */
@@ -166,6 +170,7 @@ export interface CreatedChannel {
   path: string
   avatar_filename: string | null
   summaries_enabled: boolean
+  categorization_enabled: boolean
   created_at: string
 }
 
@@ -225,6 +230,8 @@ export interface Category {
   name: string
   /** Lowercase `#rrggbb`. */
   color: string
+  /** What the user wrote to describe the videos it should hold. */
+  ai_prompt: string | null
   unwatched_count: number
   channels: string[]
   playlists: string[]
@@ -248,6 +255,7 @@ export interface CreatedCategory {
   id: string
   name: string
   color: string
+  ai_prompt: string | null
   channels: string[]
   playlists: string[]
 }
@@ -270,18 +278,31 @@ export interface Preferences {
   /** The saved prompt, or the shipped one when none is saved. */
   summaries_prompt: string
   summaries_prompt_is_default: boolean
+  categorization_enabled: boolean
+  categorization_model: string
+  /** The saved prompt, or the shipped one when none is saved. */
+  categorization_prompt: string
+  categorization_prompt_is_default: boolean
 }
 
 /**
  * Body of `PATCH /api/preferences`: only the preferences to change.
- * `ollama_url: ""` unsets the URL; `summaries_prompt: null` goes back to the
- * shipped prompt.
+ * `ollama_url: ""` unsets the URL; `summaries_prompt: null` and
+ * `categorization_prompt: null` go back to the shipped prompt.
  */
 export type PreferencesPatch = Partial<
-  Omit<Preferences, 'ollama_url' | 'summaries_prompt' | 'summaries_prompt_is_default'>
+  Omit<
+    Preferences,
+    | 'ollama_url'
+    | 'summaries_prompt'
+    | 'summaries_prompt_is_default'
+    | 'categorization_prompt'
+    | 'categorization_prompt_is_default'
+  >
 > & {
   ollama_url?: string
   summaries_prompt?: string | null
+  categorization_prompt?: string | null
 }
 
 /** Response of `GET /api/ollama?url=`: an Ollama server and its models. */

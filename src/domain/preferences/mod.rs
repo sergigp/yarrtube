@@ -1,3 +1,6 @@
+pub mod categorization_model;
+pub mod categorization_prompt;
+pub mod categorization_settings;
 pub mod context_length;
 pub mod errors;
 #[allow(clippy::module_inception)]
@@ -10,6 +13,9 @@ pub mod summary_settings;
 pub mod temperature;
 pub mod theme;
 
+pub use categorization_model::CategorizationModel;
+pub use categorization_prompt::CategorizationPrompt;
+pub use categorization_settings::CategorizationSettings;
 pub use context_length::ContextLength;
 pub use errors::{ReadPreferencesError, UpdatePreferencesError};
 pub use preferences::Preferences;

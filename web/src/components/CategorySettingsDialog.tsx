@@ -22,18 +22,18 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 
-interface ManageSourcesDialogProps {
+interface CategorySettingsDialogProps {
   category: Category
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
 /** Every tracked channel and playlist as a chip, pressed when in the category. */
-export function ManageSourcesDialog({ category, open, onOpenChange }: ManageSourcesDialogProps) {
+export function CategorySettingsDialog({ category, open, onOpenChange }: CategorySettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Mounted only while open, so every open starts from the saved sources. */}
-      {open && <ManageSourcesContent category={category} onClose={() => onOpenChange(false)} />}
+      {open && <CategorySettingsContent category={category} onClose={() => onOpenChange(false)} />}
     </Dialog>
   )
 }
@@ -43,7 +43,7 @@ export function ManageSourcesDialog({ category, open, onOpenChange }: ManageSour
  * category's sources exactly the pressed chips in one request. Closing with
  * staged changes asks to discard them first.
  */
-function ManageSourcesContent({ category, onClose }: { category: Category; onClose: () => void }) {
+function CategorySettingsContent({ category, onClose }: { category: Category; onClose: () => void }) {
   const { data: channels } = useChannels()
   const { data: playlists } = usePlaylists()
   const invalidateLibrary = useInvalidateLibrary()

@@ -334,13 +334,13 @@ describe('CategoryDetail', () => {
     expect(JSON.parse(init.body as string)).toEqual({ name: 'Board games' })
   })
 
-  it('opens the dialog on arrival with ManageSourcesState, once', async () => {
+  it('opens the dialog on arrival with CategorySettingsState, once', async () => {
     renderCategory(
       {
         'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
         'GET /api/categories/chess/videos': [],
       },
-      { pathname: '/categories/chess', state: { manageSources: true } },
+      { pathname: '/categories/chess', state: { editSettings: true } },
     )
     const user = userEvent.setup()
 

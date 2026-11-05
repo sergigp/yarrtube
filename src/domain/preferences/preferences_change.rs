@@ -1,4 +1,7 @@
-use super::{ContextLength, SummaryModel, SummaryPrompt, Temperature, Theme};
+use super::{
+    CategorizationModel, CategorizationPrompt, ContextLength, SummaryModel, SummaryPrompt,
+    Temperature, Theme,
+};
 use crate::domain::llm_server::OllamaUrl;
 
 /// Preferences to change; `None` keeps the stored value.
@@ -20,4 +23,8 @@ pub struct PreferencesChange {
     pub summaries_thinking: Option<bool>,
     /// `Some(None)` goes back to the shipped prompt.
     pub summaries_prompt: Option<Option<SummaryPrompt>>,
+    pub categorization_enabled: Option<bool>,
+    pub categorization_model: Option<CategorizationModel>,
+    /// `Some(None)` goes back to the shipped prompt.
+    pub categorization_prompt: Option<Option<CategorizationPrompt>>,
 }

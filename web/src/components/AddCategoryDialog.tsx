@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { CategoryColorPicker } from './CategoryColorPicker'
-import type { ManageSourcesState } from './CategoryDetail'
+import type { CategorySettingsState } from './CategoryDetail'
 
 interface AddCategoryDialogProps {
   open: boolean
@@ -52,7 +52,7 @@ function AddCategoryForm({ onClose }: { onClose: () => void }) {
       const category = await createCategory(name, color)
       invalidateLibrary()
       onClose()
-      const state: ManageSourcesState = { manageSources: true }
+      const state: CategorySettingsState = { editSettings: true }
       navigate(`/categories/${encodeURIComponent(category.id)}`, { state })
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))

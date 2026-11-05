@@ -1,4 +1,4 @@
-use super::{PreferencesChange, SummarySettings, Theme};
+use super::{CategorizationSettings, PreferencesChange, SummarySettings, Theme};
 use crate::domain::llm_server::OllamaUrl;
 use crate::domain::shared::ValidationError;
 
@@ -14,6 +14,7 @@ pub struct Preferences {
     pub ai_enabled: bool,
     pub ollama_url: Option<OllamaUrl>,
     pub summaries: SummarySettings,
+    pub categorization: CategorizationSettings,
 }
 
 impl Default for Preferences {
@@ -29,6 +30,7 @@ impl Default for Preferences {
             ai_enabled: false,
             ollama_url: None,
             summaries: SummarySettings::default(),
+            categorization: CategorizationSettings::default(),
         }
     }
 }
@@ -85,6 +87,7 @@ impl Preferences {
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             summaries,
+            categorization: self.categorization,
         }
         .ensure_ai_has_url()
     }

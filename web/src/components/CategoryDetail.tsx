@@ -18,13 +18,13 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { CategoryColorPicker } from './CategoryColorPicker'
 import { CategoryPlayer } from './CategoryPlayer'
 import { DetailHeader } from './DetailHeader'
-import { ManageSourcesDialog } from './ManageSourcesDialog'
+import { CategorySettingsDialog } from './CategorySettingsDialog'
 import { VideoGrid } from './VideoGrid'
 import { VideoGridSkeleton } from './VideoSkeletons'
 
 /** Router state that opens the manage sources dialog on arrival at a category's view. */
-export interface ManageSourcesState {
-  manageSources: true
+export interface CategorySettingsState {
+  editSettings: true
 }
 
 /**
@@ -155,9 +155,9 @@ export function CategoryDetail() {
   const markCategoryWatched = useMarkCategoryWatched()
   const theme = useTheme()
   const [managing, setManaging] = useState(false)
-  // Arriving with ManageSourcesState opens the dialog once per navigation;
+  // Arriving with CategorySettingsState opens the dialog once per navigation;
   // the state is then dropped from history so reload and back don't reopen it.
-  const arrivedManaging = (location.state as ManageSourcesState | null)?.manageSources === true
+  const arrivedManaging = (location.state as CategorySettingsState | null)?.editSettings === true
   const [openedFor, setOpenedFor] = useState<string | null>(null)
   if (arrivedManaging && openedFor !== location.key) {
     setOpenedFor(location.key)
@@ -230,7 +230,7 @@ export function CategoryDetail() {
           />
         )
       )}
-      <ManageSourcesDialog category={category} open={managing} onOpenChange={setManaging} />
+      <CategorySettingsDialog category={category} open={managing} onOpenChange={setManaging} />
       <CategoryColorDialog
         open={recoloring}
         onOpenChange={setRecoloring}

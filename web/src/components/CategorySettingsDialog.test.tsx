@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Category } from '@/api/types'
-import { ManageSourcesDialog } from './ManageSourcesDialog'
+import { CategorySettingsDialog } from './CategorySettingsDialog'
 import {
   aCategory,
   aChannel,
@@ -16,7 +16,7 @@ function renderDialog(category: Category, routes: Routes) {
   const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
   const onOpenChange = vi.fn()
   renderWithProviders(
-    <ManageSourcesDialog category={category} open onOpenChange={onOpenChange} />,
+    <CategorySettingsDialog category={category} open onOpenChange={onOpenChange} />,
   )
   return { fetchMock, onOpenChange }
 }
@@ -47,7 +47,7 @@ const library = {
   'GET /api/playlists': [aPlaylist({ id: 'PLend', name: 'Endgame course' })],
 }
 
-describe('ManageSourcesDialog', () => {
+describe('CategorySettingsDialog', () => {
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 

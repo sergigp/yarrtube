@@ -43,6 +43,7 @@ pub async fn create_channel(
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
     let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
+    let categorization_enabled = request.categorization_enabled.unwrap_or(false);
 
     let outcome = run_blocking(move || {
         channel_creator.create(
@@ -52,6 +53,7 @@ pub async fn create_channel(
             reconcile_interval,
             path,
             summaries_enabled,
+            categorization_enabled,
         )
     })
     .await?;
@@ -114,6 +116,7 @@ pub async fn update_channel(
             .map(ReconcileInterval::new)
             .transpose()?,
         summaries_enabled: request.summaries_enabled,
+        categorization_enabled: request.categorization_enabled,
     };
     if change.is_empty() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
@@ -3294,6 +3297,7 @@ mod tests {
             path: Some("creators/somechannel".to_string()),
             reconcile_interval_minutes: None,
             summaries_enabled: Some(false),
+            categorization_enabled: Some(false),
         }
     }
 
@@ -3317,6 +3321,7 @@ mod tests {
             video_limit: None,
             reconcile_interval_minutes: None,
             summaries_enabled: None,
+            categorization_enabled: None,
         }
     }
 
@@ -3332,6 +3337,7 @@ mod tests {
             avatar_filename: None,
             created_at: fixed_timestamp(),
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 
@@ -3347,6 +3353,7 @@ mod tests {
             unwatched_count: 0,
             work_in_progress: false,
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 

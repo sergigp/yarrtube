@@ -16,6 +16,7 @@ export async function addPlaylist(request, playlist, { downloaded = true } = {})
       exclude_from_home: false,
       reconcile_interval_minutes: 180,
       summaries_enabled: false,
+      categorization_enabled: false,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()
@@ -38,6 +39,7 @@ export async function addChannel(request, channel, { videoLimit, downloaded = tr
       path: `channels/${slugOf(channel.handle)}`,
       reconcile_interval_minutes: 180,
       summaries_enabled: false,
+      categorization_enabled: false,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()

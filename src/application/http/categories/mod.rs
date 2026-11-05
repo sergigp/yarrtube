@@ -5,7 +5,7 @@ use super::error::ApiError;
 use super::validation::required;
 use super::videos::update_watch_state_error;
 use crate::domain::category::{
-    CategoryColor, CategoryId, CategoryMember, CategoryName, CreateCategoryError,
+    CategoryColor, CategoryId, CategoryMember, CategoryName, CategoryPrompt, CreateCategoryError,
     DeleteCategoryError, UpdateCategoryError,
 };
 use crate::domain::channel::ChannelHandle;
@@ -62,6 +62,7 @@ pub async fn update_category(
     let update = CategoryUpdate {
         name: request.name.map(CategoryName::new).transpose()?,
         color: request.color.map(CategoryColor::new).transpose()?,
+        ai_prompt: request.ai_prompt.map(CategoryPrompt::new).transpose()?,
     };
 
     run_blocking(move || category_updater.update(&id, update))
@@ -257,6 +258,7 @@ mod tests {
                 StatusCode::CREATED,
                 CategoryResponse {
                     color: "#f59e0b".to_string(),
+                    ai_prompt: None,
                     ..category_response(id.as_ref(), "Chess", &[], &[])
                 }
             ))
@@ -859,6 +861,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: None,
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -925,6 +928,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: None,
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -952,6 +956,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: Some("Board games".to_string()),
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -1040,6 +1045,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: Some("sports".to_string()),
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -1062,6 +1068,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: None,
                 color: None,
+                ai_prompt: None,
             },
         )
         .await;
@@ -1082,6 +1089,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: None,
                 color: Some("yellow".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -2067,6 +2075,7 @@ mod tests {
             id: id.map(|id| id.as_str().to_string()).unwrap_or_default(),
             name: name.to_string(),
             color: CategoryColor::PALETTE[0].to_string(),
+            ai_prompt: None,
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
         }
@@ -2078,6 +2087,7 @@ mod tests {
             id: id.unwrap_or_else(CategoryId::new_generated),
             name: CategoryName::new(name).unwrap(),
             color: CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            ai_prompt: None,
             members: vec![],
             created_at: fixed_timestamp(),
         }
@@ -2097,6 +2107,7 @@ mod tests {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
             color: category.color.as_str().to_string(),
+            ai_prompt: None,
             unwatched_count,
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
@@ -2291,6 +2302,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: Some(name.to_string()),
                 color: None,
+                ai_prompt: None,
             },
         )
         .await

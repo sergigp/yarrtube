@@ -4,8 +4,8 @@ use super::blocking::run_blocking;
 use super::error::ApiError;
 use crate::domain::llm_server::OllamaUrl;
 use crate::domain::preferences::{
-    ContextLength, PreferencesChange, SummaryModel, SummaryPrompt, Temperature, Theme,
-    UpdatePreferencesError,
+    CategorizationModel, CategorizationPrompt, ContextLength, PreferencesChange, SummaryModel,
+    SummaryPrompt, Temperature, Theme, UpdatePreferencesError,
 };
 use crate::domain::services::{
     PreferencesSearcher, PreferencesSearcherApi, PreferencesUpdater, PreferencesUpdaterApi,
@@ -59,6 +59,15 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
         summaries_prompt: request
             .summaries_prompt
             .map(|prompt| prompt.map(SummaryPrompt::new).transpose())
+            .transpose()?,
+        categorization_enabled: request.categorization_enabled,
+        categorization_model: request
+            .categorization_model
+            .map(CategorizationModel::new)
+            .transpose()?,
+        categorization_prompt: request
+            .categorization_prompt
+            .map(|prompt| prompt.map(CategorizationPrompt::new).transpose())
             .transpose()?,
     })
 }

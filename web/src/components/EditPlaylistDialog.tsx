@@ -8,7 +8,7 @@ import { CategoryPicker } from './CategoryPicker'
 import { LocationLine } from './LocationLine'
 import { MoveSourceDialog } from './MoveSourceDialog'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
-import { SummariesField } from './SummariesField'
+import { SourceAiSection } from './SourceAiSection'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -125,11 +125,13 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
         moveBlocked={playlist.work_in_progress}
       />
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
-      <SummariesField
-        id="edit-playlist-summaries"
-        checked={summariesEnabled}
-        onChange={setSummariesEnabled}
-        enabledOnSource={playlist.summaries_enabled}
+      <SourceAiSection
+        idPrefix="edit-playlist"
+        summaries={{
+          checked: summariesEnabled,
+          onChange: setSummariesEnabled,
+          enabledOnSource: playlist.summaries_enabled,
+        }}
         onNavigateAway={onClose}
       />
       {withCategories && (

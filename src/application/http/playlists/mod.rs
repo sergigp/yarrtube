@@ -42,6 +42,7 @@ pub async fn create_playlist(
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
     let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
+    let categorization_enabled = request.categorization_enabled.unwrap_or(false);
 
     let outcome = run_blocking(move || {
         playlist_creator.create(
@@ -51,6 +52,7 @@ pub async fn create_playlist(
             exclude_from_home,
             reconcile_interval,
             summaries_enabled,
+            categorization_enabled,
         )
     })
     .await?;
@@ -114,6 +116,7 @@ pub async fn update_playlist(
             .map(ReconcileInterval::new)
             .transpose()?,
         summaries_enabled: request.summaries_enabled,
+        categorization_enabled: request.categorization_enabled,
     };
     if change.is_empty() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
@@ -4133,6 +4136,7 @@ mod tests {
             exclude_from_home: None,
             reconcile_interval_minutes: None,
             summaries_enabled: Some(false),
+            categorization_enabled: Some(false),
         }
     }
 
@@ -4142,6 +4146,7 @@ mod tests {
             hide_unwatched_count: None,
             reconcile_interval_minutes: None,
             summaries_enabled: None,
+            categorization_enabled: None,
         }
     }
 
@@ -4151,6 +4156,7 @@ mod tests {
             hide_unwatched_count: None,
             reconcile_interval_minutes: None,
             summaries_enabled: None,
+            categorization_enabled: None,
         }
     }
 
@@ -4187,6 +4193,7 @@ mod tests {
             reconcile_interval_minutes: 180,
             created_at: fixed_timestamp(),
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 
@@ -4204,6 +4211,7 @@ mod tests {
             unwatched_count: 0,
             work_in_progress: false,
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 

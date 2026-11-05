@@ -115,8 +115,14 @@ impl PlaylistUpdater {
             Some(reconcile_interval) => playlist.with_reconcile_interval(reconcile_interval),
             None => playlist,
         };
-        match change.summaries_enabled {
+        let playlist = match change.summaries_enabled {
             Some(summaries_enabled) => playlist.with_summaries_enabled(summaries_enabled),
+            None => playlist,
+        };
+        match change.categorization_enabled {
+            Some(categorization_enabled) => {
+                playlist.with_categorization_enabled(categorization_enabled)
+            }
             None => playlist,
         }
     }

@@ -112,8 +112,14 @@ impl ChannelUpdater {
             Some(reconcile_interval) => channel.with_reconcile_interval(reconcile_interval),
             None => channel,
         };
-        match change.summaries_enabled {
+        let channel = match change.summaries_enabled {
             Some(summaries_enabled) => channel.with_summaries_enabled(summaries_enabled),
+            None => channel,
+        };
+        match change.categorization_enabled {
+            Some(categorization_enabled) => {
+                channel.with_categorization_enabled(categorization_enabled)
+            }
             None => channel,
         }
     }

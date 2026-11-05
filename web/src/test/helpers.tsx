@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, type InitialEntry } from 'react-router-dom'
 import { vi } from 'vitest'
 import SHIPPED_PROMPT from '../../../prompts/summaries/v3.md?raw'
+import SHIPPED_CATEGORIZATION_PROMPT from '../../../prompts/categorization/v1.md?raw'
 import type {
   Announcement,
   AppVersion,
@@ -123,6 +124,7 @@ export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListI
     reconcile_interval_minutes: 180,
     avatar_filename: null,
     summaries_enabled: false,
+    categorization_enabled: false,
     unwatched_count: 0,
     work_in_progress: false,
     ...overrides,
@@ -141,6 +143,7 @@ export function aPlaylist(overrides: Partial<PlaylistListItem> = {}): PlaylistLi
     hide_unwatched_count: false,
     reconcile_interval_minutes: 180,
     summaries_enabled: false,
+    categorization_enabled: false,
     created_at: '2026-01-01T00:00:00Z',
     unwatched_count: 0,
     work_in_progress: false,
@@ -253,6 +256,7 @@ export function aCategory(overrides: Partial<Category> = {}): Category {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
     color: '#f59e0b',
+    ai_prompt: null,
     unwatched_count: 0,
     channels: [],
     playlists: [],
@@ -279,6 +283,7 @@ export function aCreatedCategory(overrides: Partial<CreatedCategory> = {}): Crea
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
     color: '#f59e0b',
+    ai_prompt: null,
     channels: [],
     playlists: [],
     ...overrides,
@@ -313,6 +318,10 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     summaries_thinking: true,
     summaries_prompt: SHIPPED_PROMPT,
     summaries_prompt_is_default: true,
+    categorization_enabled: false,
+    categorization_model: 'qwen3:4b',
+    categorization_prompt: SHIPPED_CATEGORIZATION_PROMPT,
+    categorization_prompt_is_default: true,
     ...overrides,
   }
 }

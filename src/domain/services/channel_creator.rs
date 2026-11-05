@@ -53,6 +53,7 @@ impl ChannelCreator {
 }
 
 pub trait ChannelCreatorApi: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn create(
         &self,
         id: ChannelHandle,
@@ -61,6 +62,7 @@ pub trait ChannelCreatorApi: Send + Sync {
         reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
         summaries_enabled: bool,
+        categorization_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError>;
 }
 
@@ -73,6 +75,7 @@ impl ChannelCreatorApi for ChannelCreator {
         reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
         summaries_enabled: bool,
+        categorization_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
         self.ensure_summaries_available(summaries_enabled)?;
         if let Some(existing) = self.find_existing(&id)? {
@@ -92,7 +95,8 @@ impl ChannelCreatorApi for ChannelCreator {
             avatar_filename,
             self.clock.now(),
         )
-        .with_summaries_enabled(summaries_enabled);
+        .with_summaries_enabled(summaries_enabled)
+        .with_categorization_enabled(categorization_enabled);
         self.insert_channel(&channel)?;
         self.publish_channel_created(&channel)?;
         info!(channel_id = %channel.id, name = %channel.name, "created channel");

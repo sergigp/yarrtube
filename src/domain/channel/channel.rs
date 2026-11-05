@@ -16,6 +16,7 @@ pub struct Channel {
     pub avatar_filename: Option<String>,
     pub created_at: DateTime<Utc>,
     pub summaries_enabled: bool,
+    pub categorization_enabled: bool,
 }
 
 impl Channel {
@@ -42,6 +43,7 @@ impl Channel {
             avatar_filename,
             created_at,
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 
@@ -70,6 +72,13 @@ impl Channel {
     pub fn with_summaries_enabled(self, summaries_enabled: bool) -> Self {
         Self {
             summaries_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_categorization_enabled(self, categorization_enabled: bool) -> Self {
+        Self {
+            categorization_enabled,
             ..self
         }
     }

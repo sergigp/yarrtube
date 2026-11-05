@@ -34,6 +34,13 @@ pub struct UpdatePreferencesRequest {
     /// Left out keeps the prompt, `null` goes back to the shipped one.
     #[serde(default, deserialize_with = "present")]
     pub summaries_prompt: Option<Option<String>>,
+    #[serde(default)]
+    pub categorization_enabled: Option<bool>,
+    #[serde(default)]
+    pub categorization_model: Option<String>,
+    /// Left out keeps the prompt, `null` goes back to the shipped one.
+    #[serde(default, deserialize_with = "present")]
+    pub categorization_prompt: Option<Option<String>>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -53,11 +60,16 @@ pub struct PreferencesResponse {
     pub summaries_thinking: bool,
     pub summaries_prompt: String,
     pub summaries_prompt_is_default: bool,
+    pub categorization_enabled: bool,
+    pub categorization_model: String,
+    pub categorization_prompt: String,
+    pub categorization_prompt_is_default: bool,
 }
 
 impl From<Preferences> for PreferencesResponse {
     fn from(preferences: Preferences) -> Self {
         let summaries = &preferences.summaries;
+        let categorization = &preferences.categorization;
         Self {
             categories_enabled: preferences.categories_enabled,
             home_show_continue_watching: preferences.home_show_continue_watching,
@@ -74,6 +86,10 @@ impl From<Preferences> for PreferencesResponse {
             summaries_thinking: summaries.thinking,
             summaries_prompt: summaries.effective_prompt().as_str().to_string(),
             summaries_prompt_is_default: summaries.prompt.is_none(),
+            categorization_enabled: categorization.enabled,
+            categorization_model: categorization.model.as_str().to_string(),
+            categorization_prompt: categorization.effective_prompt().as_str().to_string(),
+            categorization_prompt_is_default: categorization.prompt.is_none(),
         }
     }
 }

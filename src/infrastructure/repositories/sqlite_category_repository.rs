@@ -198,6 +198,7 @@ impl SqliteCategoryRepository {
             id,
             name: CategoryName::new(row.name)?,
             color: CategoryColor::new(row.color)?,
+            ai_prompt: None,
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),

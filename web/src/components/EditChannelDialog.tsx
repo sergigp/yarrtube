@@ -13,7 +13,7 @@ import { CategoryPicker } from './CategoryPicker'
 import { LocationLine } from './LocationLine'
 import { MoveSourceDialog } from './MoveSourceDialog'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
-import { SummariesField } from './SummariesField'
+import { SourceAiSection } from './SourceAiSection'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -173,11 +173,13 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
         onChange={changeInterval}
       />
 
-      <SummariesField
-        id="edit-channel-summaries"
-        checked={form.summaries_enabled}
-        onChange={changeSummaries}
-        enabledOnSource={channel.summaries_enabled}
+      <SourceAiSection
+        idPrefix="edit-channel"
+        summaries={{
+          checked: form.summaries_enabled,
+          onChange: changeSummaries,
+          enabledOnSource: channel.summaries_enabled,
+        }}
         onNavigateAway={onClose}
       />
 

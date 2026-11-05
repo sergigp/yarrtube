@@ -156,6 +156,7 @@ impl From<StoredPreferences> for Preferences {
                 // reading it as the default would erase it on the next save.
                 prompt: stored.summaries_prompt.map(SummaryPrompt::from_stored),
             },
+            categorization: defaults.categorization,
         }
     }
 }
