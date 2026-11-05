@@ -2325,6 +2325,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_enable_categorization_on_a_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = UpdatePlaylistRequest {
+            categorization_enabled: Some(true),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                categorization_enabled: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_enable_summaries_on_a_playlist_if_summaries_are_off() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
