@@ -129,7 +129,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
         exclude_from_home: excludeFromHome,
         reconcile_interval_minutes: reconcileIntervalMinutes,
         summaries_enabled: summariesEnabled,
-        categorization_enabled: false,
+        categorization_enabled: categorizationEnabled,
       })
       location.remember()
       invalidateLibrary()
