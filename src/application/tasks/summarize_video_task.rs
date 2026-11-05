@@ -1170,7 +1170,7 @@ mod tests {
         assert_eq!(
             result,
             Err(
-                "the model stopped at the 3288-token output cap (context 12288, 100 input tokens)"
+                "the model ran out of context (12288 tokens: 100 of input, 12188 left to think and answer)"
                     .to_string()
             )
         );

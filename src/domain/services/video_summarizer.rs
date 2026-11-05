@@ -317,10 +317,10 @@ impl VideoSummarizer {
         }
         if reply.stopped_at_limit {
             return Err(anyhow!(
-                "the model stopped at the {}-token output cap (context {}, {} input tokens)",
-                context_length.output_budget_tokens(),
+                "the model ran out of context ({} tokens: {} of input, {} left to think and answer)",
                 context_length.value(),
-                reply.input_tokens
+                reply.input_tokens,
+                context_length.value().saturating_sub(reply.input_tokens)
             )
             .into());
         }

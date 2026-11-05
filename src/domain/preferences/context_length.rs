@@ -28,11 +28,6 @@ impl ContextLength {
     pub fn input_budget_tokens(&self) -> u32 {
         self.0 * INPUT_BUDGET_OF_DEFAULT / DEFAULT
     }
-
-    /// The tokens the model can write: what the input budget leaves.
-    pub fn output_budget_tokens(&self) -> u32 {
-        self.0 - self.input_budget_tokens()
-    }
 }
 
 impl Default for ContextLength {
