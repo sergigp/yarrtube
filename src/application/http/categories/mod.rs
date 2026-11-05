@@ -920,6 +920,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_remove_the_ai_prompt_of_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = Category {
+            ai_prompt: CategoryPrompt::new("Chess games").unwrap(),
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+                ai_prompt: Some(String::new()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                ai_prompt: None,
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_not_announce_a_recolored_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));

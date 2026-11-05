@@ -7,7 +7,9 @@ pub struct CategoryPrompt(String);
 impl CategoryPrompt {
     /// `None` when blank.
     pub fn new(value: impl Into<String>) -> Result<Option<Self>, ValidationError> {
-        Ok(Some(Self(value.into().trim().to_string())))
+        let value = value.into();
+        let trimmed = value.trim();
+        Ok((!trimmed.is_empty()).then(|| Self(trimmed.to_string())))
     }
 
     pub fn as_str(&self) -> &str {
