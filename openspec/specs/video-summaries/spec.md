@@ -70,11 +70,15 @@ For a video with chapters, `{chapters}` SHALL be the `chapters` section with `{c
 - **THEN** nothing is inserted for `{chapters}`
 
 ### Requirement: Summary Settings Sent To Ollama
-Every request SHALL use the saved `summaries_model`, `summaries_context_length` and `summaries_temperature`, and cap the output at the context left over by the input budget. Thinking SHALL be requested only when `summaries_thinking` is on and Ollama lists `thinking` among the model's capabilities. Every request SHALL tell Ollama neither to truncate the prompt nor to shift the context, because by default it silently cuts an oversized prompt and reports only what it kept.
+Every request SHALL use the saved `summaries_model`, `summaries_context_length` and `summaries_temperature`, and SHALL let the answer use all the context the prompt leaves, with no lower output cap. Thinking SHALL be requested only when `summaries_thinking` is on and Ollama lists `thinking` among the model's capabilities. Every request SHALL tell Ollama neither to truncate the prompt nor to shift the context, because by default it silently cuts an oversized prompt and reports only what it kept.
 
 #### Scenario: Never truncated
 - **WHEN** any request is sent
 - **THEN** it asks Ollama not to truncate and not to shift
+
+#### Scenario: All the free context available
+- **WHEN** a request is sent with a context length of 8192
+- **THEN** its output limit is 8192, leaving Ollama to stop where the context ends
 
 #### Scenario: Model able to think
 - **WHEN** thinking is on and the saved model supports it
@@ -144,7 +148,7 @@ Everything up to and including the last `</think>` in an answer SHALL be dropped
 - **THEN** the answer used is `Three games.`
 
 ### Requirement: Incomplete Answers Rejected
-A call SHALL be rejected when its answer is empty once cleaned, when Ollama stopped at the output cap, when Ollama refuses the prompt as too long, or when it runs past the 30-minute timeout. A rejected call SHALL fail the whole generation, storing nothing.
+A call SHALL be rejected when its answer is empty once cleaned, when Ollama stopped at the context limit, when Ollama refuses the prompt as too long, or when it runs past the 30-minute timeout. A rejected call SHALL fail the whole generation, storing nothing.
 
 #### Scenario: Stopped at the output cap
 - **WHEN** Ollama reports it stopped because of the length limit
@@ -230,7 +234,7 @@ A video's summary SHALL be deleted whenever the video's record is deleted, inclu
 - **THEN** those summaries are deleted too
 
 ### Requirement: Summary Generation Logged
-Generation SHALL be logged at info level from start to end: the start with the video and its length in seconds; each call with its full system and user messages, then its full answer, tokens and duration; and the end with the summary, total duration, video length and model. Skips SHALL be logged with their reason at info level, and failures at error level with the specific reason: the output cap, context and input tokens, or Ollama's refusal.
+Generation SHALL be logged at info level from start to end: the start with the video and its length in seconds; each call with its full system and user messages, then its full answer, tokens and duration; and the end with the summary, total duration, video length and model. Skips SHALL be logged with their reason at info level, and failures at error level with the specific reason: the context, input tokens and room left when the context ran out, or Ollama's refusal.
 
 #### Scenario: Successful generation
 - **WHEN** a 30-minute video is summarized in one call at info verbosity
@@ -247,6 +251,10 @@ Generation SHALL be logged at info level from start to end: the start with the v
 #### Scenario: Failed
 - **WHEN** a generation fails
 - **THEN** the logs hold the specific reason, at error level
+
+#### Scenario: Context ran out
+- **WHEN** a call with 100 input tokens fills a context of 12288
+- **THEN** the error logged names the context of 12288, the 100 input tokens and the 12188 tokens left
 
 ### Requirement: Summary Visibility
 A stored summary SHALL be shown only while AI is on, summaries are on and the source holding that copy of the video has `summaries_enabled` `true`. Otherwise the system SHALL treat the video as having no summary wherever it is shown. A hidden summary SHALL stay stored and SHALL show again, without being regenerated, once all three conditions hold.

@@ -16,6 +16,16 @@ Known weaknesses: videos with several parts (the chess stream with three
 games is still summarized wrong); opens with "The video…" now and then
 (strip it in code). About 5 min per video on the M2 Air, ~12 videos an hour.
 
+## 2026-11-05 · output limited only by the free context
+
+Production capped output at what the input budget left (3288 of 12288) and
+failed 17 calls on 10 videos in a day, some on inputs of ~2k tokens with ~10k
+free. The cap sat inside normal use: the uncapped v3 run below has qwen3:4b
+writing up to 3,551 tokens (`calls[].out` in its `summaries.jsonl`). A call now
+uses all the context its prompt leaves. Inputs can still run over the budget
+(11,131 seen), since the budget counts only the transcript, and leave little
+room: retune it from the logged room left if those keep failing.
+
 ## 2026-11-03 · prompt v3 · qwen3:4b chosen
 
 Run: [`2026-11-03_prompt-v3`](results/2026-11-03_prompt-v3/report-claude-sonnet.md),
@@ -109,4 +119,6 @@ Speed per video:
   `num_ctx`, and compare `prompt_eval_count` with the expected input size.
 - `qwen3:4b` **ignores `think: false`** and writes its reasoning into the
   answer: strip everything up to `</think>`.
-- Thinking can loop for an hour: cap it with `num_predict` and a timeout.
+- Thinking can loop for an hour: `shift: false` ends it at the context's end,
+  and a timeout bounds the time. A `num_predict` below the free context fails
+  normal calls too: keep it at the context length.
