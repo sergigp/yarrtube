@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { useCheckOllama, useOllama, usePreferences, useSavePreferences } from '@/api/queries'
-import type { OllamaServer, Preferences, PreferencesPatch } from '@/api/types'
+import type { OllamaModel, OllamaServer, Preferences, PreferencesPatch } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -46,9 +46,9 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const [form, setForm] = useState<AiSettingsForm>(() => formFrom(saved))
   const set = <K extends keyof AiSettingsForm>(key: K, value: AiSettingsForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
-  const summariesDisabled = !form.ai_enabled
+  const aiOff = !form.ai_enabled
   // Always shown, so turning summaries on doesn't reshape the page.
-  const modelDisabled = summariesDisabled || !form.summaries_enabled
+  const modelDisabled = aiOff || !form.summaries_enabled
   // Context length, temperature, thinking and the prompt: their defaults come
   // from the evals, so they stay out of the way until asked for.
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -160,33 +160,16 @@ function AiSettings({ saved }: { saved: Preferences }) {
           label="Enabled"
           name="Summaries enabled"
           checked={form.summaries_enabled}
-          disabled={summariesDisabled}
+          disabled={aiOff}
           onChange={(value) => set('summaries_enabled', value)}
         />
-        <Field id="summaries-model" label="Model">
-          {server ? (
-            <select
-              id="summaries-model"
-              value={form.summaries_model}
-              disabled={modelDisabled}
-              onChange={(event) => set('summaries_model', event.target.value)}
-              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-            >
-              {modelOptions(server.models, form.summaries_model).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              id="summaries-model"
-              value={form.summaries_model}
-              disabled={modelDisabled}
-              onChange={(event) => set('summaries_model', event.target.value)}
-            />
-          )}
-        </Field>
+        <ModelField
+          id="summaries-model"
+          models={server?.models}
+          value={form.summaries_model}
+          disabled={modelDisabled}
+          onChange={(value) => set('summaries_model', value)}
+        />
         {form.summaries_enabled && (
           <>
             <button
@@ -211,7 +194,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     max={131072}
                     step={1024}
                     value={form.summaries_context_length}
-                    disabled={summariesDisabled}
+                    disabled={aiOff}
                     onChange={(event) => set('summaries_context_length', event.target.value)}
                   />
                 </Field>
@@ -223,7 +206,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     max={2}
                     step={0.1}
                     value={form.summaries_temperature}
-                    disabled={summariesDisabled}
+                    disabled={aiOff}
                     onChange={(event) => set('summaries_temperature', event.target.value)}
                   />
                 </Field>
@@ -237,7 +220,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     label="Thinking"
                     help={THINKING_HELP}
                     checked={form.summaries_thinking}
-                    disabled={summariesDisabled}
+                    disabled={aiOff}
                     onChange={(value) => set('summaries_thinking', value)}
                   />
                 )}
@@ -247,7 +230,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     rows={20}
                     spellCheck={false}
                     value={form.summaries_prompt}
-                    disabled={summariesDisabled}
+                    disabled={aiOff}
                     onChange={(event) => set('summaries_prompt', event.target.value)}
                     className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
                   />
@@ -261,7 +244,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={saving || summariesDisabled}
+                        disabled={saving || aiOff}
                         onClick={() => void resetPrompt()}
                       >
                         Reset to default
@@ -273,6 +256,24 @@ function AiSettings({ saved }: { saved: Preferences }) {
             )}
           </>
         )}
+      </Section>
+      <Section title="Categorization">
+        <SwitchRow
+          id="categorization-enabled"
+          label="Enabled"
+          name="Categorization enabled"
+          checked={form.categorization_enabled}
+          disabled={aiOff}
+          onChange={(value) => set('categorization_enabled', value)}
+        />
+        <ModelField
+          id="categorization-model"
+          name="Categorization model"
+          models={server?.models}
+          value={form.categorization_model}
+          disabled={aiOff || !form.categorization_enabled}
+          onChange={(value) => set('categorization_model', value)}
+        />
       </Section>
       <div className="flex items-center justify-end gap-4">
         {saveError && (
@@ -293,6 +294,53 @@ function AiSettings({ saved }: { saved: Preferences }) {
         </Button>
       </div>
     </>
+  )
+}
+
+/** "Model": the server's models when known, otherwise a text field. */
+function ModelField({
+  id,
+  name,
+  models,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string
+  /** The field's accessible name, when the label alone is ambiguous. */
+  name?: string
+  models: OllamaModel[] | undefined
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <Field id={id} label="Model">
+      {models ? (
+        <select
+          id={id}
+          aria-label={name}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+        >
+          {modelOptions(models, value).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <Input
+          id={id}
+          aria-label={name}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+    </Field>
   )
 }
 

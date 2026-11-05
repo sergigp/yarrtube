@@ -20,6 +20,19 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
   })
 
+  it('shows the Categorization section disabled on a fresh install', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+
+    const section = within(await screen.findByRole('group', { name: 'Categorization' }))
+    expect(section.getByRole('switch', { name: 'Categorization enabled' })).not.toBeChecked()
+    expect(section.getByRole('switch', { name: 'Categorization enabled' })).toBeDisabled()
+    expect(section.getByText('Model')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Categorization model' })).toHaveValue('qwen3:4b')
+    expect(screen.getByRole('textbox', { name: 'Categorization model' })).toBeDisabled()
+    expect(section.queryByRole('button', { name: /advanced/i })).not.toBeInTheDocument()
+  })
+
   it('keeps the model disabled while summaries are off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ ai_enabled: true }) })
     renderWithProviders(<AiSettingsView />)

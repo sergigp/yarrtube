@@ -10,6 +10,8 @@ export interface AiSettingsForm {
   summaries_temperature: string
   summaries_thinking: boolean
   summaries_prompt: string
+  categorization_enabled: boolean
+  categorization_model: string
 }
 
 /** The form showing `preferences`. */
@@ -23,6 +25,8 @@ export function formFrom(preferences: Preferences): AiSettingsForm {
     summaries_temperature: String(preferences.summaries_temperature),
     summaries_thinking: preferences.summaries_thinking,
     summaries_prompt: preferences.summaries_prompt,
+    categorization_enabled: preferences.categorization_enabled,
+    categorization_model: preferences.categorization_model,
   }
 }
 
