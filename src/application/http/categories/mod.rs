@@ -452,6 +452,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_categories_with_their_ai_prompt() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = Category {
+            ai_prompt: CategoryPrompt::new("Chess games and openings").unwrap(),
+            ..category(None, "Chess")
+        };
+        let science = category(None, "Science");
+        repository.insert(&chess).unwrap();
+        repository.insert(&science).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![
+                    CategoryListItemResponse {
+                        ai_prompt: Some("Chess games and openings".to_string()),
+                        ..list_item(&chess, 0, &[], &[])
+                    },
+                    list_item(&science, 0, &[], &[]),
+                ],
+                unwatched_total: 0,
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_count_distinct_unwatched_videos_per_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
