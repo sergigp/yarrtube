@@ -4,7 +4,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `http/preferences`: `it_should_return_the_categorization_defaults_if_nothing_saved`: off, `qwen3:4b`, shipped prompt, `is_default` true. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.1 `http/preferences`: `it_should_return_the_categorization_defaults_if_nothing_saved`: off, `qwen3:4b`, shipped prompt, `is_default` true. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.2 `http/preferences`: `it_should_save_the_categorization_settings`: patch returns and stores enabled, model, prompt, `is_default` false. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.3 `http/preferences`: `it_should_go_back_to_the_shipped_categorization_prompt`: `null` drops the saved prompt. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.4 `http/preferences`: `it_should_fail_if_the_categorization_model_is_blank`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.

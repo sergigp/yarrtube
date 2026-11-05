@@ -223,6 +223,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_searcher = PreferencesSearcher::new(repository);
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_enabled: false,
+                categorization_model: "qwen3:4b".to_string(),
+                categorization_prompt: include_str!("../../../../prompts/categorization/v1.md")
+                    .to_string(),
+                categorization_prompt_is_default: true,
+                ..all_on_response()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
