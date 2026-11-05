@@ -186,7 +186,7 @@ The system SHALL publish a ChannelDeleted domain event, containing the channel's
 - **THEN** the system does not publish a ChannelDeleted event
 
 ### Requirement: Update Channel Settings
-The system SHALL provide an HTTP endpoint that changes the quality, video limit, reconcile interval and/or summaries setting (`summaries_enabled`, a boolean) of a stored channel identified by its handle, and returns the channel as stored. Each field is optional and validated as on creation; `summaries_enabled` `true` requires AI summaries on, as `source-summaries` describes; an absent field keeps its stored value, and at least one SHALL be supplied. The handle, name, path and avatar SHALL NOT change. Quality and video limit apply from the channel's next sync. A new reconcile interval SHALL apply from the next scheduled reconcile on: when the channel's pending recurring reconcile is due later than the update time plus the new interval, the system SHALL move it to the update time plus the new interval; otherwise the pending reconcile keeps its time. The update publishes no domain event.
+The system SHALL provide an HTTP endpoint that changes the quality, video limit, reconcile interval, summaries setting (`summaries_enabled`, a boolean) and/or categorization setting (`categorization_enabled`, a boolean) of a stored channel identified by its handle, and returns the channel as stored. Each field is optional and validated as on creation; `summaries_enabled` `true` requires AI summaries on, as `source-summaries` describes; `categorization_enabled` `true` requires AI categorization on, as `source-categorization` describes; an absent field keeps its stored value, and at least one SHALL be supplied. The handle, name, path and avatar SHALL NOT change. Quality and video limit apply from the channel's next sync. A new reconcile interval SHALL apply from the next scheduled reconcile on: when the channel's pending recurring reconcile is due later than the update time plus the new interval, the system SHALL move it to the update time plus the new interval; otherwise the pending reconcile keeps its time. The update publishes no domain event.
 
 #### Scenario: Changing the quality
 - **WHEN** a request supplies quality `low` for a stored channel whose quality is `high`
@@ -224,16 +224,20 @@ The system SHALL provide an HTTP endpoint that changes the quality, video limit,
 - **WHEN** a request supplies a `summaries_enabled` value that is not a boolean
 - **THEN** the system makes no change and rejects the request with a client error
 
+#### Scenario: Enabling categorization
+- **WHEN** AI, categories and categorization are on and a request supplies only `categorization_enabled` `true` for a stored channel whose categorization is off
+- **THEN** the system stores the channel with `categorization_enabled` `true` and its other fields unchanged, and returns it
+
 #### Scenario: Changing both settings
 - **WHEN** a request supplies a quality, a video limit and a reconcile interval for a stored channel
 - **THEN** the system stores all new values and returns the updated channel
 
 #### Scenario: Setting the values the channel already has
-- **WHEN** a request supplies the quality, video limit, reconcile interval and summaries setting the channel already has
+- **WHEN** a request supplies the quality, video limit, reconcile interval, summaries setting and categorization setting the channel already has
 - **THEN** the system makes no change and returns the channel as stored
 
 #### Scenario: Nothing to update
-- **WHEN** a request supplies none of quality, video limit, reconcile interval and `summaries_enabled`
+- **WHEN** a request supplies none of quality, video limit, reconcile interval, `summaries_enabled` and `categorization_enabled`
 - **THEN** the system rejects the request without changing storage and returns a bad request with a meaningful error description
 
 #### Scenario: Invalid quality or video limit
