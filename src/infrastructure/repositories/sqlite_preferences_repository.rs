@@ -217,6 +217,41 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_categorization_settings() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            categorization: CategorizationSettings {
+                enabled: true,
+                model: CategorizationModel::new("gemma3:4b").unwrap(),
+                prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_missing_categorization_keys_as_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"summaries_enabled\": true}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().unwrap().map(|found| found.categorization),
+            Some(CategorizationSettings::default())
+        );
+    }
+
+    #[test]
     fn it_should_read_missing_keys_as_defaults() {
         let db = TestDatabase::new();
         db.connection()

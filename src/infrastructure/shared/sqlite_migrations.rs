@@ -876,6 +876,45 @@ mod tests {
     }
 
     #[test]
+    fn it_should_default_existing_sources_and_categories_after_the_ai_categorization_migration() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_late_video_data(&mut conn);
+        conn.execute_batch(
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, created_at)
+             VALUES ('@chan', 'Chan', 'UC1', 'high', 3, 'channels/chan', '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlists (id, name, path, quality, kind, created_at)
+             VALUES ('PL1', 'Mix', 'playlists/mix', 'high', 'youtube_linked', '2024-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+        insert_colored_category(&conn, "Chess", "#0ea5e9");
+
+        apply(&mut conn).unwrap();
+
+        let categorization_enabled = conn
+            .prepare(
+                "SELECT id, categorization_enabled FROM channels
+                 UNION ALL SELECT id, categorization_enabled FROM playlists",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let ai_prompt = conn.query_row("SELECT ai_prompt FROM categories", [], |row| {
+            row.get::<_, Option<String>>(0)
+        });
+        assert_eq!(
+            categorization_enabled,
+            Ok(vec![
+                ("@chan".to_string(), false),
+                ("PL1".to_string(), false)
+            ])
+        );
+        assert_eq!(ai_prompt, Ok(None));
+    }
+
+    #[test]
     fn it_should_disable_summaries_for_sources_stored_before_the_setting() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate_to_late_video_data(&mut conn);

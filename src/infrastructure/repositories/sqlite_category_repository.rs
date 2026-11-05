@@ -344,6 +344,23 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_ai_prompt() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let chess = category("Chess", &[]).with_ai_prompt(CategoryPrompt::new("Chess").unwrap());
+        repository.insert(&chess).unwrap();
+        assert_eq!(repository.list().unwrap(), vec![chess.clone()]);
+        let edited = chess.with_ai_prompt(CategoryPrompt::new("Openings").unwrap());
+        repository.update(&edited).unwrap();
+        assert_eq!(repository.find(&edited.id).unwrap(), Some(edited.clone()));
+        let cleared = edited.with_ai_prompt(None);
+
+        repository.update(&cleared).unwrap();
+
+        assert_eq!(repository.find(&cleared.id).unwrap(), Some(cleared));
+    }
+
+    #[test]
     fn it_should_delete_the_category() {
         let db = TestDatabase::new();
         let repository = SqliteCategoryRepository::new(db.database());

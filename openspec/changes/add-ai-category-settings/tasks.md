@@ -42,7 +42,7 @@
 - [x] 2.36 `Web category settings`: `SidebarCategories`: row menu offers "Edit settings", opening "Edit Science settings". Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.37 `Web category settings`: `CategoryDetail`: header action "Edit settings"; arrival with `CategorySettingsState` opens it once. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.38 `Web category settings`: `AddCategoryDialog`: creating opens "Edit Chess settings". Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.39 `Web category settings`: `CategorySettingsDialog`: shows "AI prompt" prefilled while available. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.39 `Web category settings`: `CategorySettingsDialog`: shows "AI prompt" prefilled while available. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.40 `Web category settings`: `CategorySettingsDialog`: hides it otherwise and saves sources without `ai_prompt`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.41 `Web category settings`: `CategorySettingsDialog`: saving only the prompt doesn't send members. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.42 `Web category settings`: `CategorySettingsDialog`: saving both sends both, then closes. Verify: the test goes red on an assertion, then green with the full suite.
@@ -52,12 +52,12 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `SqlitePreferencesRepository`: `it_should_round_trip_the_categorization_settings`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 3.2 `SqlitePreferencesRepository`: `it_should_read_missing_categorization_keys_as_defaults`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 3.3 `SqliteCategoryRepository`: `it_should_round_trip_the_ai_prompt`: insert, update, clear, `list`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 3.4 `SqliteChannelRepository, SqlitePlaylistRepository`: `it_should_round_trip_the_channels_categorization_setting`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 3.5 `SqliteChannelRepository, SqlitePlaylistRepository`: `it_should_round_trip_the_playlists_categorization_setting`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 3.6 `sqlite_migrations`: `it_should_default_existing_sources_and_categories_after_the_ai_categorization_migration`: `false` and `NULL`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.1 `SqlitePreferencesRepository`: `it_should_round_trip_the_categorization_settings`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.2 `SqlitePreferencesRepository`: `it_should_read_missing_categorization_keys_as_defaults`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.3 `SqliteCategoryRepository`: `it_should_round_trip_the_ai_prompt`: insert, update, clear, `list`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.4 `SqliteChannelRepository, SqlitePlaylistRepository`: `it_should_round_trip_the_channels_categorization_setting`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.5 `SqliteChannelRepository, SqlitePlaylistRepository`: `it_should_round_trip_the_playlists_categorization_setting`. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.6 `sqlite_migrations`: `it_should_default_existing_sources_and_categories_after_the_ai_categorization_migration`: `false` and `NULL`. Verify: the test goes red on an assertion, then green with the full suite.
 
 ## 4. Verification
 

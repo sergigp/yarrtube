@@ -286,6 +286,19 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_playlists_categorization_setting() {
+        let repo = repo();
+        let playlist = playlist("PL1", "First").with_categorization_enabled(true);
+        repo.insert(&playlist).unwrap();
+        assert_eq!(repo.find(&playlist.id).unwrap(), Some(playlist.clone()));
+        let updated = playlist.with_categorization_enabled(false);
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
     fn it_should_round_trip_the_playlists_summaries_setting() {
         let repo = repo();
         let playlist = playlist("PL1", "First").with_summaries_enabled(true);
