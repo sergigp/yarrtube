@@ -199,7 +199,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
     use crate::domain::preferences::SummaryModel;
-    use crate::domain::preferences::{Preferences, SummarySettings};
+    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
@@ -343,6 +343,44 @@ mod tests {
         assert_eq!(
             playlist_repository.list().unwrap(),
             vec![playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_a_playlist_with_categorization_enabled() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = CreatePlaylistRequest {
+            categorization_enabled: Some(true),
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    categorization_enabled: true,
+                    ..playlist_response("PL1", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true)]
         );
     }
 
@@ -4002,6 +4040,18 @@ mod tests {
     }
 
     /// Preferences with AI and summaries on, so sources can enable summaries.
+    fn categorization_on() -> Preferences {
+        Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+            categorization: CategorizationSettings {
+                enabled: true,
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        }
+    }
+
     fn summaries_on() -> Preferences {
         Preferences {
             ai_enabled: true,
