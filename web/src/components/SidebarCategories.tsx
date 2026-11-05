@@ -64,7 +64,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
             }}
           >
             <Settings2 />
-            Manage sources
+            Edit settings
           </DropdownMenuItem>
         }
         onDeleteRequest={onDeleteRequest}

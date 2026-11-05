@@ -30,7 +30,7 @@ function renderDialog(routes: ApiRoutes) {
 }
 
 describe('AddCategoryDialog', () => {
-  it('creates a category and opens it with the manage sources dialog', async () => {
+  it('creates a category and opens it with the category settings dialog', async () => {
     const create = vi.fn(() => aCreatedCategory({ id: 'chess', name: 'Chess' }))
     const { fetchMock, onOpenChange } = renderDialog({
       'POST /api/categories': create,
@@ -55,7 +55,7 @@ describe('AddCategoryDialog', () => {
         '/categories/chess',
       ),
     )
-    expect(await screen.findByRole('dialog', { name: 'Manage sources in Chess' })).toBeVisible()
+    expect(await screen.findByRole('dialog', { name: 'Edit Chess settings' })).toBeVisible()
     expect(screen.getByRole('searchbox', { name: 'Search channels and playlists' })).toHaveFocus()
   })
 

@@ -6,28 +6,29 @@ const current = {
   video_limit: 10,
   reconcile_interval_minutes: 180,
   summaries_enabled: false,
+  categorization_enabled: false,
 } as const
 const interval = { amount: '3', unit: 'hours' } as const
 
 describe('channelSettingsChanges', () => {
   it('returns nothing when no setting changed', () => {
-    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '10', interval, summaries_enabled: false })).toEqual({})
+    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '10', interval, summaries_enabled: false, categorization_enabled: false })).toEqual({})
   })
 
   it('returns only a changed quality', () => {
-    expect(channelSettingsChanges(current, { quality: 'low', video_limit: '10', interval, summaries_enabled: false })).toEqual({
+    expect(channelSettingsChanges(current, { quality: 'low', video_limit: '10', interval, summaries_enabled: false, categorization_enabled: false })).toEqual({
       quality: 'low',
     })
   })
 
   it('returns only a changed video limit, as a number', () => {
-    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '25', interval, summaries_enabled: false })).toEqual({
+    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '25', interval, summaries_enabled: false, categorization_enabled: false })).toEqual({
       video_limit: 25,
     })
   })
 
   it('returns both settings when both changed', () => {
-    expect(channelSettingsChanges(current, { quality: 'mid', video_limit: '3', interval, summaries_enabled: false })).toEqual({
+    expect(channelSettingsChanges(current, { quality: 'mid', video_limit: '3', interval, summaries_enabled: false, categorization_enabled: false })).toEqual({
       quality: 'mid',
       video_limit: 3,
     })
@@ -40,6 +41,7 @@ describe('channelSettingsChanges', () => {
         video_limit: '10',
         interval,
         summaries_enabled: true,
+        categorization_enabled: false,
       }),
     ).toEqual({ summaries_enabled: true })
   })

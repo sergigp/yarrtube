@@ -100,7 +100,7 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
     >
       <div className="flex items-start gap-3 px-6 pt-6 pb-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <DialogTitle>Manage sources in {category.name}</DialogTitle>
+          <DialogTitle>Edit {category.name} settings</DialogTitle>
           <DialogDescription>
             Pick the channels and playlists whose videos show in {category.name}.
           </DialogDescription>
@@ -182,7 +182,7 @@ function CategorySettingsContent({ category, onClose }: { category: Category; on
         open={confirmingDiscard}
         onOpenChange={setConfirmingDiscard}
         title="Discard changes?"
-        description={`Your changes to the sources in ${category.name} won't be saved.`}
+        description={`Your changes to ${category.name} won't be saved.`}
         cancelLabel="Keep editing"
         confirmLabel="Discard"
         onConfirm={onClose}

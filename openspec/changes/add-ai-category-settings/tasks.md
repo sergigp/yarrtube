@@ -36,12 +36,12 @@
 - [x] 2.30 `Web source dialogs`: `AddChannelDialog`: creates with `categorization_enabled` false by default, true when checked. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.31 `Web source dialogs`: `AddPlaylistDialog`: same as 30. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.32 `Web source dialogs`: `AddChannelDialog`: disabled with a link to AI settings while unavailable; hidden with categories off. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.33 `Web source dialogs`: `EditChannelDialog`: prefilled, sends only `categorization_enabled` when changed. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.34 `Web source dialogs`: `EditChannelDialog`: stays enabled to turn off while AI is off. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.35 `Web source dialogs`: `EditPlaylistDialog`: same as 33. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.36 `Web category settings`: `SidebarCategories`: row menu offers "Edit settings", opening "Edit Science settings". Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.37 `Web category settings`: `CategoryDetail`: header action "Edit settings"; arrival with `CategorySettingsState` opens it once. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.38 `Web category settings`: `AddCategoryDialog`: creating opens "Edit Chess settings". Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.33 `Web source dialogs`: `EditChannelDialog`: prefilled, sends only `categorization_enabled` when changed. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.34 `Web source dialogs`: `EditChannelDialog`: stays enabled to turn off while AI is off. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.35 `Web source dialogs`: `EditPlaylistDialog`: same as 33. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.36 `Web category settings`: `SidebarCategories`: row menu offers "Edit settings", opening "Edit Science settings". Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.37 `Web category settings`: `CategoryDetail`: header action "Edit settings"; arrival with `CategorySettingsState` opens it once. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.38 `Web category settings`: `AddCategoryDialog`: creating opens "Edit Chess settings". Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.39 `Web category settings`: `CategorySettingsDialog`: shows "AI prompt" prefilled while available. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.40 `Web category settings`: `CategorySettingsDialog`: hides it otherwise and saves sources without `ai_prompt`. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.41 `Web category settings`: `CategorySettingsDialog`: saving only the prompt doesn't send members. Verify: the test goes red on an assertion, then green with the full suite.

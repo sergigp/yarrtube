@@ -245,8 +245,8 @@ describe('CategoryDetail', () => {
     expect(explanation).toBe(
       'Add channels and playlists to Chess to watch their videos here, newest first.',
     )
-    expect(items).toEqual(['Change color', 'Manage sources', 'Delete'])
-    expect(dialogTitle).toBe('Manage sources in Chess')
+    expect(items).toEqual(['Change color', 'Edit settings', 'Delete'])
+    expect(dialogTitle).toBe('Edit Chess settings')
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
@@ -345,7 +345,7 @@ describe('CategoryDetail', () => {
     const user = userEvent.setup()
 
     const openedOnArrival = (await screen.findByRole('dialog')).textContent?.includes(
-      'Manage sources in Chess',
+      'Edit Chess settings',
     )
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())

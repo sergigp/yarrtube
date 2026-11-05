@@ -53,7 +53,7 @@ describe('CategorySettingsDialog', () => {
 
     expect(
       within(screen.getByRole('dialog')).getByRole('heading', { level: 2 }).textContent,
-    ).toBe('Manage sources in Chess')
+    ).toBe('Edit Chess settings')
     expect({
       channels: await chipsOf('Channels'),
       playlists: await chipsOf('Playlists'),

@@ -22,14 +22,14 @@ import { CategorySettingsDialog } from './CategorySettingsDialog'
 import { VideoGrid } from './VideoGrid'
 import { VideoGridSkeleton } from './VideoSkeletons'
 
-/** Router state that opens the manage sources dialog on arrival at a category's view. */
+/** Router state that opens the category settings dialog on arrival at a category's view. */
 export interface CategorySettingsState {
   editSettings: true
 }
 
 /**
  * What an empty category shows instead of videos: what it is for, and the
- * way to fill it, the manage sources dialog.
+ * way to fill it, the category settings dialog.
  */
 function EmptyCategory({ category, onManage }: { category: Category; onManage: () => void }) {
   const headingId = useId()
@@ -205,7 +205,7 @@ export function CategoryDetail() {
         onRename={refreshing((name: string) => updateCategory(category.id, { name }))}
         extraActions={[
           { label: 'Change color', icon: <Palette />, onSelect: () => setRecoloring(true) },
-          { label: 'Manage sources', icon: <Settings2 />, onSelect: () => setManaging(true) },
+          { label: 'Edit settings', icon: <Settings2 />, onSelect: () => setManaging(true) },
         ]}
         onMarkWatched={sources > 0 ? () => markCategoryWatched(category.id) : undefined}
         onDelete={refreshing(async () => {

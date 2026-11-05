@@ -97,6 +97,9 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
       ...(summariesEnabled !== playlist.summaries_enabled && {
         summaries_enabled: summariesEnabled,
       }),
+      ...(categorizationEnabled !== playlist.categorization_enabled && {
+        categorization_enabled: categorizationEnabled,
+      }),
     }
     const changesSettings = Object.keys(changes).length > 0
     if (!changesSettings && !categories.changed) {

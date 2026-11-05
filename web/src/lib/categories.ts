@@ -81,14 +81,14 @@ export function membershipChanges(
   })
 }
 
-/** A tracked channel or playlist as a chip of the manage sources dialog. */
+/** A tracked channel or playlist as a chip of the category settings dialog. */
 export interface SourceChip {
   source: SourceRef
   name: string
   avatarFilename: string | null
 }
 
-/** Which chips the manage sources dialog shows, by whether they're in the category. */
+/** Which chips the category settings dialog shows, by whether they're in the category. */
 export type SourceFilter = 'all' | 'in' | 'out'
 
 /** Every tracked source as a chip, each kind by name ignoring case. */
@@ -110,7 +110,7 @@ export function sourceChips(
   }
 }
 
-/** The category's members, as the manage sources dialog stages them. */
+/** The category's members, as the category settings dialog stages them. */
 export function membersOf(category: Category): CategoryMembers {
   return { channels: category.channels, playlists: category.playlists }
 }

@@ -8,13 +8,18 @@ export interface ChannelSettingsForm {
   video_limit: string
   interval: IntervalForm
   summaries_enabled: boolean
+  categorization_enabled: boolean
 }
 
 /** The settings the form changes from the channel's current ones; `{}` when none. */
 export function channelSettingsChanges(
   current: Pick<
     ChannelListItem,
-    'quality' | 'video_limit' | 'reconcile_interval_minutes' | 'summaries_enabled'
+    | 'quality'
+    | 'video_limit'
+    | 'reconcile_interval_minutes'
+    | 'summaries_enabled'
+    | 'categorization_enabled'
   >,
   form: ChannelSettingsForm,
 ): UpdateChannelRequest {
@@ -27,6 +32,9 @@ export function channelSettingsChanges(
       interval !== current.reconcile_interval_minutes && { reconcile_interval_minutes: interval }),
     ...(form.summaries_enabled !== current.summaries_enabled && {
       summaries_enabled: form.summaries_enabled,
+    }),
+    ...(form.categorization_enabled !== current.categorization_enabled && {
+      categorization_enabled: form.categorization_enabled,
     }),
   }
 }

@@ -266,7 +266,7 @@ describe('DetailHeader', () => {
         videos={[aVideo(), aVideo()]}
         unwatchedCount={1}
         summaryPrefix="3 sources"
-        extraActions={[{ label: 'Manage sources', icon: null, onSelect: () => {} }]}
+        extraActions={[{ label: 'Edit settings', icon: null, onSelect: () => {} }]}
         onDelete={noop}
         deleteDescription="desc"
       />,
@@ -276,7 +276,7 @@ describe('DetailHeader', () => {
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
 
     expect(screen.getByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
-    expect(items).toEqual(['Manage sources', 'Delete'])
+    expect(items).toEqual(['Edit settings', 'Delete'])
   })
 
   describe('on desktop', () => {
