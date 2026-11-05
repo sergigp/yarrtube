@@ -96,6 +96,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [summariesEnabled, setSummariesEnabled] = useState(false)
+  const [categorizationEnabled, setCategorizationEnabled] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
   const saveSourceCategories = useSaveSourceCategories()
   const withCategories = useCategoriesShown()
@@ -173,6 +174,10 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
         summaries={{
           checked: summariesEnabled,
           onChange: setSummariesEnabled,
+        }}
+        categorization={{
+          checked: categorizationEnabled,
+          onChange: setCategorizationEnabled,
         }}
         onNavigateAway={onClose}
       />

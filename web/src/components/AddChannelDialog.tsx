@@ -105,6 +105,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [summariesEnabled, setSummariesEnabled] = useState(false)
+  const [categorizationEnabled, setCategorizationEnabled] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
   const saveSourceCategories = useSaveSourceCategories()
   const withCategories = useCategoriesShown()
@@ -137,7 +138,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         path: location.value.path,
         reconcile_interval_minutes: reconcileIntervalMinutes,
         summaries_enabled: summariesEnabled,
-        categorization_enabled: false,
+        categorization_enabled: categorizationEnabled,
       })
       location.remember()
       invalidateLibrary()
@@ -185,6 +186,10 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         summaries={{
           checked: summariesEnabled,
           onChange: setSummariesEnabled,
+        }}
+        categorization={{
+          checked: categorizationEnabled,
+          onChange: setCategorizationEnabled,
         }}
         onNavigateAway={onClose}
       />

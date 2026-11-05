@@ -81,6 +81,7 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
     intervalForm(playlist.reconcile_interval_minutes),
   )
   const [summariesEnabled, setSummariesEnabled] = useState(playlist.summaries_enabled)
+  const [categorizationEnabled, setCategorizationEnabled] = useState(playlist.categorization_enabled)
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -131,6 +132,11 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
           checked: summariesEnabled,
           onChange: setSummariesEnabled,
           enabledOnSource: playlist.summaries_enabled,
+        }}
+        categorization={{
+          checked: categorizationEnabled,
+          onChange: setCategorizationEnabled,
+          enabledOnSource: playlist.categorization_enabled,
         }}
         onNavigateAway={onClose}
       />

@@ -95,6 +95,9 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
   const changeInterval = (interval: IntervalForm) => setForm((prev) => ({ ...prev, interval }))
   const changeSummaries = (summaries_enabled: boolean) =>
     setForm((prev) => ({ ...prev, summaries_enabled }))
+  const [categorizationEnabled, setCategorizationEnabled] = useState(
+    channel.categorization_enabled,
+  )
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -179,6 +182,11 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
           checked: form.summaries_enabled,
           onChange: changeSummaries,
           enabledOnSource: channel.summaries_enabled,
+        }}
+        categorization={{
+          checked: categorizationEnabled,
+          onChange: setCategorizationEnabled,
+          enabledOnSource: channel.categorization_enabled,
         }}
         onNavigateAway={onClose}
       />
