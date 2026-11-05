@@ -89,7 +89,9 @@ fi
 
 if [[ "$SKIP_WEB_BUILD" == false ]]; then
   echo "==> building web UI"
-  (cd "$REPO_ROOT/web" && npm ci && npm run build)
+  # The build tools are dev dependencies, which `npm ci` skips with
+  # NODE_ENV=production, whatever the caller's shell has.
+  (cd "$REPO_ROOT/web" && unset NODE_ENV && npm ci && npm run build)
 fi
 
 DB_PATH="$REPO_ROOT/yarrtube.sqlite3"
