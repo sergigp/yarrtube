@@ -26,7 +26,7 @@ use dto::{
 };
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
-const NOTHING_TO_UPDATE: &str = "Request must change exclude from home, hide unwatched count, the reconcile interval or summaries";
+const NOTHING_TO_UPDATE: &str = "Request must change exclude from home, hide unwatched count, the reconcile interval, summaries or categorization";
 
 pub async fn create_playlist(
     State(playlist_creator): State<PlaylistCreator>,
@@ -2763,7 +2763,7 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Request must change exclude from home, hide unwatched count, the reconcile interval or summaries"
+                "Request must change exclude from home, hide unwatched count, the reconcile interval, summaries or categorization"
             ))
         );
     }
