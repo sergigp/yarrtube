@@ -2407,6 +2407,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_enable_categorization_on_a_playlist_if_summaries_are_off() {
+        for preferences in categorization_unavailable() {
+            let db = TestDatabase::new();
+            let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+            playlist_repository
+                .insert(&playlist("PL1", DEFAULT_PATH))
+                .unwrap();
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences_repository.save(&preferences).unwrap();
+            let playlist_updater = PlaylistUpdater::new(
+                playlist_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                preferences_repository,
+            );
+
+            let request = UpdatePlaylistRequest {
+                reconcile_interval_minutes: Some(60),
+                categorization_enabled: Some(true),
+                ..empty_update_request()
+            };
+            let response = update(playlist_updater, "PL1", request).await;
+
+            assert_eq!(
+                response,
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Turn on AI categorization before enabling it for a playlist"
+                ))
+            );
+            assert_eq!(
+                playlist_repository.list().unwrap(),
+                vec![playlist("PL1", DEFAULT_PATH)]
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn it_should_disable_summaries_on_a_playlist_while_ai_is_off() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

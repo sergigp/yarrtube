@@ -21,7 +21,7 @@
 - [x] 2.15 `http/channels, then http/playlists`: `it_should_fail_to_create_if_categorization_missing` (both). Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.16 `http/channels, then http/playlists`: `it_should_keep_the_existing_source_when_categorization_differs_on_create` (both): duplicate returns the stored `false`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.17 `http/channels, then http/playlists`: `it_should_enable_categorization_on_a_channel` / `…_playlist`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.18 `http/channels, then http/playlists`: `it_should_fail_to_enable_categorization_on_a_channel_if_unavailable` / `…_playlist_…`: other fields unchanged. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.18 `http/channels, then http/playlists`: `it_should_fail_to_enable_categorization_on_a_channel_if_unavailable` / `…_playlist_…`: other fields unchanged. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.19 `http/channels, then http/playlists`: `it_should_disable_categorization_on_a_channel_while_ai_is_off` / `…_playlist_…`. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.20 `http/channels, then http/playlists`: `it_should_list_channels_with_their_categorization_setting` / `playlists`. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.21 `Web AiSettingsView.test.tsx`: shows the Categorization section disabled on a fresh install. Verify: the test goes red on an assertion, then green with the full suite.
