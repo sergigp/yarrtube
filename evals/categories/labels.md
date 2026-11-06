@@ -160,7 +160,7 @@ xkcd's What If? · 3 min · https://youtu.be/alkJ7xScBiw
 
 > Exploding a nuclear bomb at the bottom of the Mariana Trench would create a collapsing cavity of hot steam that generates no significant waves, unlike shallow-water tests. However, if a cat accidentally adds extra zeros to the calculation, the explosion would cause global devastation including massive tsunamis, firestorms, and the extinction of most life. The video concludes that cats are forbidden from nuclear physics departments due to this hypothetical scenario.
 
-[ ] Jobava London · [ ] Sicilian · [ ] Chess gameplays · [ ] Science News · [ ] AI news · [ ] Tech · [ ] Politics and Economy News · [ ] Food for thought · [ ] Coding tutorials · [ ] None
+[ ] Jobava London · [ ] Sicilian · [ ] Chess gameplays · [ ] Science News · [ ] AI news · [ ] Tech · [ ] Politics and Economy News · [ ] Food for thought · [ ] Coding tutorials · [x] None
 
 Notes: this one is hard too, it could be science news or food for thought, or could be none, depeding on how strict we are.
 
