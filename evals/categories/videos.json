@@ -1173,7 +1173,8 @@
         "title": "Game 3"
       }
     ],
-    "summary": null
+    "summary": "Three rapid chess games where the presenter examines the \"Jabava London\" opening in two games and the Benoni opening in the third. In the first game against d5, the presenter achieved checkmate via queen E3 and knight C5 leading to Queen H7 mate with a 97 score. The second game against A6 involved a pawnstorm starting with e3 that captured multiple pawns and won the endgame. For the Benoni opening game, the presenter secured a pawn through rook maneuvers after trading bishops but admitted tactical errors, concluding they were slightly better in the endgame despite \"butcher[ing]\" the game.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "04wD8bKJZfw",
@@ -1237,7 +1238,8 @@
         "title": "Game 3"
       }
     ],
-    "summary": null
+    "summary": "The video demonstrates three chess games where openings below 2000 elo are exploited effectively. In the first game, the player shows how a Slav defense with H5 leads to rapid loss if Black plays E5—a move the speaker calls antistrategic and anti-positional—because it weakens Black's king position while underdeveloped. The second game highlights the \"Excalibur Knight\" (knight B5) as a powerful tool that limits Black's counterplay and prevents minority attacks, working best for players below 1500 elo. The third game illustrates how to handle Black's queen A5 threat by maintaining a strong pawn structure and exploiting bishop weaknesses. The speaker wins all three games, concluding that specific openings like the Slav with H5 are virtually unstoppable for lower-rated players when played correctly.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "6uFhzy3VnXA",
@@ -1284,7 +1286,8 @@
         "title": "Example 2"
       }
     ],
-    "summary": null
+    "summary": "GM Naroditsky's analysis demonstrates that the London System opening (referred to as \"Jobava London\" in the video) enables White to build positional pressure via the \"boa constrictor\" method, resulting in a crushing attack where Queen G6 check wins material after Black's king becomes vulnerable. The bishop on E5 is critical to this sequence, and the opening proves effective for intermediate players at 1600-1700 level by controlling key squares without relying on tricks. The video concludes with White securing victory through this positional strategy, showing how the London System delivers decisive results for players of this skill level.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "X0OperXCJMY",
@@ -1373,7 +1376,8 @@
         "title": "Game 2"
       }
     ],
-    "summary": null
+    "summary": "The video presents a rare weapon against the London System chess opening, specifically a move sequence starting with f6 followed by e5 that occurs in less than 0.05% of games. The speaker demonstrates this tactic in two practice games against subscribers, where black consistently gains initiative and complex positional advantages within the opening, ultimately dominating the position despite white's attempts to counter. The video concludes that this approach is a practical but uncommon method to disrupt London players, though it requires pairing with other openings since the London System remains fundamentally solid. The speaker emphasizes that this weapon gives black a clear advantage within the first 10 moves without relying on complex theory.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "H81kiNIZ8hA",
@@ -1454,7 +1458,8 @@
         "title": "Nf6"
       }
     ],
-    "summary": null
+    "summary": "The Alpine Sicilian opening, after 1.e4 c5 2.d4, provides beginners with a space advantage by pushing the d-pawn to dominate the center. Black's best moves—d5 and Nf6—are countered by White's active development, resulting in positions where White maintains strong central control and minimal complications. The speaker states that White is doing fantastic in these lines, with a safe king and well-developed pieces.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "PACqm__Sne8",
@@ -1496,7 +1501,8 @@
         "title": "Back to Game"
       }
     ],
-    "summary": null
+    "summary": "GM Naroditsky analyzes the Rossolimo Sicilian Defense as the top-player preferred line against 1.e4 for over a decade, emphasizing its use by elite players like Caruana and himself. He explains the F4 pawn break concept where White creates a weak square at e4 that Black struggles to occupy quickly, citing a 2013 game example. The video concludes by highlighting how this defense remains a critical theory focus despite Black's counterplay options like d5 to generate powerful squares.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "rMNFLg1gLoI",
@@ -1528,7 +1534,8 @@
         "title": "Analysis"
       }
     ],
-    "summary": null
+    "summary": "GM Naroditsky demonstrates a successful speedrun through the Accelerated Dragon Sicilian opening variation where White plays an unusual move (A3) that leads to immediate checkmate. The game ends with Black winning via bishop takes E3 check after White wastes a move by failing to castle properly and allowing Black's attack on the B2 pawn to dominate. White's position becomes completely paralyzed due to Black's bishop pair and the open B-file, making the game one-sided with Black up a pawn and White resigned. The video concludes that White's move A3 is a poor choice that exacerbates weaknesses, while Black's center fork trick and subsequent pawn attacks prove decisive.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "qe6vFSpO6i4",
@@ -1580,7 +1587,8 @@
         "title": "Summary of the game line"
       }
     ],
-    "summary": null
+    "summary": "The video demonstrates a hyperaccelerated Dragon Sicilian defense game where black wins after white makes a critical mistake with bishop to d4. The uploader shows that this move allows black to immediately exploit white's vulnerable king position through a sequence of forced checks, leading to a checkmate in one after white's king moves to g3. Black achieves victory by attacking the king's position with a bishop on e6 and a discovered check from the rook on b8, preventing white from castling and forcing a quick checkmate. The uploader emphasizes this line is a clear win for black and should be memorized to avoid the mistake.",
+    "summary_by": "qwen3:4b, summaries prompt v3"
   },
   {
     "id": "bsUVXzxnnoc",
