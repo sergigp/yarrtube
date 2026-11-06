@@ -5,7 +5,7 @@ Tests for the AI features, one folder per feature:
 | Feature | Folder | Status |
 |---|---|---|
 | Video summaries | [`summaries/`](summaries/README.md) | in use: see its [decision log](summaries/decisions.md) |
-| Auto-categorization | `categories/` | not started |
+| Auto-categorization | [`categories/`](categories/README.md) | prompts under evaluation: see its [decision log](categories/decisions.md) |
 
 This page explains what evals are and the ideas every feature shares. How to
 run one and what it scores is in the feature's own README.

@@ -5,3 +5,4 @@ __pycache__/
 # Judge scratch: answers are copied into the run's .jsonl, inputs are rebuilt from summaries.
 */results/*/judge-external/
 */results/*/faithfulness-external/
+*/subtitles/
