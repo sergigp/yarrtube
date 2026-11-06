@@ -35,6 +35,10 @@ describe('videoGridLayout', () => {
     )
   })
 
+  it('keeps vertical swipes on a phone shelf for the page', () => {
+    expect(videoGridListClassName('shelf').split(' ')).toContain('max-sm:overflow-y-hidden')
+  })
+
   it('makes the feed one column on phones and keeps grid and feed cards always shown', () => {
     expect(videoGridListClassName('feed').split(' ')).toContain('max-sm:grid-cols-1!')
     expect(videoGridListClassName('grid').split(' ')).not.toContain('max-sm:grid-cols-1!')

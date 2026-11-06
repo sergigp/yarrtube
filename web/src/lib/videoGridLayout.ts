@@ -21,9 +21,15 @@ const COLUMNS = [
 
 const GRID = ['grid gap-x-4 gap-y-6', ...COLUMNS.map((step) => step.columns)].join(' ')
 
-/** Below `sm`, a shelf scrolls sideways from edge to edge, snapping card by card. */
+/**
+ * Below `sm`, a shelf scrolls sideways from edge to edge, snapping card by card.
+ * `overflow-x-auto` alone makes the y axis scrollable too, and the cards' negative
+ * margin overflows it, so a vertical swipe on a card would scroll the shelf instead
+ * of the page: `overflow-y-hidden` prevents that. `py-2` keeps the cards' hover
+ * surface unclipped, and `-my-2` cancels it out in the layout.
+ */
 const PHONE_SHELF =
-  'max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-4 max-sm:gap-3 max-sm:overflow-x-auto max-sm:px-4'
+  'max-sm:-mx-4 max-sm:-my-2 max-sm:flex max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-4 max-sm:gap-3 max-sm:overflow-x-auto max-sm:overflow-y-hidden max-sm:px-4 max-sm:py-2'
 
 /** Nearly the full width, leaving a sliver of the next card to show the shelf swipes. */
 const PHONE_SHELF_CARD = 'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start'
