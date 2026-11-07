@@ -3,7 +3,7 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::required;
-use super::videos::update_watch_state_error;
+use super::videos::{edit_video_categories_error, update_watch_state_error};
 use crate::domain::category::{
     CategoryColor, CategoryId, CategoryMember, CategoryName, CategoryPrompt, CreateCategoryError,
     DeleteCategoryError, UpdateCategoryError,
@@ -13,7 +13,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdate,
     CategoryUpdater, CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi,
-    VideoCategoryEditor, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    VideoCategoryEditor, VideoCategoryEditorApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -116,9 +116,15 @@ pub async fn set_category_members(
 }
 
 pub async fn delete_category_ai_verdicts(
-    State(_video_category_editor): State<VideoCategoryEditor>,
-    Path(_id): Path<String>,
+    State(video_category_editor): State<VideoCategoryEditor>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    let id = CategoryId::new(id)?;
+
+    run_blocking(move || video_category_editor.rerun_category(&id))
+        .await?
+        .map_err(edit_video_categories_error)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -167,8 +173,11 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::services::{CategoryVideoCollector, VideoCategoryAssigner};
+    use crate::domain::services::{
+        CategoryVideoCollector, VideoCategoryAssigner, VideoOwnerFinder,
+    };
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::{Video, VideoId, VideoRecordId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
@@ -187,6 +196,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        SqliteTaskRepository, TaskRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
@@ -2837,6 +2849,97 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_rerun_a_categorys_ai_verdicts() {
+        let db = TestDatabase::new();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@chess"))
+            .unwrap();
+        let [first, second, unjudged] = ["vid1", "vid2", "vid3"].map(downloaded_video);
+        [&first, &second, &unjudged].into_iter().for_each(|video| {
+            save_channel_video(
+                &SqliteVideoRepository::new(db.database()),
+                &SqliteChannelVideoRepository::new(db.database()),
+                "@chess",
+                video,
+            )
+        });
+        let repository = SqliteCategoryRepository::new(db.database());
+        let food = category(None, "Food for thought");
+        let tech = category(None, "Tech");
+        [&food, &tech]
+            .into_iter()
+            .for_each(|category| repository.insert(category).unwrap());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = [
+            yes_verdict(&first, &tech),
+            VideoCategoryVerdict::by_user(
+                second.id.clone(),
+                tech.id.clone(),
+                false,
+                fixed_timestamp(),
+            ),
+        ];
+        [
+            yes_verdict(&first, &food),
+            unavailable_verdict(&second, &food),
+        ]
+        .iter()
+        .chain(&kept)
+        .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                first.id.clone(),
+                vec![food.id.clone(), tech.id.clone()],
+            )])
+            .unwrap();
+        let ids = [first.id.clone(), second.id.clone(), unjudged.id.clone()];
+
+        let response = delete_category_ai_verdicts(
+            State(video_category_editor(db.database())),
+            Path(food.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        let mut expected_verdicts = kept.to_vec();
+        expected_verdicts.sort_by(|a, b| {
+            (a.video_id.as_str(), a.category_id.as_str())
+                .cmp(&(b.video_id.as_str(), b.category_id.as_str()))
+        });
+        assert_eq!(
+            verdict_repository.find_many(&ids).unwrap(),
+            expected_verdicts
+        );
+        assert_eq!(
+            video_categories_repository.find_many(&ids).unwrap(),
+            vec![
+                VideoCategories::new(first.id.clone(), vec![tech.id.clone()]),
+                VideoCategories::none(second.id.clone()),
+                VideoCategories::none(unjudged.id.clone()),
+            ]
+        );
+        assert_eq!(
+            SqliteEventRepository::new(db.database())
+                .list_eligible()
+                .unwrap(),
+            vec![categories_changed_event(1, &[&first])]
+        );
+        let mut synced = [&first, &second];
+        synced.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        assert_eq!(
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+                .list_non_completed()
+                .unwrap(),
+            synced
+                .iter()
+                .zip(1..)
+                .map(|(video, id)| sync_video_task(id, video))
+                .collect::<Vec<_>>()
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
@@ -3204,5 +3307,46 @@ mod tests {
             )),
             Arc::new(CategoryLock::default()),
         )
+    }
+
+    fn video_category_editor(database: Database) -> VideoCategoryEditor {
+        let clock = Arc::new(FixedClock(fixed_timestamp()));
+        VideoCategoryEditor::new(
+            Arc::new(SqliteVideoRepository::new(database.clone())),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+                Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+                Arc::new(SqliteChannelRepository::new(database.clone())),
+                Arc::new(SqlitePlaylistRepository::new(database.clone())),
+                "/videos",
+            )),
+            Arc::new(SqliteCategoryRepository::new(database.clone())),
+            Arc::new(SqliteChannelRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistRepository::new(database.clone())),
+            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
+            video_category_assigner(database.clone()),
+            Arc::new(SqliteTaskRepository::new(database, clock.clone())),
+            clock,
+        )
+    }
+
+    /// The pending `sync_video` row of `video`, `id`th scheduled.
+    fn sync_video_task(id: i64, video: &Video) -> ScheduledTask {
+        let task = Task::SyncVideo {
+            video_id: video.id.as_str().to_string(),
+        };
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at: fixed_timestamp(),
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
     }
 }

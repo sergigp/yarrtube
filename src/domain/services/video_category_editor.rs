@@ -118,8 +118,18 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
         self.schedule(&Self::reconcile_task(source))
     }
 
-    fn rerun_category(&self, _category_id: &CategoryId) -> Result<(), EditVideoCategoriesError> {
-        Ok(())
+    fn rerun_category(&self, category_id: &CategoryId) -> Result<(), EditVideoCategoriesError> {
+        self.find_category(category_id)?;
+        let affected = self
+            .video_category_verdict_repository
+            .delete_ai_for_category(category_id)
+            .map_err(EditVideoCategoriesError::Repository)?;
+        self.recompute(&affected)?;
+        affected.iter().try_for_each(|video_id| {
+            self.schedule(&Task::SyncVideo {
+                video_id: video_id.as_str().to_string(),
+            })
+        })
     }
 }
 
@@ -151,8 +161,12 @@ impl VideoCategoryEditor {
             .video_category_verdict_repository
             .delete_ai_for_videos(video_ids)
             .map_err(EditVideoCategoriesError::Repository)?;
+        self.recompute(&affected)
+    }
+
+    fn recompute(&self, video_ids: &[VideoRecordId]) -> Result<(), EditVideoCategoriesError> {
         self.video_category_assigner
-            .recompute(&affected)
+            .recompute(video_ids)
             .map_err(EditVideoCategoriesError::Repository)
     }
 

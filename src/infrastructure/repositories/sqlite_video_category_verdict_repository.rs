@@ -142,9 +142,12 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
 
     fn delete_ai_for_category(
         &self,
-        _category_id: &CategoryId,
+        category_id: &CategoryId,
     ) -> anyhow::Result<Vec<VideoRecordId>> {
-        Ok(Vec::new())
+        self.delete_returning_videos(
+            "decided_by = ?1 AND category_id = ?2",
+            &[VerdictAuthor::Ai.as_str(), category_id.as_str()],
+        )
     }
 
     fn count_ai_by_category(&self) -> anyhow::Result<HashMap<CategoryId, u64>> {
