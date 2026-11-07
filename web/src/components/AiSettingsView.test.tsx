@@ -104,6 +104,27 @@ describe('AiSettingsView', () => {
     expect(patchBodies(fetchMock)).toEqual([{ categorization_enabled: true, categorization_model: 'gemma3:4b' }])
   })
 
+  it('saves only the changed categorization advanced setting', async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'PATCH /api/preferences': aiOn(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+    const contextLength = screen.getByRole('spinbutton', { name: 'Categorization context length' })
+    await user.clear(contextLength)
+    await user.type(contextLength, '8192')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await screen.findByText('Saved')
+    expect(patchBodies(fetchMock)).toEqual([{ categorization_context_length: 8192 }])
+  })
+
   it('resets a saved categorization prompt to the default', async () => {
     const shipped = aPreferences().categorization_prompt
     const saved = aPreferences({
