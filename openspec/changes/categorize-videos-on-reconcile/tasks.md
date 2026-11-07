@@ -18,7 +18,7 @@
 - [x] 2.10 `it_should_store_a_yes_verdict_and_add_the_category_to_the_video`: `categorize` + `apply_verdict` + event
 - [x] 2.11 `it_should_store_a_no_verdict_without_changing_the_video_categories`
 - [x] 2.12 `it_should_send_the_video_details_and_category_prompt_with_the_categorization_settings`: `CategorizationQuestion::user_message`/`chat`
-- [ ] 2.13 `it_should_read_the_answer_after_leaked_thinking`: `CategorizationAnswer::parse`
+- [x] 2.13 `it_should_read_the_answer_after_leaked_thinking`: `CategorizationAnswer::parse`
 - [ ] 2.14 `it_should_only_ask_about_categories_pending_when_it_runs`
 - [ ] 2.15 `it_should_do_nothing_when_the_conditions_no_longer_hold`: `prepare` skips
 - [ ] 2.16 `it_should_not_store_a_verdict_for_a_category_deleted_during_its_call`: existence check under the lock

@@ -218,6 +218,33 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_read_the_answer_after_leaked_thinking() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let sicilian = prompted_category("Sicilian");
+        seed(&db, &video, &[&sicilian]);
+        let answer = r#"<think>Is {"belongs": false} right?</think>
+Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
+        let task = categorize_video_task(&db, llm_replying(vec![reply(answer)]));
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(
+                &video,
+                &sicilian,
+                Verdict::Yes,
+                "A Sicilian game."
+            )]
+        );
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,

@@ -110,7 +110,11 @@ impl CategorizationAnswer {
     /// After the last `</think>`, the JSON object with a boolean `belongs`;
     /// `None` otherwise.
     pub fn parse(content: &str) -> Option<Self> {
-        let answer: serde_json::Value = serde_json::from_str(content).ok()?;
+        let answer = content
+            .rsplit_once("</think>")
+            .map_or(content, |(_, after)| after);
+        let object = answer.get(answer.find('{')?..=answer.rfind('}')?)?;
+        let answer: serde_json::Value = serde_json::from_str(object).ok()?;
         Some(Self {
             belongs: answer.get("belongs")?.as_bool()?,
             reason: answer
