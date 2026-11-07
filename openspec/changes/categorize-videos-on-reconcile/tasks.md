@@ -22,7 +22,7 @@
 - [x] 2.14 `it_should_only_ask_about_categories_pending_when_it_runs`
 - [x] 2.15 `it_should_do_nothing_when_the_conditions_no_longer_hold`: `prepare` skips
 - [x] 2.16 `it_should_not_store_a_verdict_for_a_category_deleted_during_its_call`: existence check under the lock
-- [ ] 2.17 `it_should_not_store_a_verdict_for_a_video_removed_during_its_call`: video existence check in `apply_verdict` under the lock
+- [x] 2.17 `it_should_not_store_a_verdict_for_a_video_removed_during_its_call`: video existence check in `apply_verdict` under the lock
 - [ ] 2.18 `it_should_fail_after_trying_every_category_when_a_call_is_rejected`
 - [ ] 2.19 `it_should_retry_only_the_categories_still_pending`
 - [ ] 2.20 `it_should_mark_rejected_categories_unavailable_on_the_last_attempt`

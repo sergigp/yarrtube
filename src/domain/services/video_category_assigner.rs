@@ -133,7 +133,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         source: &CategoryMember,
     ) -> anyhow::Result<bool> {
         let _guard = self.lock();
-        if self.category_repository.find(&verdict.category_id)?.is_none() {
+        if !self.pair_exists(verdict)? {
             return Ok(false);
         }
         self.video_category_verdict_repository.save(verdict)?;
@@ -215,6 +215,15 @@ impl VideoCategoryAssigner {
     fn categories_of(&self, source: &CategoryMember) -> anyhow::Result<Vec<CategoryId>> {
         let categories = self.category_repository.list()?;
         Ok(Self::source_category_ids(source, &categories))
+    }
+
+    /// Whether the video and the category of `verdict` are both still stored.
+    fn pair_exists(&self, verdict: &VideoCategoryVerdict) -> anyhow::Result<bool> {
+        Ok(self.video_repository.find(&verdict.video_id)?.is_some()
+            && self
+                .category_repository
+                .find(&verdict.category_id)?
+                .is_some())
     }
 
     /// Sets `video_id`, a record of `source`, to the source's categories plus

@@ -77,7 +77,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
         SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_summary_repository::{
         SqliteVideoSummaryRepository, VideoSummaryRepository,
     };
@@ -339,6 +341,37 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![VideoCategories::none(video.id.clone())]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_not_store_a_verdict_for_a_video_removed_during_its_call() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        let (database, removed) = (db.database(), video.id.clone());
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply(YES)])
+                .with_on_chat(move || {
+                    SqliteVideoRepository::new(database.clone())
+                        .delete(&removed)
+                        .unwrap()
+                }),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![]
         );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
