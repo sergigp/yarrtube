@@ -93,20 +93,11 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
     }
 
     fn delete_for_video(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "DELETE FROM video_category_verdicts WHERE video_id = ?1",
-            params![video_id.as_str()],
-        )
-        .inspect_err(|e| {
-            tracing::error!(video_id = %video_id, error = %e, "failed to delete video category verdicts")
-        })
-        .context("failed to delete video category verdicts")?;
-        Ok(())
+        self.delete_where("video_id = ?1", video_id.as_str())
     }
 
-    fn delete_for_category(&self, _category_id: &CategoryId) -> anyhow::Result<()> {
-        Ok(())
+    fn delete_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()> {
+        self.delete_where("category_id = ?1", category_id.as_str())
     }
 
     fn delete_unavailable(&self) -> anyhow::Result<()> {
@@ -119,6 +110,20 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
 }
 
 impl SqliteVideoCategoryVerdictRepository {
+    /// Deletes the verdicts matching `predicate`, with `value` as `?1`.
+    fn delete_where(&self, predicate: &str, value: &str) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            &format!("DELETE FROM video_category_verdicts WHERE {predicate}"),
+            params![value],
+        )
+        .inspect_err(|e| {
+            tracing::error!(predicate, value, error = %e, "failed to delete video category verdicts")
+        })
+        .context("failed to delete video category verdicts")?;
+        Ok(())
+    }
+
     fn read_row(row: &Row<'_>) -> rusqlite::Result<VerdictRow> {
         Ok(VerdictRow {
             video_id: row.get(0)?,
@@ -205,6 +210,30 @@ mod tests {
         .for_each(|verdict| repository.save(verdict).unwrap());
 
         let result = repository.delete_for_video(&video_id("rec1"));
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            repository
+                .find_many(&[video_id("rec1"), video_id("rec2")])
+                .unwrap(),
+            vec![kept]
+        );
+    }
+
+    #[test]
+    fn it_should_delete_a_categorys_verdicts() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = ai_verdict("rec1", "funny", Verdict::No);
+        [
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            kept.clone(),
+            ai_verdict("rec2", "chess", Verdict::No),
+        ]
+        .iter()
+        .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let result = repository.delete_for_category(&CategoryId::new("chess").unwrap());
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         assert_eq!(
