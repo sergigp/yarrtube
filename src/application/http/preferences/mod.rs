@@ -283,6 +283,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_unavailable_verdicts_when_the_same_settings_are_saved() {
+        let requests = [
+            UpdatePreferencesRequest {
+                categorization_model: Some("qwen3:4b".to_string()),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                categorization_enabled: Some(true),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                summaries_model: Some("gemma3:4b".to_string()),
+                ..UpdatePreferencesRequest::default()
+            },
+        ];
+
+        for request in requests {
+            let db = TestDatabase::new();
+            let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let verdict_repository =
+                Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+            let unavailable = verdict("tech", Verdict::Unavailable);
+            verdict_repository.save(&unavailable).unwrap();
+            let preferences_updater = PreferencesUpdater::new(
+                repository,
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+                verdict_repository.clone(),
+            );
+
+            update(preferences_updater, request).await.unwrap();
+
+            assert_eq!(
+                verdict_repository.find_many(&[verdict_video_id()]).unwrap(),
+                vec![unavailable]
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
