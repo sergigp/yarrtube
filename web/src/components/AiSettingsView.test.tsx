@@ -309,6 +309,26 @@ describe('AiSettingsView', () => {
     expect(patchBodies(fetchMock)).toEqual([])
   })
 
+  it('refuses to save an emptied categorization number', async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+    await user.clear(screen.getByRole('spinbutton', { name: 'Categorization temperature' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Context length and temperature must be numbers',
+    )
+    expect(patchBodies(fetchMock)).toEqual([])
+  })
+
   it('tests the connection to the typed URL', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
