@@ -6381,12 +6381,14 @@ mod tests {
             })
         );
         assert_eq!(
-            verdict_repository.find_many(&[video.id.clone()]).unwrap(),
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
             vec![user_verdict(&video, &sicilian, Verdict::Yes)]
         );
         assert_eq!(
             SqliteVideoCategoriesRepository::new(db.database())
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![VideoCategories::new(
                 video.id.clone(),
@@ -6443,12 +6445,14 @@ mod tests {
             })
         );
         assert_eq!(
-            verdict_repository.find_many(&[video.id.clone()]).unwrap(),
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
             vec![user_verdict(&video, &food, Verdict::No)]
         );
         assert_eq!(
             video_categories_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![VideoCategories::none(video.id.clone())]
         );
@@ -6493,7 +6497,7 @@ mod tests {
         );
         assert_eq!(
             SqliteVideoCategoryVerdictRepository::new(db.database())
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![]
         );
@@ -6564,7 +6568,7 @@ mod tests {
         );
         assert_eq!(
             SqliteVideoCategoryVerdictRepository::new(db.database())
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![]
         );
@@ -6614,12 +6618,14 @@ mod tests {
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
-            verdict_repository.find_many(&[video.id.clone()]).unwrap(),
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
             vec![user_verdict(&video, &funny, Verdict::Yes)]
         );
         assert_eq!(
             video_categories_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![VideoCategories::new(
                 video.id.clone(),

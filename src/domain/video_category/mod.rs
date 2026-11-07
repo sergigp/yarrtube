@@ -11,5 +11,5 @@ pub use errors::EditVideoCategoriesError;
 pub use events::VideoCategoriesChanged;
 pub use pending_categories::pending_categories;
 pub use video_categories::VideoCategories;
-pub use video_category_choice::{CategoryOrigin, VideoCategoryChoice};
+pub use video_category_choice::VideoCategoryChoice;
 pub use video_category_verdict::{Verdict, VerdictAuthor, VideoCategoryVerdict};
