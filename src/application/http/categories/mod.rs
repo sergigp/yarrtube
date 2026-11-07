@@ -385,6 +385,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_category_without_a_prompt_if_blank() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator = category_creator(&db, repository.clone());
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                ai_prompt: Some(String::new()),
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        let stored = repository.list().unwrap();
+        let id = stored.first().map(|category| category.id.clone());
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                category_response(id.as_ref(), "Chess", &[], &[])
+            ))
+        );
+        assert_eq!(stored, vec![category(id, "Chess")]);
+    }
+
+    #[tokio::test]
     async fn it_should_create_the_first_category_with_the_first_palette_color() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
