@@ -1,6 +1,7 @@
 use crate::domain::category::Category;
 use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::video::{Video, VideoOwner};
+use crate::domain::video_category::pending_categories;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
@@ -62,8 +63,12 @@ pub trait VideoCategorizerApi: Send + Sync {
 }
 
 impl VideoCategorizerApi for VideoCategorizer {
-    fn pending(&self, _video: &Video, _owner: &VideoOwner) -> anyhow::Result<Vec<Category>> {
-        Ok(Vec::new())
+    fn pending(&self, _video: &Video, owner: &VideoOwner) -> anyhow::Result<Vec<Category>> {
+        Ok(pending_categories(
+            self.category_repository.list()?,
+            &owner.source,
+            &[],
+        ))
     }
 
     fn categorize(&self, _video: &Video, _is_last_attempt: bool) -> anyhow::Result<()> {

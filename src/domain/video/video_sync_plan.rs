@@ -20,7 +20,7 @@ impl VideoSyncPlan {
     pub fn for_video(
         video: &Video,
         summaries_wanted: bool,
-        _categorization_wanted: bool,
+        categorization_wanted: bool,
         now: DateTime<Utc>,
     ) -> Self {
         let steps = [
@@ -47,6 +47,7 @@ impl VideoSyncPlan {
                 VideoSyncStep::Summarize,
                 summaries_wanted && video.is_summarizable(),
             ),
+            (VideoSyncStep::Categorize, categorization_wanted),
         ]
         .into_iter()
         .filter(|(_, needed)| *needed)

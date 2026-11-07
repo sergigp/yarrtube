@@ -1,7 +1,7 @@
 use crate::domain::services::{
-    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategorizer, VideoCategoryAssigner,
-    VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoRelocator,
-    VideoRelocatorApi,
+    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategorizer, VideoCategorizerApi,
+    VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
+    VideoRelocator, VideoRelocatorApi,
 };
 use crate::domain::video::{
     Video, VideoOwner, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
@@ -36,7 +36,6 @@ pub struct VideoReconciler {
     clock: Arc<dyn Clock>,
     video_category_assigner: VideoCategoryAssigner,
     preferences_repository: Arc<dyn PreferencesRepository>,
-    #[allow(dead_code)]
     video_categorizer: Arc<VideoCategorizer>,
 }
 
@@ -97,7 +96,13 @@ impl VideoReconcilerApi for VideoReconciler {
         self.repair_metadata(&video, &owner);
         self.warn_if_stranded(&video)?;
         let summaries_wanted = video.is_summarizable() && self.summaries_wanted(&owner)?;
-        self.schedule_steps(&video, &owner.target, summaries_wanted)
+        let categorization_wanted = self.categorization_wanted(&video, &owner)?;
+        self.schedule_steps(
+            &video,
+            &owner.target,
+            summaries_wanted,
+            categorization_wanted,
+        )
     }
 }
 
@@ -248,19 +253,30 @@ impl VideoReconciler {
                 .summaries_available())
     }
 
+    /// Whether `video` has categories pending for the AI.
+    fn categorization_wanted(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<bool> {
+        Ok(!self.video_categorizer.pending(video, owner)?.is_empty())
+    }
+
     fn schedule_steps(
         &self,
         video: &Video,
         target: &VideoTarget,
         summaries_wanted: bool,
+        categorization_wanted: bool,
     ) -> anyhow::Result<()> {
-        VideoSyncPlan::for_video(video, summaries_wanted, false, self.clock.now())
-            .steps
-            .iter()
-            .try_for_each(|step| {
-                self.task_repository
-                    .schedule(&step.task_for(video, target), self.clock.now())
-            })
+        VideoSyncPlan::for_video(
+            video,
+            summaries_wanted,
+            categorization_wanted,
+            self.clock.now(),
+        )
+        .steps
+        .iter()
+        .try_for_each(|step| {
+            self.task_repository
+                .schedule(&step.task_for(video, target), self.clock.now())
+        })
     }
 }
 

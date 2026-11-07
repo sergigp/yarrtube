@@ -28,14 +28,16 @@ impl TaskHandler for SyncVideoTask {
 mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
-    use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
+    use crate::domain::category::{
+        Category, CategoryColor, CategoryMember, CategoryName, CategoryPrompt,
+    };
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::llm_server::OllamaUrl;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::preferences::{Preferences, SummarySettings};
+    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::VideoCategorizer;
     use crate::domain::services::VideoCategoryAssigner;
@@ -2739,6 +2741,38 @@ mod tests {
         assert_eq!(scheduled, [vec![], vec![]]);
     }
 
+    #[test]
+    fn it_should_schedule_a_categorization_for_a_summarized_video_with_pending_categories() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = summarized_video();
+        video_repository.save(&video).unwrap();
+        seed_channel_with_categorization(&db, &video, true);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&prompted_category("Sicilian", &[]))
+            .unwrap();
+        preferences_repository.save(&categorization_on()).unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &categorize_video(&video))]
+        );
+    }
+
     /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
     fn sync_task_of_downloaded_video(
         db: &TestDatabase,
@@ -2793,6 +2827,46 @@ mod tests {
             .unwrap();
     }
 
+    fn seed_channel_with_categorization(
+        db: &TestDatabase,
+        video: &Video,
+        categorization_enabled: bool,
+    ) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel().with_categorization_enabled(categorization_enabled))
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn categorization_on() -> Preferences {
+        let preferences = Preferences::default();
+        Preferences {
+            ai_enabled: true,
+            categories_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+            categorization: CategorizationSettings {
+                enabled: true,
+                ..preferences.categorization
+            },
+            ..Preferences::default()
+        }
+    }
+
+    fn prompted_category(name: &str, members: &[CategoryMember]) -> Category {
+        category_with_members(name, members).with_ai_prompt(Some(
+            CategoryPrompt::new(format!("Videos about {name}"))
+                .unwrap()
+                .unwrap(),
+        ))
+    }
+
     fn summaries_on() -> Preferences {
         let preferences = Preferences::default();
         Preferences {
@@ -2804,6 +2878,10 @@ mod tests {
             },
             ..Preferences::default()
         }
+    }
+
+    fn summarized_video() -> Video {
+        subtitled_video().mark_summary_generated(fixed_timestamp())
     }
 
     fn subtitled_video() -> Video {
@@ -3010,6 +3088,12 @@ mod tests {
         Task::FetchSubtitles {
             video_id: video.id.as_str().to_string(),
             output_dir: "/videos/creators/somechannel".to_string(),
+        }
+    }
+
+    fn categorize_video(video: &Video) -> Task {
+        Task::CategorizeVideo {
+            video_id: video.id.as_str().to_string(),
         }
     }
 
