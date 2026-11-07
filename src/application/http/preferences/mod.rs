@@ -238,11 +238,31 @@ mod tests {
             Ok(PreferencesResponse {
                 categorization_enabled: false,
                 categorization_model: "qwen3:4b".to_string(),
-                categorization_prompt: include_str!("../../../../prompts/categorization/v1.md")
+                categorization_prompt: include_str!("../../../../prompts/categorization/v2.md")
                     .to_string(),
                 categorization_prompt_is_default: true,
                 ..all_on_response()
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_ship_the_categorization_prompt_v2() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_searcher = PreferencesSearcher::new(repository);
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response.map(|preferences| (
+                preferences.categorization_prompt,
+                preferences.categorization_prompt_is_default
+            )),
+            Ok((
+                include_str!("../../../../prompts/categorization/v2.md").to_string(),
+                true
+            ))
         );
     }
 
