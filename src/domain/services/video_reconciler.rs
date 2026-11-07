@@ -1,3 +1,4 @@
+use crate::domain::preferences::Preferences;
 use crate::domain::services::{
     MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategorizer, VideoCategorizerApi,
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
@@ -245,17 +246,18 @@ impl VideoReconciler {
 
     /// Whether the videos of `owner` get an AI summary.
     fn summaries_wanted(&self, owner: &VideoOwner) -> anyhow::Result<bool> {
-        Ok(owner.summaries_enabled
-            && self
-                .preferences_repository
-                .find()?
-                .unwrap_or_default()
-                .summaries_available())
+        Ok(owner.summaries_enabled && self.preferences()?.summaries_available())
+    }
+
+    /// The saved preferences, or the defaults.
+    fn preferences(&self) -> anyhow::Result<Preferences> {
+        Ok(self.preferences_repository.find()?.unwrap_or_default())
     }
 
     /// Whether `video` has categories pending for the AI.
     fn categorization_wanted(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<bool> {
         Ok(owner.categorization_enabled
+            && self.preferences()?.categorization_available()
             && video.is_categorizable()
             && !self.video_categorizer.pending(video, owner)?.is_empty())
     }

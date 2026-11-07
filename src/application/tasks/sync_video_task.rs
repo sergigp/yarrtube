@@ -2838,6 +2838,54 @@ mod tests {
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_not_schedule_a_categorization_when_ai_categorization_is_off() {
+        let ai_off = Preferences {
+            ai_enabled: false,
+            ..categorization_on()
+        };
+        let categories_off = Preferences {
+            categories_enabled: false,
+            ..categorization_on()
+        };
+        let categorization_off = Preferences {
+            categorization: CategorizationSettings {
+                enabled: false,
+                ..categorization_on().categorization
+            },
+            ..categorization_on()
+        };
+
+        let scheduled = [ai_off, categories_off, categorization_off].map(|preferences| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            let video = summarized_video();
+            video_repository.save(&video).unwrap();
+            seed_channel_with_categorization(&db, &video, true);
+            SqliteCategoryRepository::new(db.database())
+                .insert(&prompted_category("Sicilian", &[]))
+                .unwrap();
+            preferences_repository.save(&preferences).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
+
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
+        assert_eq!(scheduled, [vec![], vec![], vec![]]);
+    }
+
     /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
     fn sync_task_of_downloaded_video(
         db: &TestDatabase,
