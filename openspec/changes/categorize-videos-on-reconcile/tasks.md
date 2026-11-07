@@ -54,7 +54,7 @@
 
 `OllamaLlmServerRepository`
 
-- [ ] 3.7 `it_should_send_the_response_schema_as_format`
+- [x] 3.7 `it_should_send_the_response_schema_as_format`
 
 ## 4. Verification
 

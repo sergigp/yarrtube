@@ -105,8 +105,9 @@ impl OllamaLlmServerRepository {
         Ok(refusal.error)
     }
 
+    /// The request body; `format` only when the chat has a schema.
     fn chat_body(chat: &LlmChat) -> serde_json::Value {
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "model": chat.model,
             "stream": false,
             "truncate": false,
@@ -121,7 +122,11 @@ impl OllamaLlmServerRepository {
                 {"role": "system", "content": chat.system},
                 {"role": "user", "content": chat.user},
             ],
-        })
+        });
+        if let Some(schema) = &chat.format {
+            body["format"] = schema.clone();
+        }
+        body
     }
 
     /// `model` with its capabilities (`POST /api/show`).
@@ -303,6 +308,32 @@ mod tests {
             .create();
 
         let result = OllamaLlmServerRepository::new().chat(&url(&server), &chat());
+
+        assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
+        chat_mock.assert();
+    }
+
+    #[test]
+    fn it_should_send_the_response_schema_as_format() {
+        let mut server = mockito::Server::new();
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {"belongs": {"type": "boolean"}},
+            "required": ["belongs"],
+        });
+        let chat_mock = server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({ "format": schema.clone() }),
+            ))
+            .with_body(ANSWER)
+            .create();
+        let with_schema = LlmChat {
+            format: Some(schema),
+            ..chat()
+        };
+
+        let result = OllamaLlmServerRepository::new().chat(&url(&server), &with_schema);
 
         assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
         chat_mock.assert();
