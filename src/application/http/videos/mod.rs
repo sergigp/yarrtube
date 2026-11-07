@@ -6645,6 +6645,28 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_return_not_found_when_rerunning_an_unknown_video() {
+        let db = TestDatabase::new();
+
+        let response = delete_video_ai_verdicts(
+            State(video_category_editor(&|| db.database())),
+            Path("rec1".to_string()),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video not found"))
+        );
+        assert_eq!(
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+                .list_non_completed()
+                .unwrap(),
+            vec![]
+        );
+    }
+
     async fn list_categories_of(
         video_category_choice_searcher: VideoCategoryChoiceSearcher,
         id: &str,

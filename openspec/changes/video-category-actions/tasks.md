@@ -18,7 +18,7 @@
 - [x] 2.10 `it_should_reject_a_missing_or_non_boolean_belongs`
 - [x] 2.11 `it_should_return_not_found_for_an_unknown_video_or_category_when_setting`
 - [x] 2.12 `it_should_rerun_a_videos_ai_categorization`: `rerun_video` + `recompute` + `SyncVideo`
-- [ ] 2.13 `it_should_return_not_found_when_rerunning_an_unknown_video`
+- [x] 2.13 `it_should_return_not_found_when_rerunning_an_unknown_video`
 - [ ] 2.14 `it_should_not_evaluate_a_pair_with_a_user_verdict`
 - [ ] 2.15 `it_should_clear_a_channels_ai_verdicts_keeping_user_ones`: `rerun_source` + `ReconcileChannel`
 - [ ] 2.16 `it_should_clear_a_playlists_ai_verdicts_keeping_user_ones`
