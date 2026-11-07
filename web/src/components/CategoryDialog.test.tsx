@@ -6,6 +6,7 @@ import { queryKeys } from '@/api/queries'
 import { CategoryDialog } from './CategoryDialog'
 import {
   aCategory,
+  aCategoryList,
   aChannel,
   aPlaylist,
   aPreferences,
@@ -14,8 +15,9 @@ import {
   type Routes,
 } from '@/test/helpers'
 
-function renderDialog(category: Category, routes: Routes) {
+function renderDialog(category: Category | undefined, routes: Routes) {
   const fetchMock = mockApi({
+    'GET /api/categories': aCategoryList(),
     'GET /api/channels': [],
     'GET /api/playlists': [],
     'GET /api/preferences': aPreferences(),
@@ -58,6 +60,12 @@ function bodies(fetchMock: ReturnType<typeof mockApi>, method: string): unknown[
     .map(([, init]) => JSON.parse((init as RequestInit).body as string))
 }
 
+function inDocumentOrder(elements: HTMLElement[]): HTMLElement[] {
+  return [...elements].sort((a, b) =>
+    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+  )
+}
+
 const library = {
   'GET /api/channels': [
     aChannel({ id: '@hikaru', name: 'Hikaru', avatar_filename: 'hikaru.jpg' }),
@@ -67,6 +75,32 @@ const library = {
 }
 
 describe('CategoryDialog', () => {
+  it('asks for the name, color, prompt and chips when creating, with the next free color', async () => {
+    renderDialog(undefined, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'GET /api/categories': aCategoryList([
+        aCategory({ name: 'Cooking', color: '#f59e0b' }),
+        aCategory({ name: 'Sports', color: '#ef4444' }),
+      ]),
+    })
+
+    expect(screen.getByRole('dialog', { name: 'Add category' })).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Orange' })).toBeChecked())
+    const name = screen.getByRole('textbox', { name: 'Name' })
+    const color = screen.getByRole('radio', { name: 'Orange' })
+    const prompt = await screen.findByRole('textbox', { name: 'AI prompt' })
+    const chip = await screen.findByRole('button', { name: 'Hikaru' })
+    expect(name).toHaveFocus()
+    expect(name).toHaveValue('')
+    expect(prompt).toHaveValue('')
+    expect(prompt).toHaveAttribute('rows', '6')
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    expect(inDocumentOrder([chip, prompt, color, name])).toEqual([name, color, prompt, chip])
+    expect(screen.getByRole('radio', { name: /^In this category/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Not in this category/ })).toBeInTheDocument()
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 
@@ -139,10 +173,11 @@ describe('CategoryDialog', () => {
     })
     const user = userEvent.setup()
     const search = screen.getByRole('searchbox', { name: 'Search channels and playlists' })
-    const focusedOnOpen = search === document.activeElement
 
     await screen.findByRole('button', { name: 'Vsauce' })
-    const filters = screen.getAllByRole('radio').map((filter) => filter.textContent)
+    const filters = within(screen.getByLabelText('Show'))
+      .getAllByRole('radio')
+      .map((filter) => filter.textContent)
     await user.type(search, 'VER')
     const searched = shownChips()
     await user.click(screen.getByRole('radio', { name: /^Not in Science/ }))
@@ -153,7 +188,6 @@ describe('CategoryDialog', () => {
     await user.clear(search)
     await user.type(search, 'hik{Enter}')
 
-    expect(focusedOnOpen).toBe(true)
     expect(filters).toEqual(['All', 'In Science1', 'Not in Science3'])
     expect({ searched, searchedOut, searchedIn }).toEqual({
       searched: ['Veritasium', 'Overview'],

@@ -2,6 +2,7 @@ import { useId, useRef, useState } from 'react'
 import { Check, ListVideo, Plus, Search, X } from 'lucide-react'
 import { avatarMediaUrl, setCategoryMembers, updateCategory } from '@/api/client'
 import {
+  useCategories,
   useCategorizationAvailable,
   useChannels,
   useInvalidateLibrary,
@@ -19,12 +20,14 @@ import {
   type SourceFilter,
   type SourceRef,
 } from '@/lib/categories'
+import { defaultColor } from '@/lib/categoryColors'
 import { errorMessage } from '@/lib/errorMessage'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { CategoryColorPicker } from './CategoryColorPicker'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 
@@ -35,29 +38,44 @@ interface CategoryDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-/** A category's AI prompt and every tracked source as a chip, pressed when in it. */
+const NO_MEMBERS: CategoryMembers = { channels: [], playlists: [] }
+
+/**
+ * A category's name, color, AI prompt and every tracked source as a chip,
+ * pressed when in it; `category` absent to create one.
+ */
 export function CategoryDialog({ category, open, onOpenChange }: CategoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Mounted only while open, so every open starts from the saved sources. */}
-      {open && category && <CategoryDialogContent category={category} onClose={() => onOpenChange(false)} />}
+      {open && <CategoryDialogContent category={category} onClose={() => onOpenChange(false)} />}
     </Dialog>
   )
 }
 
 /**
- * The AI prompt, the chips and the save controls. Editing only stages a change;
+ * The form and the save controls. Editing only stages a change;
  * Save sends what changed, making the category's sources exactly the pressed
  * chips in one request. Closing with staged changes asks to discard them first.
  */
-function CategoryDialogContent({ category, onClose }: { category: Category; onClose: () => void }) {
+function CategoryDialogContent({ category, onClose }: { category?: Category; onClose: () => void }) {
   const { data: channels } = useChannels()
   const { data: playlists } = usePlaylists()
+  const { data: categories } = useCategories()
   const invalidateLibrary = useInvalidateLibrary()
-  const saved = membersOf(category)
+  const saved = category ? membersOf(category) : NO_MEMBERS
   const [staged, setStaged] = useState(saved)
   const withPrompt = useCategorizationAvailable()
-  const [prompt, setPrompt] = useState(category.ai_prompt ?? '')
+  const [name, setName] = useState(category?.name ?? '')
+  // What the color started from, kept so a refetch can't change the choice.
+  const [startColor] = useState(category?.color)
+  // Until one is picked, a new category takes the least used color, once loaded.
+  const [chosenColor, setChosenColor] = useState<string | null>(null)
+  const color =
+    chosenColor ??
+    startColor ??
+    defaultColor((categories?.categories ?? []).map((existing) => existing.color))
+  const [prompt, setPrompt] = useState(category?.ai_prompt ?? '')
   // What the field started from, or last saved here. Not the live category: a
   // refetch while open must not make an untouched prompt look edited.
   const [promptBase, setPromptBase] = useState(prompt)
@@ -68,7 +86,7 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
   const chips = sourceChips(channels, playlists)
   const allChips = [...chips.channels, ...chips.playlists]
   const shown = (kind: SourceChip[]) => visibleChips(kind, staged, search, filter)
@@ -79,6 +97,7 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
   const sourcesChanged = summary.added + summary.removed > 0
   const promptChanged = withPrompt && prompt.trim() !== promptBase
   const dirty = sourcesChanged || promptChanged
+  const categoryName = category?.name ?? 'this category'
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
 
   const requestClose = () => (dirty ? setConfirmingDiscard(true) : onClose())
@@ -90,6 +109,9 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
   }
 
   const save = async () => {
+    if (!category) {
+      return
+    }
     setSaving(true)
     setError(null)
     let promptStored = promptSaved
@@ -122,17 +144,17 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
       showCloseButton={false}
       onOpenAutoFocus={(event) => {
         event.preventDefault()
-        searchRef.current?.focus()
+        nameRef.current?.focus()
       }}
       onEscapeKeyDown={guardDismiss}
       onInteractOutside={guardDismiss}
-      className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none sm:h-[min(40rem,calc(100dvh-2rem))] sm:max-w-2xl"
+      className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none sm:h-[min(48rem,calc(100dvh-2rem))] sm:max-w-2xl"
     >
       <div className="flex items-start gap-3 px-6 pt-6 pb-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <DialogTitle>Edit {category.name} settings</DialogTitle>
+          <DialogTitle>{category ? `Edit ${category.name} settings` : 'Add category'}</DialogTitle>
           <DialogDescription>
-            Pick the channels and playlists whose videos show in {category.name}.
+            Pick the channels and playlists whose videos show in {categoryName}.
           </DialogDescription>
         </div>
         <Button
@@ -149,12 +171,28 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
       {/* Everything between the header and the save controls scrolls together, so
           the prompt can never push them out of a short dialog. */}
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex flex-col gap-4 px-6 pb-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="category-name">Name</Label>
+            <Input
+              ref={nameRef}
+              id="category-name"
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm leading-none font-medium">Color</span>
+            <CategoryColorPicker value={color} onChange={setChosenColor} />
+          </div>
+        </div>
         {withPrompt && (
           <div className="flex flex-col gap-1.5 px-6 pb-4">
             <Label htmlFor="category-ai-prompt">AI prompt</Label>
             <textarea
               id="category-ai-prompt"
-              rows={3}
+              rows={6}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               aria-describedby="category-ai-prompt-hint"
@@ -169,7 +207,6 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              ref={searchRef}
               type="search"
               aria-label="Search channels and playlists"
               placeholder="Search channels and playlists"
@@ -200,10 +237,10 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
             }}
           >
             <FilterItem value="all" label="All" />
-            <FilterItem value="in" label={`In ${category.name}`} count={inCount} />
+            <FilterItem value="in" label={`In ${categoryName}`} count={inCount} />
             <FilterItem
               value="out"
-              label={`Not in ${category.name}`}
+              label={`Not in ${categoryName}`}
               count={allChips.length - inCount}
             />
           </ToggleGroup>
@@ -234,8 +271,8 @@ function CategoryDialogContent({ category, onClose }: { category: Category; onCl
         title="Discard changes?"
         description={
           promptSaved && !promptChanged
-            ? `The AI prompt is already saved. Your changes to the sources in ${category.name} won't be saved.`
-            : `Your changes to ${category.name} won't be saved.`
+            ? `The AI prompt is already saved. Your changes to the sources in ${categoryName} won't be saved.`
+            : `Your changes to ${categoryName} won't be saved.`
         }
         cancelLabel="Keep editing"
         confirmLabel="Discard"
