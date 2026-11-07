@@ -48,7 +48,6 @@ pub struct PlaylistVideoReconciler {
     clock: Arc<dyn Clock>,
     show_locks: Arc<ShowLocks>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
-    #[allow(dead_code)]
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
 }
 
@@ -372,6 +371,8 @@ impl PlaylistVideoReconciler {
                 self.video_transcript_repository.delete(&video.id)?;
                 self.video_summary_repository.delete(&video.id)?;
                 self.video_categories_repository.delete(&video.id)?;
+                self.video_category_verdict_repository
+                    .delete_for_video(&video.id)?;
                 self.event_publisher
                     .publish(&DomainEvent::VideoRemovedFromPlaylist(
                         VideoRemovedFromPlaylist {
