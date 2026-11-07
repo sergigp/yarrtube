@@ -14,6 +14,8 @@ pub struct CategoryView {
     pub color: CategoryColor,
     pub ai_prompt: Option<CategoryPrompt>,
     pub unwatched_count: usize,
+    /// Stored videos with an AI verdict for it.
+    pub ai_verdict_count: u64,
     /// Existing members only.
     pub channels: Vec<ChannelHandle>,
     pub playlists: Vec<PlaylistId>,

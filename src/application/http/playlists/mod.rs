@@ -13,7 +13,7 @@ use crate::domain::services::{
     CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
     PlaylistDeleterApi, PlaylistPreviewer, PlaylistPreviewerApi, PlaylistUpdater,
     PlaylistUpdaterApi, PlaylistVideoReconciler, PlaylistVideoReconcilerApi, PlaylistViewSearcher,
-    PlaylistViewSearcherApi, ShowMover, ShowMoverApi, VideoWatchStateUpdater,
+    PlaylistViewSearcherApi, ShowMover, ShowMoverApi, VideoCategoryEditor, VideoWatchStateUpdater,
     VideoWatchStateUpdaterApi,
 };
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -103,6 +103,13 @@ pub async fn delete_playlist(
         Err(e @ DeletePlaylistError::NotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ DeletePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
+}
+
+pub async fn delete_playlist_ai_verdicts(
+    State(_video_category_editor): State<VideoCategoryEditor>,
+    Path(_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn update_playlist(

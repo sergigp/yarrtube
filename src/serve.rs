@@ -9,8 +9,9 @@ use crate::domain::services::{
     PlaylistVideoReconciler, PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer,
     PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
     ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
-    VideoCategorizer, VideoCategoryAssigner, VideoDownloader, VideoFileDeleter, VideoOwnerFinder,
-    VideoReconciler, VideoRelocator, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
+    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
+    VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -540,6 +541,25 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.category_lock.clone(),
         ),
         llm_server_searcher: LlmServerSearcher::new(infrastructure.llm_server_repository.clone()),
+        video_category_choice_searcher: VideoCategoryChoiceSearcher::new(
+            infrastructure.video_repository.clone(),
+            video_owner_finder(infrastructure),
+            infrastructure.category_repository.clone(),
+            infrastructure.video_category_verdict_repository.clone(),
+        ),
+        video_category_editor: VideoCategoryEditor::new(
+            infrastructure.video_repository.clone(),
+            video_owner_finder(infrastructure),
+            infrastructure.category_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.playlist_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
+            infrastructure.video_category_verdict_repository.clone(),
+            video_category_assigner(infrastructure),
+            infrastructure.task_repository.clone(),
+            infrastructure.clock.clone(),
+        ),
         category_creator: CategoryCreator::new(
             infrastructure.category_repository.clone(),
             infrastructure.channel_repository.clone(),
@@ -564,6 +584,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_repository.clone(),
             infrastructure.playlist_repository.clone(),
             category_video_collector(infrastructure),
+            infrastructure.video_category_verdict_repository.clone(),
         ),
         show_mover: ShowMover::new(
             infrastructure.playlist_repository.clone(),

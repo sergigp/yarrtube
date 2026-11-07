@@ -1,3 +1,4 @@
+pub mod category_dto;
 pub mod dto;
 
 use super::blocking::run_blocking;
@@ -7,17 +8,19 @@ use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
-    SubtitleReader, SubtitleReaderApi, VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater,
-    VideoWatchStateUpdaterApi,
+    SubtitleReader, SubtitleReaderApi, VideoCategoryChoiceSearcher, VideoCategoryEditor,
+    VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
     HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, UpdateWatchStateError,
     VideoDuration, VideoId, VideoSearchText, WebVtt,
 };
+use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::http::header::{CONTENT_TYPE, HeaderName};
+use category_dto::{SetVideoCategoryRequest, VideoCategoriesResponse};
 use dto::{
     CategoryVideoResponse, HomeResponse, HomeVideoResponse, RecordProgressRequest,
     RecordProgressResponse, SearchVideosQuery, SearchVideosResponse, VideoResponse,
@@ -161,6 +164,41 @@ pub async fn get_channel_video_subtitles(
         .await?
         .map_err(read_subtitles_error)?;
     Ok(vtt_response(vtt))
+}
+
+pub async fn list_video_categories(
+    State(_video_category_choice_searcher): State<VideoCategoryChoiceSearcher>,
+    Path(_id): Path<String>,
+) -> Result<Json<VideoCategoriesResponse>, ApiError> {
+    Ok(Json(VideoCategoriesResponse::from(Vec::new())))
+}
+
+pub async fn set_video_category(
+    State(_video_category_editor): State<VideoCategoryEditor>,
+    State(_video_category_choice_searcher): State<VideoCategoryChoiceSearcher>,
+    Path((_id, _category_id)): Path<(String, String)>,
+    Json(_request): Json<SetVideoCategoryRequest>,
+) -> Result<Json<VideoCategoriesResponse>, ApiError> {
+    Ok(Json(VideoCategoriesResponse::from(Vec::new())))
+}
+
+pub async fn delete_video_ai_verdicts(
+    State(_video_category_editor): State<VideoCategoryEditor>,
+    Path(_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Maps a failed read or edit of a video's categories, the same for every
+/// route touching them.
+pub fn edit_video_categories_error(error: EditVideoCategoriesError) -> ApiError {
+    match error {
+        e @ (EditVideoCategoriesError::VideoNotFound
+        | EditVideoCategoriesError::CategoryNotFound
+        | EditVideoCategoriesError::SourceNotFound) => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ EditVideoCategoriesError::FromSource(_) => ApiError::new(StatusCode::CONFLICT, e),
+        e @ EditVideoCategoriesError::Repository(_) => ApiError::internal(e),
+    }
 }
 
 pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
@@ -6264,6 +6302,7 @@ mod tests {
     fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         VideoResponse {
             id: youtube_id.to_string(),
+            record_id: String::new(),
             title: title.to_string(),
             status: "PENDING".to_string(),
             quality: None,
@@ -6300,6 +6339,7 @@ mod tests {
     ) -> HomeVideoResponse {
         HomeVideoResponse {
             id: youtube_id.to_string(),
+            record_id: String::new(),
             title: title.to_string(),
             thumbnail_filename: None,
             duration_seconds: None,
@@ -6320,6 +6360,7 @@ mod tests {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
         CategoryVideoResponse {
             id: youtube_id.to_string(),
+            record_id: String::new(),
             title: title.to_string(),
             status: "DOWNLOADED".to_string(),
             quality: Some("high".to_string()),

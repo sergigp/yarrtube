@@ -122,7 +122,9 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                 </div>
                 <VideoActionsMenu
                   videoId={video.id}
+                  recordId={video.record_id}
                   title={video.title}
+                  sourceName={video.source.name}
                   markable={!video.watched}
                   excludablePlaylist={
                     video.source.kind === 'playlist'

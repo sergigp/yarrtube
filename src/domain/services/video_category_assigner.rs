@@ -92,6 +92,9 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
         source: &CategoryMember,
         still_current: &dyn Fn() -> anyhow::Result<bool>,
     ) -> anyhow::Result<bool>;
+    /// Under the lock: sets each of `video_ids` to its source's categories
+    /// plus its yes verdicts, announcing the changed ones in one event.
+    fn recompute(&self, video_ids: &[VideoRecordId]) -> anyhow::Result<()>;
 }
 
 impl VideoCategoryAssignerApi for VideoCategoryAssigner {
@@ -105,7 +108,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         source: &CategoryMember,
     ) -> anyhow::Result<()> {
         let _guard = self.lock();
-        self.recompute(video_id, source)
+        self.recompute_record(video_id, source)
     }
 
     fn reassign_category(
@@ -158,6 +161,10 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         self.video_category_verdict_repository.save(verdict)?;
         self.recompute_with(&verdict.video_id, source, &categories)?;
         self.forget_if_removed(&verdict.video_id)
+    }
+
+    fn recompute(&self, _video_ids: &[VideoRecordId]) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -258,7 +265,11 @@ impl VideoCategoryAssigner {
 
     /// Sets `video_id`, a record of `source`, to the source's categories plus
     /// its yes verdicts; the caller holds the lock.
-    fn recompute(&self, video_id: &VideoRecordId, source: &CategoryMember) -> anyhow::Result<()> {
+    fn recompute_record(
+        &self,
+        video_id: &VideoRecordId,
+        source: &CategoryMember,
+    ) -> anyhow::Result<()> {
         let categories = self.category_repository.list()?;
         self.recompute_with(video_id, source, &categories)
     }

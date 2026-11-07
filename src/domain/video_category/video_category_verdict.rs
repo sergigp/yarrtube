@@ -113,6 +113,25 @@ impl VideoCategoryVerdict {
         }
     }
 
+    /// The user's own decision for the pair.
+    pub fn by_user(
+        video_id: VideoRecordId,
+        category_id: CategoryId,
+        belongs: bool,
+        now: DateTime<Utc>,
+    ) -> Self {
+        let _ = belongs;
+        Self {
+            video_id,
+            category_id,
+            verdict: Verdict::No,
+            decided_by: VerdictAuthor::User,
+            model: None,
+            reason: None,
+            decided_at: now,
+        }
+    }
+
     pub fn is_yes(&self) -> bool {
         self.verdict == Verdict::Yes
     }

@@ -5,6 +5,7 @@ use crate::domain::video::{SourcedVideo, VideoId, VideoSource};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -15,6 +16,7 @@ pub struct CategoryViewSearcher {
     channel_repository: Arc<dyn ChannelRepository>,
     playlist_repository: Arc<dyn PlaylistRepository>,
     collector: CategoryVideoCollector,
+    video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
 }
 
 impl CategoryViewSearcher {
@@ -23,12 +25,14 @@ impl CategoryViewSearcher {
         channel_repository: Arc<dyn ChannelRepository>,
         playlist_repository: Arc<dyn PlaylistRepository>,
         collector: CategoryVideoCollector,
+        video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     ) -> Self {
         Self {
             repository,
             channel_repository,
             playlist_repository,
             collector,
+            video_category_verdict_repository,
         }
     }
 }
@@ -155,6 +159,7 @@ impl CategoryViewSearcher {
             color: category.color,
             ai_prompt: category.ai_prompt,
             unwatched_count,
+            ai_verdict_count: 0,
         }
     }
 }

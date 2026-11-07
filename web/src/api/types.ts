@@ -62,6 +62,8 @@ export interface LibraryItem {
 /** An entry of `GET /api/playlists/:id/videos` and `/api/channels/:handle/videos`. */
 export interface Video {
   id: string
+  /** This stored copy's id; `id` is the YouTube video's. */
+  record_id: string
   title: string
   status: VideoStatus
   quality: string | null
@@ -100,6 +102,8 @@ export interface HomeVideoSource {
 
 export interface HomeVideo {
   id: string
+  /** This stored copy's id; `id` is the YouTube video's. */
+  record_id: string
   title: string
   thumbnail_filename: string | null
   duration_seconds: number | null
@@ -233,6 +237,8 @@ export interface Category {
   /** What the user wrote to describe the videos it should hold. */
   ai_prompt: string | null
   unwatched_count: number
+  /** Stored videos with an AI verdict for it. */
+  ai_verdict_count: number
   channels: string[]
   playlists: string[]
 }
@@ -326,4 +332,25 @@ export interface OllamaModel {
   size_bytes: number
   /** Whether the model can think before answering. */
   thinking: boolean
+}
+
+/** Where a video's membership of a category comes from. */
+export type CategoryOrigin = 'source' | 'ai' | 'user'
+
+export type Verdict = 'yes' | 'no' | 'unavailable'
+
+/** One category as offered for one video copy. */
+export interface VideoCategoryChoice {
+  id: string
+  name: string
+  color: string
+  belongs: boolean
+  /** `source` whenever the video's channel or playlist is a member. */
+  from: CategoryOrigin | null
+  verdict: Verdict | null
+}
+
+/** Response of `GET /api/videos/:record_id/categories`, in name order. */
+export interface VideoCategories {
+  categories: VideoCategoryChoice[]
 }

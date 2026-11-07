@@ -82,6 +82,7 @@ pub struct CategoryListItemResponse {
     pub color: String,
     pub ai_prompt: Option<String>,
     pub unwatched_count: usize,
+    pub ai_verdict_count: u64,
     pub channels: Vec<String>,
     pub playlists: Vec<String>,
 }
@@ -97,6 +98,7 @@ impl From<CategoryView> for CategoryListItemResponse {
                 .as_ref()
                 .map(|prompt| prompt.as_str().to_string()),
             unwatched_count: category.unwatched_count,
+            ai_verdict_count: 0,
             channels: category
                 .channels
                 .iter()

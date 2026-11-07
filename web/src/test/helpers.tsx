@@ -20,6 +20,7 @@ import type {
   Preferences,
   Task,
   Video,
+  VideoCategoryChoice,
 } from '@/api/types'
 
 /**
@@ -155,6 +156,7 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
   uniqueId += 1
   return {
     id: `video-${uniqueId}`,
+    record_id: `record-${uniqueId}`,
     title: `Video ${uniqueId}`,
     status: 'DOWNLOADED',
     quality: 'high',
@@ -179,6 +181,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
   uniqueId += 1
   return {
     id: `video-${uniqueId}`,
+    record_id: `record-${uniqueId}`,
     title: `Video ${uniqueId}`,
     thumbnail_filename: null,
     duration_seconds: 120,
@@ -209,6 +212,21 @@ export function aCategoryVideo(overrides: Partial<CategoryVideo> = {}): Category
       avatar_filename: null,
     },
     category_ids: [],
+    ...overrides,
+  }
+}
+
+export function aVideoCategoryChoice(
+  overrides: Partial<VideoCategoryChoice> = {},
+): VideoCategoryChoice {
+  uniqueId += 1
+  return {
+    id: `category-${uniqueId}`,
+    name: `Category ${uniqueId}`,
+    color: '#f59e0b',
+    belongs: false,
+    from: null,
+    verdict: null,
     ...overrides,
   }
 }
@@ -258,6 +276,7 @@ export function aCategory(overrides: Partial<Category> = {}): Category {
     color: '#f59e0b',
     ai_prompt: null,
     unwatched_count: 0,
+    ai_verdict_count: 0,
     channels: [],
     playlists: [],
     ...overrides,

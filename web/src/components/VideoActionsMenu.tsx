@@ -11,9 +11,14 @@ import { homeSettingAction } from '@/lib/homeSetting'
 import { cn } from '@/lib/utils'
 
 interface VideoActionsMenuProps {
+  /** The YouTube video id. */
   videoId: string
+  /** The stored copy's `record_id`, naming it to the categories routes. */
+  recordId: string
   /** Names the video in the trigger's label and the failure alert. */
   title: string
+  /** The channel or playlist the copy comes from. */
+  sourceName: string
   /** When false, "Mark as watched" is disabled. */
   markable: boolean
   /** The playlist the card is sourced from, offered for exclusion from home. */
@@ -24,7 +29,9 @@ interface VideoActionsMenuProps {
 /** A vertical "⋮" menu of actions on one video. */
 export function VideoActionsMenu({
   videoId,
+  recordId: _recordId,
   title,
+  sourceName: _sourceName,
   markable,
   excludablePlaylist,
   className,

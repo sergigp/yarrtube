@@ -20,6 +20,7 @@ import type {
   RecordProgressResponse,
   Task,
   Video,
+  VideoCategories,
   VideoProgress,
 } from './types'
 import { parseAnnouncements } from '@/lib/announcements'
@@ -351,6 +352,51 @@ export async function markCategoryWatched(id: string): Promise<void> {
   await send(`/categories/${encodeURIComponent(id)}/watched`, {
     method: 'POST',
     label: `mark category ${id} watched`,
+  })
+}
+
+/** A video copy's categories, `recordId` being its `record_id`, never its YouTube id. */
+export function getVideoCategories(recordId: string): Promise<VideoCategories> {
+  return request(`/videos/${encodeURIComponent(recordId)}/categories`)
+}
+
+/** Sets a video copy's category by hand; responds with its categories as they are now. */
+export function setVideoCategory(
+  recordId: string,
+  categoryId: string,
+  belongs: boolean,
+): Promise<VideoCategories> {
+  return request(
+    `/videos/${encodeURIComponent(recordId)}/categories/${encodeURIComponent(categoryId)}`,
+    { method: 'PUT', body: { belongs }, label: `set category ${categoryId} of video ${recordId}` },
+  )
+}
+
+/** Deletes a video copy's AI verdicts so the AI is asked again. */
+export async function deleteVideoAiVerdicts(recordId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(recordId)}/ai-verdicts`, {
+    method: 'DELETE',
+    label: `re-run AI for video ${recordId}`,
+  })
+}
+
+/** Deletes the AI verdicts of every video of a channel or playlist. */
+export async function deleteSourceAiVerdicts(source: {
+  kind: 'channel' | 'playlist'
+  id: string
+}): Promise<void> {
+  const collection = source.kind === 'channel' ? 'channels' : 'playlists'
+  await send(`/${collection}/${encodeURIComponent(source.id)}/ai-verdicts`, {
+    method: 'DELETE',
+    label: `delete AI verdicts of ${source.kind} ${source.id}`,
+  })
+}
+
+/** Deletes a category's AI verdicts so its videos are evaluated again. */
+export async function deleteCategoryAiVerdicts(categoryId: string): Promise<void> {
+  await send(`/categories/${encodeURIComponent(categoryId)}/ai-verdicts`, {
+    method: 'DELETE',
+    label: `re-evaluate category ${categoryId}`,
   })
 }
 

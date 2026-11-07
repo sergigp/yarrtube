@@ -10,6 +10,7 @@ function renderPane(videos: Video[] | undefined) {
     <VideoListPane
       noun="channel"
       basePathOf={() => 'channels/chan'}
+      sourceNameOf={() => 'My Channel'}
       videos={videos}
       error={null}
       selectedVideoId={null}

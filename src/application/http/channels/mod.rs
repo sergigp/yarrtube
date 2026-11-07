@@ -13,7 +13,8 @@ use crate::domain::services::{
     ChannelCreator, ChannelCreatorApi, ChannelDeleter, ChannelDeleterApi, ChannelPreviewer,
     ChannelPreviewerApi, ChannelUpdater, ChannelUpdaterApi, ChannelVideoReconciler,
     ChannelVideoReconcilerApi, ChannelViewSearcher, ChannelViewSearcherApi, CreateChannelOutcome,
-    ShowMover, ShowMoverApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    ShowMover, ShowMoverApi, VideoCategoryEditor, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use crate::domain::shared::{Quality, ReconcileInterval};
 use axum::Json;
@@ -102,6 +103,13 @@ pub async fn delete_channel(
         Err(e @ DeleteChannelError::NotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ DeleteChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
+}
+
+pub async fn delete_channel_ai_verdicts(
+    State(_video_category_editor): State<VideoCategoryEditor>,
+    Path(_handle): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn update_channel(

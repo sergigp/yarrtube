@@ -16,8 +16,8 @@ use crate::domain::services::{
     ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, LlmServerSearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
     PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher, PreferencesSearcher,
-    PreferencesUpdater, ShowMover, SubtitleReader, TaskViewSearcher, VideoSearcher,
-    VideoWatchStateUpdater,
+    PreferencesUpdater, ShowMover, SubtitleReader, TaskViewSearcher, VideoCategoryChoiceSearcher,
+    VideoCategoryEditor, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
@@ -65,6 +65,8 @@ pub struct ApiServices {
     pub preferences_searcher: PreferencesSearcher,
     pub preferences_updater: PreferencesUpdater,
     pub llm_server_searcher: LlmServerSearcher,
+    pub video_category_choice_searcher: VideoCategoryChoiceSearcher,
+    pub video_category_editor: VideoCategoryEditor,
 }
 
 pub fn api_router(api_services: ApiServices) -> Router {
@@ -89,6 +91,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
             post(playlists::mark_playlist_watched),
         )
         .route(
+            "/playlists/{id}/ai-verdicts",
+            axum::routing::delete(playlists::delete_playlist_ai_verdicts),
+        )
+        .route(
             "/playlists/{id}/videos",
             get(videos::list_videos_for_playlist),
         )
@@ -100,6 +106,18 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route("/videos/search", get(videos::search_videos))
         .route("/videos/{id}/progress", post(videos::record_video_progress))
         .route("/videos/{id}/watched", post(videos::mark_video_watched))
+        .route(
+            "/videos/{id}/categories",
+            get(videos::list_video_categories),
+        )
+        .route(
+            "/videos/{id}/categories/{category_id}",
+            axum::routing::put(videos::set_video_category),
+        )
+        .route(
+            "/videos/{id}/ai-verdicts",
+            axum::routing::delete(videos::delete_video_ai_verdicts),
+        )
         .route("/tasks", get(tasks::list_tasks))
         .route("/version", get(version::get_version))
         .route("/ollama", get(ollama::get_ollama))
@@ -134,6 +152,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
             post(channels::mark_channel_watched),
         )
         .route(
+            "/channels/{handle}/ai-verdicts",
+            axum::routing::delete(channels::delete_channel_ai_verdicts),
+        )
+        .route(
             "/categories",
             post(categories::create_category).get(categories::list_categories),
         )
@@ -152,6 +174,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route(
             "/categories/{id}/watched",
             post(categories::mark_category_watched),
+        )
+        .route(
+            "/categories/{id}/ai-verdicts",
+            axum::routing::delete(categories::delete_category_ai_verdicts),
         )
         .with_state(api_services)
 }

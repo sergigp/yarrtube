@@ -5,6 +5,7 @@ use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Row, params, params_from_iter};
+use std::collections::HashMap;
 
 /// Each (video, category) pair's verdict, at most one per pair.
 pub trait VideoCategoryVerdictRepository: Send + Sync {
@@ -18,6 +19,20 @@ pub trait VideoCategoryVerdictRepository: Send + Sync {
     fn delete_unavailable(&self) -> anyhow::Result<()>;
     /// `category_id`'s `unavailable` verdicts.
     fn delete_unavailable_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
+    /// Deletes the AI verdicts of `video_ids`; returns the records that had
+    /// one.
+    fn delete_ai_for_videos(
+        &self,
+        video_ids: &[VideoRecordId],
+    ) -> anyhow::Result<Vec<VideoRecordId>>;
+    /// Deletes `category_id`'s AI verdicts; returns the records that had one.
+    fn delete_ai_for_category(
+        &self,
+        category_id: &CategoryId,
+    ) -> anyhow::Result<Vec<VideoRecordId>>;
+    /// How many AI verdicts each category has; categories without any are
+    /// absent.
+    fn count_ai_by_category(&self) -> anyhow::Result<HashMap<CategoryId, u64>>;
 }
 
 /// A `video_category_verdicts` row as read, before its values are parsed
@@ -109,6 +124,24 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
             "verdict = ?1 AND category_id = ?2",
             &[Verdict::Unavailable.as_str(), category_id.as_str()],
         )
+    }
+
+    fn delete_ai_for_videos(
+        &self,
+        _video_ids: &[VideoRecordId],
+    ) -> anyhow::Result<Vec<VideoRecordId>> {
+        Ok(Vec::new())
+    }
+
+    fn delete_ai_for_category(
+        &self,
+        _category_id: &CategoryId,
+    ) -> anyhow::Result<Vec<VideoRecordId>> {
+        Ok(Vec::new())
+    }
+
+    fn count_ai_by_category(&self) -> anyhow::Result<HashMap<CategoryId, u64>> {
+        Ok(HashMap::new())
     }
 }
 

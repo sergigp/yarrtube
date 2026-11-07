@@ -57,6 +57,7 @@ export function CategoryPlayer({ videos, error }: CategoryPlayerProps) {
       <VideoListPane
         noun="category"
         basePathOf={(item) => item.source.path}
+        sourceNameOf={(item) => item.source.name}
         videos={videos}
         error={error}
         selectedVideoId={video?.id ?? null}

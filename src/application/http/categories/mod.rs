@@ -13,7 +13,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdate,
     CategoryUpdater, CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi,
-    NewCategory, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    VideoCategoryEditor, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -112,6 +112,13 @@ pub async fn set_category_members(
         .await?
         .map_err(update_category_error)?;
 
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_category_ai_verdicts(
+    State(_video_category_editor): State<VideoCategoryEditor>,
+    Path(_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -658,6 +665,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -689,6 +697,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -721,6 +730,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -791,6 +801,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -842,6 +853,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -897,6 +909,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -945,6 +958,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -984,6 +998,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -1024,6 +1039,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             category_video_collector(&db),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = list(category_view_searcher).await;
@@ -2921,6 +2937,7 @@ mod tests {
             color: category.color.as_str().to_string(),
             ai_prompt: None,
             unwatched_count,
+            ai_verdict_count: 0,
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
         }

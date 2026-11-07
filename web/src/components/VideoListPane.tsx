@@ -37,6 +37,8 @@ interface VideoListPaneProps<T extends Video> {
   noun: string
   /** The channel/playlist path a video's thumbnail is served under. */
   basePathOf: (video: T) => string
+  /** The name of the channel or playlist a video comes from. */
+  sourceNameOf: (video: T) => string
   videos: T[] | undefined
   error: Error | null
   selectedVideoId: string | null
@@ -52,6 +54,7 @@ interface VideoListPaneProps<T extends Video> {
 export function VideoListPane<T extends Video>({
   noun,
   basePathOf,
+  sourceNameOf,
   videos,
   error,
   selectedVideoId,
@@ -121,7 +124,9 @@ export function VideoListPane<T extends Video>({
                 </button>
                 <VideoActionsMenu
                   videoId={video.id}
+                  recordId={video.record_id}
                   title={video.title}
+                  sourceName={sourceNameOf(video)}
                   markable={!video.watched && video.status === 'DOWNLOADED'}
                   className="mt-2"
                 />

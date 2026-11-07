@@ -27,7 +27,7 @@ describe('VideoActionsMenu', () => {
     renderWithProviders(
       <>
         <LibraryObserver />
-        <VideoActionsMenu videoId="abc" title="My Video" markable />
+        <VideoActionsMenu videoId="abc" recordId="rec-abc" title="My Video" sourceName="My Channel" markable />
       </>,
     )
     await waitFor(() => expect(home).toHaveBeenCalledOnce())
@@ -43,7 +43,7 @@ describe('VideoActionsMenu', () => {
 
   it('disables "Mark as watched" when not markable', async () => {
     mockApi({})
-    renderWithProviders(<VideoActionsMenu videoId="abc" title="My Video" markable={false} />)
+    renderWithProviders(<VideoActionsMenu videoId="abc" recordId="rec-abc" title="My Video" sourceName="My Channel" markable={false} />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
@@ -65,7 +65,7 @@ describe('VideoActionsMenu', () => {
     renderWithProviders(
       <>
         <LibraryObserver />
-        <VideoActionsMenu videoId="abc" title="My Video" markable />
+        <VideoActionsMenu videoId="abc" recordId="rec-abc" title="My Video" sourceName="My Channel" markable />
       </>,
     )
     await waitFor(() => expect(home).toHaveBeenCalledOnce())
@@ -97,7 +97,9 @@ describe('VideoActionsMenu', () => {
         <LibraryObserver />
         <VideoActionsMenu
           videoId="abc"
+          recordId="rec-abc"
           title="My Video"
+          sourceName="My Channel"
           markable
           excludablePlaylist={{ id: 'PL1', name: 'Bluey' }}
         />
@@ -120,7 +122,7 @@ describe('VideoActionsMenu', () => {
 
   it('offers no exclude item without a playlist', async () => {
     mockApi({})
-    renderWithProviders(<VideoActionsMenu videoId="abc" title="My Video" markable />)
+    renderWithProviders(<VideoActionsMenu videoId="abc" recordId="rec-abc" title="My Video" sourceName="My Channel" markable />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
@@ -144,7 +146,9 @@ describe('VideoActionsMenu', () => {
         <LibraryObserver />
         <VideoActionsMenu
           videoId="abc"
+          recordId="rec-abc"
           title="My Video"
+          sourceName="My Channel"
           markable
           excludablePlaylist={{ id: 'PL1', name: 'Bluey' }}
         />
@@ -167,7 +171,7 @@ describe('VideoActionsMenu', () => {
 
   it("extends the control's hit area to 44 by 44 pixels on touch devices", () => {
     mockApi({})
-    renderWithProviders(<VideoActionsMenu videoId="abc" title="My Video" markable />)
+    renderWithProviders(<VideoActionsMenu videoId="abc" recordId="rec-abc" title="My Video" sourceName="My Channel" markable />)
 
     // A 28px control (size-7) grown by 8px on every side (-inset-2) under `pointer: coarse`.
     expect(screen.getByRole('button', { name: 'Actions for My Video' })).toHaveClass(
