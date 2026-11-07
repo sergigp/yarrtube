@@ -55,7 +55,9 @@ mod tests {
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{EpisodeNumber, VideoId, VideoRecordId, VideoStatus};
-    use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
+    use crate::domain::video_category::{
+        Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
+    };
     use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, CaptionTrack, TranscriptText, VideoTranscript,
@@ -83,7 +85,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::SqliteVideoCategoryVerdictRepository;
+    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
+        SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
@@ -416,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_leave_the_categories_of_an_uncategorized_channel() {
+    fn it_should_keep_the_yes_verdict_categories_of_an_uncategorized_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -431,11 +435,22 @@ mod tests {
             channel_video_repository.as_ref(),
             &existing,
         );
-        // Set by a classifier: the channel is in no category.
-        let classified = VideoCategories::new(
-            existing.id.clone(),
-            vec![CategoryId::new("classified").unwrap()],
-        );
+        let chess = category_with_members("Chess", &[]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&chess)
+            .unwrap();
+        SqliteVideoCategoryVerdictRepository::new(db.database())
+            .save(&VideoCategoryVerdict {
+                video_id: existing.id.clone(),
+                category_id: chess.id.clone(),
+                verdict: Verdict::Yes,
+                decided_by: VerdictAuthor::Ai,
+                model: Some("qwen3:4b".to_string()),
+                reason: Some("A chess game.".to_string()),
+                decided_at: fixed_timestamp(),
+            })
+            .unwrap();
+        let classified = VideoCategories::new(existing.id.clone(), vec![chess.id.clone()]);
         video_categories_repository
             .save_many(std::slice::from_ref(&classified))
             .unwrap();

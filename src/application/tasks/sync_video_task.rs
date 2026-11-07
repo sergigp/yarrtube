@@ -1302,6 +1302,92 @@ mod tests {
     }
 
     #[test]
+    fn it_should_give_a_video_of_an_uncategorized_source_its_yes_verdicts() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let video = my_video();
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            &video,
+        );
+        let (chess, funny) = (
+            category_with_members("Chess", &[]),
+            category_with_members("Funny", &[]),
+        );
+        [&chess, &funny]
+            .iter()
+            .for_each(|category| category_repository.insert(category).unwrap());
+        verdict_repository
+            .save(&ai_verdict(&video, &chess, Verdict::Yes))
+            .unwrap();
+        verdict_repository
+            .save(&ai_verdict(&video, &funny, Verdict::No))
+            .unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            Arc::new(video_repository),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            VideoCategoryAssigner::new(
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(verdict_repository),
+                video_categories_repository.clone(),
+                Arc::new(category_repository),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(CategoryLock::default()),
+            ),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            video_categorizer(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()]
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_leave_a_new_video_of_an_uncategorized_playlist_uncategorized() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

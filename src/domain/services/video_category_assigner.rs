@@ -15,8 +15,8 @@ use crate::infrastructure::shared::domain_events::event_publisher::EventPublishe
 use std::collections::HashMap;
 use std::sync::{Arc, MutexGuard};
 
-/// Keeps each stored video record's categories in line with its source's
-/// (the source regime) and announces every change in one batched event.
+/// Keeps each stored video record's categories at its source's plus its yes
+/// verdicts' and announces every change in one batched event.
 #[derive(Clone)]
 pub struct VideoCategoryAssigner {
     video_repository: Arc<dyn VideoRepository>,
@@ -59,8 +59,8 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
     /// callers of `reassign_category` hold it from before they change the
     /// categories it is computed from until it returns.
     fn lock(&self) -> MutexGuard<'_, ()>;
-    /// Source regime for one record of `source`: its set = the source's
-    /// categories. No-op when the source is in no category (AI regime).
+    /// Sets one record of `source` to the source's categories plus its yes
+    /// verdicts.
     fn assign_video(&self, video_id: &VideoRecordId, source: &CategoryMember)
     -> anyhow::Result<()>;
     /// After `category_id`'s members changed or it was deleted: recomputes every
@@ -96,11 +96,11 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         source: &CategoryMember,
     ) -> anyhow::Result<()> {
         let _guard = self.lock();
-        let category_ids = self.categories_of(source)?;
-        if category_ids.is_empty() {
-            return Ok(());
-        }
-        let category_ids = [category_ids, self.yes_category_ids(video_id)?].concat();
+        let category_ids = [
+            self.categories_of(source)?,
+            self.yes_category_ids(video_id)?,
+        ]
+        .concat();
         self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
     }
 
@@ -210,8 +210,7 @@ impl VideoCategoryAssigner {
             .collect()
     }
 
-    /// The current categories holding `source`; empty when it is in none
-    /// (the AI regime).
+    /// The current categories holding `source`.
     fn categories_of(&self, source: &CategoryMember) -> anyhow::Result<Vec<CategoryId>> {
         let categories = self.category_repository.list()?;
         Ok(Self::source_category_ids(source, &categories))
