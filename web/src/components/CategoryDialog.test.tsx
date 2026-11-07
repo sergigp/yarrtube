@@ -266,6 +266,28 @@ describe('CategoryDialog', () => {
     expect(bodies(fetchMock, 'PUT')).toEqual([])
   })
 
+  it('stays open without sending the members when the name is taken', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(chess, {
+      ...library,
+      'PATCH /api/categories/chess': {
+        status: 409,
+        error: 'a category named "Cooking" already exists',
+      },
+    })
+    const user = userEvent.setup()
+    const name = screen.getByRole('textbox', { name: 'Name' })
+
+    await user.clear(name)
+    await user.type(name, 'Cooking')
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('a category named "Cooking" already exists')).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(name).toHaveValue('Cooking')
+    expect(bodies(fetchMock, 'PUT')).toEqual([])
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 
