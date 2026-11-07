@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { VideoCategoryChoice } from '@/api/types'
 import { VideoCategoriesDialog } from './VideoCategoriesDialog'
 import {
@@ -49,6 +50,13 @@ function categoriesOf(...categories: VideoCategoryChoice[]) {
   return { categories }
 }
 
+/** The bodies sent with `method`, in order. */
+function bodies(fetchMock: ReturnType<typeof mockApi>, method: string): unknown[] {
+  return fetchMock.mock.calls
+    .filter(([, init]) => (init as RequestInit | undefined)?.method === method)
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string))
+}
+
 describe('VideoCategoriesDialog', () => {
   it('shows locked source chips, AI marks and filled chips', async () => {
     renderDialog({ 'GET /api/videos/rec1/categories': categoriesOf(chess, funny, sicilian) })
@@ -63,5 +71,25 @@ describe('VideoCategoriesDialog', () => {
     ])
     expect(screen.getByText('From @GothamChess')).toBeInTheDocument()
     expect(screen.getByText('AI')).toBeInTheDocument()
+  })
+
+  it('sets a category by hand when a chip is clicked', async () => {
+    const userNo = { ...sicilian, belongs: false, from: 'user' as const, verdict: 'no' as const }
+    const { fetchMock } = renderDialog({
+      'GET /api/videos/rec1/categories': categoriesOf(chess, funny, sicilian),
+      'PUT /api/videos/rec1/categories/sicilian': categoriesOf(chess, funny, userNo),
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Sicilian, decided by AI' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Sicilian' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      ),
+    )
+    expect(bodies(fetchMock, 'PUT')).toEqual([{ belongs: false }])
+    expect(screen.queryByText('AI')).not.toBeInTheDocument()
   })
 })

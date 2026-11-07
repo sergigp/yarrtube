@@ -1,6 +1,6 @@
 import { Check, Lock } from 'lucide-react'
 import type { VideoCategoryChoice } from '@/api/types'
-import { useVideoCategories } from '@/api/queries'
+import { useSetVideoCategory, useVideoCategories } from '@/api/queries'
 import { useTheme } from '@/hooks/useTheme'
 import { inkShade, softTint } from '@/lib/categoryColors'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -30,6 +30,7 @@ export function VideoCategoriesDialog({
   onOpenChange,
 }: VideoCategoriesDialogProps) {
   const { data, error } = useVideoCategories(recordId, open)
+  const setVideoCategory = useSetVideoCategory()
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -44,7 +45,12 @@ export function VideoCategoriesDialog({
         {data && (
           <div role="toolbar" aria-label="Categories" className="flex flex-wrap gap-1.5">
             {data.categories.map((choice) => (
-              <ChoiceChip key={choice.id} choice={choice} sourceName={sourceName} />
+              <ChoiceChip
+                key={choice.id}
+                choice={choice}
+                sourceName={sourceName}
+                onToggle={() => setVideoCategory(recordId, choice.id, !choice.belongs)}
+              />
             ))}
           </div>
         )}
@@ -53,7 +59,15 @@ export function VideoCategoriesDialog({
   )
 }
 
-function ChoiceChip({ choice, sourceName }: { choice: VideoCategoryChoice; sourceName: string }) {
+function ChoiceChip({
+  choice,
+  sourceName,
+  onToggle,
+}: {
+  choice: VideoCategoryChoice
+  sourceName: string
+  onToggle: () => void
+}) {
   const theme = useTheme()
   const locked = choice.from === 'source'
   const byAi = choice.from === 'ai'
@@ -77,6 +91,7 @@ function ChoiceChip({ choice, sourceName }: { choice: VideoCategoryChoice; sourc
           ? { background: softTint(choice.color, theme), color: inkShade(choice.color, theme) }
           : undefined
       }
+      onClick={onToggle}
     >
       {locked ? (
         <Lock className="size-3" />

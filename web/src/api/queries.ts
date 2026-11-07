@@ -30,6 +30,7 @@ import {
   patchPreferences,
   updateChannel,
   updatePlaylist,
+  setVideoCategory,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
 } from './client'
@@ -474,6 +475,27 @@ export function useUpdatePlaylistSettings(): (
       await invalidateLibrary()
     },
     [invalidateLibrary],
+  )
+}
+
+/**
+ * Returns a function that sets a video copy's category by hand, showing the
+ * categories it responds with, then refetches the library and the home videos.
+ */
+export function useSetVideoCategory(): (
+  recordId: string,
+  categoryId: string,
+  belongs: boolean,
+) => Promise<void> {
+  const queryClient = useQueryClient()
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  return useCallback(
+    async (recordId: string, categoryId: string, belongs: boolean) => {
+      const categories = await setVideoCategory(recordId, categoryId, belongs)
+      queryClient.setQueryData(queryKeys.videoCategories(recordId), categories)
+      await invalidateLibraryAndHome()
+    },
+    [queryClient, invalidateLibraryAndHome],
   )
 }
 
