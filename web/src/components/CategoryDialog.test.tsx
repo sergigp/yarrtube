@@ -744,4 +744,29 @@ describe('CategoryDialog', () => {
     ).toBeInTheDocument()
     expect(screen.queryAllByRole('toolbar')).toEqual([])
   })
+
+  it('re-evaluates N videos after confirmation, hidden at 0', async () => {
+    const reevaluate = vi.fn(() => null)
+    const evaluated = { ...chess, ai_prompt: 'Chess videos', ai_verdict_count: 40 }
+    const { refetch } = renderDialog(evaluated, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'DELETE /api/categories/chess/ai-verdicts': reevaluate,
+      'GET /api/categories': { categories: [evaluated], unwatched_total: 0 },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Re-evaluate 40 videos' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Re-evaluate 40 videos?' })
+    expect(
+      within(confirmation).getByText(
+        'The AI will evaluate these 40 videos for Chess again. Categories you set by hand stay.',
+      ),
+    ).toBeInTheDocument()
+    await user.click(within(confirmation).getByRole('button', { name: 'Re-evaluate' }))
+
+    await waitFor(() => expect(reevaluate).toHaveBeenCalledOnce())
+    refetch({ ...evaluated, ai_verdict_count: 0 })
+    expect(screen.queryByRole('button', { name: /^Re-evaluate/ })).not.toBeInTheDocument()
+  })
 })
