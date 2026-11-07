@@ -175,6 +175,25 @@ describe('CategoryDialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  it('creates without a prompt field while categorization is off', async () => {
+    const { fetchMock } = renderCreating({
+      ...library,
+      'POST /api/categories': aCreatedCategory({ id: 'chess', name: 'Chess' }),
+      'GET /api/categories/chess/videos': [],
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Chess')
+    await user.click(await screen.findByRole('button', { name: 'Hikaru' }))
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(bodies(fetchMock, 'POST')).toHaveLength(1))
+    expect(screen.queryByRole('textbox', { name: 'AI prompt' })).not.toBeInTheDocument()
+    expect(bodies(fetchMock, 'POST')).toEqual([
+      { name: 'Chess', color: '#f59e0b', channels: ['@hikaru'], playlists: [] },
+    ])
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 

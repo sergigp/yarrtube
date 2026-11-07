@@ -113,11 +113,12 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
   const create = async () => {
     setSaving(true)
     setError(null)
+    const aiPrompt = withPrompt ? prompt.trim() : ''
     try {
       const created = await createCategory({
         name: name.trim(),
         color,
-        ai_prompt: prompt.trim(),
+        ...(aiPrompt !== '' && { ai_prompt: aiPrompt }),
         ...staged,
       })
       invalidateLibrary()
