@@ -6299,6 +6299,18 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_return_not_found_for_the_categories_of_an_unknown_video() {
+        let db = TestDatabase::new();
+
+        let response = list_categories_of(video_category_choice_searcher(&db), "rec1").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video not found"))
+        );
+    }
+
     async fn list_categories_of(
         video_category_choice_searcher: VideoCategoryChoiceSearcher,
         id: &str,
