@@ -228,7 +228,15 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
                 onChange={(event) => setName(event.target.value)}
               />
             </div>
-            <div className="flex flex-col gap-1.5">
+            {/* Enter on a swatch or the hue slider would submit the form. */}
+            <div
+              className="flex flex-col gap-1.5"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                }
+              }}
+            >
               <span className="text-sm leading-none font-medium">Color</span>
               <CategoryColorPicker value={color} onChange={setChosenColor} />
             </div>

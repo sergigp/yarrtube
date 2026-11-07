@@ -220,6 +220,21 @@ describe('CategoryDialog', () => {
     expect(screen.getByRole('button', { name: 'Hikaru' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('neither creates nor closes on Enter in the color picker', async () => {
+    const { fetchMock, onOpenChange } = renderCreating(library)
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Chess')
+    await user.click(screen.getByRole('radio', { name: 'Violet' }))
+    await user.keyboard('{Enter}')
+    await user.click(screen.getByRole('radio', { name: 'Custom' }))
+    await user.click(screen.getByRole('slider', { name: 'Hue' }))
+    await user.keyboard('{Enter}')
+
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(bodies(fetchMock, 'POST')).toEqual([])
+  })
+
   it('closes an untouched new category without asking', async () => {
     const { onOpenChange } = renderCreating({})
     const user = userEvent.setup()
