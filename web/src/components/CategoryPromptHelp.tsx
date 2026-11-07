@@ -7,7 +7,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
  */
 export function CategoryPromptHelp() {
   return (
-    <Popover>
+    // Modal: its own scroll lock replaces the dialog's, which would swallow the wheel.
+    <Popover modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -19,7 +20,8 @@ export function CategoryPromptHelp() {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-[70vh] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto"
+        collisionPadding={16}
+        className="max-h-[min(70vh,var(--radix-popover-content-available-height))] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto"
       >
         <CategoryPromptGuide />
       </PopoverContent>
