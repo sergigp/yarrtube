@@ -51,12 +51,16 @@ sequenceDiagram
 - `src/infrastructure/repositories/sqlite_video_category_verdict_repository.rs`: scoped AI deletes, count per category.
 - `src/domain/services/video_category_assigner.rs`: `recompute` for many records, one event.
 - `src/domain/category/category_view.rs`, `src/domain/services/category_view_searcher.rs`: `ai_verdict_count`.
+- `src/application/http/videos/dto.rs`: `record_id` on `VideoResponse`, `HomeVideoResponse`, `CategoryVideoResponse`. The web only knew the YouTube `id`, and one YouTube video can have several copies (records), so the record id is what names a copy in the video routes.
+- `src/domain/video/home_video_view.rs`, `src/domain/services/video_searcher.rs`: `HomeVideoView.record_id` (the other views already hold the `Video`).
 - `src/application/http/videos/mod.rs`: `GET/PUT /videos/{id}/categories[/{category_id}]`, `DELETE /videos/{id}/ai-verdicts`.
 - `src/application/http/{channels,playlists,categories}/mod.rs`: `DELETE …/ai-verdicts`.
 - `src/application/http/categories/dto.rs`: `ai_verdict_count`.
 - `src/application/http/mod.rs`, `src/serve.rs`, `src/domain/services/mod.rs`: routes and wiring.
-- `web/src/api/{types,client,queries}.ts`, `web/src/test/helpers.tsx`: DTO mirror, calls, `aVideoCategoryChoice`, `ai_verdict_count` in `aCategory`.
-- `web/src/components/VideoActionsMenu.tsx` (+ test): "Edit categories…" item, gets `videoId`/`title` already.
+- `web/src/api/{types,client,queries}.ts`, `web/src/test/helpers.tsx`: DTO mirror, calls, `aVideoCategoryChoice`, `ai_verdict_count` in `aCategory`, `record_id` on `Video`/`HomeVideo` and in `aVideo`/`aHomeVideo`.
+- `web/src/components/VideoActionsMenu.tsx` (+ test): "Edit categories…" item; new `recordId` and `sourceName` props, passed to the dialog (`videoId`, the YouTube id, stays for "Mark as watched").
+- `web/src/components/VideoGrid.tsx`: passes `video.record_id`, `video.source.name`.
+- `web/src/components/VideoListPane.tsx`: new `sourceNameOf(video)` prop (like `basePathOf`), passes `video.record_id` and it; `ChannelDetail`, `PlaylistDetail` give the source's name, `CategoryPlayer` `item.source.name`.
 - `web/src/components/EntryActionsMenu.tsx`, `DetailHeader.test.tsx`: source item + confirmation.
 - `web/src/components/CategorySettingsDialog.tsx` (+ test): "Re-evaluate N videos" + confirmation.
 - `doc/CATEGORIES.md`, `doc/AI.md`: editing by hand and re-running.
@@ -139,6 +143,12 @@ pub trait VideoCategoryVerdictRepository: Send + Sync {
 // domain/category/category_view.rs
 pub struct CategoryView { /* … */ pub ai_verdict_count: u64 }
 
+// domain/video/home_video_view.rs
+pub struct HomeVideoView { /* … */ pub record_id: VideoRecordId }
+
+// application/http/videos/dto.rs
+// VideoResponse, HomeVideoResponse, CategoryVideoResponse gain `record_id: String`
+
 // application/http/videos/category_dto.rs
 pub struct VideoCategoryChoiceResponse { id: String, name: String, color: String, belongs: bool,
     from: Option<String>, verdict: Option<String> }
@@ -164,28 +174,35 @@ interface VideoCategoryChoice { id: string; name: string; color: string; belongs
   from: CategoryOrigin | null; verdict: Verdict | null }
 interface VideoCategories { categories: VideoCategoryChoice[] }
 interface Category { /* … */ ai_verdict_count: number }
+interface Video { /* … */ record_id: string }      // CategoryVideo inherits it
+interface HomeVideo { /* … */ record_id: string }
 
 // api/client.ts
-getVideoCategories(videoId: string): Promise<VideoCategories>
-setVideoCategory(videoId: string, categoryId: string, belongs: boolean): Promise<VideoCategories>
-deleteVideoAiVerdicts(videoId: string): Promise<void>
+// recordId: the copy's `record_id`, never the YouTube `id`
+getVideoCategories(recordId: string): Promise<VideoCategories>
+setVideoCategory(recordId: string, categoryId: string, belongs: boolean): Promise<VideoCategories>
+deleteVideoAiVerdicts(recordId: string): Promise<void>
 deleteSourceAiVerdicts(source: { kind: 'channel' | 'playlist'; id: string }): Promise<void>
 deleteCategoryAiVerdicts(categoryId: string): Promise<void>
 
 // api/queries.ts
-useVideoCategories(videoId: string, enabled: boolean)   // ['videos', id, 'categories']
+useVideoCategories(recordId: string, enabled: boolean)   // ['videos', recordId, 'categories']
 // mutations invalidate it and the library (category lists, feeds)
 
 // components/VideoCategoriesDialog.tsx
-function VideoCategoriesDialog(props: { videoId: string; title: string; sourceName: string
+// components/VideoActionsMenu.tsx: props gain { recordId: string; sourceName: string }
+// components/VideoListPane.tsx: props gain { sourceNameOf: (video: T) => string }
+function VideoCategoriesDialog(props: { recordId: string; title: string; sourceName: string
   open: boolean; onOpenChange(open: boolean): void }): JSX.Element
 ```
 
 ## Call Stack
 
-**Open dialog**: `VideoActionsMenu` "Edit categories…" → `VideoCategoriesDialog` → `GET /api/videos/{id}/categories` → `list_video_categories` → `VideoCategoryChoiceSearcher::search(&id)` → `VideoRepository::find`, `VideoOwnerFinder::find`, `CategoryRepository::list`, `VerdictRepository::find_many(&[id])` → `VideoCategoryChoice::list(..)`
+Every `{id}` under `/api/videos/{id}/categories` and `/api/videos/{id}/ai-verdicts` is a `VideoRecordId`, the `record_id` of the video listings.
 
-**Click a chip**: `setVideoCategory(videoId, categoryId, !belongs)` → `PUT …/categories/{category_id}` → `set_video_category` → `VideoCategoryEditor::set(&id, &category_id, belongs)` → owner, `CategoryRepository::find` (404), `category.has_member(&owner.source)` (409) → `VideoCategoryVerdict::by_user(..)` → `VideoCategoryAssigner::apply_verdict(&verdict, &owner.source)` → handler returns `search(&id)`
+**Open dialog**: `VideoGrid` / `VideoListPane` pass `record_id` + source name → `VideoActionsMenu` "Edit categories…" → `VideoCategoriesDialog` → `GET /api/videos/{record_id}/categories` → `list_video_categories` → `VideoCategoryChoiceSearcher::search(&id)` → `VideoRepository::find`, `VideoOwnerFinder::find`, `CategoryRepository::list`, `VerdictRepository::find_many(&[id])` → `VideoCategoryChoice::list(..)`
+
+**Click a chip**: `setVideoCategory(recordId, categoryId, !belongs)` → `PUT …/categories/{category_id}` → `set_video_category` → `VideoCategoryEditor::set(&id, &category_id, belongs)` → owner, `CategoryRepository::find` (404), `category.has_member(&owner.source)` (409) → `VideoCategoryVerdict::by_user(..)` → `VideoCategoryAssigner::apply_verdict(&verdict, &owner.source)` → handler returns `search(&id)`
 
 **Re-run video**: dialog "Re-run AI" → `DELETE /api/videos/{id}/ai-verdicts` → `VideoCategoryEditor::rerun_video(&id)` → `VerdictRepository::delete_ai_for_videos(&[id])` → `assigner.recompute(&affected)` → `TaskRepository::schedule(&Task::SyncVideo { video_id }, now)` → 204 → refetch
 
@@ -200,6 +217,9 @@ function VideoCategoriesDialog(props: { videoId: string; title: string; sourceNa
 **1. Behaviour**
 
 HTTP `videos` (`http/videos/mod.rs`)
+0a. `it_should_include_the_record_id_when_listing_playlist_videos`.
+0b. `it_should_include_the_record_id_when_listing_category_videos`.
+0c. `it_should_include_the_record_id_on_home`.
 1. `it_should_list_a_videos_categories_with_where_each_comes_from`: source, ai yes/no, user yes, none; name order.
 2. `it_should_report_the_source_for_a_member_category_even_with_a_verdict`.
 3. `it_should_return_not_found_for_the_categories_of_an_unknown_video`.
