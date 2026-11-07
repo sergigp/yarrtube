@@ -1,10 +1,16 @@
 import { useState } from 'react'
-import { Check, Lock } from 'lucide-react'
+import { Check, Lock, RotateCcw } from 'lucide-react'
 import type { VideoCategoryChoice } from '@/api/types'
-import { useSetVideoCategory, useVideoCategories } from '@/api/queries'
+import {
+  useCategorizationAvailable,
+  useRerunVideoAi,
+  useSetVideoCategory,
+  useVideoCategories,
+} from '@/api/queries'
 import { useTheme } from '@/hooks/useTheme'
 import { inkShade, softTint } from '@/lib/categoryColors'
 import { errorMessage } from '@/lib/errorMessage'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
@@ -33,7 +39,18 @@ export function VideoCategoriesDialog({
 }: VideoCategoriesDialogProps) {
   const { data, error } = useVideoCategories(recordId, open)
   const setVideoCategory = useSetVideoCategory()
+  const rerunVideoAi = useRerunVideoAi()
+  const categorizationAvailable = useCategorizationAvailable()
   const [failure, setFailure] = useState<string | null>(null)
+
+  const rerun = async () => {
+    setFailure(null)
+    try {
+      await rerunVideoAi(recordId)
+    } catch (err) {
+      setFailure(`Failed to re-run AI: ${errorMessage(err)}`)
+    }
+  }
 
   const toggle = async (choice: VideoCategoryChoice) => {
     setFailure(null)
@@ -67,6 +84,14 @@ export function VideoCategoriesDialog({
           </div>
         )}
         {failure && <p className="text-sm text-destructive">{failure}</p>}
+        {categorizationAvailable && (
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={() => void rerun()}>
+              <RotateCcw />
+              Re-run AI
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

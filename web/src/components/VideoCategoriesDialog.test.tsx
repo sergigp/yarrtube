@@ -105,4 +105,41 @@ describe('VideoCategoriesDialog', () => {
     expect(await screen.findByText('Failed to set "Funny": database is locked')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Funny' })).toHaveAttribute('aria-pressed', 'false')
   })
+
+  it('re-runs AI only while AI categorization is available', async () => {
+    const politics = aVideoCategoryChoice({
+      id: 'politics',
+      name: 'Politics',
+      belongs: true,
+      from: 'ai',
+      verdict: 'yes',
+    })
+    const responses = [categoriesOf(politics), categoriesOf({ ...politics, belongs: false, from: null, verdict: null })]
+    const { fetchMock } = renderDialog({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/videos/rec1/categories': () => responses.shift() ?? categoriesOf(),
+      'DELETE /api/videos/rec1/ai-verdicts': {},
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Re-run AI' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Politics' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      ),
+    )
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE'),
+    ).toHaveLength(1)
+  })
+
+  it('offers no Re-run AI while AI categorization is unavailable', async () => {
+    renderDialog({ 'GET /api/videos/rec1/categories': categoriesOf(chess) })
+
+    await chips()
+
+    expect(screen.queryByRole('button', { name: 'Re-run AI' })).not.toBeInTheDocument()
+  })
 })

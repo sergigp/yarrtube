@@ -31,6 +31,7 @@ import {
   updateChannel,
   updatePlaylist,
   setVideoCategory,
+  deleteVideoAiVerdicts,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
 } from './client'
@@ -494,6 +495,25 @@ export function useSetVideoCategory(): (
       const categories = await setVideoCategory(recordId, categoryId, belongs)
       queryClient.setQueryData(queryKeys.videoCategories(recordId), categories)
       await invalidateLibraryAndHome()
+    },
+    [queryClient, invalidateLibraryAndHome],
+  )
+}
+
+/**
+ * Returns a function that deletes a video copy's AI verdicts, then refetches
+ * its categories, the library and the home videos.
+ */
+export function useRerunVideoAi(): (recordId: string) => Promise<void> {
+  const queryClient = useQueryClient()
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  return useCallback(
+    async (recordId: string) => {
+      await deleteVideoAiVerdicts(recordId)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.videoCategories(recordId) }),
+        invalidateLibraryAndHome(),
+      ])
     },
     [queryClient, invalidateLibraryAndHome],
   )
