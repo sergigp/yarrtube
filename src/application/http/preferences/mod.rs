@@ -100,10 +100,15 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::category::CategoryId;
     use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
-    use crate::domain::video::{SummaryState, Video, VideoId};
+    use crate::domain::video::{SummaryState, Video, VideoId, VideoRecordId};
+    use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
+        SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
@@ -228,6 +233,52 @@ mod tests {
             update(preferences_updater, request).await.unwrap();
 
             assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+        }
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_unavailable_verdicts_when_categorization_settings_change() {
+        let requests = [
+            UpdatePreferencesRequest {
+                ollama_url: Some("http://other.local:11434".to_string()),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                categorization_model: Some("gemma3:4b".to_string()),
+                ..UpdatePreferencesRequest::default()
+            },
+            UpdatePreferencesRequest {
+                categorization_prompt: Some(Some("Answer yes or no.".to_string())),
+                ..UpdatePreferencesRequest::default()
+            },
+        ];
+
+        for request in requests {
+            let db = TestDatabase::new();
+            let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let verdict_repository =
+                Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+            let decided = [
+                verdict("chess", Verdict::Yes),
+                verdict("funny", Verdict::No),
+            ];
+            decided
+                .iter()
+                .chain(&[verdict("tech", Verdict::Unavailable)])
+                .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+            let preferences_updater = PreferencesUpdater::new(
+                repository,
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+                verdict_repository.clone(),
+            );
+
+            update(preferences_updater, request).await.unwrap();
+
+            assert_eq!(
+                verdict_repository.find_many(&[verdict_video_id()]).unwrap(),
+                decided.to_vec()
+            );
         }
     }
 
@@ -997,6 +1048,7 @@ mod tests {
             Arc::new(SqlitePreferencesRepository::new(database())),
             Arc::new(SqliteVideoRepository::new(database())),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
         )
     }
 
@@ -1008,6 +1060,7 @@ mod tests {
             repository,
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         )
     }
 
@@ -1022,6 +1075,23 @@ mod tests {
     }
 
     /// The shipped prompt with one rule added to its `system` section.
+    fn verdict_video_id() -> VideoRecordId {
+        VideoRecordId::new("rec1").unwrap()
+    }
+
+    /// The AI's `verdict` for `verdict_video_id()` and `category`.
+    fn verdict(category: &str, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            video_id: verdict_video_id(),
+            category_id: CategoryId::new(category).unwrap(),
+            verdict,
+            decided_by: VerdictAuthor::Ai,
+            model: Some("qwen3:4b".to_string()),
+            reason: None,
+            decided_at: fixed_timestamp(),
+        }
+    }
+
     fn edited_prompt() -> String {
         SummaryPrompt::shipped().as_str().replace(
             "- Ignore sponsors, ads and requests to like or subscribe.\n\n## user",

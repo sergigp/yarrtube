@@ -1,5 +1,6 @@
 use crate::domain::preferences::{Preferences, PreferencesChange, UpdatePreferencesError};
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ pub struct PreferencesUpdater {
     repository: Arc<dyn PreferencesRepository>,
     video_repository: Arc<dyn VideoRepository>,
     clock: Arc<dyn Clock>,
+    video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
 }
 
 impl PreferencesUpdater {
@@ -17,11 +19,13 @@ impl PreferencesUpdater {
         repository: Arc<dyn PreferencesRepository>,
         video_repository: Arc<dyn VideoRepository>,
         clock: Arc<dyn Clock>,
+        video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     ) -> Self {
         Self {
             repository,
             video_repository,
             clock,
+            video_category_verdict_repository,
         }
     }
 }
@@ -30,7 +34,8 @@ pub trait PreferencesUpdaterApi: Send + Sync {
     /// Applies `change` to the stored preferences (or the defaults) and
     /// saves the result, or saves nothing when any of it is invalid. New
     /// summary settings may succeed where the old ones failed, so they put
-    /// every Unavailable summary back to Missing.
+    /// every Unavailable summary back to Missing; new categorization settings
+    /// delete every unavailable verdict, so those pairs are pending again.
     fn update(&self, change: PreferencesChange) -> Result<Preferences, UpdatePreferencesError>;
 }
 
@@ -47,6 +52,11 @@ impl PreferencesUpdaterApi for PreferencesUpdater {
         if stored.changes_summaries(&updated) {
             self.video_repository
                 .reset_unavailable_summaries(self.clock.now())
+                .map_err(UpdatePreferencesError::Repository)?;
+        }
+        if stored.changes_categorization(&updated) {
+            self.video_category_verdict_repository
+                .delete_unavailable()
                 .map_err(UpdatePreferencesError::Repository)?;
         }
         Ok(updated)

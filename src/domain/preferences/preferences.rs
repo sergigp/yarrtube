@@ -64,8 +64,10 @@ impl Preferences {
 
     /// Whether `other` categorizes differently: another Ollama URL,
     /// categorization model or prompt.
-    pub fn changes_categorization(&self, _other: &Self) -> bool {
-        false
+    pub fn changes_categorization(&self, other: &Self) -> bool {
+        self.ollama_url != other.ollama_url
+            || self.categorization.model != other.categorization.model
+            || self.categorization.effective_prompt() != other.categorization.effective_prompt()
     }
 
     /// These preferences with `change` applied, as long as the result is
