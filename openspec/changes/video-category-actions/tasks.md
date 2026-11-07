@@ -9,7 +9,7 @@
 - [x] 2.1 `it_should_include_the_record_id_when_listing_playlist_videos`
 - [x] 2.2 `it_should_include_the_record_id_when_listing_category_videos`
 - [x] 2.3 `it_should_include_the_record_id_on_home`: `HomeVideoView.record_id`
-- [ ] 2.4 `it_should_list_a_videos_categories_with_where_each_comes_from`: `VideoCategoryChoice::list` + searcher
+- [x] 2.4 `it_should_list_a_videos_categories_with_where_each_comes_from`: `VideoCategoryChoice::list` + searcher
 - [ ] 2.5 `it_should_report_the_source_for_a_member_category_even_with_a_verdict`
 - [ ] 2.6 `it_should_return_not_found_for_the_categories_of_an_unknown_video`
 - [ ] 2.7 `it_should_add_a_category_by_hand_replacing_an_ai_no`: `VideoCategoryEditor::set`

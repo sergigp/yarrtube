@@ -1,4 +1,5 @@
-use crate::domain::services::VideoOwnerFinder;
+use crate::domain::category::CategoryMember;
+use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
 use crate::domain::video::VideoRecordId;
 use crate::domain::video_category::{EditVideoCategoriesError, VideoCategoryChoice};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
@@ -42,8 +43,36 @@ pub trait VideoCategoryChoiceSearcherApi: Send + Sync {
 impl VideoCategoryChoiceSearcherApi for VideoCategoryChoiceSearcher {
     fn search(
         &self,
-        _video_id: &VideoRecordId,
+        video_id: &VideoRecordId,
     ) -> Result<Vec<VideoCategoryChoice>, EditVideoCategoriesError> {
-        Ok(Vec::new())
+        let source = self.find_source(video_id)?;
+        let categories = self
+            .category_repository
+            .list()
+            .map_err(EditVideoCategoriesError::Repository)?;
+        let verdicts = self
+            .video_category_verdict_repository
+            .find_many(std::slice::from_ref(video_id))
+            .map_err(EditVideoCategoriesError::Repository)?;
+        Ok(VideoCategoryChoice::list(&categories, &source, &verdicts))
+    }
+}
+
+impl VideoCategoryChoiceSearcher {
+    /// The channel or playlist holding the stored `video_id`.
+    fn find_source(
+        &self,
+        video_id: &VideoRecordId,
+    ) -> Result<CategoryMember, EditVideoCategoriesError> {
+        let video = self
+            .video_repository
+            .find(video_id)
+            .map_err(EditVideoCategoriesError::Repository)?
+            .ok_or(EditVideoCategoriesError::VideoNotFound)?;
+        self.video_owner_finder
+            .find(&video)
+            .map_err(EditVideoCategoriesError::Repository)?
+            .map(|owner| owner.source)
+            .ok_or(EditVideoCategoriesError::VideoNotFound)
     }
 }

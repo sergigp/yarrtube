@@ -8,12 +8,13 @@ use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
-    SubtitleReader, SubtitleReaderApi, VideoCategoryChoiceSearcher, VideoCategoryEditor,
-    VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    SubtitleReader, SubtitleReaderApi, VideoCategoryChoiceSearcher, VideoCategoryChoiceSearcherApi,
+    VideoCategoryEditor, VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
     HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, UpdateWatchStateError,
-    VideoDuration, VideoId, VideoSearchText, WebVtt,
+    VideoDuration, VideoId, VideoRecordId, VideoSearchText, WebVtt,
 };
 use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
@@ -167,10 +168,15 @@ pub async fn get_channel_video_subtitles(
 }
 
 pub async fn list_video_categories(
-    State(_video_category_choice_searcher): State<VideoCategoryChoiceSearcher>,
-    Path(_id): Path<String>,
+    State(video_category_choice_searcher): State<VideoCategoryChoiceSearcher>,
+    Path(id): Path<String>,
 ) -> Result<Json<VideoCategoriesResponse>, ApiError> {
-    Ok(Json(VideoCategoriesResponse::from(Vec::new())))
+    let id = VideoRecordId::new(id)?;
+
+    let choices = run_blocking(move || video_category_choice_searcher.search(&id))
+        .await?
+        .map_err(edit_video_categories_error)?;
+    Ok(Json(VideoCategoriesResponse::from(choices)))
 }
 
 pub async fn set_video_category(
@@ -245,9 +251,11 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::preferences::{Preferences, SummaryModel, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
+    use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoRecordId};
     use crate::domain::video_category::VideoCategories;
+    use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -272,6 +280,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
+        SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
@@ -283,6 +294,7 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
+    use category_dto::VideoCategoryChoiceResponse;
     use chrono::{DateTime, Duration, Utc};
     use dto::{
         ChapterResponse, HomeCategorySectionResponse, HomeVideoResponse, HomeVideoSourceResponse,
@@ -6207,6 +6219,115 @@ mod tests {
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
+    #[tokio::test]
+    async fn it_should_list_a_videos_categories_with_where_each_comes_from() {
+        let db = TestDatabase::new();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess", None))
+            .unwrap();
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+            0,
+        );
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        let chess = named_category("Chess", &[channel_member("@GothamChess")]);
+        let [funny, politics, sicilian, tech] =
+            ["Funny", "Politics", "Sicilian", "Tech"].map(|name| named_category(name, &[]));
+        [&tech, &chess, &sicilian, &politics, &funny]
+            .into_iter()
+            .for_each(|category| category_repository.insert(category).unwrap());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        [
+            ai_verdict(&video, &sicilian, Verdict::Yes),
+            ai_verdict(&video, &tech, Verdict::No),
+            user_verdict(&video, &funny, Verdict::Yes),
+        ]
+        .iter()
+        .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+
+        let response =
+            list_categories_of(video_category_choice_searcher(&db), video.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(VideoCategoriesResponse {
+                categories: vec![
+                    choice_response(&chess, true, Some("source"), None),
+                    choice_response(&funny, true, Some("user"), Some("yes")),
+                    choice_response(&politics, false, None, None),
+                    choice_response(&sicilian, true, Some("ai"), Some("yes")),
+                    choice_response(&tech, false, Some("ai"), Some("no")),
+                ],
+            })
+        );
+    }
+
+    async fn list_categories_of(
+        video_category_choice_searcher: VideoCategoryChoiceSearcher,
+        id: &str,
+    ) -> Result<VideoCategoriesResponse, ApiError> {
+        list_video_categories(State(video_category_choice_searcher), Path(id.to_string()))
+            .await
+            .map(|Json(body)| body)
+    }
+
+    /// A choice searcher over every SQLite repository of `db`.
+    fn video_category_choice_searcher(db: &TestDatabase) -> VideoCategoryChoiceSearcher {
+        VideoCategoryChoiceSearcher::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        )
+    }
+
+    fn choice_response(
+        category: &Category,
+        belongs: bool,
+        from: Option<&str>,
+        verdict: Option<&str>,
+    ) -> VideoCategoryChoiceResponse {
+        VideoCategoryChoiceResponse {
+            id: category.id.as_str().to_string(),
+            name: category.name.as_str().to_string(),
+            color: category.color.as_str().to_string(),
+            belongs,
+            from: from.map(str::to_string),
+            verdict: verdict.map(str::to_string),
+        }
+    }
+
+    fn ai_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            video_id: video.id.clone(),
+            category_id: category.id.clone(),
+            verdict,
+            decided_by: VerdictAuthor::Ai,
+            model: Some("qwen3:4b".to_string()),
+            reason: Some("A reason.".to_string()),
+            decided_at: fixed_timestamp(),
+        }
+    }
+
+    fn user_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            decided_by: VerdictAuthor::User,
+            model: None,
+            reason: None,
+            ..ai_verdict(video, category, verdict)
+        }
+    }
+
     fn any_video_searcher() -> VideoSearcher {
         VideoSearcher::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),

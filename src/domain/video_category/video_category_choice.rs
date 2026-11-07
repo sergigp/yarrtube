@@ -1,4 +1,4 @@
-use super::{Verdict, VideoCategoryVerdict};
+use super::{Verdict, VerdictAuthor, VideoCategoryVerdict};
 use crate::domain::category::{Category, CategoryMember};
 
 /// Where a video's membership of a category comes from.
@@ -18,6 +18,13 @@ impl CategoryOrigin {
             Self::User => "user",
         }
     }
+
+    fn of(author: VerdictAuthor) -> Self {
+        match author {
+            VerdictAuthor::Ai => Self::Ai,
+            VerdictAuthor::User => Self::User,
+        }
+    }
 }
 
 /// One category as offered for one video: whether the video belongs to it
@@ -35,10 +42,40 @@ impl VideoCategoryChoice {
     /// Every category, name order, from the source's membership and the
     /// video's verdicts.
     pub fn list(
-        _categories: &[Category],
-        _source: &CategoryMember,
-        _verdicts: &[VideoCategoryVerdict],
+        categories: &[Category],
+        source: &CategoryMember,
+        verdicts: &[VideoCategoryVerdict],
     ) -> Vec<Self> {
-        Vec::new()
+        categories
+            .iter()
+            .map(|category| {
+                let verdict = verdicts
+                    .iter()
+                    .find(|verdict| verdict.category_id == category.id);
+                Self::of(category, source, verdict)
+            })
+            .collect()
+    }
+
+    /// `category` for a video of `source` holding `verdict` for it.
+    fn of(
+        category: &Category,
+        source: &CategoryMember,
+        verdict: Option<&VideoCategoryVerdict>,
+    ) -> Self {
+        let (from, belongs) = match verdict {
+            Some(verdict) => (
+                Some(CategoryOrigin::of(verdict.decided_by)),
+                verdict.is_yes(),
+            ),
+            None if category.has_member(source) => (Some(CategoryOrigin::Source), true),
+            None => (None, false),
+        };
+        Self {
+            category: category.clone(),
+            belongs,
+            from,
+            verdict: verdict.map(|verdict| verdict.verdict),
+        }
     }
 }
