@@ -112,8 +112,10 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
         })
     }
 
-    fn rerun_source(&self, _source: &CategoryMember) -> Result<(), EditVideoCategoriesError> {
-        Ok(())
+    fn rerun_source(&self, source: &CategoryMember) -> Result<(), EditVideoCategoriesError> {
+        let video_ids = self.record_ids(source)?;
+        self.clear_ai_verdicts(&video_ids)?;
+        self.schedule(&Self::reconcile_task(source))
     }
 
     fn rerun_category(&self, _category_id: &CategoryId) -> Result<(), EditVideoCategoriesError> {
@@ -152,6 +154,54 @@ impl VideoCategoryEditor {
         self.video_category_assigner
             .recompute(&affected)
             .map_err(EditVideoCategoriesError::Repository)
+    }
+
+    /// The stored records of `source`; `SourceNotFound` when it isn't tracked.
+    fn record_ids(
+        &self,
+        source: &CategoryMember,
+    ) -> Result<Vec<VideoRecordId>, EditVideoCategoriesError> {
+        self.find_tracked(source)?;
+        let video_ids = match source {
+            CategoryMember::Channel(handle) => self
+                .channel_video_repository
+                .list_for_channel(handle)
+                .map(|videos| videos.into_iter().map(|video| video.video_id).collect()),
+            CategoryMember::Playlist(id) => self
+                .playlist_video_repository
+                .list_for_playlist(id)
+                .map(|videos| videos.into_iter().map(|video| video.video_id).collect()),
+        };
+        video_ids.map_err(EditVideoCategoriesError::Repository)
+    }
+
+    fn find_tracked(&self, source: &CategoryMember) -> Result<(), EditVideoCategoriesError> {
+        let tracked = match source {
+            CategoryMember::Channel(handle) => self
+                .channel_repository
+                .find(handle)
+                .map(|channel| channel.is_some()),
+            CategoryMember::Playlist(id) => self
+                .playlist_repository
+                .find(id)
+                .map(|playlist| playlist.is_some()),
+        };
+        match tracked.map_err(EditVideoCategoriesError::Repository)? {
+            true => Ok(()),
+            false => Err(EditVideoCategoriesError::SourceNotFound),
+        }
+    }
+
+    /// The pass that syncs every video of `source`.
+    fn reconcile_task(source: &CategoryMember) -> Task {
+        match source {
+            CategoryMember::Channel(handle) => Task::ReconcileChannel {
+                channel_id: handle.as_str().to_string(),
+            },
+            CategoryMember::Playlist(id) => Task::ReconcilePlaylist {
+                playlist_id: id.as_str().to_string(),
+            },
+        }
     }
 
     /// Schedules `task` to run now.
