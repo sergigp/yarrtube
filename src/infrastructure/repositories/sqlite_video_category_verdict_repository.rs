@@ -68,7 +68,13 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         conn.execute(
             "INSERT INTO video_category_verdicts
                 (video_id, category_id, verdict, decided_by, model, reason, decided_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT (video_id, category_id) DO UPDATE SET
+                verdict = excluded.verdict,
+                decided_by = excluded.decided_by,
+                model = excluded.model,
+                reason = excluded.reason,
+                decided_at = excluded.decided_at",
             params![
                 verdict.video_id.as_str(),
                 verdict.category_id.as_str(),
@@ -155,6 +161,24 @@ mod tests {
         assert_eq!(
             found.map_err(|e| e.to_string()),
             Ok(vec![chess, funny, other])
+        );
+    }
+
+    #[test]
+    fn it_should_replace_a_pairs_verdict() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let replacement = user_verdict("rec1", "chess", Verdict::No);
+        repository
+            .save(&ai_verdict("rec1", "chess", Verdict::Yes))
+            .unwrap();
+
+        let result = repository.save(&replacement);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            repository.find_many(&[video_id("rec1")]).unwrap(),
+            vec![replacement]
         );
     }
 
