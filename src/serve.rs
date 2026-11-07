@@ -553,6 +553,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         ),
         category_deleter: CategoryDeleter::new(
             infrastructure.category_repository.clone(),
+            infrastructure.video_category_verdict_repository.clone(),
             video_category_assigner(infrastructure),
         ),
         category_view_searcher: CategoryViewSearcher::new(

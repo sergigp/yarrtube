@@ -1,23 +1,27 @@
 use crate::domain::category::{Category, CategoryId, DeleteCategoryError};
 use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use std::sync::Arc;
 
 /// Deletes categories. Their member sources and videos are left untouched;
-/// only the videos' membership of the category goes.
+/// only the videos' membership of the category and their verdicts for it go.
 #[derive(Clone)]
 pub struct CategoryDeleter {
     repository: Arc<dyn CategoryRepository>,
+    video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     video_category_assigner: VideoCategoryAssigner,
 }
 
 impl CategoryDeleter {
     pub fn new(
         repository: Arc<dyn CategoryRepository>,
+        video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
         video_category_assigner: VideoCategoryAssigner,
     ) -> Self {
         Self {
             repository,
+            video_category_verdict_repository,
             video_category_assigner,
         }
     }
@@ -31,6 +35,9 @@ impl CategoryDeleterApi for CategoryDeleter {
     fn delete(&self, id: &CategoryId) -> Result<(), DeleteCategoryError> {
         let _guard = self.video_category_assigner.lock();
         let category = self.find_category(id)?;
+        self.video_category_verdict_repository
+            .delete_for_category(id)
+            .map_err(DeleteCategoryError::Repository)?;
         self.uncategorize_videos(&category)?;
         self.repository
             .delete(id)

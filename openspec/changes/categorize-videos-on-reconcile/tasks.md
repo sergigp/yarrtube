@@ -28,7 +28,7 @@
 - [x] 2.20 `it_should_mark_rejected_categories_unavailable_on_the_last_attempt`
 - [x] 2.21 `it_should_complete_without_verdicts_when_ollama_is_unreachable`
 - [x] 2.22 `it_should_log_each_verdict`
-- [ ] 2.23 `it_should_delete_a_categorys_verdicts_with_it`: `CategoryDeleter`
+- [x] 2.23 `it_should_delete_a_categorys_verdicts_with_it`: `CategoryDeleter`
 - [ ] 2.24 `it_should_keep_yes_verdict_categories_when_a_source_leaves_a_category`: `reassign_category` union
 - [ ] 2.25 `it_should_make_unavailable_verdicts_pending_when_a_category_prompt_changes`: `CategoryUpdater`
 - [ ] 2.26 `it_should_keep_verdicts_when_a_category_prompt_is_edited_or_cleared`
