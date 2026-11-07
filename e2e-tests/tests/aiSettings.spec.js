@@ -4,7 +4,7 @@ import { OLLAMA_VERSION } from '../ollama-stub.js'
 test('AI settings: point at Ollama, pick a model and save, then reset the prompt', async ({ page, daemon }) => {
   const enableAi = page.getByRole('switch', { name: 'Enable AI' })
   const model = page.getByRole('combobox', { name: 'Model', exact: true })
-  const temperature = page.getByRole('spinbutton', { name: 'Temperature' })
+  const temperature = page.getByRole('spinbutton', { name: 'Temperature', exact: true })
   const prompt = page.getByRole('textbox', { name: 'Prompt', exact: true })
   const save = page.getByRole('button', { name: 'Save' })
 
@@ -27,7 +27,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
   await test.step('turning AI and summaries on with a model that can’t think is saved', async () => {
     await enableAi.click()
     await page.getByRole('switch', { name: 'Summaries enabled' }).click()
-    await page.getByRole('button', { name: 'Advanced' }).click()
+    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
     await expect(page.getByText('Using the default prompt')).toBeVisible()
     await model.selectOption('gemma3:4b')
     await expect(page.getByText("gemma3:4b doesn't support thinking")).toBeVisible()
@@ -37,7 +37,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     await expect(save).toBeDisabled()
 
     await page.reload()
-    await page.getByRole('button', { name: 'Advanced' }).click()
+    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
     await expect(enableAi).toBeChecked()
     await expect(page.getByRole('switch', { name: 'Summaries enabled' })).toBeChecked()
     await expect(model).toHaveValue('gemma3:4b')
@@ -51,13 +51,32 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     await expect(page.getByText('Saved')).toBeVisible()
 
     await page.reload()
-    await page.getByRole('button', { name: 'Advanced' }).click()
+    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
     await expect(prompt).toHaveValue(/- Be brief\./)
     await expect(page.getByText('Using the default prompt')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Reset to default' }).click()
     await expect(page.getByText('Using the default prompt')).toBeVisible()
     await expect(prompt).toHaveValue(shipped)
+  })
+
+  await test.step('categorization has its own generation settings', async () => {
+    const contextLength = page.getByRole('spinbutton', { name: 'Categorization context length' })
+    const summaryTemperature = await temperature.inputValue()
+    await page.getByRole('switch', { name: 'Categorization enabled' }).click()
+    await page.getByRole('button', { name: 'Advanced categorization settings' }).click()
+    await expect(contextLength).toHaveValue('4096')
+    await expect(page.getByRole('spinbutton', { name: 'Categorization temperature' })).toHaveValue('0')
+    await expect(page.getByRole('switch', { name: 'Categorization thinking' })).toBeChecked()
+    await contextLength.fill('8192')
+    await save.click()
+    await expect(page.getByText('Saved')).toBeVisible()
+
+    await page.reload()
+    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    await page.getByRole('button', { name: 'Advanced categorization settings' }).click()
+    await expect(contextLength).toHaveValue('8192')
+    await expect(temperature).toHaveValue(summaryTemperature)
   })
 })
 
@@ -70,7 +89,7 @@ test.describe(() => {
     await page.getByRole('textbox', { name: 'Ollama URL' }).fill(daemon.ollamaUrl)
     await page.getByRole('switch', { name: 'Enable AI' }).click()
     await page.getByRole('switch', { name: 'Summaries enabled' }).click()
-    await page.getByRole('button', { name: 'Advanced' }).click()
+    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
     const prompt = page.getByRole('textbox', { name: 'Prompt', exact: true })
     const shipped = await prompt.inputValue()
     await prompt.fill(shipped.replace('## map user', '## map usr'))

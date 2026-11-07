@@ -32,14 +32,22 @@ test('category on mobile: add from the drawer, edit settings full screen, then a
     await expect(dialog).toContainText('Add category')
   })
 
-  await test.step('creating it opens its category settings dialog full screen', async () => {
+  await test.step('the dialog fills the screen, and creating lands on the category', async () => {
+    await expect(dialog).toContainText('No channels or playlists to add yet.')
+    const { width, height } = page.viewportSize()
+    const box = await dialog.boundingBox()
+    expect([box.x, box.y, box.width, box.height].map(Math.round)).toEqual([0, 0, width, height])
     await dialog.getByLabel('Name').fill('Chess')
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(page).toHaveURL(/\/categories\/[^?]+$/)
+    await dialog.waitFor({ state: 'hidden' })
+  })
+
+  await test.step('its category settings dialog is full screen too', async () => {
+    await page.getByRole('button', { name: 'Add channels and playlists' }).click()
     await expect(dialog).toContainText('Edit Chess settings')
-    await expect(dialog).toContainText('No channels or playlists to add yet.')
-    const box = await dialog.boundingBox()
     const { width, height } = page.viewportSize()
+    const box = await dialog.boundingBox()
     expect([box.x, box.y, box.width, box.height].map(Math.round)).toEqual([0, 0, width, height])
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' })
@@ -67,14 +75,12 @@ test('category lifecycle: create, edit settings, rename, assign from the add cha
     await expect(dialog).toContainText(`Edit ${name} settings`)
   }
 
-  await test.step('create it from the sidebar, landing in its category settings dialog', async () => {
+  await test.step('create it from the sidebar, landing on its view', async () => {
     await page.getByRole('button', { name: 'Add category', exact: true }).click()
+    await expect(dialog.getByLabel('Name')).toBeFocused()
     await dialog.getByLabel('Name').fill('Chess')
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(page).toHaveURL(/\/categories\/[^?]+$/)
-    await expect(dialog).toContainText('Edit Chess settings')
-    await expect(dialog.getByRole('searchbox', { name: 'Search channels and playlists' })).toBeFocused()
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' })
     await expect(categoryRows).toHaveText(['Chess'])
   })
@@ -191,6 +197,55 @@ test.describe('with a downloaded channel in a category', () => {
       data: { channels: [seeded.handle], playlists: [] },
     })
     expect(members.ok(), await members.text()).toBeTruthy()
+  })
+
+  test('category dialog: create with a prompt and a source in one request, then recolor', async ({
+    page,
+    request,
+    daemon,
+  }) => {
+    const preferences = await request.patch('/api/preferences', {
+      data: { ollama_url: daemon.ollamaUrl, ai_enabled: true, categorization_enabled: true },
+    })
+    expect(preferences.ok(), await preferences.text()).toBeTruthy()
+    const [{ name: channelName }] = await (await request.get('/api/channels')).json()
+    const dialog = page.getByRole('dialog', { name: 'Add category' })
+
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Add category', exact: true }).click()
+    await dialog.getByLabel('Name').fill('Chess')
+    await dialog.getByRole('radio', { name: 'Violet' }).check()
+    await dialog.getByRole('textbox', { name: 'AI prompt' }).fill('Chess games')
+    await dialog.getByRole('button', { name: 'About AI prompt' }).click()
+    await expect(page.getByRole('region', { name: 'AI prompt guide' })).toContainText('Belongs:')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('region', { name: 'AI prompt guide' })).toHaveCount(0)
+    await dialog.getByRole('button', { name: channelName, exact: true }).click()
+    const created = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/categories') && response.request().method() === 'POST',
+    )
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click()
+
+    const response = await created
+    expect(response.status()).toBe(201)
+    expect(await response.json()).toMatchObject({
+      name: 'Chess',
+      color: '#8b5cf6',
+      ai_prompt: 'Chess games',
+      channels: [seeded.handle],
+      playlists: [],
+    })
+    await dialog.waitFor({ state: 'hidden' })
+    await expect(page.locator('main').getByText(/^1 source · /)).toBeVisible()
+
+    await page.getByRole('button', { name: 'Edit settings' }).click()
+    const settings = page.getByRole('dialog', { name: 'Edit Chess settings' })
+    await settings.getByRole('radio', { name: 'Teal' }).check()
+    await settings.getByRole('button', { name: 'Save', exact: true }).click()
+    await settings.waitFor({ state: 'hidden' })
+    const { categories } = await (await request.get('/api/categories')).json()
+    expect(categories.find((category) => category.name === 'Chess').color).toBe('#14b8a6')
   })
 
   test('category card plays its video in the category, queued with the category', async ({

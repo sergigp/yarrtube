@@ -42,7 +42,7 @@
 ## 4. Verification
 
 - [x] 4.1 Update `doc/AI.md`, `doc/CATEGORIES.md` and `prompts/categorization/README.md` (v2 shipped, still under evaluation; new settings; one dialog). Verify: no reference to `categorization/v1.md` as the default or to "Change color" remains (`grep`).
-- [ ] 4.2 Update `e2e-tests/tests/categories.spec.js` and `aiSettings.spec.js`, then run `scripts/run-tests.sh --only e2e`. Verify: the suite passes, with the create flow going through one dialog and `POST /api/categories` covering prompt and sources.
-- [ ] 4.3 Run `scripts/run-tests.sh --only web --only rust`. Verify: fmt, clippy and tests pass.
+- [x] 4.2 Update `e2e-tests/tests/categories.spec.js` and `aiSettings.spec.js`, then run `scripts/run-tests.sh --only e2e`. Verify: the suite passes, with the create flow going through one dialog and `POST /api/categories` covering prompt and sources.
+- [x] 4.3 Run `scripts/run-tests.sh --only web --only rust`. Verify: fmt, clippy and tests pass.
 - [ ] 4.4 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed preferences (AI, categorization on) and a channel via the HTTP API, then with the Playwright MCP browser: create a category with name, color, prompt and a source and assert the single `POST` and the resulting view; edit it and assert one `PATCH`; open the "?" guide; open the AI page and assert `4096`, `0`, thinking on and the v2 prompt under Advanced; repeat the dialog at phone width with a screenshot. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.5 Manual (human): on a real phone, check the keyboard with "Name" focused, tapping the "?" guide, and that the dialog at 48rem feels right on desktop with many sources.
