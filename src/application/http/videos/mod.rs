@@ -317,6 +317,7 @@ mod tests {
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
+    use crate::infrastructure::shared::sqlite_connection::Database;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use category_dto::VideoCategoryChoiceResponse;
@@ -6495,6 +6496,31 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_reject_a_missing_or_non_boolean_belongs() {
+        let mut responses = Vec::new();
+        for belongs in [None, Some(serde_json::json!("true"))] {
+            responses.push(
+                set_category_with(
+                    video_category_editor(&unused_connection),
+                    video_category_choice_searcher_on(&unused_connection),
+                    "rec1",
+                    "chess",
+                    SetVideoCategoryRequest { belongs },
+                )
+                .await,
+            );
+        }
+
+        assert_eq!(
+            responses,
+            vec![
+                Err(ApiError::bad_request("belongs must be true or false")),
+                Err(ApiError::bad_request("belongs must be true or false")),
+            ]
+        );
+    }
+
     async fn list_categories_of(
         video_category_choice_searcher: VideoCategoryChoiceSearcher,
         id: &str,
@@ -6506,11 +6532,17 @@ mod tests {
 
     /// A choice searcher over every SQLite repository of `db`.
     fn video_category_choice_searcher(db: &TestDatabase) -> VideoCategoryChoiceSearcher {
+        video_category_choice_searcher_on(&|| db.database())
+    }
+
+    fn video_category_choice_searcher_on(
+        database: &dyn Fn() -> Database,
+    ) -> VideoCategoryChoiceSearcher {
         VideoCategoryChoiceSearcher::new(
-            Arc::new(SqliteVideoRepository::new(db.database())),
-            Arc::new(video_owner_finder(db)),
-            Arc::new(SqliteCategoryRepository::new(db.database())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(database())),
+            Arc::new(video_owner_finder(database)),
+            Arc::new(SqliteCategoryRepository::new(database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
         )
     }
 
@@ -6520,9 +6552,27 @@ mod tests {
         category_id: &str,
         request: SetVideoCategoryRequest,
     ) -> Result<VideoCategoriesResponse, ApiError> {
+        let database = || db.database();
+        set_category_with(
+            video_category_editor(&database),
+            video_category_choice_searcher_on(&database),
+            id,
+            category_id,
+            request,
+        )
+        .await
+    }
+
+    async fn set_category_with(
+        video_category_editor: VideoCategoryEditor,
+        video_category_choice_searcher: VideoCategoryChoiceSearcher,
+        id: &str,
+        category_id: &str,
+        request: SetVideoCategoryRequest,
+    ) -> Result<VideoCategoriesResponse, ApiError> {
         set_video_category(
-            State(video_category_editor(db)),
-            State(video_category_choice_searcher(db)),
+            State(video_category_editor),
+            State(video_category_choice_searcher),
             Path((id.to_string(), category_id.to_string())),
             Json(request),
         )
@@ -6530,40 +6580,40 @@ mod tests {
         .map(|Json(body)| body)
     }
 
-    /// A video category editor over every SQLite repository of `db`, at
-    /// `fixed_timestamp()`.
-    fn video_category_editor(db: &TestDatabase) -> VideoCategoryEditor {
+    /// A video category editor over every SQLite repository `database`
+    /// opens, at `fixed_timestamp()`.
+    fn video_category_editor(database: &dyn Fn() -> Database) -> VideoCategoryEditor {
         let clock = Arc::new(FixedClock(fixed_timestamp()));
         VideoCategoryEditor::new(
-            Arc::new(SqliteVideoRepository::new(db.database())),
-            Arc::new(video_owner_finder(db)),
-            Arc::new(SqliteCategoryRepository::new(db.database())),
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqlitePlaylistRepository::new(db.database())),
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(database())),
+            Arc::new(video_owner_finder(database)),
+            Arc::new(SqliteCategoryRepository::new(database())),
+            Arc::new(SqliteChannelRepository::new(database())),
+            Arc::new(SqlitePlaylistRepository::new(database())),
+            Arc::new(SqliteChannelVideoRepository::new(database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
             VideoCategoryAssigner::new(
-                Arc::new(SqliteVideoRepository::new(db.database())),
-                Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
-                Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
-                Arc::new(SqliteCategoryRepository::new(db.database())),
-                Arc::new(SqliteChannelVideoRepository::new(db.database())),
-                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                Arc::new(SqliteEventPublisher::new(db.database(), clock.clone())),
+                Arc::new(SqliteVideoRepository::new(database())),
+                Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
+                Arc::new(SqliteVideoCategoriesRepository::new(database())),
+                Arc::new(SqliteCategoryRepository::new(database())),
+                Arc::new(SqliteChannelVideoRepository::new(database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(database())),
+                Arc::new(SqliteEventPublisher::new(database(), clock.clone())),
                 Arc::new(CategoryLock::default()),
             ),
-            Arc::new(SqliteTaskRepository::new(db.database(), clock.clone())),
+            Arc::new(SqliteTaskRepository::new(database(), clock.clone())),
             clock,
         )
     }
 
-    fn video_owner_finder(db: &TestDatabase) -> VideoOwnerFinder {
+    fn video_owner_finder(database: &dyn Fn() -> Database) -> VideoOwnerFinder {
         VideoOwnerFinder::new(
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database())),
+            Arc::new(SqliteChannelRepository::new(database())),
+            Arc::new(SqlitePlaylistRepository::new(database())),
             "/videos",
         )
     }
