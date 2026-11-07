@@ -2940,6 +2940,22 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_return_not_found_when_rerunning_an_unknown_category() {
+        let db = TestDatabase::new();
+
+        let response = delete_category_ai_verdicts(
+            State(video_category_editor(db.database())),
+            Path("unknown".to_string()),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(StatusCode::NOT_FOUND, "category not found"))
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
