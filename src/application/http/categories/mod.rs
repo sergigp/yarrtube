@@ -1693,12 +1693,20 @@ mod tests {
                 video,
             )
         });
-        // The channel is in no category: its videos' categories were set
-        // per video (by a classifier), not from the channel.
+        // The channel is in no category: its videos' categories come from
+        // their yes verdicts.
         let chess = category(None, "Chess");
         let funny = category(None, "Funny");
         repository.insert(&chess).unwrap();
         repository.insert(&funny).unwrap();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        [(&first, &chess), (&first, &funny), (&second, &chess)]
+            .into_iter()
+            .for_each(|(video, category)| {
+                verdict_repository
+                    .save(&yes_verdict(video, category))
+                    .unwrap()
+            });
         video_categories_repository
             .save_many(&[
                 VideoCategories::new(first.id.clone(), vec![chess.id.clone(), funny.id.clone()]),
@@ -2113,6 +2121,83 @@ mod tests {
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_yes_verdict_categories_when_a_source_leaves_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        let (kept, dropped) = (downloaded_video("vid1"), downloaded_video("vid2"));
+        [&kept, &dropped].into_iter().for_each(|video| {
+            save_channel_video(
+                &video_repository,
+                &SqliteChannelVideoRepository::new(db.database()),
+                "@GothamChess",
+                video,
+            )
+        });
+        let chess = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        verdict_repository
+            .save(&yes_verdict(&kept, &chess))
+            .unwrap();
+        video_categories_repository
+            .save_many(&[
+                VideoCategories::new(kept.id.clone(), vec![chess.id.clone()]),
+                VideoCategories::new(dropped.id.clone(), vec![chess.id.clone()]),
+            ])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            verdict_repository,
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&[], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[kept.id.clone(), dropped.id.clone()])
+                .unwrap(),
+            vec![
+                VideoCategories::new(kept.id.clone(), vec![chess.id.clone()]),
+                VideoCategories::none(dropped.id.clone()),
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&dropped])]
         );
     }
 

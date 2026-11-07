@@ -25,16 +25,4 @@ impl VideoCategories {
             category_ids: Vec::new(),
         }
     }
-
-    /// The same record, no longer in `category_id`.
-    pub fn without(self, category_id: &CategoryId) -> Self {
-        Self {
-            category_ids: self
-                .category_ids
-                .into_iter()
-                .filter(|id| id != category_id)
-                .collect(),
-            ..self
-        }
-    }
 }

@@ -65,8 +65,8 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
     -> anyhow::Result<()>;
     /// After `category_id`'s members changed or it was deleted: recomputes every
     /// record of `previous_members`, of its current members and of records
-    /// still holding it, against `categories` (the state to apply). The
-    /// records of a source in no category only lose `category_id`.
+    /// still holding it, against `categories` (the state to apply): each
+    /// gets its source's categories plus its yes verdicts.
     fn reassign_category(
         &self,
         category_id: &CategoryId,
@@ -114,7 +114,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         );
         let desired = sources
             .iter()
-            .map(|source| self.desired_for_source(source, category_id, categories))
+            .map(|source| self.desired_for_source(source, categories))
             .collect::<anyhow::Result<Vec<_>>>()?
             .concat();
         self.save_and_announce(desired)
@@ -229,52 +229,49 @@ impl VideoCategoryAssigner {
     /// Sets `video_id`, a record of `source`, to the source's categories plus
     /// its yes verdicts; the caller holds the lock.
     fn recompute(&self, video_id: &VideoRecordId, source: &CategoryMember) -> anyhow::Result<()> {
-        let category_ids = [
-            self.categories_of(source)?,
-            self.yes_category_ids(video_id)?,
-        ]
-        .concat();
-        self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
+        let desired =
+            self.with_yes_verdicts(vec![video_id.clone()], &self.categories_of(source)?)?;
+        self.save_and_announce(desired)
     }
 
-    /// The categories `video_id` has a yes verdict for.
-    fn yes_category_ids(&self, video_id: &VideoRecordId) -> anyhow::Result<Vec<CategoryId>> {
-        Ok(self
-            .video_category_verdict_repository
-            .find_many(std::slice::from_ref(video_id))?
-            .into_iter()
-            .filter(VideoCategoryVerdict::is_yes)
-            .map(|verdict| verdict.category_id)
-            .collect())
-    }
-
-    /// Each of `video_ids` in exactly `category_ids`.
-    fn each_in(video_ids: Vec<VideoRecordId>, category_ids: &[CategoryId]) -> Vec<VideoCategories> {
-        video_ids
-            .into_iter()
-            .map(|video_id| VideoCategories::new(video_id, category_ids.to_vec()))
-            .collect()
-    }
-
-    /// Every record of `source` after `category_id` changed: each with the
-    /// source's categories when it is in any (source regime), else its own
-    /// categories without `category_id` (AI regime, the others are kept).
+    /// Every record of `source`, each with the source's categories in
+    /// `categories` plus its yes verdicts.
     fn desired_for_source(
         &self,
         source: &CategoryMember,
-        category_id: &CategoryId,
         categories: &[Category],
     ) -> anyhow::Result<Vec<VideoCategories>> {
-        let category_ids = Self::source_category_ids(source, categories);
         let record_ids = self.record_ids(source)?;
-        if !category_ids.is_empty() {
-            return Ok(Self::each_in(record_ids, &category_ids));
-        }
-        Ok(self
-            .video_categories_repository
-            .find_many(&record_ids)?
+        self.with_yes_verdicts(record_ids, &Self::source_category_ids(source, categories))
+    }
+
+    /// Each of `video_ids` in `category_ids` plus the categories of its yes
+    /// verdicts.
+    fn with_yes_verdicts(
+        &self,
+        video_ids: Vec<VideoRecordId>,
+        category_ids: &[CategoryId],
+    ) -> anyhow::Result<Vec<VideoCategories>> {
+        let yes = self
+            .video_category_verdict_repository
+            .find_many(&video_ids)?
             .into_iter()
-            .map(|current| current.without(category_id))
+            .filter(VideoCategoryVerdict::is_yes)
+            .fold(
+                HashMap::<VideoRecordId, Vec<CategoryId>>::new(),
+                |mut yes, verdict| {
+                    yes.entry(verdict.video_id)
+                        .or_default()
+                        .push(verdict.category_id);
+                    yes
+                },
+            );
+        Ok(video_ids
+            .into_iter()
+            .map(|video_id| {
+                let own = yes.get(&video_id).cloned().unwrap_or_default();
+                VideoCategories::new(video_id, [category_ids.to_vec(), own].concat())
+            })
             .collect())
     }
 
