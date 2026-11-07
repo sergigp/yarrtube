@@ -288,6 +288,32 @@ describe('CategoryDialog', () => {
     expect(bodies(fetchMock, 'PUT')).toEqual([])
   })
 
+  it('saves on Enter in the name, but neither toggles nor saves on Enter with several matches', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(chess, {
+      ...library,
+      'PATCH /api/categories/chess': () => null,
+    })
+    const user = userEvent.setup()
+    const name = screen.getByRole('textbox', { name: 'Name' })
+    const search = screen.getByRole('searchbox', { name: 'Search channels and playlists' })
+
+    await screen.findByRole('button', { name: 'GothamChess' })
+    await user.type(name, ' club')
+    await user.type(search, 'h{Enter}')
+
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(bodies(fetchMock, 'PATCH')).toEqual([])
+    expect(await chipsOf('Channels')).toEqual([
+      ['GothamChess', false],
+      ['Hikaru', true],
+    ])
+
+    await user.type(name, '{Enter}')
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([{ name: 'Chess club' }])
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 

@@ -84,8 +84,8 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
     chosenColor ||
     base.color ||
     defaultColor((categories?.categories ?? []).map((existing) => existing.color))
-  // Saved by a save whose sources then failed: it can no longer be discarded.
-  const [promptSaved, setPromptSaved] = useState(false)
+  // Saved by a save whose sources then failed: they can no longer be discarded.
+  const [detailsSaved, setDetailsSaved] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<SourceFilter>('all')
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
@@ -146,12 +146,12 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
     }
     setSaving(true)
     setError(null)
-    let promptStored = promptSaved
+    let detailsStored = detailsSaved
     try {
       if (detailsChanged) {
         await updateCategory(category.id, details)
-        promptStored = true
-        setPromptSaved(true)
+        detailsStored = true
+        setDetailsSaved(true)
         setBase({
           name: name.trim(),
           color: chosenColor ?? base.color,
@@ -164,12 +164,12 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
       onClose()
     } catch (err) {
       setError(
-        promptStored
-          ? `The AI prompt was saved, but the sources weren't: ${errorMessage(err)}`
+        detailsStored
+          ? `Your other changes were saved, but the sources weren't: ${errorMessage(err)}`
           : errorMessage(err),
       )
     } finally {
-      // Also after a failure: the prompt may be saved even if the sources aren't.
+      // Also after a failure: the details may be saved even if the sources aren't.
       invalidateLibrary()
       setSaving(false)
     }
@@ -204,103 +204,116 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
           <X />
         </Button>
       </div>
-      {/* Everything between the header and the save controls scrolls together, so
-          the prompt can never push them out of a short dialog. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-4 px-6 pb-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="category-name">Name</Label>
-            <Input
-              ref={nameRef}
-              id="category-name"
-              type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
+      <form
+        className="flex min-h-0 flex-1 flex-col"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (canSave) {
+            void save()
+          }
+        }}
+      >
+        {/* Everything between the header and the save controls scrolls together, so
+            the prompt can never push them out of a short dialog. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="flex flex-col gap-4 px-6 pb-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="category-name">Name</Label>
+              <Input
+                ref={nameRef}
+                id="category-name"
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm leading-none font-medium">Color</span>
+              <CategoryColorPicker value={color} onChange={setChosenColor} />
+            </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm leading-none font-medium">Color</span>
-            <CategoryColorPicker value={color} onChange={setChosenColor} />
-          </div>
-        </div>
-        {withPrompt && (
-          <div className="flex flex-col gap-1.5 px-6 pb-4">
-            <Label htmlFor="category-ai-prompt">AI prompt</Label>
-            <textarea
-              id="category-ai-prompt"
-              rows={6}
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              aria-describedby="category-ai-prompt-hint"
-              className="w-full resize-none rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-            />
-            <p id="category-ai-prompt-hint" className="text-xs text-muted-foreground">
-              Describe the videos that belong in this category.
-            </p>
-          </div>
-        )}
-        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-border bg-popover px-6 pb-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              aria-label="Search channels and playlists"
-              placeholder="Search channels and playlists"
-              className="pl-8"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                // Enter picks the only match, so typing a name and Enter adds it.
-                const matches = [...shownChannels, ...shownPlaylists]
-                if (event.key === 'Enter' && matches.length === 1) {
+          {withPrompt && (
+            <div className="flex flex-col gap-1.5 px-6 pb-4">
+              <Label htmlFor="category-ai-prompt">AI prompt</Label>
+              <textarea
+                id="category-ai-prompt"
+                rows={6}
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                aria-describedby="category-ai-prompt-hint"
+                className="w-full resize-none rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              />
+              <p id="category-ai-prompt-hint" className="text-xs text-muted-foreground">
+                Describe the videos that belong in this category.
+              </p>
+            </div>
+          )}
+          <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-border bg-popover px-6 pb-4">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                aria-label="Search channels and playlists"
+                placeholder="Search channels and playlists"
+                className="pl-8"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') {
+                    return
+                  }
+                  // Never saves; picks the only match, so typing a name and Enter adds it.
                   event.preventDefault()
-                  toggle(matches[0]!.source)
+                  const matches = [...shownChannels, ...shownPlaylists]
+                  if (matches.length === 1) {
+                    toggle(matches[0]!.source)
+                  }
+                }}
+              />
+            </div>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              aria-label="Show"
+              className="flex-wrap"
+              value={filter}
+              onValueChange={(value) => {
+                if (value) {
+                  setFilter(value as SourceFilter)
                 }
               }}
-            />
+            >
+              <FilterItem value="all" label="All" />
+              <FilterItem value="in" label={`In ${categoryName}`} count={inCount} />
+              <FilterItem
+                value="out"
+                label={`Not in ${categoryName}`}
+                count={allChips.length - inCount}
+              />
+            </ToggleGroup>
           </div>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            size="sm"
-            aria-label="Show"
-            className="flex-wrap"
-            value={filter}
-            onValueChange={(value) => {
-              if (value) {
-                setFilter(value as SourceFilter)
-              }
-            }}
-          >
-            <FilterItem value="all" label="All" />
-            <FilterItem value="in" label={`In ${categoryName}`} count={inCount} />
-            <FilterItem
-              value="out"
-              label={`Not in ${categoryName}`}
-              count={allChips.length - inCount}
-            />
-          </ToggleGroup>
+          <div className="flex flex-col gap-5 px-6 py-4">
+            {channels?.length === 0 && playlists?.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No channels or playlists to add yet. Track one from the sidebar, then come back.
+              </p>
+            )}
+            <ChipGroup title="Channels" chips={shownChannels} staged={staged} onToggle={toggle} />
+            <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
+          </div>
         </div>
-        <div className="flex flex-col gap-5 px-6 py-4">
-          {channels?.length === 0 && playlists?.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No channels or playlists to add yet. Track one from the sidebar, then come back.
-            </p>
-          )}
-          <ChipGroup title="Channels" chips={shownChannels} staged={staged} onToggle={toggle} />
-          <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-6 py-4">
+          {error && <p className="w-full text-sm text-destructive">{error}</p>}
+          <p className="mr-auto text-sm text-muted-foreground">{summaryText(summary)}</p>
+          <Button type="button" variant="outline" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!canSave}>
+            {category ? (saving ? 'Saving…' : 'Save') : saving ? 'Creating…' : 'Create'}
+          </Button>
         </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-6 py-4">
-        {error && <p className="w-full text-sm text-destructive">{error}</p>}
-        <p className="mr-auto text-sm text-muted-foreground">{summaryText(summary)}</p>
-        <Button type="button" variant="outline" onClick={requestClose}>
-          Cancel
-        </Button>
-        <Button type="button" disabled={!canSave} onClick={save}>
-          {category ? (saving ? 'Saving…' : 'Save') : saving ? 'Creating…' : 'Create'}
-        </Button>
-      </div>
+      </form>
       <ConfirmDialog
         open={confirmingDiscard}
         onOpenChange={setConfirmingDiscard}
@@ -308,9 +321,9 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
         description={
           !category
             ? "This category won't be created."
-            : promptSaved && !detailsChanged
-            ? `The AI prompt is already saved. Your changes to the sources in ${categoryName} won't be saved.`
-            : `Your changes to ${categoryName} won't be saved.`
+            : detailsSaved && !detailsChanged
+              ? `Your other changes are already saved. Your changes to the sources in ${categoryName} won't be saved.`
+              : `Your changes to ${categoryName} won't be saved.`
         }
         cancelLabel="Keep editing"
         confirmLabel="Discard"
