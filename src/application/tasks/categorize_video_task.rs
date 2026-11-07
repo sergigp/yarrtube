@@ -477,6 +477,36 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         );
     }
 
+    #[test]
+    fn it_should_complete_without_verdicts_when_ollama_is_unreachable() {
+        let unreachable = FakeLlmServerRepository::failing();
+        let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
+            name: "llama3:8b".to_string(),
+            ..thinking_model()
+        }));
+        let down_during_call = FakeLlmServerRepository::new(server_with(thinking_model()))
+            .with_replies(vec![Err(anyhow::anyhow!("connection reset"))]);
+
+        let outcomes = [unreachable, model_missing, down_during_call].map(|llm| {
+            let db = TestDatabase::new();
+            let video = summarized_video();
+            seed(&db, &video, &[&prompted_category("Sicilian")]);
+            let task = categorize_video_task(&db, Arc::new(llm));
+
+            let result = run_last_attempt(&task, &video);
+
+            let verdicts = SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap();
+            (result, verdicts)
+        });
+
+        assert_eq!(
+            outcomes,
+            [(Ok(()), vec![]), (Ok(()), vec![]), (Ok(()), vec![])]
+        );
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,

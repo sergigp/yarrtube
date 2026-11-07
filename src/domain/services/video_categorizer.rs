@@ -18,33 +18,41 @@ use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoS
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Why a video isn't categorized now. Nothing about it changes.
 enum Skip {
     /// It shouldn't be, for now.
     NotWanted(&'static str),
-    /// It should be, but reading what it needs failed.
-    Failed(anyhow::Error),
+    /// It should be, but something outside the video stops it.
+    Blocked(anyhow::Error),
 }
 
 impl From<anyhow::Error> for Skip {
     fn from(error: anyhow::Error) -> Self {
-        Self::Failed(error)
+        Self::Blocked(error)
     }
 }
 
-/// Why a call gave no verdict.
-enum Failure {
-    /// The model didn't answer usably: retrying may.
+/// How one call ended, when it didn't stop the categorization.
+enum Outcome {
+    /// Its verdict was applied.
+    Answered,
+    /// The model didn't answer usably, for this reason: retrying may.
     Rejected(String),
-    /// Something else failed: the categorization stops.
-    Error(anyhow::Error),
 }
 
-impl From<anyhow::Error> for Failure {
+/// Why the categorization stops before trying every category.
+enum Stop {
+    /// The server's fault: a later sync tries again.
+    Server(anyhow::Error),
+    /// Storing failed.
+    Failed(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Stop {
     fn from(error: anyhow::Error) -> Self {
-        Self::Error(error)
+        Self::Failed(error)
     }
 }
 
@@ -122,27 +130,17 @@ impl VideoCategorizerApi for VideoCategorizer {
     }
 
     fn categorize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()> {
-        let job = match self.prepare(video) {
-            Ok(job) => job,
+        match self.prepare(video) {
+            Ok(job) => self.ask_each(video, &job, is_last_attempt),
             Err(Skip::NotWanted(reason)) => {
                 info!(video_id = %video.id, reason, "skipped video categorization");
-                return Ok(());
+                Ok(())
             }
-            Err(Skip::Failed(error)) => return Err(error),
-        };
-        let rejected = job
-            .pending
-            .iter()
-            .filter_map(|category| match self.evaluate(video, &job, category) {
-                Ok(()) => None,
-                Err(Failure::Rejected(reason)) => Some(Ok((category, reason))),
-                Err(Failure::Error(error)) => Some(Err(error)),
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        if is_last_attempt {
-            self.give_up(video, &job, &rejected)?;
+            Err(Skip::Blocked(reason)) => {
+                warn!(video_id = %video.id, %reason, "couldn't categorize video");
+                Ok(())
+            }
         }
-        Self::fail_if_rejected(&rejected)
     }
 }
 
@@ -188,30 +186,71 @@ impl VideoCategorizer {
         })
     }
 
+    /// Asks about every pending category, then fails naming the rejected
+    /// ones, after giving them up on the last attempt. A server fault stops
+    /// it quietly.
+    fn ask_each(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        is_last_attempt: bool,
+    ) -> anyhow::Result<()> {
+        let rejected = match self.rejected_categories(video, job) {
+            Ok(rejected) => rejected,
+            Err(Stop::Server(reason)) => {
+                warn!(video_id = %video.id, %reason, "couldn't categorize video");
+                return Ok(());
+            }
+            Err(Stop::Failed(error)) => return Err(error),
+        };
+        if is_last_attempt {
+            self.give_up(video, job, &rejected)?;
+        }
+        Self::fail_if_rejected(&rejected)
+    }
+
+    /// Asks about each pending category in turn; the ones rejected, with why.
+    fn rejected_categories<'a>(
+        &self,
+        video: &Video,
+        job: &'a CategorizationJob,
+    ) -> Result<Vec<(&'a Category, String)>, Stop> {
+        job.pending
+            .iter()
+            .filter_map(|category| match self.evaluate(video, job, category) {
+                Ok(Outcome::Answered) => None,
+                Ok(Outcome::Rejected(reason)) => Some(Ok((category, reason))),
+                Err(stop) => Some(Err(stop)),
+            })
+            .collect()
+    }
+
     /// Asks the model whether `video` fits `category` and applies its verdict.
     fn evaluate(
         &self,
         video: &Video,
         job: &CategorizationJob,
         category: &Category,
-    ) -> Result<(), Failure> {
+    ) -> Result<Outcome, Stop> {
         let question =
             CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, category);
         let reply = self
             .llm_server_repository
-            .chat(&job.url, &question.chat(&job.settings, job.thinking))?;
+            .chat(&job.url, &question.chat(&job.settings, job.thinking))
+            .map_err(Stop::Server)?;
         if let Some(refusal) = reply.refusal {
-            return Err(Failure::Rejected(format!(
+            return Ok(Outcome::Rejected(format!(
                 "Ollama refused the call: {refusal}"
             )));
         }
         if reply.stopped_at_limit {
-            return Err(Failure::Rejected(format!(
+            return Ok(Outcome::Rejected(format!(
                 "it hit the {MAX_OUTPUT_TOKENS}-token output limit"
             )));
         }
-        let answer = CategorizationAnswer::parse(&reply.content)
-            .ok_or_else(|| Failure::Rejected("its answer isn't usable".to_string()))?;
+        let Some(answer) = CategorizationAnswer::parse(&reply.content) else {
+            return Ok(Outcome::Rejected("its answer isn't usable".to_string()));
+        };
         let verdict = VideoCategoryVerdict::answered(
             video.id.clone(),
             category.id.clone(),
@@ -221,7 +260,7 @@ impl VideoCategorizer {
         );
         self.video_category_assigner
             .apply_verdict(&verdict, &job.owner.source)?;
-        Ok(())
+        Ok(Outcome::Answered)
     }
 
     /// Gives each of `rejected` an unavailable verdict.

@@ -26,7 +26,7 @@
 - [x] 2.18 `it_should_fail_after_trying_every_category_when_a_call_is_rejected`
 - [x] 2.19 `it_should_retry_only_the_categories_still_pending`
 - [x] 2.20 `it_should_mark_rejected_categories_unavailable_on_the_last_attempt`
-- [ ] 2.21 `it_should_complete_without_verdicts_when_ollama_is_unreachable`
+- [x] 2.21 `it_should_complete_without_verdicts_when_ollama_is_unreachable`
 - [ ] 2.22 `it_should_log_each_verdict`
 - [ ] 2.23 `it_should_delete_a_categorys_verdicts_with_it`: `CategoryDeleter`
 - [ ] 2.24 `it_should_keep_yes_verdict_categories_when_a_source_leaves_a_category`: `reassign_category` union
