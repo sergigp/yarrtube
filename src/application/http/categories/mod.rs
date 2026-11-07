@@ -1053,6 +1053,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "Board games").await;
@@ -1115,6 +1116,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "Board games").await;
@@ -1148,6 +1150,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = update(
@@ -1187,6 +1190,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = update(
@@ -1211,6 +1215,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_make_unavailable_verdicts_pending_when_a_category_prompt_changes() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        let video = downloaded_video("vid1");
+        let tech = Category {
+            ai_prompt: CategoryPrompt::new("Programming").unwrap(),
+            ..category(None, "Tech")
+        };
+        let food = category(None, "Food");
+        repository.insert(&tech).unwrap();
+        repository.insert(&food).unwrap();
+        let food_unavailable = unavailable_verdict(&video, &food);
+        verdict_repository
+            .save(&unavailable_verdict(&video, &tech))
+            .unwrap();
+        verdict_repository.save(&food_unavailable).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+            verdict_repository.clone(),
+        );
+
+        let response = update(
+            category_updater,
+            tech.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+                ai_prompt: Some("Programming and gadgets".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![food_unavailable]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_remove_the_ai_prompt_of_a_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
@@ -1224,6 +1274,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = update(
@@ -1261,6 +1312,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = update(
@@ -1330,6 +1382,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = update(
@@ -1358,6 +1411,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = update(
@@ -1393,6 +1447,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "Chess").await;
@@ -1420,6 +1475,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "sports").await;
@@ -1447,6 +1503,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = update(
@@ -1546,6 +1603,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = rename(category_updater, "missing", "Chess").await;
@@ -1857,6 +1915,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -1897,6 +1956,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -1931,6 +1991,7 @@ mod tests {
             channel_repository,
             playlist_repository,
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -1968,6 +2029,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2031,6 +2093,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2102,6 +2165,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2176,6 +2240,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2252,6 +2317,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2322,6 +2388,9 @@ mod tests {
             channel_repository,
             playlist_repository,
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(
+                unused_connection(),
+            )),
         );
 
         let response = set_members(
@@ -2388,6 +2457,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2456,6 +2526,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner,
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2494,6 +2565,7 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(
@@ -2535,6 +2607,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         );
 
         let response = set_members(category_updater, "missing", members_request(&[], &[])).await;
@@ -2675,6 +2748,9 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_category_assigner(unused_connection()),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(
+                unused_connection(),
+            )),
         )
     }
 
@@ -2976,6 +3052,14 @@ mod tests {
             model: Some("qwen3:4b".to_string()),
             reason: Some("It fits.".to_string()),
             decided_at: fixed_timestamp(),
+        }
+    }
+
+    fn unavailable_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            verdict: Verdict::Unavailable,
+            reason: None,
+            ..yes_verdict(video, category)
         }
     }
 

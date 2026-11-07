@@ -30,7 +30,7 @@
 - [x] 2.22 `it_should_log_each_verdict`
 - [x] 2.23 `it_should_delete_a_categorys_verdicts_with_it`: `CategoryDeleter`
 - [x] 2.24 `it_should_keep_yes_verdict_categories_when_a_source_leaves_a_category`: `reassign_category` union
-- [ ] 2.25 `it_should_make_unavailable_verdicts_pending_when_a_category_prompt_changes`: `CategoryUpdater`
+- [x] 2.25 `it_should_make_unavailable_verdicts_pending_when_a_category_prompt_changes`: `CategoryUpdater`
 - [ ] 2.26 `it_should_keep_verdicts_when_a_category_prompt_is_edited_or_cleared`
 - [ ] 2.27 `it_should_delete_unavailable_verdicts_when_categorization_settings_change`: `PreferencesUpdater`
 - [ ] 2.28 `it_should_keep_unavailable_verdicts_when_the_same_settings_are_saved`
