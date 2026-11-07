@@ -17,6 +17,21 @@ use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoS
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use std::sync::Arc;
+use tracing::info;
+
+/// Why a video isn't categorized now. Nothing about it changes.
+enum Skip {
+    /// It shouldn't be, for now.
+    NotWanted(&'static str),
+    /// It should be, but reading what it needs failed.
+    Failed(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Skip {
+    fn from(error: anyhow::Error) -> Self {
+        Self::Failed(error)
+    }
+}
 
 /// What every call of one categorization shares.
 struct CategorizationJob {
@@ -92,7 +107,14 @@ impl VideoCategorizerApi for VideoCategorizer {
     }
 
     fn categorize(&self, video: &Video, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let job = self.prepare(video)?;
+        let job = match self.prepare(video) {
+            Ok(job) => job,
+            Err(Skip::NotWanted(reason)) => {
+                info!(video_id = %video.id, reason, "skipped video categorization");
+                return Ok(());
+            }
+            Err(Skip::Failed(error)) => return Err(error),
+        };
         job.pending
             .iter()
             .try_for_each(|category| self.evaluate(video, &job, category))
@@ -100,14 +122,25 @@ impl VideoCategorizerApi for VideoCategorizer {
 }
 
 impl VideoCategorizer {
-    /// What the categorization needs.
-    fn prepare(&self, video: &Video) -> anyhow::Result<CategorizationJob> {
+    /// What the categorization needs, unless the video shouldn't be
+    /// categorized now.
+    fn prepare(&self, video: &Video) -> Result<CategorizationJob, Skip> {
         let preferences = self.preferences_repository.find()?.unwrap_or_default();
+        if !preferences.categorization_available() {
+            return Err(Skip::NotWanted("AI categorization is off"));
+        }
+        if !video.is_categorizable() {
+            return Err(Skip::NotWanted("the video has no summary"));
+        }
         let url = preferences.ollama_url.context("no Ollama URL is saved")?;
-        let owner = self
-            .video_owner_finder
-            .find(video)?
-            .context("the video has no channel or playlist")?;
+        let Some(owner) = self.video_owner_finder.find(video)? else {
+            return Err(Skip::NotWanted("the video has no channel or playlist"));
+        };
+        if !owner.categorization_enabled {
+            return Err(Skip::NotWanted(
+                "its channel or playlist has categorization off",
+            ));
+        }
         let summary = self
             .video_summary_repository
             .find(&video.id)?

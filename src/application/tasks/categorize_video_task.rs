@@ -272,6 +272,38 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         );
     }
 
+    #[test]
+    fn it_should_do_nothing_when_the_conditions_no_longer_hold() {
+        let source_off = |db: &TestDatabase| {
+            SqliteChannelRepository::new(db.database())
+                .update(&my_channel().with_categorization_enabled(false))
+                .unwrap()
+        };
+        let categorization_off = |db: &TestDatabase| {
+            SqlitePreferencesRepository::new(db.database())
+                .save(&Preferences {
+                    ai_enabled: false,
+                    ..categorization_on()
+                })
+                .unwrap()
+        };
+
+        let asked = [source_off, categorization_off].map(|turn_off| {
+            let db = TestDatabase::new();
+            let llm = llm_replying(vec![reply(YES)]);
+            let video = summarized_video();
+            seed(&db, &video, &[&prompted_category("Sicilian")]);
+            let task = categorize_video_task(&db, llm.clone());
+            turn_off(&db);
+
+            let result = run(&task, &video);
+
+            (result, asked_categories(&llm))
+        });
+
+        assert_eq!(asked, [(Ok(()), vec![]), (Ok(()), vec![])]);
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,
