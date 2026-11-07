@@ -3,7 +3,8 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
 use super::validation::{MISSING_CATEGORIZATION, MISSING_QUALITY, MISSING_SUMMARIES, required};
-use super::videos::update_watch_state_error;
+use super::videos::{edit_video_categories_error, update_watch_state_error};
+use crate::domain::category::CategoryMember;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
     CreatePlaylistError, DeletePlaylistError, PlaylistPath, PlaylistSettingsChange,
@@ -13,8 +14,8 @@ use crate::domain::services::{
     CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
     PlaylistDeleterApi, PlaylistPreviewer, PlaylistPreviewerApi, PlaylistUpdater,
     PlaylistUpdaterApi, PlaylistVideoReconciler, PlaylistVideoReconcilerApi, PlaylistViewSearcher,
-    PlaylistViewSearcherApi, ShowMover, ShowMoverApi, VideoCategoryEditor, VideoWatchStateUpdater,
-    VideoWatchStateUpdaterApi,
+    PlaylistViewSearcherApi, ShowMover, ShowMoverApi, VideoCategoryEditor, VideoCategoryEditorApi,
+    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::shared::{Quality, ReconcileInterval};
 use axum::Json;
@@ -106,9 +107,15 @@ pub async fn delete_playlist(
 }
 
 pub async fn delete_playlist_ai_verdicts(
-    State(_video_category_editor): State<VideoCategoryEditor>,
-    Path(_id): Path<String>,
+    State(video_category_editor): State<VideoCategoryEditor>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    let source = CategoryMember::Playlist(PlaylistId::new(id)?);
+
+    run_blocking(move || video_category_editor.rerun_source(&source))
+        .await?
+        .map_err(edit_video_categories_error)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -202,7 +209,7 @@ pub async fn mark_playlist_watched(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::CategoryId;
+    use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryName};
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
@@ -229,7 +236,7 @@ mod tests {
     use crate::domain::video::VideoDownloaded;
     use crate::domain::video::VideoId;
     use crate::domain::video_category::{
-        Verdict, VerdictAuthor, VideoCategories, VideoCategoryVerdict,
+        Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
     use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
@@ -239,7 +246,9 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
-    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
+    use crate::infrastructure::repositories::sqlite_category_repository::{
+        CategoryRepository, SqliteCategoryRepository,
+    };
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -4030,6 +4039,81 @@ mod tests {
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
+    #[tokio::test]
+    async fn it_should_clear_a_playlists_ai_verdicts_keeping_user_ones() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1", "playlists/pl1"))
+            .unwrap();
+        let [ai_only, with_user] = [("vid1", 0), ("vid2", 1)].map(|(youtube_id, position)| {
+            save_playlist_video(
+                &video_repository,
+                &playlist_video_repository,
+                "PL1",
+                youtube_id,
+                position,
+            )
+            .0
+        });
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        let [funny, politics] = ["Funny", "Politics"].map(named_category);
+        [&funny, &politics]
+            .into_iter()
+            .for_each(|category| category_repository.insert(category).unwrap());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let user_no = user_verdict(&with_user, &funny, Verdict::No);
+        [
+            ai_verdict(&ai_only, &politics, Verdict::Yes),
+            ai_verdict(&with_user, &politics, Verdict::Unavailable),
+            user_no.clone(),
+        ]
+        .iter()
+        .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                ai_only.id.clone(),
+                vec![politics.id.clone()],
+            )])
+            .unwrap();
+        let ids = [ai_only.id.clone(), with_user.id.clone()];
+
+        let response = delete_playlist_ai_verdicts(
+            State(video_category_editor(db.database())),
+            Path("PL1".to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(verdict_repository.find_many(&ids).unwrap(), vec![user_no]);
+        assert_eq!(
+            video_categories_repository.find_many(&ids).unwrap(),
+            vec![
+                VideoCategories::none(ai_only.id.clone()),
+                VideoCategories::none(with_user.id.clone()),
+            ]
+        );
+        assert_eq!(
+            SqliteEventRepository::new(db.database())
+                .list_eligible()
+                .unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged {
+                    video_ids: vec![ai_only.id.as_str().to_string()],
+                })
+            )]
+        );
+        assert_eq!(
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+                .list_non_completed()
+                .unwrap(),
+            vec![pending_task(1, &reconcile_task("PL1"), fixed_timestamp())]
+        );
+    }
+
     fn any_playlist_creator() -> PlaylistCreator {
         PlaylistCreator::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
@@ -4838,5 +4922,57 @@ mod tests {
             video_category_assigner(database),
             Arc::new(FixedClock(fixed_timestamp())),
         ))
+    }
+
+    fn video_category_editor(database: Database) -> VideoCategoryEditor {
+        let clock = Arc::new(FixedClock(fixed_timestamp()));
+        VideoCategoryEditor::new(
+            Arc::new(SqliteVideoRepository::new(database.clone())),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+                Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+                Arc::new(SqliteChannelRepository::new(database.clone())),
+                Arc::new(SqlitePlaylistRepository::new(database.clone())),
+                "/videos",
+            )),
+            Arc::new(SqliteCategoryRepository::new(database.clone())),
+            Arc::new(SqliteChannelRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistRepository::new(database.clone())),
+            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
+            video_category_assigner(database.clone()),
+            Arc::new(SqliteTaskRepository::new(database, clock.clone())),
+            clock,
+        )
+    }
+
+    fn named_category(name: &str) -> Category {
+        Category::create(
+            CategoryName::new(name).unwrap(),
+            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            fixed_timestamp(),
+        )
+    }
+
+    fn ai_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            video_id: video.id.clone(),
+            category_id: category.id.clone(),
+            verdict,
+            decided_by: VerdictAuthor::Ai,
+            model: Some("qwen3:4b".to_string()),
+            reason: Some("A reason.".to_string()),
+            decided_at: fixed_timestamp(),
+        }
+    }
+
+    fn user_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            decided_by: VerdictAuthor::User,
+            model: None,
+            reason: None,
+            ..ai_verdict(video, category, verdict)
+        }
     }
 }

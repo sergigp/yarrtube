@@ -21,7 +21,7 @@
 - [x] 2.13 `it_should_return_not_found_when_rerunning_an_unknown_video`
 - [x] 2.14 `it_should_not_evaluate_a_pair_with_a_user_verdict`
 - [x] 2.15 `it_should_clear_a_channels_ai_verdicts_keeping_user_ones`: `rerun_source` + `ReconcileChannel`
-- [ ] 2.16 `it_should_clear_a_playlists_ai_verdicts_keeping_user_ones`
+- [x] 2.16 `it_should_clear_a_playlists_ai_verdicts_keeping_user_ones`
 - [ ] 2.17 `it_should_return_not_found_when_clearing_an_unknown_source`
 - [ ] 2.18 `it_should_rerun_a_categorys_ai_verdicts`: `rerun_category`
 - [ ] 2.19 `it_should_return_not_found_when_rerunning_an_unknown_category`
