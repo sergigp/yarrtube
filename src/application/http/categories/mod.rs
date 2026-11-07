@@ -40,7 +40,7 @@ pub async fn create_category(
             .map(CategoryPrompt::new)
             .transpose()?
             .flatten(),
-        members: Vec::new(),
+        members: members_from(request.channels, request.playlists)?,
     };
 
     match run_blocking(move || category_creator.create(category)).await? {
@@ -286,6 +286,46 @@ mod tests {
             stored,
             vec![Category {
                 ai_prompt: CategoryPrompt::new("Chess games").unwrap(),
+                ..category(id, "Chess")
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_a_category_with_members() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@Hikaru"))
+            .unwrap();
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PLendgames"))
+            .unwrap();
+        let category_creator = category_creator(&db, repository.clone());
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                channels: vec!["@Hikaru".to_string(), "@Hikaru".to_string()],
+                playlists: vec!["PLendgames".to_string()],
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        let stored = repository.list().unwrap();
+        let id = stored.first().map(|category| category.id.clone());
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                category_response(id.as_ref(), "Chess", &["@Hikaru"], &["PLendgames"])
+            ))
+        );
+        assert_eq!(
+            stored,
+            vec![Category {
+                members: vec![channel_member("@Hikaru"), playlist_member("PLendgames")],
                 ..category(id, "Chess")
             }]
         );

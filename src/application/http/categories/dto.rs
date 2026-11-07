@@ -1,4 +1,4 @@
-use crate::domain::category::{Category, CategoryView, CategoryViews};
+use crate::domain::category::{Category, CategoryMember, CategoryView, CategoryViews};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -11,10 +11,8 @@ pub struct CreateCategoryRequest {
     #[serde(default)]
     pub ai_prompt: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
     pub channels: Vec<String>,
     #[serde(default)]
-    #[allow(dead_code)]
     pub playlists: Vec<String>,
 }
 
@@ -57,8 +55,22 @@ impl From<Category> for CategoryResponse {
                 .ai_prompt
                 .as_ref()
                 .map(|prompt| prompt.as_str().to_string()),
-            channels: Vec::new(),
-            playlists: Vec::new(),
+            channels: category
+                .members
+                .iter()
+                .filter_map(|member| match member {
+                    CategoryMember::Channel(handle) => Some(handle.as_str().to_string()),
+                    CategoryMember::Playlist(_) => None,
+                })
+                .collect(),
+            playlists: category
+                .members
+                .iter()
+                .filter_map(|member| match member {
+                    CategoryMember::Channel(_) => None,
+                    CategoryMember::Playlist(id) => Some(id.as_str().to_string()),
+                })
+                .collect(),
         }
     }
 }
