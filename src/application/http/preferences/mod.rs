@@ -267,6 +267,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_the_categorization_generation_defaults_if_nothing_saved() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_searcher = PreferencesSearcher::new(repository);
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response.map(|preferences| (
+                preferences.categorization_context_length,
+                preferences.categorization_temperature,
+                preferences.categorization_thinking
+            )),
+            Ok((4096, 0.0, true))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_save_the_categorization_settings() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));

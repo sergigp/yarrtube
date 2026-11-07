@@ -14,8 +14,9 @@ impl Temperature {
         }
     }
 
+    /// What `evals/categories` runs with.
     pub fn categorization_default() -> Self {
-        Self::default()
+        Self(0.0)
     }
 
     pub fn value(&self) -> f64 {

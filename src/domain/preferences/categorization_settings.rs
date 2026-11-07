@@ -13,13 +13,14 @@ pub struct CategorizationSettings {
 }
 
 impl Default for CategorizationSettings {
+    /// Off, with the settings `evals/categories` runs with.
     fn default() -> Self {
         Self {
             enabled: false,
             model: CategorizationModel::default(),
             context_length: ContextLength::categorization_default(),
             temperature: Temperature::categorization_default(),
-            thinking: false,
+            thinking: true,
             prompt: None,
         }
     }
