@@ -128,9 +128,16 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
 
     fn delete_ai_for_videos(
         &self,
-        _video_ids: &[VideoRecordId],
+        video_ids: &[VideoRecordId],
     ) -> anyhow::Result<Vec<VideoRecordId>> {
-        Ok(Vec::new())
+        let placeholders = vec!["?"; video_ids.len()].join(", ");
+        let values: Vec<&str> = std::iter::once(VerdictAuthor::Ai.as_str())
+            .chain(video_ids.iter().map(VideoRecordId::as_str))
+            .collect();
+        self.delete_returning_videos(
+            &format!("decided_by = ?1 AND video_id IN ({placeholders})"),
+            &values,
+        )
     }
 
     fn delete_ai_for_category(
@@ -158,6 +165,46 @@ impl SqliteVideoCategoryVerdictRepository {
         })
         .context("failed to delete video category verdicts")?;
         Ok(())
+    }
+
+    /// Deletes the verdicts matching `predicate`, with `values` as `?1`, `?2`…,
+    /// returning their videos, each once, in id order.
+    fn delete_returning_videos(
+        &self,
+        predicate: &str,
+        values: &[&str],
+    ) -> anyhow::Result<Vec<VideoRecordId>> {
+        let conn = self.db.write()?;
+        let tx = conn
+            .unchecked_transaction()
+            .context("failed to start deleting video category verdicts")?;
+        let video_ids = tx
+            .prepare(&format!(
+                "SELECT DISTINCT video_id FROM video_category_verdicts WHERE {predicate}
+                 ORDER BY video_id"
+            ))
+            .and_then(|mut stmt| {
+                stmt.query_map(params_from_iter(values), |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .inspect_err(|e| {
+                tracing::error!(predicate, ?values, error = %e, "failed to find video category verdicts to delete")
+            })
+            .context("failed to find video category verdicts to delete")?;
+        tx.execute(
+            &format!("DELETE FROM video_category_verdicts WHERE {predicate}"),
+            params_from_iter(values),
+        )
+        .inspect_err(|e| {
+            tracing::error!(predicate, ?values, error = %e, "failed to delete video category verdicts")
+        })
+        .context("failed to delete video category verdicts")?;
+        tx.commit()
+            .context("failed to commit deleting video category verdicts")?;
+        video_ids
+            .into_iter()
+            .map(|id| Ok(VideoRecordId::new(id)?))
+            .collect()
     }
 
     fn read_row(row: &Row<'_>) -> rusqlite::Result<VerdictRow> {

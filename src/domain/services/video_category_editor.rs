@@ -2,6 +2,7 @@ use crate::domain::category::{Category, CategoryId, CategoryMember};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
+use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
 use crate::domain::video_category::{EditVideoCategoriesError, VideoCategoryVerdict};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
@@ -103,8 +104,12 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
         Ok(())
     }
 
-    fn rerun_video(&self, _video_id: &VideoRecordId) -> Result<(), EditVideoCategoriesError> {
-        Ok(())
+    fn rerun_video(&self, video_id: &VideoRecordId) -> Result<(), EditVideoCategoriesError> {
+        self.find_source(video_id)?;
+        self.clear_ai_verdicts(std::slice::from_ref(video_id))?;
+        self.schedule(&Task::SyncVideo {
+            video_id: video_id.as_str().to_string(),
+        })
     }
 
     fn rerun_source(&self, _source: &CategoryMember) -> Result<(), EditVideoCategoriesError> {
@@ -132,6 +137,28 @@ impl VideoCategoryEditor {
             .map_err(EditVideoCategoriesError::Repository)?
             .map(|owner| owner.source)
             .ok_or(EditVideoCategoriesError::VideoNotFound)
+    }
+
+    /// Deletes the AI verdicts of `video_ids` and recomputes the categories
+    /// of those that had one.
+    fn clear_ai_verdicts(
+        &self,
+        video_ids: &[VideoRecordId],
+    ) -> Result<(), EditVideoCategoriesError> {
+        let affected = self
+            .video_category_verdict_repository
+            .delete_ai_for_videos(video_ids)
+            .map_err(EditVideoCategoriesError::Repository)?;
+        self.video_category_assigner
+            .recompute(&affected)
+            .map_err(EditVideoCategoriesError::Repository)
+    }
+
+    /// Schedules `task` to run now.
+    fn schedule(&self, task: &Task) -> Result<(), EditVideoCategoriesError> {
+        self.task_repository
+            .schedule(task, self.clock.now())
+            .map_err(EditVideoCategoriesError::Repository)
     }
 
     /// A category holding the video's `source` is changed through the

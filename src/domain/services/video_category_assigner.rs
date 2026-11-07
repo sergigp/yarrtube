@@ -163,8 +163,15 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         self.forget_if_removed(&verdict.video_id)
     }
 
-    fn recompute(&self, _video_ids: &[VideoRecordId]) -> anyhow::Result<()> {
-        Ok(())
+    fn recompute(&self, video_ids: &[VideoRecordId]) -> anyhow::Result<()> {
+        let _guard = self.lock();
+        let categories = self.category_repository.list()?;
+        let desired = video_ids
+            .iter()
+            .map(|video_id| self.desired_for_record(video_id, &categories))
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .concat();
+        self.save_and_announce(desired)
     }
 }
 
@@ -287,6 +294,33 @@ impl VideoCategoryAssigner {
             &Self::source_category_ids(source, categories),
         )?;
         self.save_and_announce(desired)
+    }
+
+    /// `video_id` with its source's categories in `categories` plus its yes
+    /// verdicts; nothing when no source holds it.
+    fn desired_for_record(
+        &self,
+        video_id: &VideoRecordId,
+        categories: &[Category],
+    ) -> anyhow::Result<Vec<VideoCategories>> {
+        match self.source_of(video_id)? {
+            Some(source) => self.with_yes_verdicts(
+                vec![video_id.clone()],
+                &Self::source_category_ids(&source, categories),
+            ),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// The channel holding `video_id`, else the playlist holding it.
+    fn source_of(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<CategoryMember>> {
+        if let Some(channel_video) = self.channel_video_repository.find_by_video(video_id)? {
+            return Ok(Some(CategoryMember::Channel(channel_video.channel_id)));
+        }
+        Ok(self
+            .playlist_video_repository
+            .find_by_video(video_id)?
+            .map(|playlist_video| CategoryMember::Playlist(playlist_video.playlist_id)))
     }
 
     /// Every record of `source`, each with the source's categories in
