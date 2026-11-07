@@ -101,7 +101,7 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
     }
 
     fn delete_unavailable(&self) -> anyhow::Result<()> {
-        Ok(())
+        self.delete_where("verdict = ?1", Verdict::Unavailable.as_str())
     }
 
     fn delete_unavailable_for_category(&self, _category_id: &CategoryId) -> anyhow::Result<()> {
@@ -241,6 +241,33 @@ mod tests {
                 .find_many(&[video_id("rec1"), video_id("rec2")])
                 .unwrap(),
             vec![kept]
+        );
+    }
+
+    #[test]
+    fn it_should_delete_only_unavailable_verdicts() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = [
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            ai_verdict("rec1", "funny", Verdict::No),
+        ];
+        [
+            ai_verdict("rec1", "tech", Verdict::Unavailable),
+            ai_verdict("rec2", "chess", Verdict::Unavailable),
+        ]
+        .iter()
+        .chain(&kept)
+        .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let result = repository.delete_unavailable();
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            repository
+                .find_many(&[video_id("rec1"), video_id("rec2")])
+                .unwrap(),
+            kept.to_vec()
         );
     }
 

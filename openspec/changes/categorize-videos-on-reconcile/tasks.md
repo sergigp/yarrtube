@@ -49,7 +49,7 @@
 - [x] 3.2 `it_should_replace_a_pairs_verdict`
 - [x] 3.3 `it_should_delete_a_videos_verdicts`
 - [x] 3.4 `it_should_delete_a_categorys_verdicts`
-- [ ] 3.5 `it_should_delete_only_unavailable_verdicts`
+- [x] 3.5 `it_should_delete_only_unavailable_verdicts`
 - [ ] 3.6 `it_should_delete_the_unavailable_verdicts_of_one_category`
 
 `OllamaLlmServerRepository`
