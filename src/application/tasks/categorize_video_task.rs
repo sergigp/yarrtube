@@ -91,6 +91,7 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     const YES: &str = r#"{"reason": "A Sicilian game.", "belongs": true}"#;
+    const NO: &str = r#"{"reason": "A chess game.", "belongs": false}"#;
 
     #[test]
     fn it_should_store_a_yes_verdict_and_add_the_category_to_the_video() {
@@ -135,6 +136,35 @@ mod tests {
                 })
             )]
         );
+    }
+
+    #[test]
+    fn it_should_store_a_no_verdict_without_changing_the_video_categories() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = summarized_video();
+        let tech = prompted_category("Tech");
+        seed(&db, &video, &[&tech]);
+        let task = categorize_video_task(&db, llm_replying(vec![reply(NO)]));
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(&video, &tech, Verdict::No, "A chess game.")]
+        );
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
     /// The task over `db`, asking `llm`.
