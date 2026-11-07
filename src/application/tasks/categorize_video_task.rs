@@ -376,6 +376,32 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_fail_after_trying_every_category_when_a_call_is_rejected() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        seed(&db, &video, &[&sicilian, &tech]);
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![reply("It might belong."), reply(NO)]),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Err("the model couldn't answer for Sicilian (its answer isn't usable)".to_string())
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(&video, &tech, Verdict::No, "A chess game.")]
+        );
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,

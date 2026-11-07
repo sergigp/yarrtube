@@ -15,7 +15,7 @@ use crate::infrastructure::repositories::sqlite_preferences_repository::Preferen
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::shared::system_clock::Clock;
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use std::sync::Arc;
 use tracing::info;
 
@@ -30,6 +30,20 @@ enum Skip {
 impl From<anyhow::Error> for Skip {
     fn from(error: anyhow::Error) -> Self {
         Self::Failed(error)
+    }
+}
+
+/// Why a call gave no verdict.
+enum Failure {
+    /// The model didn't answer usably: retrying may.
+    Rejected(String),
+    /// Something else failed: the categorization stops.
+    Error(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Failure {
+    fn from(error: anyhow::Error) -> Self {
+        Self::Error(error)
     }
 }
 
@@ -115,9 +129,16 @@ impl VideoCategorizerApi for VideoCategorizer {
             }
             Err(Skip::Failed(error)) => return Err(error),
         };
-        job.pending
+        let rejected = job
+            .pending
             .iter()
-            .try_for_each(|category| self.evaluate(video, &job, category))
+            .filter_map(|category| match self.evaluate(video, &job, category) {
+                Ok(()) => None,
+                Err(Failure::Rejected(reason)) => Some(Ok((category, reason))),
+                Err(Failure::Error(error)) => Some(Err(error)),
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        Self::fail_if_rejected(&rejected)
     }
 }
 
@@ -169,14 +190,14 @@ impl VideoCategorizer {
         video: &Video,
         job: &CategorizationJob,
         category: &Category,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Failure> {
         let question =
             CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, category);
         let reply = self
             .llm_server_repository
             .chat(&job.url, &question.chat(&job.settings, job.thinking))?;
-        let answer =
-            CategorizationAnswer::parse(&reply.content).context("the answer isn't usable")?;
+        let answer = CategorizationAnswer::parse(&reply.content)
+            .ok_or_else(|| Failure::Rejected("its answer isn't usable".to_string()))?;
         let verdict = VideoCategoryVerdict::answered(
             video.id.clone(),
             category.id.clone(),
@@ -187,5 +208,18 @@ impl VideoCategorizer {
         self.video_category_assigner
             .apply_verdict(&verdict, &job.owner.source)?;
         Ok(())
+    }
+
+    /// An error naming each of `rejected`, with why; `Ok` when none was.
+    fn fail_if_rejected(rejected: &[(&Category, String)]) -> anyhow::Result<()> {
+        if rejected.is_empty() {
+            return Ok(());
+        }
+        let causes = rejected
+            .iter()
+            .map(|(category, reason)| format!("{} ({reason})", category.name.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(anyhow!("the model couldn't answer for {causes}"))
     }
 }
