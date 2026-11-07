@@ -244,6 +244,28 @@ describe('CategoryDialog', () => {
     expect(bodies(fetchMock, 'POST')).toEqual([])
   })
 
+  it('prefills the name and color, and saves them in one update without the members', async () => {
+    const violetChess = { ...chess, color: '#8b5cf6' }
+    const { fetchMock, onOpenChange } = renderDialog(violetChess, {
+      'PATCH /api/categories/chess': { status: 204 },
+    })
+    const user = userEvent.setup()
+    const name = screen.getByRole('textbox', { name: 'Name' })
+
+    expect(name).toHaveValue('Chess')
+    expect(name).toHaveFocus()
+    expect(screen.getByRole('radio', { name: 'Violet' })).toBeChecked()
+    await user.clear(name)
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await user.type(name, 'Board games')
+    await user.click(screen.getByRole('radio', { name: 'Teal' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bodies(fetchMock, 'PATCH')).toEqual([{ name: 'Board games', color: '#14b8a6' }])
+    expect(bodies(fetchMock, 'PUT')).toEqual([])
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 

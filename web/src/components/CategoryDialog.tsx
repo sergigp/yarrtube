@@ -105,8 +105,8 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
     { name, color: chosenColor ?? base.color, prompt },
     { withPrompt },
   )
-  const promptChanged = details.ai_prompt !== undefined
-  const dirty = sourcesChanged || Object.keys(details).length > 0
+  const detailsChanged = Object.keys(details).length > 0
+  const dirty = sourcesChanged || detailsChanged
   const categoryName = category?.name ?? 'this category'
   const canSave = name.trim() !== '' && (!category || dirty) && !saving
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
@@ -148,11 +148,15 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
     setError(null)
     let promptStored = promptSaved
     try {
-      if (promptChanged) {
-        await updateCategory(category.id, { ai_prompt: prompt.trim() })
+      if (detailsChanged) {
+        await updateCategory(category.id, details)
         promptStored = true
         setPromptSaved(true)
-        setBase({ ...base, prompt: prompt.trim() })
+        setBase({
+          name: name.trim(),
+          color: chosenColor ?? base.color,
+          prompt: withPrompt ? prompt.trim() : base.prompt,
+        })
       }
       if (sourcesChanged) {
         await setCategoryMembers(category.id, staged)
@@ -304,7 +308,7 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
         description={
           !category
             ? "This category won't be created."
-            : promptSaved && !promptChanged
+            : promptSaved && !detailsChanged
             ? `The AI prompt is already saved. Your changes to the sources in ${categoryName} won't be saved.`
             : `Your changes to ${categoryName} won't be saved.`
         }
