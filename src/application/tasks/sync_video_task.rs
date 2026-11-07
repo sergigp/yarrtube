@@ -2773,6 +2773,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_schedule_a_categorization_without_a_generated_summary() {
+        let videos = [
+            subtitled_video(),
+            subtitled_video().mark_summary_unavailable(fixed_timestamp()),
+        ];
+
+        let scheduled = videos.map(|video| {
+            let db = TestDatabase::new();
+            let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            let task_repository = Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ));
+            video_repository.save(&video).unwrap();
+            seed_channel_with_categorization(&db, &video, true);
+            SqliteCategoryRepository::new(db.database())
+                .insert(&prompted_category("Sicilian", &[]))
+                .unwrap();
+            preferences_repository.save(&categorization_on()).unwrap();
+            let task = sync_task_of_downloaded_video(
+                &db,
+                video_repository,
+                task_repository.clone(),
+                preferences_repository,
+            );
+
+            run(&task, &payload_for(&video)).unwrap();
+
+            task_repository.list_non_completed().unwrap()
+        });
+
+        assert_eq!(scheduled, [vec![], vec![]]);
+    }
+
     /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
     fn sync_task_of_downloaded_video(
         db: &TestDatabase,

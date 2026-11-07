@@ -377,7 +377,7 @@ impl Video {
 
     /// Summary Generated: a video is categorized from its summary.
     pub fn is_categorizable(&self) -> bool {
-        false
+        self.summary_state == SummaryState::Generated
     }
 
     pub fn mark_summary_generated(self, now: DateTime<Utc>) -> Self {
