@@ -49,7 +49,7 @@ function AddCategoryForm({ onClose }: { onClose: () => void }) {
     setSubmitting(true)
     setError(null)
     try {
-      const category = await createCategory(name, color)
+      const category = await createCategory({ name, color })
       invalidateLibrary()
       onClose()
       const state: CategorySettingsState = { editSettings: true }

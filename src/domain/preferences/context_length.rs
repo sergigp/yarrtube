@@ -19,6 +19,10 @@ impl ContextLength {
         }
     }
 
+    pub fn categorization_default() -> Self {
+        Self::default()
+    }
+
     pub fn value(&self) -> u32 {
         self.0
     }

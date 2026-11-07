@@ -44,7 +44,7 @@ pub mod video_searcher;
 pub mod video_summarizer;
 pub mod video_watch_state_updater;
 
-pub use category_creator::{CategoryCreator, CategoryCreatorApi};
+pub use category_creator::{CategoryCreator, CategoryCreatorApi, NewCategory};
 pub use category_deleter::{CategoryDeleter, CategoryDeleterApi};
 pub use category_member_remover::{CategoryMemberRemover, CategoryMemberRemoverApi};
 pub use category_updater::{CategoryUpdate, CategoryUpdater, CategoryUpdaterApi};

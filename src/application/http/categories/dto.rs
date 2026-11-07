@@ -7,6 +7,15 @@ pub struct CreateCategoryRequest {
     pub name: Option<String>,
     #[serde(default)]
     pub color: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub ai_prompt: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub channels: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub playlists: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]

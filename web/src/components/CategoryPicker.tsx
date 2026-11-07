@@ -51,7 +51,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
       return
     }
     try {
-      const category = await createCategory(typed)
+      const category = await createCategory({ name: typed })
       await invalidateLibrary()
       onChange([...value, category.id])
       setText('')

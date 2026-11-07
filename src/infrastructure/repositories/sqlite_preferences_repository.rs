@@ -176,6 +176,9 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_model
                     .and_then(|model| CategorizationModel::new(model).ok())
                     .unwrap_or(defaults.categorization.model),
+                context_length: defaults.categorization.context_length,
+                temperature: defaults.categorization.temperature,
+                thinking: defaults.categorization.thinking,
                 prompt: stored
                     .categorization_prompt
                     .map(CategorizationPrompt::from_stored),
@@ -225,6 +228,7 @@ mod tests {
                 enabled: true,
                 model: CategorizationModel::new("gemma3:4b").unwrap(),
                 prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+                ..CategorizationSettings::default()
             },
             ..Preferences::default()
         };

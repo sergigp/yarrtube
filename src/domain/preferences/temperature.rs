@@ -14,6 +14,10 @@ impl Temperature {
         }
     }
 
+    pub fn categorization_default() -> Self {
+        Self::default()
+    }
+
     pub fn value(&self) -> f64 {
         self.0
     }

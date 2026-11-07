@@ -34,7 +34,7 @@ export function formFrom(preferences: Preferences): AiSettingsForm {
 
 /**
  * The fields of `form` that differ from `saved`, as a patch; without
- * `summaries_thinking` when the model can't think (`thinking: false`). A
+ * `summaries_thinking` when that model can't think (`summariesThinking: false`). A
  * number field that doesn't hold one (empty included) is `NaN`, for the
  * caller to refuse: JSON would send it as `null`, which the daemon reads as
  * unchanged.
@@ -42,7 +42,10 @@ export function formFrom(preferences: Preferences): AiSettingsForm {
 export function changedFields(
   saved: Preferences,
   form: AiSettingsForm,
-  { thinking }: { thinking: boolean } = { thinking: true },
+  { summariesThinking }: { summariesThinking: boolean; categorizationThinking: boolean } = {
+    summariesThinking: true,
+    categorizationThinking: true,
+  },
 ): PreferencesPatch {
   const current: PreferencesPatch = {
     ai_enabled: form.ai_enabled,
@@ -51,7 +54,7 @@ export function changedFields(
     summaries_model: form.summaries_model,
     summaries_context_length: toNumber(form.summaries_context_length),
     summaries_temperature: toNumber(form.summaries_temperature),
-    summaries_thinking: thinking ? form.summaries_thinking : saved.summaries_thinking,
+    summaries_thinking: summariesThinking ? form.summaries_thinking : saved.summaries_thinking,
     summaries_prompt: form.summaries_prompt,
     categorization_enabled: form.categorization_enabled,
     categorization_model: form.categorization_model,

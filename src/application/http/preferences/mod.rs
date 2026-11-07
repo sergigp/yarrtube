@@ -65,6 +65,9 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
             .categorization_model
             .map(CategorizationModel::new)
             .transpose()?,
+        categorization_context_length: None,
+        categorization_temperature: None,
+        categorization_thinking: None,
         categorization_prompt: request
             .categorization_prompt
             .map(|prompt| prompt.map(CategorizationPrompt::new).transpose())
@@ -274,6 +277,7 @@ mod tests {
                     enabled: true,
                     model: CategorizationModel::new("gemma3:4b").unwrap(),
                     prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+                    ..CategorizationSettings::default()
                 },
                 ..Preferences::default()
             })

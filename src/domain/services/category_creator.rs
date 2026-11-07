@@ -1,18 +1,53 @@
-use crate::domain::category::{Category, CategoryColor, CategoryName, CreateCategoryError};
+use crate::domain::category::{
+    Category, CategoryColor, CategoryMember, CategoryName, CategoryPrompt, CreateCategoryError,
+};
+use crate::domain::services::VideoCategoryAssigner;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
+use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
+use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
+
+/// A category to create.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewCategory {
+    pub name: CategoryName,
+    /// `None` takes the least used palette color.
+    pub color: Option<CategoryColor>,
+    #[allow(dead_code)]
+    pub ai_prompt: Option<CategoryPrompt>,
+    #[allow(dead_code)]
+    pub members: Vec<CategoryMember>,
+}
 
 /// Creates categories, each with a name no other category has.
 #[derive(Clone)]
 pub struct CategoryCreator {
     repository: Arc<dyn CategoryRepository>,
+    #[allow(dead_code)]
+    channel_repository: Arc<dyn ChannelRepository>,
+    #[allow(dead_code)]
+    playlist_repository: Arc<dyn PlaylistRepository>,
+    #[allow(dead_code)]
+    video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
 }
 
 impl CategoryCreator {
-    pub fn new(repository: Arc<dyn CategoryRepository>, clock: Arc<dyn Clock>) -> Self {
-        Self { repository, clock }
+    pub fn new(
+        repository: Arc<dyn CategoryRepository>,
+        channel_repository: Arc<dyn ChannelRepository>,
+        playlist_repository: Arc<dyn PlaylistRepository>,
+        video_category_assigner: VideoCategoryAssigner,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            repository,
+            channel_repository,
+            playlist_repository,
+            video_category_assigner,
+            clock,
+        }
     }
 }
 
@@ -20,23 +55,17 @@ pub trait CategoryCreatorApi: Send + Sync {
     /// Creates a category with no members, colored `color` or, without one,
     /// the least used palette color. Another category with the same name
     /// ignoring case → `NameTaken`.
-    fn create(
-        &self,
-        name: CategoryName,
-        color: Option<CategoryColor>,
-    ) -> Result<Category, CreateCategoryError>;
+    fn create(&self, category: NewCategory) -> Result<Category, CreateCategoryError>;
 }
 
 impl CategoryCreatorApi for CategoryCreator {
-    fn create(
-        &self,
-        name: CategoryName,
-        color: Option<CategoryColor>,
-    ) -> Result<Category, CreateCategoryError> {
+    fn create(&self, category: NewCategory) -> Result<Category, CreateCategoryError> {
         let existing = self.list_categories()?;
-        Self::ensure_name_free(&existing, &name)?;
-        let color = color.unwrap_or_else(|| Self::least_used_color(&existing));
-        let category = Category::create(name, color, self.clock.now());
+        Self::ensure_name_free(&existing, &category.name)?;
+        let color = category
+            .color
+            .unwrap_or_else(|| Self::least_used_color(&existing));
+        let category = Category::create(category.name, color, self.clock.now());
         self.repository
             .insert(&category)
             .map_err(CreateCategoryError::Repository)?;

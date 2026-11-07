@@ -84,6 +84,15 @@ impl Preferences {
             model: change
                 .categorization_model
                 .unwrap_or(self.categorization.model),
+            context_length: change
+                .categorization_context_length
+                .unwrap_or(self.categorization.context_length),
+            temperature: change
+                .categorization_temperature
+                .unwrap_or(self.categorization.temperature),
+            thinking: change
+                .categorization_thinking
+                .unwrap_or(self.categorization.thinking),
             prompt: change
                 .categorization_prompt
                 .unwrap_or(self.categorization.prompt),

@@ -38,6 +38,15 @@ pub struct UpdatePreferencesRequest {
     pub categorization_enabled: Option<bool>,
     #[serde(default)]
     pub categorization_model: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub categorization_context_length: Option<i64>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub categorization_temperature: Option<f64>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub categorization_thinking: Option<bool>,
     /// Left out keeps the prompt, `null` goes back to the shipped one.
     #[serde(default, deserialize_with = "present")]
     pub categorization_prompt: Option<Option<String>>,
@@ -62,6 +71,9 @@ pub struct PreferencesResponse {
     pub summaries_prompt_is_default: bool,
     pub categorization_enabled: bool,
     pub categorization_model: String,
+    pub categorization_context_length: u32,
+    pub categorization_temperature: f64,
+    pub categorization_thinking: bool,
     pub categorization_prompt: String,
     pub categorization_prompt_is_default: bool,
 }
@@ -88,6 +100,9 @@ impl From<Preferences> for PreferencesResponse {
             summaries_prompt_is_default: summaries.prompt.is_none(),
             categorization_enabled: categorization.enabled,
             categorization_model: categorization.model.as_str().to_string(),
+            categorization_context_length: categorization.context_length.value(),
+            categorization_temperature: categorization.temperature.value(),
+            categorization_thinking: categorization.thinking,
             categorization_prompt: categorization.effective_prompt().as_str().to_string(),
             categorization_prompt_is_default: categorization.prompt.is_none(),
         }

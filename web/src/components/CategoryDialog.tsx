@@ -28,18 +28,19 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 
-interface CategorySettingsDialogProps {
-  category: Category
+interface CategoryDialogProps {
+  /** Absent when creating. */
+  category?: Category
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
 /** A category's AI prompt and every tracked source as a chip, pressed when in it. */
-export function CategorySettingsDialog({ category, open, onOpenChange }: CategorySettingsDialogProps) {
+export function CategoryDialog({ category, open, onOpenChange }: CategoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Mounted only while open, so every open starts from the saved sources. */}
-      {open && <CategorySettingsContent category={category} onClose={() => onOpenChange(false)} />}
+      {open && category && <CategoryDialogContent category={category} onClose={() => onOpenChange(false)} />}
     </Dialog>
   )
 }
@@ -49,7 +50,7 @@ export function CategorySettingsDialog({ category, open, onOpenChange }: Categor
  * Save sends what changed, making the category's sources exactly the pressed
  * chips in one request. Closing with staged changes asks to discard them first.
  */
-function CategorySettingsContent({ category, onClose }: { category: Category; onClose: () => void }) {
+function CategoryDialogContent({ category, onClose }: { category: Category; onClose: () => void }) {
   const { data: channels } = useChannels()
   const { data: playlists } = usePlaylists()
   const invalidateLibrary = useInvalidateLibrary()

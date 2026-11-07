@@ -538,6 +538,9 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         llm_server_searcher: LlmServerSearcher::new(infrastructure.llm_server_repository.clone()),
         category_creator: CategoryCreator::new(
             infrastructure.category_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.playlist_repository.clone(),
+            video_category_assigner(infrastructure),
             infrastructure.clock.clone(),
         ),
         category_updater: CategoryUpdater::new(

@@ -13,7 +13,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdate,
     CategoryUpdater, CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi,
-    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    NewCategory, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -32,10 +32,17 @@ pub async fn create_category(
 ) -> Result<(StatusCode, Json<CategoryResponse>), ApiError> {
     let name = CategoryName::new(required(request.name, MISSING_CATEGORY_NAME)?)?;
     let color = request.color.map(CategoryColor::new).transpose()?;
+    let category = NewCategory {
+        name,
+        color,
+        ai_prompt: None,
+        members: Vec::new(),
+    };
 
-    match run_blocking(move || category_creator.create(name, color)).await? {
+    match run_blocking(move || category_creator.create(category)).await? {
         Ok(category) => Ok((StatusCode::CREATED, Json(CategoryResponse::from(category)))),
         Err(e @ CreateCategoryError::NameTaken(_)) => Err(ApiError::new(StatusCode::CONFLICT, e)),
+        Err(e @ CreateCategoryError::MemberNotTracked(_)) => Err(ApiError::bad_request(e)),
         Err(e @ CreateCategoryError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -95,7 +102,7 @@ pub async fn set_category_members(
     Json(request): Json<SetCategoryMembersRequest>,
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
-    let members = members_from(request)?;
+    let members = members_from(request.channels, request.playlists)?;
 
     run_blocking(move || category_updater.set_members(&id, members))
         .await?
@@ -118,13 +125,14 @@ pub async fn mark_category_watched(
 }
 
 /// The requested channels, then the requested playlists, as members.
-fn members_from(request: SetCategoryMembersRequest) -> Result<Vec<CategoryMember>, ApiError> {
-    let channels = request
-        .channels
+fn members_from(
+    channels: Vec<String>,
+    playlists: Vec<String>,
+) -> Result<Vec<CategoryMember>, ApiError> {
+    let channels = channels
         .into_iter()
         .map(|handle| ChannelHandle::new(handle).map(CategoryMember::Channel));
-    let playlists = request
-        .playlists
+    let playlists = playlists
         .into_iter()
         .map(|id| PlaylistId::new(id).map(CategoryMember::Playlist));
     Ok(channels.chain(playlists).collect::<Result<_, _>>()?)
@@ -191,8 +199,7 @@ mod tests {
     async fn it_should_create_a_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
-        let category_creator =
-            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+        let category_creator = category_creator(&db, repository.clone());
 
         let response = create(category_creator, create_request("  Chess  ")).await;
 
@@ -212,8 +219,7 @@ mod tests {
     async fn it_should_create_a_category_with_a_color() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
-        let category_creator =
-            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+        let category_creator = category_creator(&db, repository.clone());
 
         let response = create(
             category_creator,
@@ -249,8 +255,7 @@ mod tests {
     async fn it_should_create_the_first_category_with_the_first_palette_color() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
-        let category_creator =
-            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+        let category_creator = category_creator(&db, repository.clone());
 
         let response = create(category_creator, create_request("Chess")).await;
 
@@ -294,8 +299,7 @@ mod tests {
                 };
                 repository.insert(&existing).unwrap();
             });
-            let category_creator =
-                CategoryCreator::new(repository, Arc::new(FixedClock(fixed_timestamp())));
+            let category_creator = category_creator(&db, repository);
 
             let response = create(category_creator, create_request("Chess")).await;
 
@@ -335,7 +339,7 @@ mod tests {
             any_category_creator(),
             CreateCategoryRequest {
                 name: None,
-                color: None,
+                ..create_request("")
             },
         )
         .await;
@@ -364,8 +368,7 @@ mod tests {
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
         let chess = category(None, "Chess");
         repository.insert(&chess).unwrap();
-        let category_creator =
-            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+        let category_creator = category_creator(&db, repository.clone());
 
         let response = create(category_creator, create_request("chess")).await;
 
@@ -2207,6 +2210,22 @@ mod tests {
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            video_category_assigner(unused_connection()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    fn category_creator(
+        db: &TestDatabase,
+        repository: Arc<SqliteCategoryRepository>,
+    ) -> CategoryCreator {
+        CategoryCreator::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
             Arc::new(FixedClock(fixed_timestamp())),
         )
     }
@@ -2235,6 +2254,9 @@ mod tests {
         CreateCategoryRequest {
             name: Some(name.to_string()),
             color: None,
+            ai_prompt: None,
+            channels: Vec::new(),
+            playlists: Vec::new(),
         }
     }
 

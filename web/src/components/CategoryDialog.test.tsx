@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Category } from '@/api/types'
 import { queryKeys } from '@/api/queries'
-import { CategorySettingsDialog } from './CategorySettingsDialog'
+import { CategoryDialog } from './CategoryDialog'
 import {
   aCategory,
   aChannel,
@@ -23,11 +23,11 @@ function renderDialog(category: Category, routes: Routes) {
   })
   const onOpenChange = vi.fn()
   const { rerender, queryClient } = renderWithProviders(
-    <CategorySettingsDialog category={category} open onOpenChange={onOpenChange} />,
+    <CategoryDialog category={category} open onOpenChange={onOpenChange} />,
   )
   /** Delivers `refetched` to the open dialog, as a library refetch does. */
   const refetch = (refetched: Category) =>
-    rerender(<CategorySettingsDialog category={refetched} open onOpenChange={onOpenChange} />)
+    rerender(<CategoryDialog category={refetched} open onOpenChange={onOpenChange} />)
   return { fetchMock, onOpenChange, refetch, queryClient }
 }
 
@@ -66,7 +66,7 @@ const library = {
   'GET /api/playlists': [aPlaylist({ id: 'PLend', name: 'Endgame course' })],
 }
 
-describe('CategorySettingsDialog', () => {
+describe('CategoryDialog', () => {
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 

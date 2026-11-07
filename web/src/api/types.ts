@@ -250,6 +250,13 @@ export interface CategoryMembers {
   playlists: string[]
 }
 
+/** Body of `POST /api/categories`. */
+export interface NewCategory extends CategoryMembers {
+  name: string
+  color: string
+  ai_prompt?: string
+}
+
 /** Response of `POST /api/categories`. */
 export interface CreatedCategory {
   id: string
@@ -280,6 +287,9 @@ export interface Preferences {
   summaries_prompt_is_default: boolean
   categorization_enabled: boolean
   categorization_model: string
+  categorization_context_length: number
+  categorization_temperature: number
+  categorization_thinking: boolean
   /** The saved prompt, or the shipped one when none is saved. */
   categorization_prompt: string
   categorization_prompt_is_default: boolean

@@ -67,7 +67,10 @@ function AiSettings({ saved }: { saved: Preferences }) {
   // Known only when the server lists the model; unknown, the switch shows.
   const cannotThink =
     server?.models.find((model) => model.name === form.summaries_model)?.thinking === false
-  const patch = changedFields(saved, form, { thinking: !cannotThink })
+  const patch = changedFields(saved, form, {
+    summariesThinking: !cannotThink,
+    categorizationThinking: true,
+  })
   const testConnection = async () => {
     const url = form.ollama_url.trim()
     setConnection({ ...NO_CHECK, checking: true })

@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { CategoryColorPicker } from './CategoryColorPicker'
 import { CategoryPlayer } from './CategoryPlayer'
 import { DetailHeader } from './DetailHeader'
-import { CategorySettingsDialog } from './CategorySettingsDialog'
+import { CategoryDialog } from './CategoryDialog'
 import { VideoGrid } from './VideoGrid'
 import { VideoGridSkeleton } from './VideoSkeletons'
 
@@ -230,7 +230,7 @@ export function CategoryDetail() {
           />
         )
       )}
-      <CategorySettingsDialog category={category} open={editingSettings} onOpenChange={setEditingSettings} />
+      <CategoryDialog category={category} open={editingSettings} onOpenChange={setEditingSettings} />
       <CategoryColorDialog
         open={recoloring}
         onOpenChange={setRecoloring}

@@ -5,6 +5,7 @@ import type {
   CategoryMembers,
   CategoryVideo,
   CreatedCategory,
+  NewCategory,
   ChannelListItem,
   ChannelPreview,
   CreatedChannel,
@@ -308,8 +309,11 @@ export function listCategories(): Promise<CategoryList> {
 }
 
 /** Without a color, the daemon picks the least used palette color. */
-export function createCategory(name: string, color?: string): Promise<CreatedCategory> {
-  return request('/categories', { method: 'POST', body: { name, color }, label: '/categories' })
+export function createCategory(
+  category: Omit<NewCategory, 'color' | 'channels' | 'playlists'> &
+    Partial<Pick<NewCategory, 'color' | 'channels' | 'playlists'>>,
+): Promise<CreatedCategory> {
+  return request('/categories', { method: 'POST', body: category, label: '/categories' })
 }
 
 /** Renames, recolors and/or sets the AI prompt; absent fields are kept. */
