@@ -16,8 +16,8 @@ Runs: [`thinking off`](results/2026-11-06_1248_prompt-v2_qwen3-4b_think-off/repo
 [`thinking on`](results/2026-11-06_1249_prompt-v2_qwen3-4b_think-on/report.md).
 Partial: 522 of 540 calls. YouTube answered 429 for the subtitles of
 `04wD8bKJZfw` (Jobava London) and `X0OperXCJMY` (London System near-miss), so
-they have no summary yet; `--run` adds them. 8 of the 10 summaries were made
-from subtitles fetched by hand, the same `en` track `--summarize` keeps.
+they have no summary yet; `--run` adds them. 7 of the 8 new summaries used
+subtitles fetched by hand, the same `en` track `--summarize` keeps.
 
 Wrong / missed / errors, on 58 videos. Pass needs at most 1 wrong and no errors:
 
