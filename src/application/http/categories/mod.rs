@@ -332,6 +332,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_put_the_videos_of_its_members_in_a_created_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@Hikaru"))
+            .unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &channel_video_repository,
+            "@Hikaru",
+            &video,
+        );
+        let category_creator = category_creator(&db, repository.clone());
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                channels: vec!["@Hikaru".to_string()],
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        let stored = repository.list().unwrap();
+        let id = stored
+            .first()
+            .map(|category| category.id.clone())
+            .unwrap_or_else(CategoryId::new_generated);
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                category_response(Some(&id), "Chess", &["@Hikaru"], &[])
+            ))
+        );
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::new(video.id.clone(), vec![id])]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_create_the_first_category_with_the_first_palette_color() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));

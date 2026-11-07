@@ -1,7 +1,7 @@
 use crate::domain::category::{
     Category, CategoryColor, CategoryMember, CategoryName, CategoryPrompt, CreateCategoryError,
 };
-use crate::domain::services::VideoCategoryAssigner;
+use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -26,7 +26,6 @@ pub struct CategoryCreator {
     channel_repository: Arc<dyn ChannelRepository>,
     #[allow(dead_code)]
     playlist_repository: Arc<dyn PlaylistRepository>,
-    #[allow(dead_code)]
     video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
 }
@@ -58,6 +57,7 @@ pub trait CategoryCreatorApi: Send + Sync {
 
 impl CategoryCreatorApi for CategoryCreator {
     fn create(&self, category: NewCategory) -> Result<Category, CreateCategoryError> {
+        let _guard = self.video_category_assigner.lock();
         let existing = self.list_categories()?;
         Self::ensure_name_free(&existing, &category.name)?;
         let color = category
@@ -69,6 +69,7 @@ impl CategoryCreatorApi for CategoryCreator {
         self.repository
             .insert(&category)
             .map_err(CreateCategoryError::Repository)?;
+        self.assign_videos(&category)?;
         Ok(category)
     }
 }
@@ -91,6 +92,14 @@ impl CategoryCreator {
             return Err(CreateCategoryError::NameTaken(name.clone()));
         }
         Ok(())
+    }
+
+    /// Puts the stored videos of `category`'s members in it.
+    fn assign_videos(&self, category: &Category) -> Result<(), CreateCategoryError> {
+        let categories = self.list_categories()?;
+        self.video_category_assigner
+            .reassign_category(&category.id, &[], &categories)
+            .map_err(CreateCategoryError::Repository)
     }
 
     fn least_used_color(existing: &[Category]) -> CategoryColor {

@@ -11,7 +11,7 @@
 - [x] 2.5 `http/preferences`: `it_should_fail_if_the_categorization_temperature_is_out_of_range`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.6 `http/categories`: `it_should_create_a_category_with_a_prompt`: response and stored prompt, trimmed. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.7 `http/categories`: `it_should_create_a_category_with_members`: response holds the lists, members stored. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.8 `http/categories`: `it_should_put_the_videos_of_its_members_in_a_created_category`: stored videos belong to it, events announced. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.8 `http/categories`: `it_should_put_the_videos_of_its_members_in_a_created_category`: stored videos belong to it, events announced. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.9 `http/categories`: `it_should_create_a_category_without_a_prompt_if_blank`: `""` stores `None`. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.10 `http/categories`: `it_should_fail_to_create_a_category_with_an_untracked_member`: 400, nothing stored. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.11 `http/categories`: `it_should_fail_to_create_a_category_if_the_prompt_is_too_long`: 400, nothing stored. Verify: the test goes red on an assertion, then green with the full suite.
