@@ -224,7 +224,7 @@ mod tests {
             vec![LlmChat {
                 context_length: 8192,
                 temperature: 0.5,
-                max_output_tokens: 2192,
+                max_output_tokens: 8192,
                 ..one_call_chat()
             }]
         );
@@ -1170,7 +1170,7 @@ mod tests {
         assert_eq!(
             result,
             Err(
-                "the model stopped at the 3288-token output cap (context 12288, 100 input tokens)"
+                "the model ran out of context (12288 tokens: 100 of input, 12188 left to think and answer)"
                     .to_string()
             )
         );
@@ -1660,7 +1660,7 @@ mod tests {
             context_length: 12288,
             temperature: 0.3,
             thinking: true,
-            max_output_tokens: 3288,
+            max_output_tokens: 12288,
         }
     }
 

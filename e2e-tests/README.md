@@ -181,7 +181,7 @@ actually loaded rather than the placeholder a broken one is swapped for.
   auto-filled folder names, and choosing, staging and blocking destinations
   with the folder browser.
 - **Categories** (`tests/categories.spec.js`): create a category from the
-  sidebar (landing in its manage sources dialog), rename it in place,
+  sidebar (landing in its category settings dialog), rename it in place,
   assign the fixture channel to it from the Add channel dialog, remove it
   and add it back with the source chips, mark it all watched once the video
   downloads, fold the section and delete the category from its actions

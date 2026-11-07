@@ -13,7 +13,7 @@ import {
   sectionView,
 } from '@/lib/sidebarSections'
 import { cn } from '@/lib/utils'
-import type { ManageSourcesState } from './CategoryDetail'
+import type { CategorySettingsState } from './CategoryDetail'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { SidebarCount } from './SidebarCount'
@@ -59,12 +59,12 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
           <DropdownMenuItem
             onSelect={() => {
               onNavigate()
-              const state: ManageSourcesState = { manageSources: true }
+              const state: CategorySettingsState = { editSettings: true }
               navigate(`/categories/${encodeURIComponent(category.id)}`, { state })
             }}
           >
             <Settings2 />
-            Manage sources
+            Edit settings
           </DropdownMenuItem>
         }
         onDeleteRequest={onDeleteRequest}

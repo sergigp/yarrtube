@@ -15,6 +15,9 @@ pub struct UpdateCategoryRequest {
     pub name: Option<String>,
     #[serde(default)]
     pub color: Option<String>,
+    /// `""` removes the prompt.
+    #[serde(default)]
+    pub ai_prompt: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +33,7 @@ pub struct CategoryResponse {
     pub id: String,
     pub name: String,
     pub color: String,
+    pub ai_prompt: Option<String>,
     pub channels: Vec<String>,
     pub playlists: Vec<String>,
 }
@@ -40,6 +44,10 @@ impl From<Category> for CategoryResponse {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
             color: category.color.as_str().to_string(),
+            ai_prompt: category
+                .ai_prompt
+                .as_ref()
+                .map(|prompt| prompt.as_str().to_string()),
             channels: Vec::new(),
             playlists: Vec::new(),
         }
@@ -51,6 +59,7 @@ pub struct CategoryListItemResponse {
     pub id: String,
     pub name: String,
     pub color: String,
+    pub ai_prompt: Option<String>,
     pub unwatched_count: usize,
     pub channels: Vec<String>,
     pub playlists: Vec<String>,
@@ -62,6 +71,10 @@ impl From<CategoryView> for CategoryListItemResponse {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
             color: category.color.as_str().to_string(),
+            ai_prompt: category
+                .ai_prompt
+                .as_ref()
+                .map(|prompt| prompt.as_str().to_string()),
             unwatched_count: category.unwatched_count,
             channels: category
                 .channels

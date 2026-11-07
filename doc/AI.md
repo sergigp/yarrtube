@@ -34,6 +34,14 @@ spec: decisions here feed OpenSpec changes later.
   shipped version, embedded at build time (`SummaryPrompt::shipped()`):
   shipping a new version is changing that one path. Users who never saved a
   prompt get it on upgrade; a saved prompt is kept until "Reset to default".
+- Categorization settings exist before categorization itself: nothing reads
+  them yet. On the AI page, categorization has its own switch, model and
+  wrapping prompt (`prompts/categorization/v1.md`, plain text with no sections
+  or variables, saved like the summary prompt). Each category has an optional
+  AI prompt (`ai_prompt`) describing the videos it should hold, edited in its
+  "Edit settings" dialog while AI, categories and categorization are all on,
+  and each source a `categorization_enabled` opt-in. What the model will get
+  is the wrapping prompt plus the category's prompt.
 
 ## Starting point in the codebase
 
@@ -93,8 +101,8 @@ spec: decisions here feed OpenSpec changes later.
 - Ollama down, or the model not installed, skips the run and changes nothing:
   a later sync tries again.
 - Any other failure fails the task, and the queue retries it with its usual
-  backoff. When the retries run out, a rejected call (cut off at the output
-  cap, empty, refused as too long, past the 30-minute timeout) or an unreadable
+  backoff. When the retries run out, a rejected call (ran out of context,
+  empty, refused as too long, past the 30-minute timeout) or an unreadable
   transcript marks the video's summary `UNAVAILABLE`, while a server fault
   (connection error, 5xx, 404) leaves it for a later sync.
 - Changing the Ollama URL or any summary setting puts every `UNAVAILABLE` video

@@ -53,6 +53,7 @@ impl ChannelUpdaterApi for ChannelUpdater {
         change: ChannelSettingsChange,
     ) -> Result<Channel, UpdateChannelError> {
         self.ensure_summaries_available(change.summaries_enabled)?;
+        self.ensure_categorization_available(change.categorization_enabled)?;
         let channel = Self::apply_settings(self.find_channel(&id)?, change);
         self.update_channel(&channel)?;
         if let Some(reconcile_interval) = change.reconcile_interval {
@@ -64,6 +65,7 @@ impl ChannelUpdaterApi for ChannelUpdater {
             video_limit = channel.video_limit.value(),
             reconcile_interval_minutes = channel.reconcile_interval.minutes(),
             summaries_enabled = channel.summaries_enabled,
+            categorization_enabled = channel.categorization_enabled,
             "updated channel settings"
         );
         Ok(channel)
@@ -71,6 +73,26 @@ impl ChannelUpdaterApi for ChannelUpdater {
 }
 
 impl ChannelUpdater {
+    /// Enabling categorization needs it available in the preferences.
+    fn ensure_categorization_available(
+        &self,
+        categorization_enabled: Option<bool>,
+    ) -> Result<(), UpdateChannelError> {
+        if categorization_enabled != Some(true) {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(UpdateChannelError::Repository)?
+            .unwrap_or_default();
+        if preferences.categorization_available() {
+            Ok(())
+        } else {
+            Err(UpdateChannelError::CategorizationUnavailable)
+        }
+    }
+
     /// Enabling summaries needs AI and summaries on in the preferences.
     fn ensure_summaries_available(
         &self,
@@ -112,8 +134,14 @@ impl ChannelUpdater {
             Some(reconcile_interval) => channel.with_reconcile_interval(reconcile_interval),
             None => channel,
         };
-        match change.summaries_enabled {
+        let channel = match change.summaries_enabled {
             Some(summaries_enabled) => channel.with_summaries_enabled(summaries_enabled),
+            None => channel,
+        };
+        match change.categorization_enabled {
+            Some(categorization_enabled) => {
+                channel.with_categorization_enabled(categorization_enabled)
+            }
             None => channel,
         }
     }

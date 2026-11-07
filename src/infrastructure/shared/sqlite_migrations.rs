@@ -35,6 +35,7 @@ const VIDEO_CHAPTERS_SQL: &str = include_str!("../../../migrations/0020_video_ch
 const LATE_VIDEO_DATA_SQL: &str = include_str!("../../../migrations/0021_late_video_data.sql");
 const SOURCE_SUMMARIES_SQL: &str = include_str!("../../../migrations/0022_source_summaries.sql");
 const VIDEO_SUMMARIES_SQL: &str = include_str!("../../../migrations/0023_video_summaries.sql");
+const AI_CATEGORIZATION_SQL: &str = include_str!("../../../migrations/0024_ai_categorization.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -64,6 +65,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(LATE_VIDEO_DATA_SQL),
         M::up(SOURCE_SUMMARIES_SQL),
         M::up(VIDEO_SUMMARIES_SQL),
+        M::up(AI_CATEGORIZATION_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -871,6 +873,45 @@ mod tests {
                 "2024-02-01T00:00:00+00:00".to_string()
             ))
         );
+    }
+
+    #[test]
+    fn it_should_default_existing_sources_and_categories_after_the_ai_categorization_migration() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_late_video_data(&mut conn);
+        conn.execute_batch(
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, created_at)
+             VALUES ('@chan', 'Chan', 'UC1', 'high', 3, 'channels/chan', '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlists (id, name, path, quality, kind, created_at)
+             VALUES ('PL1', 'Mix', 'playlists/mix', 'high', 'youtube_linked', '2024-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+        insert_colored_category(&conn, "Chess", "#0ea5e9");
+
+        apply(&mut conn).unwrap();
+
+        let categorization_enabled = conn
+            .prepare(
+                "SELECT id, categorization_enabled FROM channels
+                 UNION ALL SELECT id, categorization_enabled FROM playlists",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let ai_prompt = conn.query_row("SELECT ai_prompt FROM categories", [], |row| {
+            row.get::<_, Option<String>>(0)
+        });
+        assert_eq!(
+            categorization_enabled,
+            Ok(vec![
+                ("@chan".to_string(), false),
+                ("PL1".to_string(), false)
+            ])
+        );
+        assert_eq!(ai_prompt, Ok(None));
     }
 
     #[test]

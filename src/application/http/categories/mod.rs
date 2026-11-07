@@ -5,7 +5,7 @@ use super::error::ApiError;
 use super::validation::required;
 use super::videos::update_watch_state_error;
 use crate::domain::category::{
-    CategoryColor, CategoryId, CategoryMember, CategoryName, CreateCategoryError,
+    CategoryColor, CategoryId, CategoryMember, CategoryName, CategoryPrompt, CreateCategoryError,
     DeleteCategoryError, UpdateCategoryError,
 };
 use crate::domain::channel::ChannelHandle;
@@ -24,7 +24,7 @@ use dto::{
 };
 
 const MISSING_CATEGORY_NAME: &str = "Category name must not be empty (missing)";
-const MISSING_CATEGORY_NAME_AND_COLOR: &str = "Category name or color is required (both missing)";
+const NOTHING_TO_UPDATE: &str = "Category name, color or AI prompt is required (all missing)";
 
 pub async fn create_category(
     State(category_creator): State<CategoryCreator>,
@@ -56,12 +56,17 @@ pub async fn update_category(
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
     required(
-        request.name.as_ref().or(request.color.as_ref()),
-        MISSING_CATEGORY_NAME_AND_COLOR,
+        request
+            .name
+            .as_ref()
+            .or(request.color.as_ref())
+            .or(request.ai_prompt.as_ref()),
+        NOTHING_TO_UPDATE,
     )?;
     let update = CategoryUpdate {
         name: request.name.map(CategoryName::new).transpose()?,
         color: request.color.map(CategoryColor::new).transpose()?,
+        ai_prompt: request.ai_prompt.map(CategoryPrompt::new).transpose()?,
     };
 
     run_blocking(move || category_updater.update(&id, update))
@@ -257,6 +262,7 @@ mod tests {
                 StatusCode::CREATED,
                 CategoryResponse {
                     color: "#f59e0b".to_string(),
+                    ai_prompt: None,
                     ..category_response(id.as_ref(), "Chess", &[], &[])
                 }
             ))
@@ -440,6 +446,41 @@ mod tests {
                     color: "#d3ecf8".to_string(),
                     ..list_item(&chess, 0, &[], &[])
                 }],
+                unwatched_total: 0,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_categories_with_their_ai_prompt() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = Category {
+            ai_prompt: CategoryPrompt::new("Chess games and openings").unwrap(),
+            ..category(None, "Chess")
+        };
+        let science = category(None, "Science");
+        repository.insert(&chess).unwrap();
+        repository.insert(&science).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![
+                    CategoryListItemResponse {
+                        ai_prompt: Some("Chess games and openings".to_string()),
+                        ..list_item(&chess, 0, &[], &[])
+                    },
+                    list_item(&science, 0, &[], &[]),
+                ],
                 unwatched_total: 0,
             })
         );
@@ -859,6 +900,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: None,
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -868,6 +910,119 @@ mod tests {
             repository.list().unwrap(),
             vec![Category {
                 color: color("#e9def8"),
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_set_the_ai_prompt_of_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+                ai_prompt: Some("  Chess games and openings  ".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                ai_prompt: CategoryPrompt::new("Chess games and openings").unwrap(),
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_remove_the_ai_prompt_of_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = Category {
+            ai_prompt: CategoryPrompt::new("Chess games").unwrap(),
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+                ai_prompt: Some(String::new()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                ai_prompt: None,
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_the_ai_prompt_when_renaming_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = Category {
+            ai_prompt: CategoryPrompt::new("Chess games").unwrap(),
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: Some("Board games".to_string()),
+                color: None,
+                ai_prompt: None,
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                name: CategoryName::new("Board games").unwrap(),
                 ..chess
             }]
         );
@@ -925,6 +1080,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: None,
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -952,6 +1108,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: Some("Board games".to_string()),
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -1040,6 +1197,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: Some("sports".to_string()),
                 color: Some("#e9def8".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -1055,13 +1213,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_update_without_name_or_color() {
+    async fn it_should_fail_to_update_a_category_with_nothing_to_change() {
         let response = update(
             any_category_updater(),
             "chess",
             UpdateCategoryRequest {
                 name: None,
                 color: None,
+                ai_prompt: None,
             },
         )
         .await;
@@ -1069,7 +1228,28 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Category name or color is required (both missing)"
+                "Category name, color or AI prompt is required (all missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_if_the_ai_prompt_is_too_long() {
+        let response = update(
+            any_category_updater(),
+            "category-1",
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+                ai_prompt: Some("x".repeat(2001)),
+            },
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Category AI prompt must be at most 2000 characters (got 2001)"
             ))
         );
     }
@@ -1082,6 +1262,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: None,
                 color: Some("yellow".to_string()),
+                ai_prompt: None,
             },
         )
         .await;
@@ -2067,6 +2248,7 @@ mod tests {
             id: id.map(|id| id.as_str().to_string()).unwrap_or_default(),
             name: name.to_string(),
             color: CategoryColor::PALETTE[0].to_string(),
+            ai_prompt: None,
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
         }
@@ -2078,6 +2260,7 @@ mod tests {
             id: id.unwrap_or_else(CategoryId::new_generated),
             name: CategoryName::new(name).unwrap(),
             color: CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            ai_prompt: None,
             members: vec![],
             created_at: fixed_timestamp(),
         }
@@ -2097,6 +2280,7 @@ mod tests {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
             color: category.color.as_str().to_string(),
+            ai_prompt: None,
             unwatched_count,
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
@@ -2291,6 +2475,7 @@ mod tests {
             UpdateCategoryRequest {
                 name: Some(name.to_string()),
                 color: None,
+                ai_prompt: None,
             },
         )
         .await

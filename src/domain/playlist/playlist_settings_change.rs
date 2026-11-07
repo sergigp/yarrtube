@@ -7,6 +7,7 @@ pub struct PlaylistSettingsChange {
     pub hide_unwatched_count: Option<bool>,
     pub reconcile_interval: Option<ReconcileInterval>,
     pub summaries_enabled: Option<bool>,
+    pub categorization_enabled: Option<bool>,
 }
 
 impl PlaylistSettingsChange {
@@ -15,5 +16,6 @@ impl PlaylistSettingsChange {
             && self.hide_unwatched_count.is_none()
             && self.reconcile_interval.is_none()
             && self.summaries_enabled.is_none()
+            && self.categorization_enabled.is_none()
     }
 }

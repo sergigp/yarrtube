@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
-use super::validation::{MISSING_QUALITY, MISSING_SUMMARIES, required};
+use super::validation::{MISSING_CATEGORIZATION, MISSING_QUALITY, MISSING_SUMMARIES, required};
 use super::videos::update_watch_state_error;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
@@ -26,7 +26,7 @@ use dto::{
 };
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
-const NOTHING_TO_UPDATE: &str = "Request must change exclude from home, hide unwatched count, the reconcile interval or summaries";
+const NOTHING_TO_UPDATE: &str = "Request must change exclude from home, hide unwatched count, the reconcile interval, summaries or categorization";
 
 pub async fn create_playlist(
     State(playlist_creator): State<PlaylistCreator>,
@@ -42,6 +42,7 @@ pub async fn create_playlist(
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
     let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
+    let categorization_enabled = required(request.categorization_enabled, MISSING_CATEGORIZATION)?;
 
     let outcome = run_blocking(move || {
         playlist_creator.create(
@@ -51,6 +52,7 @@ pub async fn create_playlist(
             exclude_from_home,
             reconcile_interval,
             summaries_enabled,
+            categorization_enabled,
         )
     })
     .await?;
@@ -66,6 +68,9 @@ pub async fn create_playlist(
         Err(e @ CreatePlaylistError::PathAlreadyInUse(_)) => Err(ApiError::bad_request(e)),
         Err(e @ CreatePlaylistError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
         Err(e @ CreatePlaylistError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
+        Err(e @ CreatePlaylistError::CategorizationUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
         Err(e @ CreatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
@@ -114,6 +119,7 @@ pub async fn update_playlist(
             .map(ReconcileInterval::new)
             .transpose()?,
         summaries_enabled: request.summaries_enabled,
+        categorization_enabled: request.categorization_enabled,
     };
     if change.is_empty() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
@@ -123,6 +129,9 @@ pub async fn update_playlist(
         Ok(playlist) => Ok(Json(PlaylistResponse::from(playlist))),
         Err(e @ UpdatePlaylistError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
         Err(e @ UpdatePlaylistError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
+        Err(e @ UpdatePlaylistError::CategorizationUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
         Err(e @ UpdatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
@@ -196,7 +205,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
     use crate::domain::preferences::SummaryModel;
-    use crate::domain::preferences::{Preferences, SummarySettings};
+    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
@@ -344,6 +353,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_playlist_with_categorization_enabled() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = CreatePlaylistRequest {
+            categorization_enabled: Some(true),
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    categorization_enabled: true,
+                    ..playlist_response("PL1", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_a_playlist_with_summaries_if_ai_is_off() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -372,6 +419,41 @@ mod tests {
         );
         assert_eq!(playlist_repository.list().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_a_playlist_with_categorization_if_unavailable() {
+        for preferences in categorization_unavailable() {
+            let db = TestDatabase::new();
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences_repository.save(&preferences).unwrap();
+            let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+            let event_repository = SqliteEventRepository::new(db.database());
+            // Failing lookup: reaching YouTube would answer 502, not 409.
+            let playlist_creator = PlaylistCreator::new(
+                playlist_repository.clone(),
+                Arc::new(FailingYoutubePlaylistRepository),
+                event_publisher(&db),
+                Arc::new(FixedClock(fixed_timestamp())),
+                preferences_repository,
+            );
+
+            let request = CreatePlaylistRequest {
+                categorization_enabled: Some(true),
+                ..create_request("PL1")
+            };
+            let response = create(playlist_creator, request).await;
+
+            assert_eq!(
+                response,
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Turn on AI categorization before enabling it for a playlist"
+                ))
+            );
+            assert_eq!(playlist_repository.list().unwrap(), vec![]);
+            assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+        }
     }
 
     #[tokio::test]
@@ -812,6 +894,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_the_existing_source_when_categorization_differs_on_create() {
+        let db = TestDatabase::new();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let existing = playlist("PL1", DEFAULT_PATH);
+        playlist_repository.insert(&existing).unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+        let request = CreatePlaylistRequest {
+            categorization_enabled: Some(true),
+            ..create_request("PL1")
+        };
+
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((StatusCode::OK, playlist_response("PL1", DEFAULT_PATH)))
+        );
+        assert_eq!(playlist_repository.list().unwrap(), vec![existing]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_keep_exclude_from_home_of_an_existing_playlist_on_duplicate_create() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -935,6 +1050,23 @@ mod tests {
             response,
             Err(ApiError::bad_request(
                 "Summaries setting must be true or false (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_categorization_missing() {
+        let request = CreatePlaylistRequest {
+            categorization_enabled: None,
+            ..create_request("PL1")
+        };
+
+        let response = create(any_playlist_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Categorization setting must be true or false (missing)"
             ))
         );
     }
@@ -1671,6 +1803,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_playlists_with_their_categorization_setting() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true))
+            .unwrap();
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteEventRepository::new(db.database())),
+            "/videos",
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![PlaylistListItemResponse {
+                categorization_enabled: true,
+                ..playlist_list_item_response("PL1", DEFAULT_PATH)
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlists_with_their_interval() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -2193,6 +2355,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_enable_categorization_on_a_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = UpdatePlaylistRequest {
+            categorization_enabled: Some(true),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                categorization_enabled: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_enable_summaries_on_a_playlist_if_summaries_are_off() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -2237,6 +2437,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_enable_categorization_on_a_playlist_if_unavailable() {
+        for preferences in categorization_unavailable() {
+            let db = TestDatabase::new();
+            let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+            playlist_repository
+                .insert(&playlist("PL1", DEFAULT_PATH))
+                .unwrap();
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences_repository.save(&preferences).unwrap();
+            let playlist_updater = PlaylistUpdater::new(
+                playlist_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                preferences_repository,
+            );
+
+            let request = UpdatePlaylistRequest {
+                reconcile_interval_minutes: Some(60),
+                categorization_enabled: Some(true),
+                ..empty_update_request()
+            };
+            let response = update(playlist_updater, "PL1", request).await;
+
+            assert_eq!(
+                response,
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Turn on AI categorization before enabling it for a playlist"
+                ))
+            );
+            assert_eq!(
+                playlist_repository.list().unwrap(),
+                vec![playlist("PL1", DEFAULT_PATH)]
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn it_should_disable_summaries_on_a_playlist_while_ai_is_off() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -2255,6 +2496,36 @@ mod tests {
 
         let request = UpdatePlaylistRequest {
             summaries_enabled: Some(false),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", DEFAULT_PATH)));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_disable_categorization_on_a_playlist_while_ai_is_off() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true))
+            .unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let request = UpdatePlaylistRequest {
+            categorization_enabled: Some(false),
             ..empty_update_request()
         };
         let response = update(playlist_updater, "PL1", request).await;
@@ -2492,7 +2763,7 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Request must change exclude from home, hide unwatched count, the reconcile interval or summaries"
+                "Request must change exclude from home, hide unwatched count, the reconcile interval, summaries or categorization"
             ))
         );
     }
@@ -3998,6 +4269,37 @@ mod tests {
             )
     }
 
+    /// Preferences with AI, categories and categorization on.
+    fn categorization_on() -> Preferences {
+        Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+            categorization: CategorizationSettings {
+                enabled: true,
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        }
+    }
+
+    /// One of AI, categories and categorization off in each.
+    fn categorization_unavailable() -> [Preferences; 3] {
+        [
+            Preferences {
+                ai_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categories_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categorization: CategorizationSettings::default(),
+                ..categorization_on()
+            },
+        ]
+    }
+
     /// Preferences with AI and summaries on, so sources can enable summaries.
     fn summaries_on() -> Preferences {
         Preferences {
@@ -4133,6 +4435,7 @@ mod tests {
             exclude_from_home: None,
             reconcile_interval_minutes: None,
             summaries_enabled: Some(false),
+            categorization_enabled: Some(false),
         }
     }
 
@@ -4142,6 +4445,7 @@ mod tests {
             hide_unwatched_count: None,
             reconcile_interval_minutes: None,
             summaries_enabled: None,
+            categorization_enabled: None,
         }
     }
 
@@ -4151,6 +4455,7 @@ mod tests {
             hide_unwatched_count: None,
             reconcile_interval_minutes: None,
             summaries_enabled: None,
+            categorization_enabled: None,
         }
     }
 
@@ -4187,6 +4492,7 @@ mod tests {
             reconcile_interval_minutes: 180,
             created_at: fixed_timestamp(),
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 
@@ -4204,6 +4510,7 @@ mod tests {
             unwatched_count: 0,
             work_in_progress: false,
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 

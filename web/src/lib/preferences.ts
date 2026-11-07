@@ -45,3 +45,12 @@ export function aiEnabled(preferences: Preferences | undefined): boolean {
 export function summariesAvailable(preferences: Preferences | undefined): boolean {
   return aiEnabled(preferences) && (preferences?.summaries_enabled ?? false)
 }
+
+/** Whether sources can have their videos categorized: AI, categories and categorization on. */
+export function categorizationAvailable(preferences: Preferences | undefined): boolean {
+  return (
+    aiEnabled(preferences) &&
+    (preferences?.categories_enabled ?? false) &&
+    (preferences?.categorization_enabled ?? false)
+  )
+}

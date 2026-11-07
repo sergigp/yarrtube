@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { useCheckOllama, useOllama, usePreferences, useSavePreferences } from '@/api/queries'
-import type { OllamaServer, Preferences, PreferencesPatch } from '@/api/types'
+import type { OllamaModel, OllamaServer, Preferences, PreferencesPatch } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -46,12 +46,13 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const [form, setForm] = useState<AiSettingsForm>(() => formFrom(saved))
   const set = <K extends keyof AiSettingsForm>(key: K, value: AiSettingsForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
-  const summariesDisabled = !form.ai_enabled
+  const aiOff = !form.ai_enabled
   // Always shown, so turning summaries on doesn't reshape the page.
-  const modelDisabled = summariesDisabled || !form.summaries_enabled
+  const modelDisabled = aiOff || !form.summaries_enabled
   // Context length, temperature, thinking and the prompt: their defaults come
   // from the evals, so they stay out of the way until asked for.
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [categorizationAdvancedOpen, setCategorizationAdvancedOpen] = useState(false)
   const savePreferences = useSavePreferences()
   const savedFlash = useSavedFlash()
   const [saving, setSaving] = useState(false)
@@ -116,6 +117,13 @@ function AiSettings({ saved }: { saved: Preferences }) {
     }
   }
 
+  const resetCategorizationPrompt = async () => {
+    const updated = await submit({ categorization_prompt: null })
+    if (updated) {
+      set('categorization_prompt', updated.categorization_prompt)
+    }
+  }
+
   return (
     <>
       <Section title="Ollama">
@@ -160,47 +168,19 @@ function AiSettings({ saved }: { saved: Preferences }) {
           label="Enabled"
           name="Summaries enabled"
           checked={form.summaries_enabled}
-          disabled={summariesDisabled}
+          disabled={aiOff}
           onChange={(value) => set('summaries_enabled', value)}
         />
-        <Field id="summaries-model" label="Model">
-          {server ? (
-            <select
-              id="summaries-model"
-              value={form.summaries_model}
-              disabled={modelDisabled}
-              onChange={(event) => set('summaries_model', event.target.value)}
-              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-            >
-              {modelOptions(server.models, form.summaries_model).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              id="summaries-model"
-              value={form.summaries_model}
-              disabled={modelDisabled}
-              onChange={(event) => set('summaries_model', event.target.value)}
-            />
-          )}
-        </Field>
+        <ModelField
+          id="summaries-model"
+          models={server?.models}
+          value={form.summaries_model}
+          disabled={modelDisabled}
+          onChange={(value) => set('summaries_model', value)}
+        />
         {form.summaries_enabled && (
           <>
-            <button
-              type="button"
-              aria-expanded={advancedOpen}
-              onClick={() => setAdvancedOpen((open) => !open)}
-              className="flex items-center gap-1 self-start text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              <ChevronRight
-                className={cn('size-4 transition-transform', advancedOpen && 'rotate-90')}
-                aria-hidden="true"
-              />
-              Advanced
-            </button>
+            <AdvancedToggle open={advancedOpen} onToggle={setAdvancedOpen} />
             {advancedOpen && (
               <>
                 <Field id="summaries-context-length" label="Context length">
@@ -211,7 +191,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     max={131072}
                     step={1024}
                     value={form.summaries_context_length}
-                    disabled={summariesDisabled}
+                    disabled={aiOff}
                     onChange={(event) => set('summaries_context_length', event.target.value)}
                   />
                 </Field>
@@ -223,7 +203,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     max={2}
                     step={0.1}
                     value={form.summaries_temperature}
-                    disabled={summariesDisabled}
+                    disabled={aiOff}
                     onChange={(event) => set('summaries_temperature', event.target.value)}
                   />
                 </Field>
@@ -237,43 +217,76 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     label="Thinking"
                     help={THINKING_HELP}
                     checked={form.summaries_thinking}
-                    disabled={summariesDisabled}
+                    disabled={aiOff}
                     onChange={(value) => set('summaries_thinking', value)}
                   />
                 )}
-                <Field id="summaries-prompt" label="Prompt" help={<PromptHelp />}>
-                  <textarea
-                    id="summaries-prompt"
-                    rows={20}
-                    spellCheck={false}
-                    value={form.summaries_prompt}
-                    disabled={summariesDisabled}
-                    onChange={(event) => set('summaries_prompt', event.target.value)}
-                    className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                  />
-                  <div className="flex items-center justify-between gap-4">
-                    {saved.summaries_prompt_is_default && form.summaries_prompt === saved.summaries_prompt ? (
-                      <p className="text-sm text-muted-foreground">Using the default prompt</p>
-                    ) : (
-                      <span />
-                    )}
-                    {!saved.summaries_prompt_is_default && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={saving || summariesDisabled}
-                        onClick={() => void resetPrompt()}
-                      >
-                        Reset to default
-                      </Button>
-                    )}
-                  </div>
-                </Field>
+                <PromptField
+                  id="summaries-prompt"
+                  help={<PromptHelp />}
+                  rows={20}
+                  value={form.summaries_prompt}
+                  disabled={aiOff}
+                  isDefault={
+                    saved.summaries_prompt_is_default &&
+                    form.summaries_prompt === saved.summaries_prompt
+                  }
+                  canReset={!saved.summaries_prompt_is_default}
+                  resetDisabled={saving || aiOff}
+                  onChange={(value) => set('summaries_prompt', value)}
+                  onReset={() => void resetPrompt()}
+                />
               </>
             )}
           </>
         )}
       </Section>
+      {saved.categories_enabled && (
+        <Section title="Categorization">
+          <SwitchRow
+            id="categorization-enabled"
+            label="Enabled"
+            name="Categorization enabled"
+            checked={form.categorization_enabled}
+            disabled={aiOff}
+            onChange={(value) => set('categorization_enabled', value)}
+          />
+          <ModelField
+            id="categorization-model"
+            name="Categorization model"
+            models={server?.models}
+            value={form.categorization_model}
+            disabled={aiOff || !form.categorization_enabled}
+            onChange={(value) => set('categorization_model', value)}
+          />
+          {form.categorization_enabled && (
+            <>
+              <AdvancedToggle
+                name="Advanced categorization settings"
+                open={categorizationAdvancedOpen}
+                onToggle={setCategorizationAdvancedOpen}
+              />
+              {categorizationAdvancedOpen && (
+                <PromptField
+                  id="categorization-prompt"
+                  name="Categorization prompt"
+                  rows={8}
+                  value={form.categorization_prompt}
+                  disabled={aiOff}
+                  isDefault={
+                    saved.categorization_prompt_is_default &&
+                    form.categorization_prompt === saved.categorization_prompt
+                  }
+                  canReset={!saved.categorization_prompt_is_default}
+                  resetDisabled={saving || aiOff}
+                  onChange={(value) => set('categorization_prompt', value)}
+                  onReset={() => void resetCategorizationPrompt()}
+                />
+              )}
+            </>
+          )}
+        </Section>
+      )}
       <div className="flex items-center justify-end gap-4">
         {saveError && (
           <p role="alert" className="mr-auto text-sm text-destructive">
@@ -293,6 +306,140 @@ function AiSettings({ saved }: { saved: Preferences }) {
         </Button>
       </div>
     </>
+  )
+}
+
+/** "Model": the server's models when known, otherwise a text field. */
+function ModelField({
+  id,
+  name,
+  models,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string
+  /** The field's accessible name, when the label alone is ambiguous. */
+  name?: string
+  models: OllamaModel[] | undefined
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <Field id={id} label="Model">
+      {models ? (
+        <select
+          id={id}
+          aria-label={name}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+        >
+          {modelOptions(models, value).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <Input
+          id={id}
+          aria-label={name}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+    </Field>
+  )
+}
+
+function AdvancedToggle({
+  name,
+  open,
+  onToggle,
+}: {
+  /** The button's accessible name, when "Advanced" alone is ambiguous. */
+  name?: string
+  open: boolean
+  onToggle: (open: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={name}
+      aria-expanded={open}
+      onClick={() => onToggle(!open)}
+      className="flex items-center gap-1 self-start text-sm font-medium text-muted-foreground hover:text-foreground"
+    >
+      <ChevronRight
+        className={cn('size-4 transition-transform', open && 'rotate-90')}
+        aria-hidden="true"
+      />
+      Advanced
+    </button>
+  )
+}
+
+/** "Prompt": the whole prompt, saying when it is the default one or resetting it. */
+function PromptField({
+  id,
+  name,
+  help,
+  rows,
+  value,
+  disabled,
+  isDefault,
+  canReset,
+  resetDisabled,
+  onChange,
+  onReset,
+}: {
+  id: string
+  /** The field's accessible name, when the label alone is ambiguous. */
+  name?: string
+  help?: ReactNode
+  rows: number
+  value: string
+  disabled: boolean
+  isDefault: boolean
+  canReset: boolean
+  resetDisabled: boolean
+  onChange: (value: string) => void
+  onReset: () => void
+}) {
+  return (
+    <Field id={id} label="Prompt" help={help}>
+      <textarea
+        id={id}
+        aria-label={name}
+        rows={rows}
+        spellCheck={false}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+      />
+      <div className="flex items-center justify-between gap-4">
+        {isDefault ? (
+          <p className="text-sm text-muted-foreground">Using the default prompt</p>
+        ) : (
+          <span />
+        )}
+        {canReset && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={resetDisabled}
+            onClick={onReset}
+          >
+            Reset to default
+          </Button>
+        )}
+      </div>
+    </Field>
   )
 }
 

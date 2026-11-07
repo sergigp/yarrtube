@@ -155,15 +155,15 @@ describe('SidebarCategories', () => {
     )
     const routeAfterDelete = screen.getByRole('status', { name: 'Current route' }).textContent
     await user.click(screen.getByRole('button', { name: 'Actions for Science' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Manage sources' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
 
-    expect(items).toEqual(['Manage sources', 'Delete'])
+    expect(items).toEqual(['Edit settings', 'Delete'])
     expect(description).toBe(
       '"Chess" holds 4 channels and playlists. None of them, nor any video, will be deleted.',
     )
     expect(remove).toHaveBeenCalledOnce()
     expect(routeAfterDelete).toBe('/')
-    expect(await screen.findByRole('dialog', { name: 'Manage sources in Science' })).toBeVisible()
+    expect(await screen.findByRole('dialog', { name: 'Edit Science settings' })).toBeVisible()
     expect(
       screen.getByRole('status', { name: 'Current route', hidden: true }),
     ).toHaveTextContent('/categories/science')

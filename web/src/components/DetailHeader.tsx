@@ -177,7 +177,7 @@ interface DetailHeaderProps {
   onSync?: () => Promise<void>
   /** Shows a "Rename" pencil that edits the name in place. */
   onRename?: (name: string) => Promise<void>
-  /** Actions listed right after Sync, e.g. a category's "Manage sources". */
+  /** Actions listed right after Sync, e.g. a category's "Edit settings". */
   extraActions?: HeaderAction[]
   onMarkWatched?: () => Promise<void>
   /** Playlists only: whether the playlist is excluded from home. */

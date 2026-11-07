@@ -57,6 +57,7 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
         change: PlaylistSettingsChange,
     ) -> Result<Playlist, UpdatePlaylistError> {
         self.ensure_summaries_available(change.summaries_enabled)?;
+        self.ensure_categorization_available(change.categorization_enabled)?;
         let playlist = Self::apply_settings(self.find_playlist(&id)?, change);
         self.update_playlist(&playlist)?;
         if let Some(reconcile_interval) = change.reconcile_interval {
@@ -74,6 +75,26 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
 }
 
 impl PlaylistUpdater {
+    /// Enabling categorization needs it available in the preferences.
+    fn ensure_categorization_available(
+        &self,
+        categorization_enabled: Option<bool>,
+    ) -> Result<(), UpdatePlaylistError> {
+        if categorization_enabled != Some(true) {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(UpdatePlaylistError::Repository)?
+            .unwrap_or_default();
+        if preferences.categorization_available() {
+            Ok(())
+        } else {
+            Err(UpdatePlaylistError::CategorizationUnavailable)
+        }
+    }
+
     /// Enabling summaries needs AI and summaries on in the preferences.
     fn ensure_summaries_available(
         &self,
@@ -115,8 +136,14 @@ impl PlaylistUpdater {
             Some(reconcile_interval) => playlist.with_reconcile_interval(reconcile_interval),
             None => playlist,
         };
-        match change.summaries_enabled {
+        let playlist = match change.summaries_enabled {
             Some(summaries_enabled) => playlist.with_summaries_enabled(summaries_enabled),
+            None => playlist,
+        };
+        match change.categorization_enabled {
+            Some(categorization_enabled) => {
+                playlist.with_categorization_enabled(categorization_enabled)
+            }
             None => playlist,
         }
     }

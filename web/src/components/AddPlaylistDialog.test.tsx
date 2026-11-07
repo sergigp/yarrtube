@@ -255,6 +255,32 @@ describe('AddPlaylistDialog', () => {
       exclude_from_home: false,
       reconcile_interval_minutes: 180,
       summaries_enabled: false,
+      categorization_enabled: false,
+    })
+  })
+
+  it('creates the playlist with categorization when checked', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'POST /api/playlists': aPlaylist(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+    await waitFor(() => expect(categorization).toBeEnabled())
+    await user.click(categorization)
+    const submit = screen.getByRole('button', { name: 'Create Playlist' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const createCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit]
+    expect(JSON.parse(createCall[1].body as string)).toMatchObject({
+      categorization_enabled: true,
     })
   })
 
@@ -331,6 +357,7 @@ describe('AddPlaylistDialog', () => {
       exclude_from_home: false,
       reconcile_interval_minutes: 30,
       summaries_enabled: false,
+      categorization_enabled: false,
     })
   })
 

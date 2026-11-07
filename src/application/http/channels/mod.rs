@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
-use super::validation::{MISSING_QUALITY, MISSING_SUMMARIES, required};
+use super::validation::{MISSING_CATEGORIZATION, MISSING_QUALITY, MISSING_SUMMARIES, required};
 use super::videos::update_watch_state_error;
 use crate::domain::channel::{
     ChannelHandle, ChannelSettingsChange, CreateChannelError, DeleteChannelError,
@@ -26,8 +26,7 @@ use dto::{
 
 const MISSING_VIDEO_LIMIT: &str = "Video limit must be a positive integer (missing)";
 const MISSING_PATH: &str = "Channel path must not be empty";
-const NOTHING_TO_UPDATE: &str =
-    "Request must change the quality, the video limit, the reconcile interval or summaries";
+const NOTHING_TO_UPDATE: &str = "Request must change the quality, the video limit, the reconcile interval, summaries or categorization";
 
 pub async fn create_channel(
     State(channel_creator): State<ChannelCreator>,
@@ -43,6 +42,7 @@ pub async fn create_channel(
         .transpose()?
         .unwrap_or_else(ReconcileInterval::default_interval);
     let summaries_enabled = required(request.summaries_enabled, MISSING_SUMMARIES)?;
+    let categorization_enabled = required(request.categorization_enabled, MISSING_CATEGORIZATION)?;
 
     let outcome = run_blocking(move || {
         channel_creator.create(
@@ -52,6 +52,7 @@ pub async fn create_channel(
             reconcile_interval,
             path,
             summaries_enabled,
+            categorization_enabled,
         )
     })
     .await?;
@@ -66,6 +67,9 @@ pub async fn create_channel(
         Err(e @ CreateChannelError::YoutubeChannelNotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
         Err(e @ CreateChannelError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
+        Err(e @ CreateChannelError::CategorizationUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
         Err(e @ CreateChannelError::Repository(_)) => Err(ApiError::internal(e)),
@@ -114,6 +118,7 @@ pub async fn update_channel(
             .map(ReconcileInterval::new)
             .transpose()?,
         summaries_enabled: request.summaries_enabled,
+        categorization_enabled: request.categorization_enabled,
     };
     if change.is_empty() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
@@ -123,6 +128,9 @@ pub async fn update_channel(
         Ok(channel) => Ok(Json(ChannelResponse::from(channel))),
         Err(e @ UpdateChannelError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
         Err(e @ UpdateChannelError::SummariesUnavailable) => {
+            Err(ApiError::new(StatusCode::CONFLICT, e))
+        }
+        Err(e @ UpdateChannelError::CategorizationUnavailable) => {
             Err(ApiError::new(StatusCode::CONFLICT, e))
         }
         Err(e @ UpdateChannelError::Repository(_)) => Err(ApiError::internal(e)),
@@ -196,7 +204,7 @@ mod tests {
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::preferences::SummaryModel;
-    use crate::domain::preferences::{Preferences, SummarySettings};
+    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
@@ -362,6 +370,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_channel_with_categorization_enabled() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let channel_creator = ChannelCreator::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = CreateChannelRequest {
+            categorization_enabled: Some(true),
+            ..create_request("@somechannel")
+        };
+        let response = create(channel_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                ChannelResponse {
+                    categorization_enabled: true,
+                    ..some_channel_response()
+                }
+            ))
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel").with_categorization_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_a_channel_with_summaries_if_ai_is_off() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -391,6 +436,42 @@ mod tests {
         );
         assert_eq!(channel_repository.list().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_a_channel_with_categorization_if_unavailable() {
+        for preferences in categorization_unavailable() {
+            let db = TestDatabase::new();
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences_repository.save(&preferences).unwrap();
+            let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+            let event_repository = SqliteEventRepository::new(db.database());
+            // Failing lookup: reaching YouTube would answer 502, not 409.
+            let channel_creator = ChannelCreator::new(
+                channel_repository.clone(),
+                Arc::new(FailingYoutubeChannelRepository),
+                Arc::new(FakeChannelAvatarRepository::default()),
+                event_publisher(&db),
+                Arc::new(FixedClock(fixed_timestamp())),
+                preferences_repository,
+            );
+
+            let request = CreateChannelRequest {
+                categorization_enabled: Some(true),
+                ..create_request("@somechannel")
+            };
+            let response = create(channel_creator, request).await;
+
+            assert_eq!(
+                response,
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Turn on AI categorization before enabling it for a channel"
+                ))
+            );
+            assert_eq!(channel_repository.list().unwrap(), vec![]);
+            assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+        }
     }
 
     #[tokio::test]
@@ -700,6 +781,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_the_existing_source_when_categorization_differs_on_create() {
+        let db = TestDatabase::new();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let existing = channel("@somechannel");
+        channel_repository.insert(&existing).unwrap();
+        let channel_creator = ChannelCreator::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+        let request = CreateChannelRequest {
+            categorization_enabled: Some(true),
+            ..create_request("@somechannel")
+        };
+
+        let response = create(channel_creator, request).await;
+
+        assert_eq!(response, Ok((StatusCode::OK, some_channel_response())));
+        assert_eq!(channel_repository.list().unwrap(), vec![existing]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_existing_channel_if_handle_differs_in_case() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -817,6 +927,23 @@ mod tests {
             response,
             Err(ApiError::bad_request(
                 "Summaries setting must be true or false (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_categorization_missing() {
+        let request = CreateChannelRequest {
+            categorization_enabled: None,
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Categorization setting must be true or false (missing)"
             ))
         );
     }
@@ -1522,6 +1649,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_enable_categorization_on_a_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&categorization_on()).unwrap();
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = UpdateChannelRequest {
+            categorization_enabled: Some(true),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                categorization_enabled: true,
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel").with_categorization_enabled(true)]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_enable_summaries_on_a_channel_if_summaries_are_off() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1564,6 +1727,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_enable_categorization_on_a_channel_if_unavailable() {
+        for preferences in categorization_unavailable() {
+            let db = TestDatabase::new();
+            let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+            channel_repository.insert(&channel("@somechannel")).unwrap();
+            let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+            preferences_repository.save(&preferences).unwrap();
+            let channel_updater = ChannelUpdater::new(
+                channel_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                preferences_repository,
+            );
+
+            let request = UpdateChannelRequest {
+                quality: Some("low".to_string()),
+                categorization_enabled: Some(true),
+                ..update_request()
+            };
+            let response = update(channel_updater, "@somechannel", request).await;
+
+            assert_eq!(
+                response,
+                Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Turn on AI categorization before enabling it for a channel"
+                ))
+            );
+            assert_eq!(
+                channel_repository.list().unwrap(),
+                vec![channel("@somechannel")]
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn it_should_disable_summaries_on_a_channel_while_ai_is_off() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1582,6 +1784,36 @@ mod tests {
 
         let request = UpdateChannelRequest {
             summaries_enabled: Some(false),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(response, Ok(some_channel_response()));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_disable_categorization_on_a_channel_while_ai_is_off() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel").with_categorization_enabled(true))
+            .unwrap();
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let request = UpdateChannelRequest {
+            categorization_enabled: Some(false),
             ..update_request()
         };
         let response = update(channel_updater, "@somechannel", request).await;
@@ -1914,7 +2146,7 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Request must change the quality, the video limit, the reconcile interval or summaries"
+                "Request must change the quality, the video limit, the reconcile interval, summaries or categorization"
             ))
         );
     }
@@ -2076,6 +2308,46 @@ mod tests {
                     summaries_enabled: true,
                     ..some_channel_list_item_response()
                 },
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_channels_with_their_categorization_setting() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let categorized = Channel {
+            name: "Categorized Channel".to_string(),
+            path: PlaylistPath::new("creators/categorized").unwrap(),
+            ..channel("@categorized").with_categorization_enabled(true)
+        };
+        channel_repository.insert(&categorized).unwrap();
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteEventRepository::new(db.database())),
+            "/videos",
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                ChannelListItemResponse {
+                    id: "@categorized".to_string(),
+                    name: "Categorized Channel".to_string(),
+                    path: "creators/categorized".to_string(),
+                    categorization_enabled: true,
+                    ..some_channel_list_item_response()
+                },
+                some_channel_list_item_response(),
             ])
         );
     }
@@ -3153,6 +3425,37 @@ mod tests {
         }
     }
 
+    /// Preferences with AI, categories and categorization on.
+    fn categorization_on() -> Preferences {
+        Preferences {
+            ai_enabled: true,
+            ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+            categorization: CategorizationSettings {
+                enabled: true,
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        }
+    }
+
+    /// One of AI, categories and categorization off in each.
+    fn categorization_unavailable() -> [Preferences; 3] {
+        [
+            Preferences {
+                ai_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categories_enabled: false,
+                ..categorization_on()
+            },
+            Preferences {
+                categorization: CategorizationSettings::default(),
+                ..categorization_on()
+            },
+        ]
+    }
+
     /// Preferences with AI and summaries on, so sources can enable summaries.
     fn summaries_on() -> Preferences {
         Preferences {
@@ -3294,6 +3597,7 @@ mod tests {
             path: Some("creators/somechannel".to_string()),
             reconcile_interval_minutes: None,
             summaries_enabled: Some(false),
+            categorization_enabled: Some(false),
         }
     }
 
@@ -3317,6 +3621,7 @@ mod tests {
             video_limit: None,
             reconcile_interval_minutes: None,
             summaries_enabled: None,
+            categorization_enabled: None,
         }
     }
 
@@ -3332,6 +3637,7 @@ mod tests {
             avatar_filename: None,
             created_at: fixed_timestamp(),
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 
@@ -3347,6 +3653,7 @@ mod tests {
             unwatched_count: 0,
             work_in_progress: false,
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 

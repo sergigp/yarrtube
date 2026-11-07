@@ -15,6 +15,8 @@ pub struct CreatePlaylistRequest {
     pub reconcile_interval_minutes: Option<i64>,
     #[serde(default)]
     pub summaries_enabled: Option<bool>,
+    #[serde(default)]
+    pub categorization_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,6 +29,8 @@ pub struct UpdatePlaylistRequest {
     pub reconcile_interval_minutes: Option<i64>,
     #[serde(default)]
     pub summaries_enabled: Option<bool>,
+    #[serde(default)]
+    pub categorization_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +56,7 @@ pub struct PlaylistResponse {
     pub hide_unwatched_count: bool,
     pub reconcile_interval_minutes: u32,
     pub summaries_enabled: bool,
+    pub categorization_enabled: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -67,6 +72,7 @@ impl From<Playlist> for PlaylistResponse {
             hide_unwatched_count: playlist.hide_unwatched_count,
             reconcile_interval_minutes: playlist.reconcile_interval.minutes(),
             summaries_enabled: playlist.summaries_enabled,
+            categorization_enabled: playlist.categorization_enabled,
             created_at: playlist.created_at,
         }
     }
@@ -83,6 +89,7 @@ pub struct PlaylistListItemResponse {
     pub hide_unwatched_count: bool,
     pub reconcile_interval_minutes: u32,
     pub summaries_enabled: bool,
+    pub categorization_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub unwatched_count: usize,
     pub work_in_progress: bool,
@@ -100,6 +107,7 @@ impl From<PlaylistView> for PlaylistListItemResponse {
             hide_unwatched_count: playlist.hide_unwatched_count,
             reconcile_interval_minutes: playlist.reconcile_interval.minutes(),
             summaries_enabled: playlist.summaries_enabled,
+            categorization_enabled: playlist.categorization_enabled,
             created_at: playlist.created_at,
             unwatched_count: playlist.unwatched_count,
             work_in_progress: playlist.work_in_progress,

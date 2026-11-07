@@ -2,6 +2,7 @@ use super::category_color::CategoryColor;
 use super::category_id::CategoryId;
 use super::category_member::CategoryMember;
 use super::category_name::CategoryName;
+use super::category_prompt::CategoryPrompt;
 use chrono::{DateTime, Utc};
 
 /// A user-created group of tracked sources.
@@ -10,6 +11,7 @@ pub struct Category {
     pub id: CategoryId,
     pub name: CategoryName,
     pub color: CategoryColor,
+    pub ai_prompt: Option<CategoryPrompt>,
     /// Each member once, in the order first added.
     pub members: Vec<CategoryMember>,
     pub created_at: DateTime<Utc>,
@@ -22,6 +24,7 @@ impl Category {
             id: CategoryId::new_generated(),
             name,
             color,
+            ai_prompt: None,
             members: Vec::new(),
             created_at: now,
         }
@@ -33,6 +36,10 @@ impl Category {
 
     pub fn with_color(self, color: CategoryColor) -> Self {
         Self { color, ..self }
+    }
+
+    pub fn with_ai_prompt(self, ai_prompt: Option<CategoryPrompt>) -> Self {
+        Self { ai_prompt, ..self }
     }
 
     /// Replaces the members, keeping each once (first occurrence wins).

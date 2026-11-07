@@ -74,6 +74,23 @@ describe('EditChannelDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it('sends only the changed categorization setting', async () => {
+    const { onSave, onOpenChange } = renderDialog(aChannel(), undefined, {
+      'GET /api/categories': aCategoryList(),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+    })
+    const user = userEvent.setup()
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+
+    expect(categorization).not.toBeChecked()
+    await waitFor(() => expect(categorization).toBeEnabled())
+    await user.click(categorization)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ categorization_enabled: true })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('lets summaries be turned off while AI is off', async () => {
     const { onSave, onOpenChange, fetchMock } = renderDialog(aChannel({ summaries_enabled: true }))
     const user = userEvent.setup()
@@ -88,6 +105,25 @@ describe('EditChannelDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ summaries_enabled: false })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('lets categorization be turned off while AI is off', async () => {
+    const { onSave, onOpenChange, fetchMock } = renderDialog(
+      aChannel({ categorization_enabled: true }),
+    )
+    const user = userEvent.setup()
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/preferences', expect.anything()),
+    )
+
+    expect(categorization).toBeChecked()
+    expect(categorization).toBeEnabled()
+    await user.click(categorization)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ categorization_enabled: false })
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 

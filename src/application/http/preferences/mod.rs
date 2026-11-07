@@ -4,8 +4,8 @@ use super::blocking::run_blocking;
 use super::error::ApiError;
 use crate::domain::llm_server::OllamaUrl;
 use crate::domain::preferences::{
-    ContextLength, PreferencesChange, SummaryModel, SummaryPrompt, Temperature, Theme,
-    UpdatePreferencesError,
+    CategorizationModel, CategorizationPrompt, ContextLength, PreferencesChange, SummaryModel,
+    SummaryPrompt, Temperature, Theme, UpdatePreferencesError,
 };
 use crate::domain::services::{
     PreferencesSearcher, PreferencesSearcherApi, PreferencesUpdater, PreferencesUpdaterApi,
@@ -60,6 +60,15 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
             .summaries_prompt
             .map(|prompt| prompt.map(SummaryPrompt::new).transpose())
             .transpose()?,
+        categorization_enabled: request.categorization_enabled,
+        categorization_model: request
+            .categorization_model
+            .map(CategorizationModel::new)
+            .transpose()?,
+        categorization_prompt: request
+            .categorization_prompt
+            .map(|prompt| prompt.map(CategorizationPrompt::new).transpose())
+            .transpose()?,
     })
 }
 
@@ -82,7 +91,7 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::preferences::{Preferences, SummarySettings};
+    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
     use crate::domain::video::{SummaryState, Video, VideoId};
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
@@ -211,6 +220,140 @@ mod tests {
 
             assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
         }
+    }
+
+    #[tokio::test]
+    async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_searcher = PreferencesSearcher::new(repository);
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_enabled: false,
+                categorization_model: "qwen3:4b".to_string(),
+                categorization_prompt: include_str!("../../../../prompts/categorization/v1.md")
+                    .to_string(),
+                categorization_prompt_is_default: true,
+                ..all_on_response()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_save_the_categorization_settings() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_enabled: Some(true),
+            categorization_model: Some("gemma3:4b".to_string()),
+            categorization_prompt: Some(Some("Answer yes or no.".to_string())),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_enabled: true,
+                categorization_model: "gemma3:4b".to_string(),
+                categorization_prompt: "Answer yes or no.".to_string(),
+                categorization_prompt_is_default: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                categorization: CategorizationSettings {
+                    enabled: true,
+                    model: CategorizationModel::new("gemma3:4b").unwrap(),
+                    prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+                },
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_go_back_to_the_shipped_categorization_prompt() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let saved = Preferences {
+            categorization: CategorizationSettings {
+                prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        };
+        repository.save(&saved).unwrap();
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_prompt: Some(None),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(response, Ok(all_on_response()));
+        assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_if_the_categorization_model_is_blank() {
+        let request = UpdatePreferencesRequest {
+            categorization_model: Some("  ".to_string()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Categorization model must be named (got \"  \")"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_if_the_categorization_prompt_is_blank() {
+        let request = UpdatePreferencesRequest {
+            categorization_prompt: Some(Some("  ".to_string())),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Categorization prompt must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_unavailable_summaries_when_the_categorization_settings_change() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = unavailable_video();
+        video_repository.save(&video).unwrap();
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_model: Some("gemma3:4b".to_string()),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
     }
 
     #[tokio::test]

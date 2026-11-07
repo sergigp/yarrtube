@@ -7,6 +7,7 @@ pub enum CreateChannelError {
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
     SummariesUnavailable,
+    CategorizationUnavailable,
 }
 
 impl fmt::Display for CreateChannelError {
@@ -22,6 +23,12 @@ impl fmt::Display for CreateChannelError {
             Self::Repository(e) => write!(f, "{e}"),
             Self::SummariesUnavailable => {
                 write!(f, "Turn on AI summaries before enabling them for a channel")
+            }
+            Self::CategorizationUnavailable => {
+                write!(
+                    f,
+                    "Turn on AI categorization before enabling it for a channel"
+                )
             }
         }
     }
@@ -51,6 +58,7 @@ pub enum UpdateChannelError {
     NotFound(ChannelHandle),
     Repository(anyhow::Error),
     SummariesUnavailable,
+    CategorizationUnavailable,
 }
 
 impl fmt::Display for UpdateChannelError {
@@ -60,6 +68,12 @@ impl fmt::Display for UpdateChannelError {
             Self::Repository(e) => write!(f, "{e}"),
             Self::SummariesUnavailable => {
                 write!(f, "Turn on AI summaries before enabling them for a channel")
+            }
+            Self::CategorizationUnavailable => {
+                write!(
+                    f,
+                    "Turn on AI categorization before enabling it for a channel"
+                )
             }
         }
     }

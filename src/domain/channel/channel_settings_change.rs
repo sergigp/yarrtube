@@ -8,6 +8,7 @@ pub struct ChannelSettingsChange {
     pub video_limit: Option<VideoLimit>,
     pub reconcile_interval: Option<ReconcileInterval>,
     pub summaries_enabled: Option<bool>,
+    pub categorization_enabled: Option<bool>,
 }
 
 impl ChannelSettingsChange {
@@ -16,5 +17,6 @@ impl ChannelSettingsChange {
             && self.video_limit.is_none()
             && self.reconcile_interval.is_none()
             && self.summaries_enabled.is_none()
+            && self.categorization_enabled.is_none()
     }
 }

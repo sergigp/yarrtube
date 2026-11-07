@@ -54,7 +54,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO playlists (id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO playlists (id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled, categorization_enabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
@@ -67,6 +67,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                 playlist.reconcile_interval.minutes(),
                 playlist.hide_unwatched_count,
                 playlist.summaries_enabled,
+                playlist.categorization_enabled,
             ],
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to insert playlist"))
@@ -77,7 +78,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     fn update(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE playlists SET name = ?2, path = ?3, quality = ?4, kind = ?5, exclude_from_home = ?6, created_at = ?7, reconcile_interval_minutes = ?8, hide_unwatched_count = ?9, summaries_enabled = ?10 WHERE id = ?1",
+            "UPDATE playlists SET name = ?2, path = ?3, quality = ?4, kind = ?5, exclude_from_home = ?6, created_at = ?7, reconcile_interval_minutes = ?8, hide_unwatched_count = ?9, summaries_enabled = ?10, categorization_enabled = ?11 WHERE id = ?1",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
@@ -89,6 +90,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                 playlist.reconcile_interval.minutes(),
                 playlist.hide_unwatched_count,
                 playlist.summaries_enabled,
+                playlist.categorization_enabled,
             ],
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to update playlist"))
@@ -159,6 +161,7 @@ impl SqlitePlaylistRepository {
             reconcile_interval: row.get(8)?,
             hide_unwatched_count: row.get(9)?,
             summaries_enabled: row.get(10)?,
+            categorization_enabled: row.get(11)?,
         })
     }
 
@@ -172,6 +175,7 @@ impl SqlitePlaylistRepository {
             exclude_from_home: row.exclude_from_home,
             hide_unwatched_count: row.hide_unwatched_count,
             summaries_enabled: row.summaries_enabled,
+            categorization_enabled: row.categorization_enabled,
             reconcile_interval: ReconcileInterval::new(row.reconcile_interval)?,
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
                 .context("failed to parse stored created_at")?
@@ -184,7 +188,7 @@ impl SqlitePlaylistRepository {
     }
 }
 
-const PLAYLIST_COLUMNS: &str = "id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled";
+const PLAYLIST_COLUMNS: &str = "id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled, categorization_enabled";
 
 struct PlaylistRow {
     id: String,
@@ -198,6 +202,7 @@ struct PlaylistRow {
     reconcile_interval: i64,
     hide_unwatched_count: bool,
     summaries_enabled: bool,
+    categorization_enabled: bool,
 }
 
 #[cfg(test)]
@@ -274,6 +279,19 @@ mod tests {
         repo.insert(&playlist).unwrap();
         assert_eq!(repo.find(&playlist.id).unwrap(), Some(playlist.clone()));
         let updated = playlist.with_hide_unwatched_count(false);
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
+    fn it_should_round_trip_the_playlists_categorization_setting() {
+        let repo = repo();
+        let playlist = playlist("PL1", "First").with_categorization_enabled(true);
+        repo.insert(&playlist).unwrap();
+        assert_eq!(repo.find(&playlist.id).unwrap(), Some(playlist.clone()));
+        let updated = playlist.with_categorization_enabled(false);
 
         repo.update(&updated).unwrap();
 

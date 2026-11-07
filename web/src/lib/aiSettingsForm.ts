@@ -10,6 +10,9 @@ export interface AiSettingsForm {
   summaries_temperature: string
   summaries_thinking: boolean
   summaries_prompt: string
+  categorization_enabled: boolean
+  categorization_model: string
+  categorization_prompt: string
 }
 
 /** The form showing `preferences`. */
@@ -23,6 +26,9 @@ export function formFrom(preferences: Preferences): AiSettingsForm {
     summaries_temperature: String(preferences.summaries_temperature),
     summaries_thinking: preferences.summaries_thinking,
     summaries_prompt: preferences.summaries_prompt,
+    categorization_enabled: preferences.categorization_enabled,
+    categorization_model: preferences.categorization_model,
+    categorization_prompt: preferences.categorization_prompt,
   }
 }
 
@@ -47,6 +53,9 @@ export function changedFields(
     summaries_temperature: toNumber(form.summaries_temperature),
     summaries_thinking: thinking ? form.summaries_thinking : saved.summaries_thinking,
     summaries_prompt: form.summaries_prompt,
+    categorization_enabled: form.categorization_enabled,
+    categorization_model: form.categorization_model,
+    categorization_prompt: form.categorization_prompt,
   }
   const before: PreferencesPatch = { ...saved, ollama_url: saved.ollama_url ?? '' }
   return Object.fromEntries(

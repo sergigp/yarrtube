@@ -245,8 +245,8 @@ describe('CategoryDetail', () => {
     expect(explanation).toBe(
       'Add channels and playlists to Chess to watch their videos here, newest first.',
     )
-    expect(items).toEqual(['Change color', 'Manage sources', 'Delete'])
-    expect(dialogTitle).toBe('Manage sources in Chess')
+    expect(items).toEqual(['Change color', 'Edit settings', 'Delete'])
+    expect(dialogTitle).toBe('Edit Chess settings')
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
@@ -334,18 +334,18 @@ describe('CategoryDetail', () => {
     expect(JSON.parse(init.body as string)).toEqual({ name: 'Board games' })
   })
 
-  it('opens the dialog on arrival with ManageSourcesState, once', async () => {
+  it('opens the dialog on arrival with CategorySettingsState, once', async () => {
     renderCategory(
       {
         'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
         'GET /api/categories/chess/videos': [],
       },
-      { pathname: '/categories/chess', state: { manageSources: true } },
+      { pathname: '/categories/chess', state: { editSettings: true } },
     )
     const user = userEvent.setup()
 
     const openedOnArrival = (await screen.findByRole('dialog')).textContent?.includes(
-      'Manage sources in Chess',
+      'Edit Chess settings',
     )
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())

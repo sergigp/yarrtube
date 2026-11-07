@@ -37,6 +37,7 @@ const DEFAULT_PREFERENCES = {
   ai_enabled: false,
   ollama_url: '',
   summaries_enabled: false,
+  categorization_enabled: false,
   summaries_model: 'qwen3:4b',
   summaries_context_length: 12288,
   summaries_temperature: 0.3,

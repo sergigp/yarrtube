@@ -16,6 +16,8 @@ pub struct CreateChannelRequest {
     pub reconcile_interval_minutes: Option<i64>,
     #[serde(default)]
     pub summaries_enabled: Option<bool>,
+    #[serde(default)]
+    pub categorization_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -28,6 +30,8 @@ pub struct UpdateChannelRequest {
     pub reconcile_interval_minutes: Option<i64>,
     #[serde(default)]
     pub summaries_enabled: Option<bool>,
+    #[serde(default)]
+    pub categorization_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +55,7 @@ pub struct ChannelResponse {
     pub video_limit: u32,
     pub reconcile_interval_minutes: u32,
     pub summaries_enabled: bool,
+    pub categorization_enabled: bool,
     pub path: String,
     pub avatar_filename: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -66,6 +71,7 @@ impl From<Channel> for ChannelResponse {
             video_limit: channel.video_limit.value(),
             reconcile_interval_minutes: channel.reconcile_interval.minutes(),
             summaries_enabled: channel.summaries_enabled,
+            categorization_enabled: channel.categorization_enabled,
             path: channel.path.as_str().to_string(),
             avatar_filename: channel.avatar_filename,
             created_at: channel.created_at,
@@ -82,6 +88,7 @@ pub struct ChannelListItemResponse {
     pub video_limit: u32,
     pub reconcile_interval_minutes: u32,
     pub summaries_enabled: bool,
+    pub categorization_enabled: bool,
     pub avatar_filename: Option<String>,
     pub unwatched_count: usize,
     pub work_in_progress: bool,
@@ -97,6 +104,7 @@ impl From<ChannelView> for ChannelListItemResponse {
             video_limit: channel.video_limit.value(),
             reconcile_interval_minutes: channel.reconcile_interval.minutes(),
             summaries_enabled: channel.summaries_enabled,
+            categorization_enabled: channel.categorization_enabled,
             avatar_filename: channel.avatar_filename,
             unwatched_count: channel.unwatched_count,
             work_in_progress: channel.work_in_progress,

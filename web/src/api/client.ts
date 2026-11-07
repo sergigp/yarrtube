@@ -136,6 +136,7 @@ export interface CreatePlaylistRequest {
   exclude_from_home: boolean
   reconcile_interval_minutes: number
   summaries_enabled: boolean
+  categorization_enabled: boolean
 }
 
 export function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistListItem> {
@@ -160,6 +161,7 @@ export interface UpdatePlaylistRequest {
   hide_unwatched_count?: boolean
   reconcile_interval_minutes?: number
   summaries_enabled?: boolean
+  categorization_enabled?: boolean
 }
 
 /**
@@ -219,6 +221,7 @@ export interface CreateChannelRequest {
   path: string
   reconcile_interval_minutes: number
   summaries_enabled: boolean
+  categorization_enabled: boolean
 }
 
 export function createChannel(body: CreateChannelRequest): Promise<CreatedChannel> {
@@ -231,6 +234,7 @@ export interface UpdateChannelRequest {
   video_limit?: number
   reconcile_interval_minutes?: number
   summaries_enabled?: boolean
+  categorization_enabled?: boolean
 }
 
 /** Changes a channel's quality, video limit and/or reconcile interval. */
@@ -308,10 +312,10 @@ export function createCategory(name: string, color?: string): Promise<CreatedCat
   return request('/categories', { method: 'POST', body: { name, color }, label: '/categories' })
 }
 
-/** Renames and/or recolors; absent fields are kept. */
+/** Renames, recolors and/or sets the AI prompt; absent fields are kept. */
 export async function updateCategory(
   id: string,
-  update: { name?: string; color?: string },
+  update: { name?: string; color?: string; ai_prompt?: string },
 ): Promise<void> {
   await send(`/categories/${encodeURIComponent(id)}`, {
     method: 'PATCH',

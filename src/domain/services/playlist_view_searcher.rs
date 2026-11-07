@@ -113,6 +113,7 @@ impl PlaylistViewSearcher {
             hide_unwatched_count: playlist.hide_unwatched_count,
             reconcile_interval: playlist.reconcile_interval,
             summaries_enabled: playlist.summaries_enabled,
+            categorization_enabled: playlist.categorization_enabled,
             created_at: playlist.created_at,
         }
     }

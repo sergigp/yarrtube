@@ -30,7 +30,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
         let conn = self.db.read()?;
         conn.query_row(
-            "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled FROM channels WHERE id = ?1",
+            "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled FROM channels WHERE id = ?1",
             params![id.as_str()],
             |row| {
                 Ok((
@@ -44,6 +44,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, String>(7)?,
                     row.get::<_, i64>(8)?,
                     row.get::<_, bool>(9)?,
+                    row.get::<_, bool>(10)?,
                 ))
             },
         )
@@ -62,6 +63,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 created_at,
                 reconcile_interval,
                 summaries_enabled,
+                categorization_enabled,
             )| {
                 Self::row_to_channel(
                     id,
@@ -74,6 +76,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     created_at,
                     reconcile_interval,
                     summaries_enabled,
+                    categorization_enabled,
                 )
             },
         )
@@ -83,7 +86,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn insert(&self, channel: &Channel) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 channel.id.as_str(),
                 channel.name,
@@ -94,7 +97,8 @@ impl ChannelRepository for SqliteChannelRepository {
                 channel.avatar_filename,
                 channel.created_at.to_rfc3339(),
                 channel.reconcile_interval.minutes(),
-                channel.summaries_enabled
+                channel.summaries_enabled,
+                channel.categorization_enabled
             ],
         )
         .inspect_err(|e| tracing::error!(channel_id = %channel.id, error = %e, "failed to insert channel"))
@@ -105,7 +109,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn update(&self, channel: &Channel) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE channels SET name = ?2, youtube_channel_id = ?3, quality = ?4, video_limit = ?5, path = ?6, avatar_filename = ?7, created_at = ?8, reconcile_interval_minutes = ?9, summaries_enabled = ?10 WHERE id = ?1",
+            "UPDATE channels SET name = ?2, youtube_channel_id = ?3, quality = ?4, video_limit = ?5, path = ?6, avatar_filename = ?7, created_at = ?8, reconcile_interval_minutes = ?9, summaries_enabled = ?10, categorization_enabled = ?11 WHERE id = ?1",
             params![
                 channel.id.as_str(),
                 channel.name,
@@ -116,7 +120,8 @@ impl ChannelRepository for SqliteChannelRepository {
                 channel.avatar_filename,
                 channel.created_at.to_rfc3339(),
                 channel.reconcile_interval.minutes(),
-                channel.summaries_enabled
+                channel.summaries_enabled,
+                channel.categorization_enabled
             ],
         )
         .inspect_err(
@@ -140,7 +145,7 @@ impl ChannelRepository for SqliteChannelRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled FROM channels ORDER BY name COLLATE NOCASE, rowid",
+                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled FROM channels ORDER BY name COLLATE NOCASE, rowid",
             )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare list query"))
             .context("failed to prepare list query")?;
@@ -157,6 +162,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, String>(7)?,
                     row.get::<_, i64>(8)?,
                     row.get::<_, bool>(9)?,
+                    row.get::<_, bool>(10)?,
                 ))
             })
             .inspect_err(|e| tracing::error!(error = %e, "failed to list channels"))
@@ -174,6 +180,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 created_at,
                 reconcile_interval,
                 summaries_enabled,
+                categorization_enabled,
             ) = row
                 .inspect_err(|e| tracing::error!(error = %e, "failed to read channel row"))
                 .context("failed to read channel row")?;
@@ -188,6 +195,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 created_at,
                 reconcile_interval,
                 summaries_enabled,
+                categorization_enabled,
             )
         })
         .collect()
@@ -207,6 +215,7 @@ impl SqliteChannelRepository {
         created_at: String,
         reconcile_interval: i64,
         summaries_enabled: bool,
+        categorization_enabled: bool,
     ) -> anyhow::Result<Channel> {
         let id = ChannelHandle::new(id)?;
         let quality = Quality::new(quality)?;
@@ -227,7 +236,8 @@ impl SqliteChannelRepository {
             avatar_filename,
             created_at,
         )
-        .with_summaries_enabled(summaries_enabled))
+        .with_summaries_enabled(summaries_enabled)
+        .with_categorization_enabled(categorization_enabled))
     }
 }
 
@@ -323,6 +333,19 @@ mod tests {
             .with_reconcile_interval(ReconcileInterval::new(30).unwrap());
         repo.insert(&channel).unwrap();
         let updated = channel.with_reconcile_interval(ReconcileInterval::new(1440).unwrap());
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
+    fn it_should_round_trip_the_channels_categorization_setting() {
+        let repo = repo();
+        let channel = channel("@somechannel", "Some Channel").with_categorization_enabled(true);
+        repo.insert(&channel).unwrap();
+        assert_eq!(repo.find(&channel.id).unwrap(), Some(channel.clone()));
+        let updated = channel.with_categorization_enabled(false);
 
         repo.update(&updated).unwrap();
 

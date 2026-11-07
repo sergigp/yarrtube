@@ -1,6 +1,7 @@
 use super::category_color::CategoryColor;
 use super::category_id::CategoryId;
 use super::category_name::CategoryName;
+use super::category_prompt::CategoryPrompt;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 
@@ -11,6 +12,7 @@ pub struct CategoryView {
     pub id: CategoryId,
     pub name: CategoryName,
     pub color: CategoryColor,
+    pub ai_prompt: Option<CategoryPrompt>,
     pub unwatched_count: usize,
     /// Existing members only.
     pub channels: Vec<ChannelHandle>,

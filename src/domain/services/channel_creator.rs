@@ -53,6 +53,7 @@ impl ChannelCreator {
 }
 
 pub trait ChannelCreatorApi: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn create(
         &self,
         id: ChannelHandle,
@@ -61,6 +62,7 @@ pub trait ChannelCreatorApi: Send + Sync {
         reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
         summaries_enabled: bool,
+        categorization_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError>;
 }
 
@@ -73,8 +75,10 @@ impl ChannelCreatorApi for ChannelCreator {
         reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
         summaries_enabled: bool,
+        categorization_enabled: bool,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
         self.ensure_summaries_available(summaries_enabled)?;
+        self.ensure_categorization_available(categorization_enabled)?;
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreateChannelOutcome::AlreadyExisted(existing));
         }
@@ -92,7 +96,8 @@ impl ChannelCreatorApi for ChannelCreator {
             avatar_filename,
             self.clock.now(),
         )
-        .with_summaries_enabled(summaries_enabled);
+        .with_summaries_enabled(summaries_enabled)
+        .with_categorization_enabled(categorization_enabled);
         self.insert_channel(&channel)?;
         self.publish_channel_created(&channel)?;
         info!(channel_id = %channel.id, name = %channel.name, "created channel");
@@ -101,6 +106,26 @@ impl ChannelCreatorApi for ChannelCreator {
 }
 
 impl ChannelCreator {
+    /// Enabling categorization needs it available in the preferences.
+    fn ensure_categorization_available(
+        &self,
+        categorization_enabled: bool,
+    ) -> Result<(), CreateChannelError> {
+        if !categorization_enabled {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(CreateChannelError::Repository)?
+            .unwrap_or_default();
+        if preferences.categorization_available() {
+            Ok(())
+        } else {
+            Err(CreateChannelError::CategorizationUnavailable)
+        }
+    }
+
     /// Enabling summaries needs AI and summaries on in the preferences.
     fn ensure_summaries_available(
         &self,

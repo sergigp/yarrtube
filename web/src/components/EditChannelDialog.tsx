@@ -13,7 +13,7 @@ import { CategoryPicker } from './CategoryPicker'
 import { LocationLine } from './LocationLine'
 import { MoveSourceDialog } from './MoveSourceDialog'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
-import { SummariesField } from './SummariesField'
+import { SourceAiSection } from './SourceAiSection'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -85,6 +85,7 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
     video_limit: String(channel.video_limit),
     interval: intervalForm(channel.reconcile_interval_minutes),
     summaries_enabled: channel.summaries_enabled,
+    categorization_enabled: channel.categorization_enabled,
   })
 
   const setField =
@@ -95,6 +96,8 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
   const changeInterval = (interval: IntervalForm) => setForm((prev) => ({ ...prev, interval }))
   const changeSummaries = (summaries_enabled: boolean) =>
     setForm((prev) => ({ ...prev, summaries_enabled }))
+  const changeCategorization = (categorization_enabled: boolean) =>
+    setForm((prev) => ({ ...prev, categorization_enabled }))
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -173,11 +176,18 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
         onChange={changeInterval}
       />
 
-      <SummariesField
-        id="edit-channel-summaries"
-        checked={form.summaries_enabled}
-        onChange={changeSummaries}
-        enabledOnSource={channel.summaries_enabled}
+      <SourceAiSection
+        idPrefix="edit-channel"
+        summaries={{
+          checked: form.summaries_enabled,
+          onChange: changeSummaries,
+          enabledOnSource: channel.summaries_enabled,
+        }}
+        categorization={{
+          checked: form.categorization_enabled,
+          onChange: changeCategorization,
+          enabledOnSource: channel.categorization_enabled,
+        }}
         onNavigateAway={onClose}
       />
 

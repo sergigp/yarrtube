@@ -117,6 +117,7 @@ test('icon-only Tasks tabs and Run now work by accessible name @mobile', async (
       exclude_from_home: false,
       reconcile_interval_minutes: 180,
       summaries_enabled: false,
+      categorization_enabled: false,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()

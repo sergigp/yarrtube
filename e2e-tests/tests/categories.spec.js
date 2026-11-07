@@ -18,7 +18,7 @@ test.use({
   expectedApiErrors: [{ method: 'GET', path: /^\/api\/categories\/[^/]+\/videos$/, status: 404 }],
 })
 
-test('category on mobile: add from the drawer, manage sources full screen, then add from the heading @mobile', async ({ page }) => {
+test('category on mobile: add from the drawer, edit settings full screen, then add from the heading @mobile', async ({ page }) => {
   await page.goto('/')
 
   const dialog = page.getByRole('dialog')
@@ -32,11 +32,11 @@ test('category on mobile: add from the drawer, manage sources full screen, then 
     await expect(dialog).toContainText('Add category')
   })
 
-  await test.step('creating it opens its manage sources dialog full screen', async () => {
+  await test.step('creating it opens its category settings dialog full screen', async () => {
     await dialog.getByLabel('Name').fill('Chess')
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(page).toHaveURL(/\/categories\/[^?]+$/)
-    await expect(dialog).toContainText('Manage sources in Chess')
+    await expect(dialog).toContainText('Edit Chess settings')
     await expect(dialog).toContainText('No channels or playlists to add yet.')
     const box = await dialog.boundingBox()
     const { width, height } = page.viewportSize()
@@ -56,23 +56,23 @@ test('category on mobile: add from the drawer, manage sources full screen, then 
   })
 })
 
-test('category lifecycle: create, manage sources, rename, assign from the add channel dialog, view, mark watched, delete', async ({ page }) => {
+test('category lifecycle: create, edit settings, rename, assign from the add channel dialog, view, mark watched, delete', async ({ page }) => {
   await page.goto('/')
 
   const dialog = page.getByRole('dialog')
   const categoryRows = sectionRows(page, 'Categories')
   const summary = page.locator('main').getByText(/^\d+ sources? · /)
-  const openManageSources = async (name) => {
-    await page.getByRole('button', { name: 'Manage sources' }).click()
-    await expect(dialog).toContainText(`Manage sources in ${name}`)
+  const openCategorySettings = async (name) => {
+    await page.getByRole('button', { name: 'Edit settings' }).click()
+    await expect(dialog).toContainText(`Edit ${name} settings`)
   }
 
-  await test.step('create it from the sidebar, landing in its manage sources dialog', async () => {
+  await test.step('create it from the sidebar, landing in its category settings dialog', async () => {
     await page.getByRole('button', { name: 'Add category', exact: true }).click()
     await dialog.getByLabel('Name').fill('Chess')
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(page).toHaveURL(/\/categories\/[^?]+$/)
-    await expect(dialog).toContainText('Manage sources in Chess')
+    await expect(dialog).toContainText('Edit Chess settings')
     await expect(dialog.getByRole('searchbox', { name: 'Search channels and playlists' })).toBeFocused()
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' })
@@ -102,7 +102,7 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   })
 
   await test.step('remove it and add it back with the chips', async () => {
-    await openManageSources('Board games')
+    await openCategorySettings('Board games')
     const chip = dialog.getByRole('button', { name: channelName, exact: true })
     await expect(chip).toHaveAttribute('aria-pressed', 'true')
     await chip.click()

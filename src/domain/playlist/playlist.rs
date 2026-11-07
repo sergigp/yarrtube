@@ -20,6 +20,7 @@ pub struct Playlist {
     /// The highest episode number the playlist has ever assigned.
     pub last_episode: Option<PlaylistEpisodeNumber>,
     pub summaries_enabled: bool,
+    pub categorization_enabled: bool,
 }
 
 impl Playlist {
@@ -46,6 +47,7 @@ impl Playlist {
             created_at,
             last_episode: None,
             summaries_enabled: false,
+            categorization_enabled: false,
         }
     }
 
@@ -77,6 +79,13 @@ impl Playlist {
     pub fn with_summaries_enabled(self, summaries_enabled: bool) -> Self {
         Self {
             summaries_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_categorization_enabled(self, categorization_enabled: bool) -> Self {
+        Self {
+            categorization_enabled,
             ..self
         }
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoriesShown, summariesAvailable } from './preferences'
+import { categoriesShown, categorizationAvailable, summariesAvailable } from './preferences'
 import { aPreferences } from '@/test/helpers'
 
 describe('categoriesShown', () => {
@@ -33,5 +33,22 @@ describe('summariesAvailable', () => {
     )
 
     expect(availability).toEqual([false, false, false, true])
+  })
+})
+
+describe('categorizationAvailable', () => {
+  it('is unavailable while the preferences are loading or failed', () => {
+    expect(categorizationAvailable(undefined)).toBe(false)
+  })
+
+  it('is available only with AI, categories and categorization on', () => {
+    const on = { ai_enabled: true, categories_enabled: true, categorization_enabled: true }
+
+    expect(categorizationAvailable(aPreferences(on))).toBe(true)
+    expect(categorizationAvailable(aPreferences({ ...on, ai_enabled: false }))).toBe(false)
+    expect(categorizationAvailable(aPreferences({ ...on, categories_enabled: false }))).toBe(false)
+    expect(categorizationAvailable(aPreferences({ ...on, categorization_enabled: false }))).toBe(
+      false,
+    )
   })
 })

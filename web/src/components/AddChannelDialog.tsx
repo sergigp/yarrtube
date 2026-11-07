@@ -18,7 +18,7 @@ import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { lookupNotice } from './lookupNotice'
 import { FolderNameField } from './FolderNameField'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
-import { SummariesField } from './SummariesField'
+import { SourceAiSection } from './SourceAiSection'
 import { CategoryPicker } from './CategoryPicker'
 import { SaveToField } from './SaveToField'
 import { Thumbnail } from './Thumbnail'
@@ -105,6 +105,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [summariesEnabled, setSummariesEnabled] = useState(false)
+  const [categorizationEnabled, setCategorizationEnabled] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
   const saveSourceCategories = useSaveSourceCategories()
   const withCategories = useCategoriesShown()
@@ -137,6 +138,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         path: location.value.path,
         reconcile_interval_minutes: reconcileIntervalMinutes,
         summaries_enabled: summariesEnabled,
+        categorization_enabled: categorizationEnabled,
       })
       location.remember()
       invalidateLibrary()
@@ -179,10 +181,16 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
 
       {withCategories && <CategoryPicker value={categoryIds} onChange={setCategoryIds} />}
 
-      <SummariesField
-        id="add-channel-summaries"
-        checked={summariesEnabled}
-        onChange={setSummariesEnabled}
+      <SourceAiSection
+        idPrefix="add-channel"
+        summaries={{
+          checked: summariesEnabled,
+          onChange: setSummariesEnabled,
+        }}
+        categorization={{
+          checked: categorizationEnabled,
+          onChange: setCategorizationEnabled,
+        }}
         onNavigateAway={onClose}
       />
 

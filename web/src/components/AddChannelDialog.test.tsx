@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddChannelDialog } from './AddChannelDialog'
 import {
@@ -142,6 +142,7 @@ describe('AddChannelDialog', () => {
       path: 'channels/chan',
       reconcile_interval_minutes: 180,
       summaries_enabled: false,
+      categorization_enabled: false,
     })
   })
 
@@ -173,6 +174,81 @@ describe('AddChannelDialog', () => {
     expect(JSON.parse(createCall[1].body as string)).toMatchObject({ summaries_enabled: true })
   })
 
+  it('groups the AI options in an AI section', async () => {
+    renderDialog({
+      'GET /api/preferences': aPreferences({
+        ai_enabled: true,
+        summaries_enabled: true,
+        categorization_enabled: true,
+      }),
+    })
+    const section = await screen.findByRole('group', { name: 'AI' })
+
+    await waitFor(() =>
+      expect(within(section).getByRole('checkbox', { name: 'Categorize videos' })).toBeEnabled(),
+    )
+    expect(
+      within(section)
+        .getAllByRole('checkbox')
+        .map((box) => box.getAttribute('id')),
+    ).toEqual(['add-channel-summaries', 'add-channel-categorization'])
+    expect(
+      within(section).getByRole('checkbox', { name: 'Categorize videos' }),
+    ).toHaveAccessibleDescription(
+      'Let AI add each video to the categories it fits.',
+    )
+  })
+
+  it('creates the channel with categorization when checked', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/channels/preview?channel=%40chan': {
+        id: '@chan',
+        title: 'The Channel',
+        avatar_url: null,
+      },
+      'POST /api/channels': aChannel(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+    await waitFor(() => expect(categorization).toBeEnabled())
+    await user.click(categorization)
+    const submit = screen.getByRole('button', { name: 'Create Channel' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const createCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit]
+    expect(JSON.parse(createCall[1].body as string)).toMatchObject({
+      categorization_enabled: true,
+    })
+  })
+
+  it('disables categorization while it is unavailable and links to the AI settings', async () => {
+    const { fetchMock } = renderDialog({})
+
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/preferences', expect.anything()),
+    )
+    expect(categorization).toBeDisabled()
+    expect(categorization).not.toBeChecked()
+    expect(categorization).toHaveAccessibleDescription('Turn on AI categorization in AI settings.')
+  })
+
+  it('hides categorization while categories are off', async () => {
+    renderDialog({ 'GET /api/preferences': aPreferences({ categories_enabled: false }) })
+
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: 'Categorize videos' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Summarize videos' })).toBeInTheDocument()
+  })
+
   it('disables summaries while AI is off and links to the AI settings', async () => {
     const fetchMock = mockApi(baseRoutes)
     const onOpenChange = vi.fn()
@@ -191,7 +267,7 @@ describe('AddChannelDialog', () => {
     expect(summaries).toBeDisabled()
     expect(summaries).not.toBeChecked()
     expect(summaries).toHaveAccessibleDescription('Turn on AI summaries in AI settings.')
-    await user.click(screen.getByRole('link', { name: 'AI settings' }))
+    await user.click(screen.getAllByRole('link', { name: 'AI settings' })[0]!)
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
@@ -275,6 +351,7 @@ describe('AddChannelDialog', () => {
       path: 'channels/chan',
       reconcile_interval_minutes: 30,
       summaries_enabled: false,
+      categorization_enabled: false,
     })
   })
 

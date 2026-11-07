@@ -1,6 +1,7 @@
 use crate::domain::llm_server::OllamaUrl;
 use crate::domain::preferences::{
-    ContextLength, Preferences, SummaryModel, SummaryPrompt, SummarySettings, Temperature, Theme,
+    CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength, Preferences,
+    SummaryModel, SummaryPrompt, SummarySettings, Temperature, Theme,
 };
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -79,6 +80,10 @@ struct StoredPreferences {
     summaries_thinking: Option<bool>,
     /// Only once the user saved one: missing reads as the shipped prompt.
     summaries_prompt: Option<String>,
+    categorization_enabled: Option<bool>,
+    categorization_model: Option<String>,
+    /// Only once the user saved one: missing reads as the shipped prompt.
+    categorization_prompt: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -99,6 +104,13 @@ impl From<&Preferences> for StoredPreferences {
             summaries_thinking: Some(preferences.summaries.thinking),
             summaries_prompt: preferences
                 .summaries
+                .prompt
+                .as_ref()
+                .map(|prompt| prompt.as_str().to_string()),
+            categorization_enabled: Some(preferences.categorization.enabled),
+            categorization_model: Some(preferences.categorization.model.as_str().to_string()),
+            categorization_prompt: preferences
+                .categorization
                 .prompt
                 .as_ref()
                 .map(|prompt| prompt.as_str().to_string()),
@@ -156,6 +168,18 @@ impl From<StoredPreferences> for Preferences {
                 // reading it as the default would erase it on the next save.
                 prompt: stored.summaries_prompt.map(SummaryPrompt::from_stored),
             },
+            categorization: CategorizationSettings {
+                enabled: stored
+                    .categorization_enabled
+                    .unwrap_or(defaults.categorization.enabled),
+                model: stored
+                    .categorization_model
+                    .and_then(|model| CategorizationModel::new(model).ok())
+                    .unwrap_or(defaults.categorization.model),
+                prompt: stored
+                    .categorization_prompt
+                    .map(CategorizationPrompt::from_stored),
+            },
         }
     }
 }
@@ -190,6 +214,41 @@ mod tests {
         repository.save(&preferences).unwrap();
 
         assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_round_trip_the_categorization_settings() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            categorization: CategorizationSettings {
+                enabled: true,
+                model: CategorizationModel::new("gemma3:4b").unwrap(),
+                prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_missing_categorization_keys_as_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"summaries_enabled\": true}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().unwrap().map(|found| found.categorization),
+            Some(CategorizationSettings::default())
+        );
     }
 
     #[test]

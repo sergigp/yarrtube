@@ -50,7 +50,12 @@ import type {
   Video,
 } from './types'
 import { anyWorkInProgress } from '@/lib/libraryPolling'
-import { aiEnabled, categoriesShown, summariesAvailable } from '@/lib/preferences'
+import {
+  aiEnabled,
+  categoriesShown,
+  categorizationAvailable,
+  summariesAvailable,
+} from '@/lib/preferences'
 
 // The sidebar lists change rarely and are refetched right after the user's
 // own actions; views showing live download progress poll quickly.
@@ -271,6 +276,11 @@ export function useAiEnabled(): boolean {
 /** Whether sources can have their videos summarized, per the preferences. */
 export function useSummariesAvailable(): boolean {
   return summariesAvailable(usePreferences().data)
+}
+
+/** Whether sources can have their videos categorized, per the preferences. */
+export function useCategorizationAvailable(): boolean {
+  return categorizationAvailable(usePreferences().data)
 }
 
 /**

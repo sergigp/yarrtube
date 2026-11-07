@@ -153,6 +153,7 @@ impl CategoryViewSearcher {
             id: category.id,
             name: category.name,
             color: category.color,
+            ai_prompt: category.ai_prompt,
             unwatched_count,
         }
     }

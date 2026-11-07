@@ -67,6 +67,23 @@ describe('EditPlaylistDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it('sends only the checked categorization setting', async () => {
+    const { onSave, onOpenChange } = renderDialog(aPlaylist(), undefined, {
+      'GET /api/categories': aCategoryList(),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+    })
+    const user = userEvent.setup()
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+
+    expect(categorization).not.toBeChecked()
+    await waitFor(() => expect(categorization).toBeEnabled())
+    await user.click(categorization)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ categorization_enabled: true })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('disables summaries while AI is off', async () => {
     const { fetchMock } = renderDialog(aPlaylist())
     const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })

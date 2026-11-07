@@ -47,6 +47,7 @@ impl PlaylistCreator {
 }
 
 pub trait PlaylistCreatorApi: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn create(
         &self,
         id: PlaylistId,
@@ -55,6 +56,7 @@ pub trait PlaylistCreatorApi: Send + Sync {
         exclude_from_home: bool,
         reconcile_interval: ReconcileInterval,
         summaries_enabled: bool,
+        categorization_enabled: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError>;
 }
 
@@ -67,8 +69,10 @@ impl PlaylistCreatorApi for PlaylistCreator {
         exclude_from_home: bool,
         reconcile_interval: ReconcileInterval,
         summaries_enabled: bool,
+        categorization_enabled: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
         self.ensure_summaries_available(summaries_enabled)?;
+        self.ensure_categorization_available(categorization_enabled)?;
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreatePlaylistOutcome::AlreadyExisted(existing));
         }
@@ -86,7 +90,8 @@ impl PlaylistCreatorApi for PlaylistCreator {
             reconcile_interval,
             now,
         )
-        .with_summaries_enabled(summaries_enabled);
+        .with_summaries_enabled(summaries_enabled)
+        .with_categorization_enabled(categorization_enabled);
         self.insert_playlist(&playlist)?;
         self.publish_playlist_created(&playlist)?;
         info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
@@ -95,6 +100,26 @@ impl PlaylistCreatorApi for PlaylistCreator {
 }
 
 impl PlaylistCreator {
+    /// Enabling categorization needs it available in the preferences.
+    fn ensure_categorization_available(
+        &self,
+        categorization_enabled: bool,
+    ) -> Result<(), CreatePlaylistError> {
+        if !categorization_enabled {
+            return Ok(());
+        }
+        let preferences = self
+            .preferences_repository
+            .find()
+            .map_err(CreatePlaylistError::Repository)?
+            .unwrap_or_default();
+        if preferences.categorization_available() {
+            Ok(())
+        } else {
+            Err(CreatePlaylistError::CategorizationUnavailable)
+        }
+    }
+
     /// Enabling summaries needs AI and summaries on in the preferences.
     fn ensure_summaries_available(
         &self,

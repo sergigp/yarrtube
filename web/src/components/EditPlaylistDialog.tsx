@@ -8,7 +8,7 @@ import { CategoryPicker } from './CategoryPicker'
 import { LocationLine } from './LocationLine'
 import { MoveSourceDialog } from './MoveSourceDialog'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
-import { SummariesField } from './SummariesField'
+import { SourceAiSection } from './SourceAiSection'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -81,6 +81,7 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
     intervalForm(playlist.reconcile_interval_minutes),
   )
   const [summariesEnabled, setSummariesEnabled] = useState(playlist.summaries_enabled)
+  const [categorizationEnabled, setCategorizationEnabled] = useState(playlist.categorization_enabled)
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -95,6 +96,9 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
       ...(minutes !== playlist.reconcile_interval_minutes && { reconcile_interval_minutes: minutes }),
       ...(summariesEnabled !== playlist.summaries_enabled && {
         summaries_enabled: summariesEnabled,
+      }),
+      ...(categorizationEnabled !== playlist.categorization_enabled && {
+        categorization_enabled: categorizationEnabled,
       }),
     }
     const changesSettings = Object.keys(changes).length > 0
@@ -125,11 +129,18 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
         moveBlocked={playlist.work_in_progress}
       />
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
-      <SummariesField
-        id="edit-playlist-summaries"
-        checked={summariesEnabled}
-        onChange={setSummariesEnabled}
-        enabledOnSource={playlist.summaries_enabled}
+      <SourceAiSection
+        idPrefix="edit-playlist"
+        summaries={{
+          checked: summariesEnabled,
+          onChange: setSummariesEnabled,
+          enabledOnSource: playlist.summaries_enabled,
+        }}
+        categorization={{
+          checked: categorizationEnabled,
+          onChange: setCategorizationEnabled,
+          enabledOnSource: playlist.categorization_enabled,
+        }}
         onNavigateAway={onClose}
       />
       {withCategories && (
