@@ -1,0 +1,9 @@
+{
+  "model": "qwen3:4b",
+  "think": false,
+  "prompt_version": "v2",
+  "system_sha": "47de19c910",
+  "num_ctx": 4096,
+  "temperature": 0.0,
+  "max_output": 2048
+}
