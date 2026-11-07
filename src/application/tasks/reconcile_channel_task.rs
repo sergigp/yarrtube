@@ -314,7 +314,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video_category_assigner = VideoCategoryAssigner::new(
-            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             Arc::new(SqliteCategoryRepository::new(db.database())),
@@ -448,7 +448,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video_category_assigner = VideoCategoryAssigner::new(
-            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             Arc::new(SqliteCategoryRepository::new(db.database())),
@@ -559,7 +559,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video_category_assigner = VideoCategoryAssigner::new(
-            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             Arc::new(SqliteCategoryRepository::new(db.database())),
@@ -3359,7 +3359,7 @@ mod tests {
 
     fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
         VideoCategoryAssigner::new(
-            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(database.clone())),
+            Arc::new(SqliteVideoRepository::new(database.clone())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
             Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
             Arc::new(SqliteCategoryRepository::new(database.clone())),
