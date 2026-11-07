@@ -34,7 +34,7 @@
 - [x] 2.26 `DetailHeader`: offers Re-run AI categorization or Clear AI categories after confirmation
 - [x] 2.27 `CategorySettingsDialog`: re-evaluates N videos after confirmation, hidden at 0
 - [ ] 2.28 `videoCategories.spec.js` (e2e): add and remove a category by hand on a seeded video; chip and category page follow
-- [ ] 2.29 Update `doc/CATEGORIES.md` and `doc/AI.md` (editing by hand, locked source chips, re-run per video, source and category, clear when off); verify they match the specs
+- [x] 2.29 Update `doc/CATEGORIES.md` and `doc/AI.md` (editing by hand, locked source chips, re-run per video, source and category, clear when off); verify they match the specs
 
 ## 3. Infrastructure adapters (TDD)
 
