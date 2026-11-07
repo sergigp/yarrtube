@@ -96,12 +96,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         source: &CategoryMember,
     ) -> anyhow::Result<()> {
         let _guard = self.lock();
-        let category_ids = [
-            self.categories_of(source)?,
-            self.yes_category_ids(video_id)?,
-        ]
-        .concat();
-        self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
+        self.recompute(video_id, source)
     }
 
     fn reassign_category(
@@ -134,10 +129,13 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
 
     fn apply_verdict(
         &self,
-        _verdict: &VideoCategoryVerdict,
-        _source: &CategoryMember,
+        verdict: &VideoCategoryVerdict,
+        source: &CategoryMember,
     ) -> anyhow::Result<bool> {
-        Ok(false)
+        let _guard = self.lock();
+        self.video_category_verdict_repository.save(verdict)?;
+        self.recompute(&verdict.video_id, source)?;
+        Ok(true)
     }
 }
 
@@ -214,6 +212,17 @@ impl VideoCategoryAssigner {
     fn categories_of(&self, source: &CategoryMember) -> anyhow::Result<Vec<CategoryId>> {
         let categories = self.category_repository.list()?;
         Ok(Self::source_category_ids(source, &categories))
+    }
+
+    /// Sets `video_id`, a record of `source`, to the source's categories plus
+    /// its yes verdicts; the caller holds the lock.
+    fn recompute(&self, video_id: &VideoRecordId, source: &CategoryMember) -> anyhow::Result<()> {
+        let category_ids = [
+            self.categories_of(source)?,
+            self.yes_category_ids(video_id)?,
+        ]
+        .concat();
+        self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
     }
 
     /// The categories `video_id` has a yes verdict for.

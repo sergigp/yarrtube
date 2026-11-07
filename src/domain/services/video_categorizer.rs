@@ -1,20 +1,36 @@
 use crate::domain::category::Category;
-use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
+use crate::domain::llm_server::OllamaUrl;
+use crate::domain::preferences::CategorizationSettings;
+use crate::domain::services::{
+    VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
+};
 use crate::domain::video::{Video, VideoOwner};
-use crate::domain::video_category::pending_categories;
+use crate::domain::video_category::{
+    CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
+};
+use crate::domain::video_summary::SummaryText;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use anyhow::Context;
 use std::sync::Arc;
+
+/// What every call of one categorization shares.
+struct CategorizationJob {
+    url: OllamaUrl,
+    settings: CategorizationSettings,
+    owner: VideoOwner,
+    summary: SummaryText,
+    pending: Vec<Category>,
+}
 
 /// Asks the LLM server which categories a video fits — see the
 /// `video-categorization` capability. Runs from the `categorize_video` task;
 /// `VideoReconciler` decides when to schedule it.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct VideoCategorizer {
     preferences_repository: Arc<dyn PreferencesRepository>,
     video_owner_finder: Arc<VideoOwnerFinder>,
@@ -74,7 +90,60 @@ impl VideoCategorizerApi for VideoCategorizer {
         ))
     }
 
-    fn categorize(&self, _video: &Video, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn categorize(&self, video: &Video, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let job = self.prepare(video)?;
+        job.pending
+            .iter()
+            .try_for_each(|category| self.evaluate(video, &job, category))
+    }
+}
+
+impl VideoCategorizer {
+    /// What the categorization needs.
+    fn prepare(&self, video: &Video) -> anyhow::Result<CategorizationJob> {
+        let preferences = self.preferences_repository.find()?.unwrap_or_default();
+        let url = preferences.ollama_url.context("no Ollama URL is saved")?;
+        let owner = self
+            .video_owner_finder
+            .find(video)?
+            .context("the video has no channel or playlist")?;
+        let summary = self
+            .video_summary_repository
+            .find(&video.id)?
+            .context("the video has no summary")?;
+        let pending = self.pending(video, &owner)?;
+        Ok(CategorizationJob {
+            url,
+            settings: preferences.categorization,
+            owner,
+            summary: summary.text,
+            pending,
+        })
+    }
+
+    /// Asks the model whether `video` fits `category` and applies its verdict.
+    fn evaluate(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        category: &Category,
+    ) -> anyhow::Result<()> {
+        let question =
+            CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, category);
+        let reply = self
+            .llm_server_repository
+            .chat(&job.url, &question.chat(&job.settings, false))?;
+        let answer =
+            CategorizationAnswer::parse(&reply.content).context("the answer isn't usable")?;
+        let verdict = VideoCategoryVerdict::answered(
+            video.id.clone(),
+            category.id.clone(),
+            answer,
+            job.settings.model.as_str(),
+            self.clock.now(),
+        );
+        self.video_category_assigner
+            .apply_verdict(&verdict, &job.owner.source)?;
         Ok(())
     }
 }

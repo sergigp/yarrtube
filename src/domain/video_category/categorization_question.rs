@@ -68,7 +68,15 @@ pub struct CategorizationAnswer {
 impl CategorizationAnswer {
     /// After the last `</think>`, the JSON object with a boolean `belongs`;
     /// `None` otherwise.
-    pub fn parse(_content: &str) -> Option<Self> {
-        None
+    pub fn parse(content: &str) -> Option<Self> {
+        let answer: serde_json::Value = serde_json::from_str(content).ok()?;
+        Some(Self {
+            belongs: answer.get("belongs")?.as_bool()?,
+            reason: answer
+                .get("reason")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        })
     }
 }
