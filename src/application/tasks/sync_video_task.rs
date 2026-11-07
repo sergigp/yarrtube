@@ -2926,6 +2926,39 @@ mod tests {
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_not_count_a_category_given_by_the_source_or_without_a_prompt_as_pending() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = summarized_video();
+        video_repository.save(&video).unwrap();
+        seed_channel_with_categorization(&db, &video, true);
+        [
+            prompted_category("Chess", &[CategoryMember::Channel(my_channel_id())]),
+            category_with_members("Funny", &[]),
+        ]
+        .iter()
+        .for_each(|category| category_repository.insert(category).unwrap());
+        preferences_repository.save(&categorization_on()).unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
     /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
     fn sync_task_of_downloaded_video(
         db: &TestDatabase,
