@@ -7,9 +7,15 @@ export interface CategoryFields {
 
 /** The fields of `fields` that differ from `base`, as an update; prompt only when `withPrompt`. */
 export function changedDetails(
-  _base: CategoryFields,
-  _fields: CategoryFields,
-  _options: { withPrompt: boolean },
+  base: CategoryFields,
+  fields: CategoryFields,
+  { withPrompt }: { withPrompt: boolean },
 ): { name?: string; color?: string; ai_prompt?: string } {
-  return {}
+  const name = fields.name.trim()
+  const prompt = fields.prompt.trim()
+  return {
+    ...(name !== base.name && { name }),
+    ...(fields.color !== base.color && { color: fields.color }),
+    ...(withPrompt && prompt !== base.prompt && { ai_prompt: prompt }),
+  }
 }
