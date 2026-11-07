@@ -769,4 +769,20 @@ describe('CategoryDialog', () => {
     refetch({ ...evaluated, ai_verdict_count: 0 })
     expect(screen.queryByRole('button', { name: /^Re-evaluate/ })).not.toBeInTheDocument()
   })
+
+  it('names a single video to re-evaluate in the singular', async () => {
+    renderDialog(
+      { ...chess, ai_prompt: 'Chess videos', ai_verdict_count: 1 },
+      { ...library, 'GET /api/preferences': categorizationOn },
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Re-evaluate 1 video' }))
+
+    expect(
+      await screen.findByText(
+        'The AI will evaluate this video for Chess again. Categories you set by hand stay.',
+      ),
+    ).toBeInTheDocument()
+  })
 })
