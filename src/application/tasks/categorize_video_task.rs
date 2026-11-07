@@ -402,6 +402,29 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         );
     }
 
+    #[test]
+    fn it_should_retry_only_the_categories_still_pending() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[&prompted_category("Sicilian"), &prompted_category("Tech")],
+        );
+        let first = categorize_video_task(
+            &db,
+            llm_replying(vec![reply(YES), reply("It might belong.")]),
+        );
+        run(&first, &video).unwrap_err();
+        let llm = llm_replying(vec![reply(NO)]);
+        let retry = categorize_video_task(&db, llm.clone());
+
+        let result = run(&retry, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(asked_categories(&llm), vec!["Tech"]);
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,
