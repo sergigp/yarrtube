@@ -226,6 +226,7 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::video::VideoId;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
@@ -239,6 +240,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::SqliteVideoCategoryVerdictRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
@@ -531,15 +533,6 @@ mod tests {
     }
 
     fn video_categorizer(database: Database) -> Arc<VideoCategorizer> {
-        use crate::domain::services::VideoOwnerFinder;
-        use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
-        use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
-        use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
-        use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
-        use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
-        use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-        use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
-        use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
         Arc::new(VideoCategorizer::new(
             Arc::new(SqlitePreferencesRepository::new(database.clone())),
             Arc::new(VideoOwnerFinder::new(

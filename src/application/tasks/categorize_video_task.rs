@@ -47,7 +47,9 @@ mod tests {
     use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::SummaryModel;
-    use crate::domain::preferences::{CategorizationPrompt, CategorizationSettings, Preferences};
+    use crate::domain::preferences::{
+        CategorizationModel, CategorizationPrompt, CategorizationSettings, Preferences,
+    };
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{Video, VideoChapter, VideoId};
@@ -83,7 +85,9 @@ mod tests {
         SqliteVideoSummaryRepository, VideoSummaryRepository,
     };
     use crate::infrastructure::shared::category_lock::CategoryLock;
-    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_publisher::{
+        EventPublisher, SqliteEventPublisher,
+    };
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
@@ -376,6 +380,66 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     }
 
     #[test]
+    fn it_should_not_keep_a_verdict_for_a_video_removed_while_it_was_stored() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        let task = CategorizeVideoTask::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(VideoCategorizer::new(
+                Arc::new(SqlitePreferencesRepository::new(db.database())),
+                Arc::new(VideoOwnerFinder::new(
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(SqliteChannelRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistRepository::new(db.database())),
+                    "/videos",
+                )),
+                Arc::new(SqliteCategoryRepository::new(db.database())),
+                Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+                Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+                llm_replying(vec![reply(YES)]),
+                VideoCategoryAssigner::new(
+                    Arc::new(SqliteVideoRepository::new(db.database())),
+                    Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+                    Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+                    Arc::new(SqliteCategoryRepository::new(db.database())),
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(RemovingVideoOnPublish {
+                        publisher: SqliteEventPublisher::new(
+                            db.database(),
+                            Arc::new(FixedClock(fixed_timestamp())),
+                        ),
+                        video_repository: SqliteVideoRepository::new(db.database()),
+                        video_id: video.id.clone(),
+                    }),
+                    Arc::new(CategoryLock::default()),
+                ),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+    }
+
+    #[test]
     fn it_should_fail_after_trying_every_category_when_a_call_is_rejected() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
@@ -474,6 +538,57 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
                 .unwrap(),
             vec![VideoCategories::none(video.id.clone())]
         );
+    }
+
+    #[test]
+    fn it_should_not_mark_a_category_unavailable_when_the_settings_changed_during_its_attempt() {
+        let changes: [fn(&TestDatabase, &Category); 2] = [
+            |db, _| {
+                SqlitePreferencesRepository::new(db.database())
+                    .save(&Preferences {
+                        categorization: CategorizationSettings {
+                            model: CategorizationModel::new("gemma3:4b").unwrap(),
+                            ..categorization_on().categorization
+                        },
+                        ..categorization_on()
+                    })
+                    .unwrap()
+            },
+            |db, category| {
+                SqliteCategoryRepository::new(db.database())
+                    .update(
+                        &category.clone().with_ai_prompt(Some(
+                            CategoryPrompt::new("The video is about cooking.")
+                                .unwrap()
+                                .unwrap(),
+                        )),
+                    )
+                    .unwrap()
+            },
+        ];
+
+        let verdicts = changes.map(|change| {
+            let db = Arc::new(TestDatabase::new());
+            let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+            let video = summarized_video();
+            let tech = prompted_category("Tech");
+            seed(&db, &video, &[&tech]);
+            let (changed_db, changed) = (db.clone(), tech.clone());
+            let llm = Arc::new(
+                FakeLlmServerRepository::new(server_with(thinking_model()))
+                    .with_replies(vec![reply("It might belong.")])
+                    .with_on_chat(move || change(&changed_db, &changed)),
+            );
+            let task = categorize_video_task(&db, llm);
+
+            run_last_attempt(&task, &video).unwrap_err();
+
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap()
+        });
+
+        assert_eq!(verdicts, [vec![], vec![]]);
     }
 
     #[test]
@@ -800,5 +915,20 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
 
     fn later() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(2_000_000, 0).unwrap()
+    }
+
+    /// Publishes through the real outbox, then removes `video_id`: a video
+    /// removed between its verdict being stored and the categories announced.
+    struct RemovingVideoOnPublish {
+        publisher: SqliteEventPublisher,
+        video_repository: SqliteVideoRepository,
+        video_id: VideoRecordId,
+    }
+
+    impl EventPublisher for RemovingVideoOnPublish {
+        fn publish(&self, event: &DomainEvent) -> anyhow::Result<()> {
+            self.publisher.publish(event)?;
+            self.video_repository.delete(&self.video_id)
+        }
     }
 }

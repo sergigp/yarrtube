@@ -1,10 +1,10 @@
-# Spec Delta
+# video-categorization Specification
 
 ## Purpose
 
 Decides, with the AI, which categories with an AI prompt each stored video fits, asking the model at most once per video and category, so reconcile passes don't repeat hours of evaluation.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Verdicts
 Each stored video copy SHALL have at most one verdict per category: `yes`, `no` or `unavailable`, recorded with who decided it (`ai` for now), when, and for an AI verdict the model and its one-sentence reason. A pair with a verdict SHALL NOT be evaluated again unless that verdict is removed.
@@ -33,7 +33,7 @@ A category SHALL be pending for a stored video when the category has an AI promp
 - **THEN** "Chess" is pending for that video
 
 ### Requirement: When A Video Is Categorized
-A video's sync SHALL schedule its categorization only when AI, categories and categorization are on in the preferences, the video's playlist or channel has `categorization_enabled` `true`, the video's summary state is Generated and at least one category is pending for it. A categorization already pending or running for the video SHALL NOT be scheduled again. Otherwise the sync SHALL schedule nothing for categorization.
+A video's sync SHALL schedule its categorization only when AI, categories and categorization are on in the preferences, the video's playlist or channel has `categorization_enabled` `true`, the video's summary state is Generated and at least one category is pending for it. A categorization already pending or running for the video SHALL NOT be scheduled again. Otherwise the sync SHALL schedule nothing for categorization. Generating a summary SHALL NOT itself sync the video: a newly summarized video is categorized from its next sync, at the latest its source's next reconcile pass.
 
 #### Scenario: Video with a summary and pending categories
 - **WHEN** a video of a channel with categorization enabled has a Generated summary and "Sicilian" is pending for it, and its sync runs
@@ -51,8 +51,12 @@ A video's sync SHALL schedule its categorization only when AI, categories and ca
 - **WHEN** a video of a playlist with `categorization_enabled` `false` has a Generated summary and pending categories, and its sync runs
 - **THEN** no categorization is scheduled
 
+#### Scenario: Summary generated after the video's sync
+- **WHEN** a new video's summary is generated after its sync ran
+- **THEN** no categorization is scheduled until its next sync
+
 ### Requirement: Categorization Run
-A categorization SHALL re-check, when it runs, the conditions for scheduling it and do nothing if they no longer hold. It SHALL then ask the model about each category pending at that moment, one call per category, and store each verdict as soon as its answer is read. A verdict SHALL NOT be stored for a category deleted, or a video removed, while it was being evaluated.
+A categorization SHALL re-check, when it runs, the conditions for scheduling it and do nothing if they no longer hold. It SHALL then ask the model about each category pending at that moment, one call per category, and store each verdict as soon as its answer is read. A verdict SHALL NOT be stored for a category deleted, or a video removed, while it was being evaluated or while its verdict was being stored.
 
 #### Scenario: Category deleted before the run
 - **WHEN** a categorization is scheduled while "Sicilian" is pending, and "Sicilian" is deleted before it runs
@@ -65,6 +69,10 @@ A categorization SHALL re-check, when it runs, the conditions for scheduling it 
 #### Scenario: Video removed during its call
 - **WHEN** a video drops out of its channel's recent uploads while the model is being asked about "Sicilian" for it
 - **THEN** no verdict for that video is stored
+
+#### Scenario: Video removed while its verdict is stored
+- **WHEN** a video is removed while its verdict for "Sicilian" is being stored
+- **THEN** no verdict and no category membership of that video remain
 
 #### Scenario: Prompt added before the run
 - **WHEN** a categorization is scheduled and "Tech" gets an AI prompt before it runs
@@ -110,10 +118,14 @@ When Ollama can't be reached or the saved categorization model isn't installed o
 - **THEN** no verdict is stored, the task completes, and the categories stay pending
 
 ### Requirement: Unavailable Verdicts Reset
-Saving a change to the Ollama URL, the categorization model or the categorization prompt SHALL delete every `unavailable` verdict. Saving a different AI prompt for a category SHALL delete that category's `unavailable` verdicts. Saving the same values SHALL change nothing.
+Saving a change to the Ollama URL, the categorization model or the categorization prompt SHALL delete every `unavailable` verdict. Saving a different AI prompt for a category SHALL delete that category's `unavailable` verdicts. Saving the same values SHALL change nothing. A categorization that started before such a change SHALL NOT store `unavailable` verdicts after it.
 
 #### Scenario: New model
 - **WHEN** a video has an `unavailable` verdict for "Tech" and the categorization model is changed
+- **THEN** "Tech" is pending for the video again
+
+#### Scenario: Model changed during a last attempt
+- **WHEN** the categorization model is changed while a video's last attempt is running and "Tech" is rejected
 - **THEN** "Tech" is pending for the video again
 
 ### Requirement: Settings Changes Keep Verdicts

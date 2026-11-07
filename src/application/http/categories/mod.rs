@@ -1261,6 +1261,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_unavailable_verdicts_when_a_category_prompt_is_saved_unchanged() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        let video = downloaded_video("vid1");
+        let tech = Category {
+            ai_prompt: CategoryPrompt::new("Programming").unwrap(),
+            ..category(None, "Tech")
+        };
+        repository.insert(&tech).unwrap();
+        let tech_unavailable = unavailable_verdict(&video, &tech);
+        verdict_repository.save(&tech_unavailable).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+            verdict_repository.clone(),
+        );
+
+        let response = update(
+            category_updater,
+            tech.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: Some("#ff0000".to_string()),
+                ai_prompt: Some("Programming".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                color: color("#ff0000"),
+                ..tech
+            }]
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![tech_unavailable]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_keep_verdicts_when_a_category_prompt_is_edited_or_cleared() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));

@@ -113,6 +113,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
@@ -271,6 +272,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
                 verdict_repository.clone(),
+                Arc::new(CategoryLock::default()),
             );
 
             update(preferences_updater, request).await.unwrap();
@@ -311,6 +313,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
                 verdict_repository.clone(),
+                Arc::new(CategoryLock::default()),
             );
 
             update(preferences_updater, request).await.unwrap();
@@ -1089,6 +1092,7 @@ mod tests {
             Arc::new(SqliteVideoRepository::new(database())),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
+            Arc::new(CategoryLock::default()),
         )
     }
 
@@ -1101,6 +1105,7 @@ mod tests {
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(CategoryLock::default()),
         )
     }
 

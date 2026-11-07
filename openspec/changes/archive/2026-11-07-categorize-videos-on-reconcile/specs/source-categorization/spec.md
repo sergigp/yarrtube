@@ -15,7 +15,7 @@ Every stored channel and playlist SHALL have a `categorization_enabled` boolean,
 
 #### Scenario: Source opted in
 - **WHEN** AI categorization is on, a channel has `categorization_enabled` `true`, and a new video of it gets a summary
-- **THEN** the video is evaluated against every category with an AI prompt the channel isn't a member of
+- **THEN** the video is evaluated against every category with an AI prompt the channel isn't a member of, from its next sync after the summary (at the latest the channel's next reconcile pass)
 
 #### Scenario: Turned off after evaluations
 - **WHEN** a channel whose videos have AI categories has its categorization turned off

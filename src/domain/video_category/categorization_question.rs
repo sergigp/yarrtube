@@ -125,3 +125,80 @@ impl CategorizationAnswer {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_parse_a_json_answer() {
+        assert_eq!(
+            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game.", "belongs": true}"#),
+            Some(sicilian_answer(true))
+        );
+    }
+
+    #[test]
+    fn it_should_parse_the_answer_after_the_last_leaked_thinking() {
+        assert_eq!(
+            CategorizationAnswer::parse(
+                r#"<think>{"belongs": true}</think><think>Hmm.</think>{"reason": "A Sicilian game.", "belongs": false}"#
+            ),
+            Some(sicilian_answer(false))
+        );
+    }
+
+    #[test]
+    fn it_should_parse_a_json_answer_surrounded_by_prose() {
+        assert_eq!(
+            CategorizationAnswer::parse(
+                r#"Here it is: {"reason": "A Sicilian game.", "belongs": true} Hope it helps."#
+            ),
+            Some(sicilian_answer(true))
+        );
+    }
+
+    #[test]
+    fn it_should_not_parse_an_answer_without_a_json_object() {
+        assert_eq!(CategorizationAnswer::parse("It belongs."), None);
+    }
+
+    #[test]
+    fn it_should_not_parse_an_answer_whose_json_object_is_only_in_the_thinking() {
+        assert_eq!(
+            CategorizationAnswer::parse(r#"<think>{"belongs": true}</think>It belongs."#),
+            None
+        );
+    }
+
+    #[test]
+    fn it_should_not_parse_an_answer_with_invalid_json() {
+        assert_eq!(
+            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game.", "belongs": tru}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn it_should_not_parse_an_answer_without_belongs() {
+        assert_eq!(
+            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game."}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn it_should_not_parse_an_answer_whose_belongs_is_not_a_boolean() {
+        assert_eq!(
+            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game.", "belongs": "true"}"#),
+            None
+        );
+    }
+
+    fn sicilian_answer(belongs: bool) -> CategorizationAnswer {
+        CategorizationAnswer {
+            belongs,
+            reason: "A Sicilian game.".to_string(),
+        }
+    }
+}

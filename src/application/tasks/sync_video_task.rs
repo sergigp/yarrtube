@@ -54,6 +54,7 @@ mod tests {
     };
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
@@ -87,6 +88,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
     use crate::infrastructure::repositories::youtube_metadata_repository::{
         FakeYoutubeMetadataRepository, YoutubeMetadata,
     };
@@ -3367,15 +3369,6 @@ mod tests {
     }
 
     fn video_categorizer(database: Database) -> Arc<VideoCategorizer> {
-        use crate::domain::services::VideoOwnerFinder;
-        use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
-        use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
-        use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
-        use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
-        use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
-        use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-        use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
-        use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
         Arc::new(VideoCategorizer::new(
             Arc::new(SqlitePreferencesRepository::new(database.clone())),
             Arc::new(VideoOwnerFinder::new(

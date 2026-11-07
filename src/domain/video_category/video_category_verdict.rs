@@ -117,3 +117,46 @@ impl VideoCategoryVerdict {
         self.verdict == Verdict::Yes
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_round_trip_every_verdict_through_its_string_representation() {
+        let verdicts = [Verdict::Yes, Verdict::No, Verdict::Unavailable];
+
+        assert_eq!(
+            verdicts.map(|verdict| Verdict::parse(verdict.as_str())),
+            verdicts.map(Ok)
+        );
+    }
+
+    #[test]
+    fn it_should_fail_to_parse_an_unknown_verdict() {
+        assert_eq!(
+            Verdict::parse("yes"),
+            Err(ValidationError("unknown verdict 'yes'".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_round_trip_every_verdict_author_through_its_string_representation() {
+        let authors = [VerdictAuthor::Ai, VerdictAuthor::User];
+
+        assert_eq!(
+            authors.map(|author| VerdictAuthor::parse(author.as_str())),
+            authors.map(Ok)
+        );
+    }
+
+    #[test]
+    fn it_should_fail_to_parse_an_unknown_verdict_author() {
+        assert_eq!(
+            VerdictAuthor::parse("ROBOT"),
+            Err(ValidationError(
+                "unknown verdict author 'ROBOT'".to_string()
+            ))
+        );
+    }
+}

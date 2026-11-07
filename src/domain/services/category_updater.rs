@@ -49,7 +49,8 @@ impl CategoryUpdater {
 pub trait CategoryUpdaterApi: Send + Sync {
     /// Applies the present fields of `update` in one save. Another category
     /// with the same name ignoring case → `NameTaken`. A rename is announced
-    /// for every video in the category; a recolor is not.
+    /// for every video in the category; a recolor is not. A changed AI prompt also deletes the
+    /// category's unavailable verdicts, so those videos are asked again.
     fn update(&self, id: &CategoryId, update: CategoryUpdate) -> Result<(), UpdateCategoryError>;
     /// Replaces the members, then recomputes the categories of every video of
     /// a former or new member. Every member must be a tracked
@@ -187,7 +188,10 @@ impl CategoryUpdater {
 
     /// A new prompt may get answers the old one couldn't: the category's
     /// unavailable verdicts go, so it is pending again for their videos.
+    /// Under the lock, so a running categorization giving up either sees the
+    /// new prompt or has its unavailable verdicts deleted here.
     fn reset_unavailable_verdicts(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
+        let _guard = self.video_category_assigner.lock();
         self.video_category_verdict_repository
             .delete_unavailable_for_category(id)
             .map_err(UpdateCategoryError::Repository)

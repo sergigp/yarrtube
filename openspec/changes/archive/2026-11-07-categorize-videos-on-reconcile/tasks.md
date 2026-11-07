@@ -40,6 +40,11 @@
 - [x] 2.32 `it_should_delete_the_verdicts_of_a_deleted_playlists_videos`: `PlaylistDeleter`
 - [x] 2.33 `labels a categorize_video task and files it under AI` (web `tasks.test.ts`)
 - [x] 2.34 Update `doc/AI.md` and `doc/CATEGORIES.md` (when a video is categorized, verdicts are final, summaries needed, toggle-off keeps categories) and `prompts/categorization/README.md` (v2 shipped); verify the docs match the specs
+- [x] 2.35 `it_should_not_mark_a_category_unavailable_when_the_settings_changed_during_its_attempt`: `give_up` via `apply_verdict_if` + `unchanged_since`; updaters delete under the category lock
+- [x] 2.36 `it_should_not_keep_a_verdict_for_a_video_removed_while_it_was_stored`: `forget_if_removed` in `apply_verdict`
+- [x] 2.37 `it_should_keep_unavailable_verdicts_when_a_category_prompt_is_saved_unchanged`, `it_should_list_a_categorize_video_task_with_video_and_channel_names`
+- [x] 2.38 Value object tests: `Verdict`, `VerdictAuthor`, `CategorizationAnswer::parse`
+- [x] 2.39 `doc/CATEGORIES.md`: a video is categorized from its next sync after its summary, at the latest its source's next reconcile pass
 
 ## 3. Infrastructure adapters (TDD)
 

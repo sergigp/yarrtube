@@ -1,6 +1,6 @@
 use crate::domain::category::Category;
 use crate::domain::llm_server::OllamaUrl;
-use crate::domain::preferences::CategorizationSettings;
+use crate::domain::preferences::{CategorizationSettings, Preferences};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
@@ -59,6 +59,7 @@ impl From<anyhow::Error> for Stop {
 
 /// What every call of one categorization shares.
 struct CategorizationJob {
+    preferences: Preferences,
     url: OllamaUrl,
     settings: CategorizationSettings,
     thinking: bool,
@@ -156,7 +157,10 @@ impl VideoCategorizer {
         if !video.is_categorizable() {
             return Err(Skip::NotWanted("the video has no summary"));
         }
-        let url = preferences.ollama_url.context("no Ollama URL is saved")?;
+        let url = preferences
+            .ollama_url
+            .clone()
+            .context("no Ollama URL is saved")?;
         let Some(owner) = self.video_owner_finder.find(video)? else {
             return Err(Skip::NotWanted("the video has no channel or playlist"));
         };
@@ -169,7 +173,7 @@ impl VideoCategorizer {
             .video_summary_repository
             .find(&video.id)?
             .context("the video has no summary")?;
-        let settings = preferences.categorization;
+        let settings = preferences.categorization.clone();
         let thinking = self
             .llm_server_repository
             .find(&url)?
@@ -178,6 +182,7 @@ impl VideoCategorizer {
             .thinking;
         let pending = self.pending(video, &owner)?;
         Ok(CategorizationJob {
+            preferences,
             url,
             settings,
             thinking,
@@ -282,7 +287,9 @@ impl VideoCategorizer {
         Ok(Outcome::Answered)
     }
 
-    /// Gives each of `rejected` an unavailable verdict.
+    /// Gives each of `rejected` an unavailable verdict, unless the settings
+    /// or its prompt changed since the job started: that change reset its
+    /// unavailable verdicts, so the new ones may answer.
     fn give_up(
         &self,
         video: &Video,
@@ -297,9 +304,24 @@ impl VideoCategorizer {
                 self.clock.now(),
             );
             self.video_category_assigner
-                .apply_verdict(&verdict, &job.owner.source)
+                .apply_verdict_if(&verdict, &job.owner.source, &|| {
+                    self.unchanged_since(job, category)
+                })
                 .map(|_| ())
         })
+    }
+
+    /// Whether the categorization settings and `category`'s prompt are
+    /// still those `job` started with.
+    fn unchanged_since(
+        &self,
+        job: &CategorizationJob,
+        category: &Category,
+    ) -> anyhow::Result<bool> {
+        let preferences = self.preferences_repository.find()?.unwrap_or_default();
+        let current = self.category_repository.find(&category.id)?;
+        Ok(!job.preferences.changes_categorization(&preferences)
+            && current.is_some_and(|current| current.ai_prompt == category.ai_prompt))
     }
 
     /// An error naming each of `rejected`, with why; `Ok` when none was.

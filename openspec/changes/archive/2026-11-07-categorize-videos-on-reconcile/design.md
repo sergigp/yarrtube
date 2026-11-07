@@ -133,6 +133,12 @@ sequenceDiagram
 - `src/domain/services/mod.rs`, `src/application/tasks/mod.rs`, `src/serve.rs`, `src/infrastructure/infrastructure_container.rs`, `src/infrastructure/repositories/mod.rs`: wiring, task type list.
 - `web/src/lib/tasks.ts` (+ `tasks.test.ts`): label "Categorizing …", AI family.
 - `doc/AI.md`, `doc/CATEGORIES.md`: how and when videos are categorized.
+- `src/domain/video/video_chapter.rs`: `VideoChapter::listed` / `clock`, moved from `src/domain/video_summary/summary_input.rs` (which now uses them) so summaries and categorization share them.
+- `src/domain/video_category/video_categories.rs`: `without` removed (the old uncategorized-source regime).
+- `src/domain/services/video_summarizer.rs`: passes `format: None`.
+- `src/infrastructure/shared/sqlite_migrations.rs`: registers migration 0025.
+- `web/src/test/helpers.tsx`: shipped prompt `v2.md`.
+- Test-only wiring of the new constructors: `src/domain/services/internal_video_reconciler.rs`, `src/application/subscribers/reconcile_on_{channel,playlist}_created.rs`, `src/application/tasks/summarize_video_task.rs`; `src/application/http/tasks/mod.rs` (task view test).
 
 ## Types & Signatures
 
@@ -241,12 +247,19 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
     /// Sets the record to its source's categories ∪ its yes verdicts (no early return).
     fn assign_video(&self, video_id: &VideoRecordId, source: &CategoryMember) -> anyhow::Result<()>;
     /// Under the lock: false, storing nothing, when the video or the category is
-    /// gone; else saves the verdict and runs `assign_video`'s recompute.
+    /// gone; else saves the verdict and runs `assign_video`'s recompute. A video
+    /// removed meanwhile leaves nothing stored either (`forget_if_removed`).
     fn apply_verdict(&self, verdict: &VideoCategoryVerdict, source: &CategoryMember) -> anyhow::Result<bool>;
+    /// `apply_verdict`, also storing nothing when `still_current`, asked under
+    /// the lock, says the verdict is outdated. `apply_verdict` delegates here.
+    fn apply_verdict_if(&self, verdict: &VideoCategoryVerdict, source: &CategoryMember,
+                        still_current: &dyn Fn() -> anyhow::Result<bool>) -> anyhow::Result<bool>;
 }
 // VideoCategoryAssigner gains video_category_verdict_repository (and reads
 // video_repository to check the video still exists)
 // ChannelDeleter, PlaylistDeleter gain video_category_verdict_repository
+// PreferencesUpdater gains video_category_verdict_repository and category_lock: Arc<CategoryLock>
+// VideoCategorizer's job keeps the Preferences it started with
 
 // infrastructure/repositories/sqlite_video_category_verdict_repository.rs
 pub trait VideoCategoryVerdictRepository: Send + Sync {
@@ -276,21 +289,23 @@ case 'categorize_video': return `Categorizing ${videoInContainer(payload)}`
 3. → `VideoReconciler::categorization_wanted(&video, &owner)`: `owner.categorization_enabled && preferences.categorization_available() && video.is_categorizable()` then `VideoCategorizer::pending(&video, &owner)` → `CategoryRepository::list()`, `VerdictRepository::find_many(&[id])`, `pending_categories(categories, &owner.source, &verdicts)` → `!is_empty()`
 4. → `VideoSyncPlan::for_video(&video, summaries_wanted, categorization_wanted, now)` → `TaskRepository::schedule(&Task::CategorizeVideo { video_id }, now)` (deduped)
 
+By design nothing syncs a video when its summary is generated: a newly summarized video is categorized from its next sync, at the latest its source's next reconcile pass.
+
 **Run** (`summaries` lane)
 1. `CategorizeVideoTask::handle(payload, is_last_attempt)` → `VideoRepository::find(&id)` → `VideoCategorizer::categorize(&video, is_last_attempt)`
 2. `prepare(&video)`: `PreferencesRepository::find()` (available?), `video.is_categorizable()`, `VideoOwnerFinder::find(&video)` (`categorization_enabled`?), `VideoSummaryRepository::find(&id)`, `LlmServerRepository::find(&url)` → `server.model(name)` (thinking), `pending(&video, &owner)`; a skip logs and returns `Ok(())`
 3. per category: `CategorizationQuestion::new(&video, &owner.source_name, &summary.text, &category).chat(&settings, thinking)` → `LlmServerRepository::chat(&url, &chat)` → reply checks (refusal, `stopped_at_limit`) → `CategorizationAnswer::parse(&reply.content)` → `VideoCategoryVerdict::answered(..)` → `VideoCategoryAssigner::apply_verdict(&verdict, &owner.source)`
-4. after the loop, rejected categories: last attempt → `apply_verdict(&VideoCategoryVerdict::unavailable(..))` each; return `Err` → queue backoff. Server error (`chat` → `Err`) → warn, return `Ok(())`
+4. after the loop, rejected categories: last attempt → `apply_verdict_if(&VideoCategoryVerdict::unavailable(..), source, unchanged_since(job, category))` each, where `unchanged_since` (asked under the lock) is `!job.preferences.changes_categorization(&current)` and the category's current `ai_prompt` equals the job's; return `Err` → queue backoff. Server error (`chat` → `Err`) → warn, return `Ok(())`
 
 **Category deleted**: `DELETE /api/categories/:id` → `CategoryDeleter::delete(&id)` → `assigner.lock()` → `CategoryRepository::delete(&id)`, `VerdictRepository::delete_for_category(&id)` → `reassign_category(..)`
 
-**Settings**: `PUT /api/preferences` → `PreferencesUpdater::update(change)` → `stored.changes_categorization(&updated)` → `VerdictRepository::delete_unavailable()`. `PATCH /api/categories/:id` with a different `ai_prompt` → `CategoryUpdater` → `VerdictRepository::delete_unavailable_for_category(&id)`
+**Settings**: `PUT /api/preferences` → `PreferencesUpdater::update(change)` → `stored.changes_categorization(&updated)` → `CategoryLock::lock()` → `VerdictRepository::delete_unavailable()`. `PATCH /api/categories/:id` with a different `ai_prompt` → `CategoryUpdater` → `assigner.lock()` → `VerdictRepository::delete_unavailable_for_category(&id)`. Both deletes run under the category lock, so a run giving up either sees the new settings or has its unavailable verdicts deleted after it.
 
 **Video removed**: `{Channel,Playlist}VideoReconciler::remove_videos_not_in` → `VerdictRepository::delete_for_video(&video.id)` next to `VideoCategoriesRepository::delete`
 
 **Source deleted**: `DELETE /api/channels/:handle` → `ChannelDeleter::delete_channel_videos(&id)` → per video `VerdictRepository::delete_for_video(&video_id)` next to `VideoCategoriesRepository::delete` (same in `PlaylistDeleter`)
 
-**Video removed during its call**: `apply_verdict` → `assigner.lock()` → `VideoRepository::find_by_id(&verdict.video_id)` is `None` → return `false`, nothing stored. Cleanup is domain code everywhere; the schema has no foreign keys or cascades.
+**Video removed during its call**: `apply_verdict` → `assigner.lock()` → `VideoRepository::find_by_id(&verdict.video_id)` is `None` → return `false`, nothing stored. Removed between that check and the save (the removal paths take no category lock): after recompute, `forget_if_removed` finds the video gone and deletes its verdicts and `video_categories`, returning `false`. Cleanup is domain code everywhere; the schema has no foreign keys or cascades.
 
 ## Test Plan
 
@@ -354,6 +369,18 @@ HTTP `preferences` (`http/preferences/mod.rs`)
 Web (`tasks.test.ts`)
 
 33. `labels a categorize_video task and files it under AI`.
+
+Added after the audit
+
+34. `it_should_not_mark_a_category_unavailable_when_the_settings_changed_during_its_attempt` (`categorize_video_task.rs`): model or category prompt changed during the last attempt → no unavailable verdict.
+35. `it_should_not_keep_a_verdict_for_a_video_removed_while_it_was_stored` (`categorize_video_task.rs`): video removed while its yes verdict is stored → no verdict, no categories.
+36. `it_should_keep_unavailable_verdicts_when_a_category_prompt_is_saved_unchanged` (`http/categories/mod.rs`).
+37. `it_should_list_a_categorize_video_task_with_video_and_channel_names` (`http/tasks/mod.rs`).
+
+**Value objects**
+
+`Verdict`, `VerdictAuthor` (`video_category_verdict.rs`): round trip every variant, reject an unknown value.
+`CategorizationAnswer::parse` (`categorization_question.rs`): plain JSON, after the last leaked thinking, surrounded by prose; `None` without a JSON object, with the object only in the thinking, with invalid JSON, without `belongs`, with a non-boolean `belongs`.
 
 **2. Infrastructure**
 
