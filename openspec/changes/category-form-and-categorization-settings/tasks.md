@@ -16,7 +16,7 @@
 - [x] 2.10 `http/categories`: `it_should_fail_to_create_a_category_with_an_untracked_member`: 400, nothing stored. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.11 `http/categories`: `it_should_fail_to_create_a_category_if_the_prompt_is_too_long`: 400, nothing stored. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.12 `Web aiSettingsForm.test.ts`: `changedFields` includes the new fields only when changed, drops `categorization_thinking` when that model can't think, `hasInvalidNumber` covers both new numbers. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.13 `Web AiSettingsView.test.tsx`: categorization Advanced shows `4096`, `0`, thinking on and the prompt. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.13 `Web AiSettingsView.test.tsx`: categorization Advanced shows `4096`, `0`, thinking on and the prompt. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.14 `Web AiSettingsView.test.tsx`: saves only the changed advanced field, independently of summaries. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.15 `Web AiSettingsView.test.tsx`: a model that can't think hides only that section's switch. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.16 `Web AiSettingsView.test.tsx`: an emptied categorization number blocks saving with the message. Verify: the test goes red on an assertion, then green with the full suite.

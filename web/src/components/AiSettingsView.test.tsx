@@ -61,6 +61,25 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('button', { name: /reset/i })).not.toBeInTheDocument()
   })
 
+  it('shows the categorization generation settings under its Advanced', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+
+    expect(screen.getByRole('spinbutton', { name: 'Categorization context length' })).toHaveValue(4096)
+    expect(screen.getByRole('spinbutton', { name: 'Categorization temperature' })).toHaveValue(0)
+    expect(screen.getByRole('switch', { name: 'Categorization thinking' })).toBeChecked()
+    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
+      aPreferences().categorization_prompt,
+    )
+  })
+
   it('saves only the changed categorization fields', async () => {
     const saved = aPreferences({ ai_enabled: true, ollama_url: 'http://mac.local:11434' })
     const fetchMock = mockApi({

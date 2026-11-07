@@ -270,21 +270,58 @@ function AiSettings({ saved }: { saved: Preferences }) {
                 onToggle={setCategorizationAdvancedOpen}
               />
               {categorizationAdvancedOpen && (
-                <PromptField
-                  id="categorization-prompt"
-                  name="Categorization prompt"
-                  rows={8}
-                  value={form.categorization_prompt}
-                  disabled={aiOff}
-                  isDefault={
-                    saved.categorization_prompt_is_default &&
-                    form.categorization_prompt === saved.categorization_prompt
-                  }
-                  canReset={!saved.categorization_prompt_is_default}
-                  resetDisabled={saving || aiOff}
-                  onChange={(value) => set('categorization_prompt', value)}
-                  onReset={() => void resetCategorizationPrompt()}
-                />
+                <>
+                  <Field id="categorization-context-length" label="Context length">
+                    <Input
+                      id="categorization-context-length"
+                      aria-label="Categorization context length"
+                      type="number"
+                      min={1024}
+                      max={131072}
+                      step={1024}
+                      value={form.categorization_context_length}
+                      disabled={aiOff}
+                      onChange={(event) => set('categorization_context_length', event.target.value)}
+                    />
+                  </Field>
+                  <Field id="categorization-temperature" label="Temperature">
+                    <Input
+                      id="categorization-temperature"
+                      aria-label="Categorization temperature"
+                      type="number"
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      value={form.categorization_temperature}
+                      disabled={aiOff}
+                      onChange={(event) => set('categorization_temperature', event.target.value)}
+                    />
+                  </Field>
+                  <SwitchRow
+                    id="categorization-thinking"
+                    label="Thinking"
+                    name="Categorization thinking"
+                    help={THINKING_HELP}
+                    checked={form.categorization_thinking}
+                    disabled={aiOff}
+                    onChange={(value) => set('categorization_thinking', value)}
+                  />
+                  <PromptField
+                    id="categorization-prompt"
+                    name="Categorization prompt"
+                    rows={8}
+                    value={form.categorization_prompt}
+                    disabled={aiOff}
+                    isDefault={
+                      saved.categorization_prompt_is_default &&
+                      form.categorization_prompt === saved.categorization_prompt
+                    }
+                    canReset={!saved.categorization_prompt_is_default}
+                    resetDisabled={saving || aiOff}
+                    onChange={(value) => set('categorization_prompt', value)}
+                    onReset={() => void resetCategorizationPrompt()}
+                  />
+                </>
               )}
             </>
           )}
