@@ -220,6 +220,30 @@ describe('CategoryDialog', () => {
     expect(screen.getByRole('button', { name: 'Hikaru' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('closes an untouched new category without asking', async () => {
+    const { onOpenChange } = renderCreating({})
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(screen.queryByText("This category won't be created.")).not.toBeInTheDocument()
+  })
+
+  it('asks before discarding a new category', async () => {
+    const { fetchMock, onOpenChange } = renderCreating({})
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Chess')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText("This category won't be created.")).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(bodies(fetchMock, 'POST')).toEqual([])
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 

@@ -22,6 +22,7 @@ import {
   type SourceRef,
 } from '@/lib/categories'
 import { defaultColor } from '@/lib/categoryColors'
+import { changedDetails, type CategoryFields } from '@/lib/categoryForm'
 import { errorMessage } from '@/lib/errorMessage'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -68,19 +69,21 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
   const saved = category ? membersOf(category) : NO_MEMBERS
   const [staged, setStaged] = useState(saved)
   const withPrompt = useCategorizationAvailable()
-  const [name, setName] = useState(category?.name ?? '')
-  // What the color started from, kept so a refetch can't change the choice.
-  const [startColor] = useState(category?.color)
-  // Until one is picked, a new category takes the least used color, once loaded.
+  // What the fields started from, or last saved here. Not the live category: a
+  // refetch while open must not make an untouched field look edited.
+  const [base, setBase] = useState<CategoryFields>({
+    name: category?.name ?? '',
+    color: category?.color ?? '',
+    prompt: category?.ai_prompt ?? '',
+  })
+  const [name, setName] = useState(base.name)
   const [chosenColor, setChosenColor] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState(base.prompt)
+  // Until one is picked, a new category takes the least used color, once loaded.
   const color =
-    chosenColor ??
-    startColor ??
+    chosenColor ||
+    base.color ||
     defaultColor((categories?.categories ?? []).map((existing) => existing.color))
-  const [prompt, setPrompt] = useState(category?.ai_prompt ?? '')
-  // What the field started from, or last saved here. Not the live category: a
-  // refetch while open must not make an untouched prompt look edited.
-  const [promptBase, setPromptBase] = useState(prompt)
   // Saved by a save whose sources then failed: it can no longer be discarded.
   const [promptSaved, setPromptSaved] = useState(false)
   const [search, setSearch] = useState('')
@@ -97,8 +100,13 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
   const inCount = allChips.filter((chip) => isIn(staged, chip.source)).length
   const summary = stagedSummary(saved, staged)
   const sourcesChanged = summary.added + summary.removed > 0
-  const promptChanged = withPrompt && prompt.trim() !== promptBase
-  const dirty = sourcesChanged || promptChanged
+  const details = changedDetails(
+    base,
+    { name, color: chosenColor ?? base.color, prompt },
+    { withPrompt },
+  )
+  const promptChanged = details.ai_prompt !== undefined
+  const dirty = sourcesChanged || Object.keys(details).length > 0
   const categoryName = category?.name ?? 'this category'
   const canSave = name.trim() !== '' && (!category || dirty) && !saving
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
@@ -144,7 +152,7 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
         await updateCategory(category.id, { ai_prompt: prompt.trim() })
         promptStored = true
         setPromptSaved(true)
-        setPromptBase(prompt.trim())
+        setBase({ ...base, prompt: prompt.trim() })
       }
       if (sourcesChanged) {
         await setCategoryMembers(category.id, staged)
@@ -294,7 +302,9 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
         onOpenChange={setConfirmingDiscard}
         title="Discard changes?"
         description={
-          promptSaved && !promptChanged
+          !category
+            ? "This category won't be created."
+            : promptSaved && !promptChanged
             ? `The AI prompt is already saved. Your changes to the sources in ${categoryName} won't be saved.`
             : `Your changes to ${categoryName} won't be saved.`
         }
