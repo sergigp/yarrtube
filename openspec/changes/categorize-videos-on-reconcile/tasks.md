@@ -10,7 +10,7 @@
 - [x] 2.2 `it_should_give_a_video_of_an_uncategorized_source_its_yes_verdicts`: no early return for a source in no category
 - [x] 2.3 `it_should_schedule_a_categorization_for_a_summarized_video_with_pending_categories`: `categorization_wanted` + `Categorize` step
 - [x] 2.4 `it_should_not_schedule_a_categorization_without_a_generated_summary`
-- [ ] 2.5 `it_should_not_schedule_a_categorization_when_the_source_has_categorization_off`
+- [x] 2.5 `it_should_not_schedule_a_categorization_when_the_source_has_categorization_off`
 - [ ] 2.6 `it_should_not_schedule_a_categorization_when_ai_categorization_is_off`
 - [ ] 2.7 `it_should_not_schedule_a_categorization_when_every_category_has_a_verdict`
 - [ ] 2.8 `it_should_not_count_a_category_given_by_the_source_or_without_a_prompt_as_pending`: `pending_categories`
