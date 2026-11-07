@@ -165,7 +165,7 @@ impl From<HomeVideoView> for HomeVideoResponse {
         let source = HomeVideoSourceResponse::from(view.source);
         Self {
             id: view.youtube_id.as_str().to_string(),
-            record_id: String::new(),
+            record_id: view.record_id.as_str().to_string(),
             title: view.title,
             thumbnail_filename: view.thumbnail_filename,
             duration_seconds: view.duration_seconds,
