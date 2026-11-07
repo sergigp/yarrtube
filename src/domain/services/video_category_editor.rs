@@ -90,7 +90,7 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
         belongs: bool,
     ) -> Result<(), EditVideoCategoriesError> {
         let source = self.find_source(video_id)?;
-        self.find_category(category_id)?;
+        Self::ensure_not_from_source(&self.find_category(category_id)?, &source)?;
         let verdict = VideoCategoryVerdict::by_user(
             video_id.clone(),
             category_id.clone(),
@@ -132,6 +132,18 @@ impl VideoCategoryEditor {
             .map_err(EditVideoCategoriesError::Repository)?
             .map(|owner| owner.source)
             .ok_or(EditVideoCategoriesError::VideoNotFound)
+    }
+
+    /// A category holding the video's `source` is changed through the
+    /// source's membership, never by hand.
+    fn ensure_not_from_source(
+        category: &Category,
+        source: &CategoryMember,
+    ) -> Result<(), EditVideoCategoriesError> {
+        match category.has_member(source) {
+            true => Err(EditVideoCategoriesError::FromSource(source.clone())),
+            false => Ok(()),
+        }
     }
 
     fn find_category(

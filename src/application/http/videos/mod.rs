@@ -6415,7 +6415,10 @@ mod tests {
             .unwrap();
         let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
         video_categories_repository
-            .save_many(&[VideoCategories::new(video.id.clone(), vec![food.id.clone()])])
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![food.id.clone()],
+            )])
             .unwrap();
         let request = SetVideoCategoryRequest {
             belongs: Some(serde_json::json!(false)),
@@ -6444,6 +6447,51 @@ mod tests {
                 .list_eligible()
                 .unwrap(),
             vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_reject_setting_a_category_given_by_the_source() {
+        let db = TestDatabase::new();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess", None))
+            .unwrap();
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+            0,
+        );
+        let chess = named_category("Chess", &[channel_member("@GothamChess")]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&chess)
+            .unwrap();
+        let request = SetVideoCategoryRequest {
+            belongs: Some(serde_json::json!(false)),
+        };
+
+        let response = set_category_of(&db, video.id.as_str(), chess.id.as_str(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "This category comes from the video's channel"
+            ))
+        );
+        assert_eq!(
+            SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            SqliteEventRepository::new(db.database())
+                .list_eligible()
+                .unwrap(),
+            vec![]
         );
     }
 
