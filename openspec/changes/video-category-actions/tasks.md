@@ -28,7 +28,7 @@
 - [x] 2.20 `it_should_count_ai_verdicts_per_category`: `CategoryViewSearcher`
 - [x] 2.21 `VideoCategoriesDialog`: shows locked source chips, AI marks and filled chips
 - [x] 2.22 `VideoCategoriesDialog`: sets a category by hand when a chip is clicked
-- [ ] 2.23 `VideoCategoriesDialog`: shows the error and keeps the chip when setting fails
+- [x] 2.23 `VideoCategoriesDialog`: shows the error and keeps the chip when setting fails
 - [ ] 2.24 `VideoCategoriesDialog`: re-runs AI only while AI categorization is available
 - [ ] 2.25 `VideoActionsMenu`: offers Edit categories only while categories are on
 - [ ] 2.26 `DetailHeader`: offers Re-run AI categorization or Clear AI categories after confirmation

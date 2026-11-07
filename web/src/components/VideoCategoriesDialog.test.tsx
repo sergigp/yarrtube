@@ -92,4 +92,17 @@ describe('VideoCategoriesDialog', () => {
     expect(bodies(fetchMock, 'PUT')).toEqual([{ belongs: false }])
     expect(screen.queryByText('AI')).not.toBeInTheDocument()
   })
+
+  it('shows the error and keeps the chip when setting fails', async () => {
+    renderDialog({
+      'GET /api/videos/rec1/categories': categoriesOf(chess, funny, sicilian),
+      'PUT /api/videos/rec1/categories/funny': { status: 500, error: 'database is locked' },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Funny' }))
+
+    expect(await screen.findByText('Failed to set "Funny": database is locked')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Funny' })).toHaveAttribute('aria-pressed', 'false')
+  })
 })

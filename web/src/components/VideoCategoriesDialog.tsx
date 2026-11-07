@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { Check, Lock } from 'lucide-react'
 import type { VideoCategoryChoice } from '@/api/types'
 import { useSetVideoCategory, useVideoCategories } from '@/api/queries'
 import { useTheme } from '@/hooks/useTheme'
 import { inkShade, softTint } from '@/lib/categoryColors'
+import { errorMessage } from '@/lib/errorMessage'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
@@ -31,6 +33,16 @@ export function VideoCategoriesDialog({
 }: VideoCategoriesDialogProps) {
   const { data, error } = useVideoCategories(recordId, open)
   const setVideoCategory = useSetVideoCategory()
+  const [failure, setFailure] = useState<string | null>(null)
+
+  const toggle = async (choice: VideoCategoryChoice) => {
+    setFailure(null)
+    try {
+      await setVideoCategory(recordId, choice.id, !choice.belongs)
+    } catch (err) {
+      setFailure(`Failed to set "${choice.name}": ${errorMessage(err)}`)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -49,11 +61,12 @@ export function VideoCategoriesDialog({
                 key={choice.id}
                 choice={choice}
                 sourceName={sourceName}
-                onToggle={() => setVideoCategory(recordId, choice.id, !choice.belongs)}
+                onToggle={() => void toggle(choice)}
               />
             ))}
           </div>
         )}
+        {failure && <p className="text-sm text-destructive">{failure}</p>}
       </DialogContent>
     </Dialog>
   )
