@@ -2959,6 +2959,41 @@ mod tests {
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_not_schedule_a_second_categorization_while_one_is_pending() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = summarized_video();
+        video_repository.save(&video).unwrap();
+        seed_channel_with_categorization(&db, &video, true);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&prompted_category("Sicilian", &[]))
+            .unwrap();
+        preferences_repository.save(&categorization_on()).unwrap();
+        task_repository
+            .schedule(&categorize_video(&video), fixed_timestamp())
+            .unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &categorize_video(&video))]
+        );
+    }
+
     /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
     fn sync_task_of_downloaded_video(
         db: &TestDatabase,
