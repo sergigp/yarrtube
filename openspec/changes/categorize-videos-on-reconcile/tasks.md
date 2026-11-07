@@ -36,7 +36,7 @@
 - [x] 2.28 `it_should_keep_unavailable_verdicts_when_the_same_settings_are_saved`
 - [x] 2.29 `it_should_delete_a_removed_videos_verdicts`: `ChannelVideoReconciler::remove_videos_not_in`
 - [x] 2.30 `it_should_delete_a_removed_playlist_videos_verdicts`: `PlaylistVideoReconciler::remove_videos_not_in`
-- [ ] 2.31 `it_should_delete_the_verdicts_of_a_deleted_channels_videos`: `ChannelDeleter`
+- [x] 2.31 `it_should_delete_the_verdicts_of_a_deleted_channels_videos`: `ChannelDeleter`
 - [ ] 2.32 `it_should_delete_the_verdicts_of_a_deleted_playlists_videos`: `PlaylistDeleter`
 - [ ] 2.33 `labels a categorize_video task and files it under AI` (web `tasks.test.ts`)
 - [ ] 2.34 Update `doc/AI.md` and `doc/CATEGORIES.md` (when a video is categorized, verdicts are final, summaries needed, toggle-off keeps categories) and `prompts/categorization/README.md` (v2 shipped); verify the docs match the specs

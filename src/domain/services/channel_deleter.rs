@@ -27,7 +27,6 @@ pub struct ChannelDeleter {
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
-    #[allow(dead_code)]
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
 }
 
@@ -88,8 +87,9 @@ impl ChannelDeleter {
         }
     }
 
-    /// Deletes each `ChannelVideo`'s owned `Video` row, its transcript and
-    /// its categories, then the `ChannelVideo` rows themselves.
+    /// Deletes each `ChannelVideo`'s owned `Video` row, its transcript, its
+    /// summary, its categories and its verdicts, then the `ChannelVideo` rows
+    /// themselves.
     fn delete_channel_videos(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
         let channel_videos = self
             .channel_video_repository
@@ -107,6 +107,9 @@ impl ChannelDeleter {
                 .map_err(DeleteChannelError::Repository)?;
             self.video_categories_repository
                 .delete(&channel_video.video_id)
+                .map_err(DeleteChannelError::Repository)?;
+            self.video_category_verdict_repository
+                .delete_for_video(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
         }
         self.channel_video_repository
