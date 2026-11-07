@@ -13,7 +13,7 @@
 - [x] 2.5 `it_should_report_the_source_for_a_member_category_even_with_a_verdict`
 - [x] 2.6 `it_should_return_not_found_for_the_categories_of_an_unknown_video`
 - [x] 2.7 `it_should_add_a_category_by_hand_replacing_an_ai_no`: `VideoCategoryEditor::set`
-- [ ] 2.8 `it_should_remove_an_ai_category_by_hand`
+- [x] 2.8 `it_should_remove_an_ai_category_by_hand`
 - [ ] 2.9 `it_should_reject_setting_a_category_given_by_the_source`
 - [ ] 2.10 `it_should_reject_a_missing_or_non_boolean_belongs`
 - [ ] 2.11 `it_should_return_not_found_for_an_unknown_video_or_category_when_setting`

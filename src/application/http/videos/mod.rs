@@ -6391,6 +6391,62 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_remove_an_ai_category_by_hand() {
+        let db = TestDatabase::new();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess", None))
+            .unwrap();
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+            0,
+        );
+        let food = named_category("Food for thought", &[]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&food)
+            .unwrap();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        verdict_repository
+            .save(&ai_verdict(&video, &food, Verdict::Yes))
+            .unwrap();
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        video_categories_repository
+            .save_many(&[VideoCategories::new(video.id.clone(), vec![food.id.clone()])])
+            .unwrap();
+        let request = SetVideoCategoryRequest {
+            belongs: Some(serde_json::json!(false)),
+        };
+
+        let response = set_category_of(&db, video.id.as_str(), food.id.as_str(), request).await;
+
+        assert_eq!(
+            response,
+            Ok(VideoCategoriesResponse {
+                categories: vec![choice_response(&food, false, Some("user"), Some("no"))],
+            })
+        );
+        assert_eq!(
+            verdict_repository.find_many(&[video.id.clone()]).unwrap(),
+            vec![user_verdict(&video, &food, Verdict::No)]
+        );
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+        assert_eq!(
+            SqliteEventRepository::new(db.database())
+                .list_eligible()
+                .unwrap(),
+            vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
     async fn list_categories_of(
         video_category_choice_searcher: VideoCategoryChoiceSearcher,
         id: &str,
