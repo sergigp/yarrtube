@@ -16,7 +16,7 @@
 - [x] 2.8 `it_should_remove_an_ai_category_by_hand`
 - [x] 2.9 `it_should_reject_setting_a_category_given_by_the_source`
 - [x] 2.10 `it_should_reject_a_missing_or_non_boolean_belongs`
-- [ ] 2.11 `it_should_return_not_found_for_an_unknown_video_or_category_when_setting`
+- [x] 2.11 `it_should_return_not_found_for_an_unknown_video_or_category_when_setting`
 - [ ] 2.12 `it_should_rerun_a_videos_ai_categorization`: `rerun_video` + `recompute` + `SyncVideo`
 - [ ] 2.13 `it_should_return_not_found_when_rerunning_an_unknown_video`
 - [ ] 2.14 `it_should_not_evaluate_a_pair_with_a_user_verdict`

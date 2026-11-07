@@ -6521,6 +6521,46 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_return_not_found_for_an_unknown_video_or_category_when_setting() {
+        let db = TestDatabase::new();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess", None))
+            .unwrap();
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+            0,
+        );
+        let chess = named_category("Chess", &[]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&chess)
+            .unwrap();
+        let belongs = || SetVideoCategoryRequest {
+            belongs: Some(serde_json::json!(true)),
+        };
+
+        let unknown_video = set_category_of(&db, "unknown", chess.id.as_str(), belongs()).await;
+        let unknown_category = set_category_of(&db, video.id.as_str(), "unknown", belongs()).await;
+
+        assert_eq!(
+            (unknown_video, unknown_category),
+            (
+                Err(ApiError::new(StatusCode::NOT_FOUND, "video not found")),
+                Err(ApiError::new(StatusCode::NOT_FOUND, "category not found")),
+            )
+        );
+        assert_eq!(
+            SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![]
+        );
+    }
+
     async fn list_categories_of(
         video_category_choice_searcher: VideoCategoryChoiceSearcher,
         id: &str,
