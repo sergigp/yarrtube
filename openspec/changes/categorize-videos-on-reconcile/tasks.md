@@ -45,7 +45,7 @@
 
 `SqliteVideoCategoryVerdictRepository`
 
-- [ ] 3.1 `it_should_save_and_find_verdicts_of_several_videos`
+- [x] 3.1 `it_should_save_and_find_verdicts_of_several_videos`
 - [ ] 3.2 `it_should_replace_a_pairs_verdict`
 - [ ] 3.3 `it_should_delete_a_videos_verdicts`
 - [ ] 3.4 `it_should_delete_a_categorys_verdicts`

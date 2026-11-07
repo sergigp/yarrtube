@@ -1,11 +1,14 @@
 use crate::domain::category::CategoryId;
 use crate::domain::video::VideoRecordId;
-use crate::domain::video_category::VideoCategoryVerdict;
+use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
 use crate::infrastructure::shared::sqlite_connection::Database;
+use anyhow::Context;
+use chrono::{DateTime, Utc};
+use rusqlite::{Row, params, params_from_iter};
 
 /// Each (video, category) pair's verdict, at most one per pair.
 pub trait VideoCategoryVerdictRepository: Send + Sync {
-    /// Every verdict of `video_ids`.
+    /// Every verdict of `video_ids`, by video then category.
     fn find_many(&self, video_ids: &[VideoRecordId]) -> anyhow::Result<Vec<VideoCategoryVerdict>>;
     /// Replaces the pair's verdict.
     fn save(&self, verdict: &VideoCategoryVerdict) -> anyhow::Result<()>;
@@ -17,8 +20,19 @@ pub trait VideoCategoryVerdictRepository: Send + Sync {
     fn delete_unavailable_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
 }
 
+/// A `video_category_verdicts` row as read, before its values are parsed
+/// into a `VideoCategoryVerdict`.
+struct VerdictRow {
+    video_id: String,
+    category_id: String,
+    verdict: String,
+    decided_by: String,
+    model: Option<String>,
+    reason: Option<String>,
+    decided_at: String,
+}
+
 pub struct SqliteVideoCategoryVerdictRepository {
-    #[allow(dead_code)]
     db: Database,
 }
 
@@ -29,11 +43,46 @@ impl SqliteVideoCategoryVerdictRepository {
 }
 
 impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
-    fn find_many(&self, _video_ids: &[VideoRecordId]) -> anyhow::Result<Vec<VideoCategoryVerdict>> {
-        Ok(Vec::new())
+    fn find_many(&self, video_ids: &[VideoRecordId]) -> anyhow::Result<Vec<VideoCategoryVerdict>> {
+        let conn = self.db.read()?;
+        let placeholders = vec!["?"; video_ids.len()].join(", ");
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT video_id, category_id, verdict, decided_by, model, reason, decided_at
+                 FROM video_category_verdicts WHERE video_id IN ({placeholders})
+                 ORDER BY video_id, category_id"
+            ))
+            .context("failed to prepare find many video category verdicts")?;
+        stmt.query_map(
+            params_from_iter(video_ids.iter().map(|id| id.as_str())),
+            Self::read_row,
+        )
+        .inspect_err(|e| tracing::error!(error = %e, "failed to find video category verdicts"))
+        .context("failed to find video category verdicts")?
+        .map(|row| Self::row_to_verdict(row.context("failed to read video category verdict row")?))
+        .collect()
     }
 
-    fn save(&self, _verdict: &VideoCategoryVerdict) -> anyhow::Result<()> {
+    fn save(&self, verdict: &VideoCategoryVerdict) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "INSERT INTO video_category_verdicts
+                (video_id, category_id, verdict, decided_by, model, reason, decided_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                verdict.video_id.as_str(),
+                verdict.category_id.as_str(),
+                verdict.verdict.as_str(),
+                verdict.decided_by.as_str(),
+                verdict.model,
+                verdict.reason,
+                verdict.decided_at.to_rfc3339(),
+            ],
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %verdict.video_id, error = %e, "failed to save video category verdict")
+        })
+        .context("failed to save video category verdict")?;
         Ok(())
     }
 
@@ -51,5 +100,86 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
 
     fn delete_unavailable_for_category(&self, _category_id: &CategoryId) -> anyhow::Result<()> {
         Ok(())
+    }
+}
+
+impl SqliteVideoCategoryVerdictRepository {
+    fn read_row(row: &Row<'_>) -> rusqlite::Result<VerdictRow> {
+        Ok(VerdictRow {
+            video_id: row.get(0)?,
+            category_id: row.get(1)?,
+            verdict: row.get(2)?,
+            decided_by: row.get(3)?,
+            model: row.get(4)?,
+            reason: row.get(5)?,
+            decided_at: row.get(6)?,
+        })
+    }
+
+    fn row_to_verdict(row: VerdictRow) -> anyhow::Result<VideoCategoryVerdict> {
+        Ok(VideoCategoryVerdict {
+            video_id: VideoRecordId::new(row.video_id)?,
+            category_id: CategoryId::new(row.category_id)?,
+            verdict: Verdict::parse(&row.verdict)?,
+            decided_by: VerdictAuthor::parse(&row.decided_by)?,
+            model: row.model,
+            reason: row.reason,
+            decided_at: DateTime::parse_from_rfc3339(&row.decided_at)
+                .context("failed to parse stored decided_at")?
+                .with_timezone(&Utc),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+
+    #[test]
+    fn it_should_save_and_find_verdicts_of_several_videos() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let (chess, funny, other) = (
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            user_verdict("rec1", "funny", Verdict::No),
+            ai_verdict("rec2", "chess", Verdict::Unavailable),
+        );
+        let not_asked = ai_verdict("rec3", "chess", Verdict::Yes);
+        [&chess, &funny, &other, &not_asked]
+            .iter()
+            .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let found = repository.find_many(&[video_id("rec1"), video_id("rec2")]);
+
+        assert_eq!(
+            found.map_err(|e| e.to_string()),
+            Ok(vec![chess, funny, other])
+        );
+    }
+
+    fn ai_verdict(video: &str, category: &str, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            video_id: video_id(video),
+            category_id: CategoryId::new(category).unwrap(),
+            verdict,
+            decided_by: VerdictAuthor::Ai,
+            model: Some("qwen3:4b".to_string()),
+            reason: Some("A Sicilian game.".to_string()),
+            decided_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap(),
+        }
+    }
+
+    fn user_verdict(video: &str, category: &str, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            decided_by: VerdictAuthor::User,
+            model: None,
+            reason: None,
+            ..ai_verdict(video, category, verdict)
+        }
+    }
+
+    fn video_id(value: &str) -> VideoRecordId {
+        VideoRecordId::new(value).unwrap()
     }
 }
