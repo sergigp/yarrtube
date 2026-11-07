@@ -456,6 +456,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_create_a_category_if_the_prompt_is_too_long() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator = category_creator(&db, repository.clone());
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                ai_prompt: Some("a".repeat(2001)),
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Category AI prompt must be at most 2000 characters (got 2001)"
+            ))
+        );
+        assert_eq!(repository.list().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_create_the_first_category_with_the_first_palette_color() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
