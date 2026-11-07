@@ -25,7 +25,7 @@ PROMPT_VERSION = "v2"  # prompts/categorization/<version>.md
 SUMMARY_MODEL = "qwen3:4b"  # the summaries eval's model in use: matches the summaries from prod
 NUM_CTX = 4096
 TEMPERATURE = 0.0
-MAX_OUTPUT = 2048  # stops runaway thinking loops
+MAX_OUTPUT = 3072  # stops runaway thinking loops
 MAX_WRONG_PER_CATEGORY = 1  # the pass bar, see decisions.md
 
 

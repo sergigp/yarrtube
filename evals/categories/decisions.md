@@ -10,6 +10,14 @@ prompt [`v2`](../../prompts/categorization/v2.md), temperature 0, `num_ctx` 4096
 a higher output cap, once the [category prompts](category-prompts.md) are
 tuned.
 
+## 2026-11-07 · prompts tuned, not measured yet
+
+Applied the changes the runs below pointed to: science explainers belong in
+Science News and not Food for thought (the labels were right), tighter Politics
+and Food for thought, smaller edits to Chess gameplays, Coding tutorials and AI
+news, `MAX_OUTPUT` 3072, and Sicilian ticked for *1 in a Billion Checkmate?*. No
+run has used them. The new cap rules out `--reuse`, so the next run is all calls.
+
 ## 2026-11-07 · first full runs · thinking leads, nothing passes
 
 Runs: [`thinking off`](results/2026-11-06_1248_prompt-v2_qwen3-4b_think-off/report.md),

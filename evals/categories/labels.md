@@ -50,7 +50,7 @@ Eric Rosen · 33 min · https://youtu.be/IgJri10gl2M
 
 > This ChessMood speedrun episode features six chess openings where the host wins all games through precise development and tactical play. The games include the Scandinavian Defense, two French variations, a Philidor defense inspired by Morphy's Opera House game, a Sicilian Grand Prix Attack, and the Scotch opening. The video concludes with the host achieving a 1300 rating after six consecutive victories. The host emphasizes the importance of initiative and rapid development in overcoming opponents, noting that maintaining pressure and exploiting weaknesses leads to victory.
 
-[ ] Jobava London · [ ] Sicilian · [x] Chess gameplays · [ ] Science News · [ ] AI news · [ ] Tech · [ ] Politics and Economy News · [ ] Food for thought · [ ] Coding tutorials · [ ] None
+[ ] Jobava London · [x] Sicilian · [x] Chess gameplays · [ ] Science News · [ ] AI news · [ ] Tech · [ ] Politics and Economy News · [ ] Food for thought · [ ] Coding tutorials · [ ] None
 
 Notes:
 

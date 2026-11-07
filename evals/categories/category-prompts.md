@@ -57,22 +57,22 @@ Does not belong: other openings, or videos that only mention the Sicilian.
 ```
 The video shows people playing chess: the games are the main content.
 Belongs: streams, speedruns, online games, tournament games, and game reviews or recaps that go through the moves.
-Does not belong: chess news without games, opening lessons or trap videos without full games, or content about chess players' lives.
+Does not belong: chess news without games, opening lessons or trap videos without full games, coaching sessions or lessons that use a game as an example, or content about chess players' lives.
 ```
 
 ## Science News
 
 ```
-The video reports on recent events in space and science.
-Belongs: astronomy news, SpaceX and NASA missions, rocket launches, new discoveries, research results, and the Nobel Prizes and other science awards.
-Does not belong: explainers on how things work with no recent event, software, AI products, gadgets, politics or history.
+The video is about space or science: what happened, what was found, or how it works.
+Belongs: astronomy, SpaceX and NASA missions, rocket launches, discoveries, research results, science awards, explainers on physics, mathematics and medicine, and the history of science and spaceflight.
+Does not belong: software, AI products, gadgets, politics or history unrelated to science.
 ```
 
 ## AI news
 
 ```
 The video is about AI tools and how people use them.
-Belongs: new models and how they compare, features of AI coding tools such as Claude Code, Codex and Pi, AI workflows, hands-on reviews, and real cases of software engineers working with AI.
+Belongs: new models and how they compare, features of AI coding tools such as Claude Code, Codex and Pi, AI workflows, hands-on reviews, and real cases of software engineers working with AI, when the AI work is the main subject.
 Does not belong: programming without AI, the academic theory behind AI, or opinions on AI's effect on society.
 ```
 
@@ -87,17 +87,17 @@ Does not belong: programming, tech tutorials or how-to guides, explainers on how
 ## Politics and Economy News
 
 ```
-The video covers current political or economic events.
-Belongs: elections, governments, geopolitics, current wars, economic news and policy decisions.
-Does not belong: history or theory that isn't tied to current events, or celebrity and crime news.
+The video reports on current political or economic news.
+Belongs: elections, governments, geopolitics, current wars, economic news and policy decisions, as the main subject or a full segment.
+Does not belong: essays on systems such as capitalism or climate, history or theory not tied to current events, rules or market effects that are only background to another subject, or celebrity and crime news.
 ```
 
 ## Food for thought
 
 ```
-The video teaches or reflects on ideas, not on current events.
-Belongs: history, sociology, economics, religion, philosophy, culture, and explainers on how science, mathematics or technology work, as lessons, essays or long explanations.
-Does not belong: news, programming tutorials, product reviews or chess.
+The video teaches or reflects on ideas about society and the human condition, not on current events.
+Belongs: history, sociology, economics, religion, philosophy and culture, as lessons, essays or long explanations.
+Does not belong: news, science, mathematics or technology explainers, programming, AI tools, product reviews, health experiments or chess.
 ```
 
 ## Coding tutorials
@@ -105,5 +105,5 @@ Does not belong: news, programming tutorials, product reviews or chess.
 ```
 The video teaches programming or software engineering.
 Belongs: coding tutorials, programming languages, frameworks, software architecture, developer tools such as the terminal, Git or editors, and walkthroughs of building software.
-Does not belong: tech news, product reviews, or news and reviews of AI tools.
+Does not belong: tech news, product reviews, news and reviews of AI tools, or running or modifying AI models.
 ```
