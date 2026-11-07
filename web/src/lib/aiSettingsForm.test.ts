@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changedFields, formFrom } from './aiSettingsForm'
+import { changedFields, formFrom, hasInvalidNumber } from './aiSettingsForm'
 import { aPreferences } from '@/test/helpers'
 
 describe('changedFields', () => {
@@ -58,6 +58,35 @@ describe('changedFields', () => {
     })
   })
 
+  it('has the categorization generation settings only when changed', () => {
+    const saved = aPreferences()
+
+    expect(
+      changedFields(saved, {
+        ...formFrom(saved),
+        categorization_context_length: '8192',
+        categorization_temperature: '0.5',
+        categorization_thinking: false,
+      }),
+    ).toEqual({
+      categorization_context_length: 8192,
+      categorization_temperature: 0.5,
+      categorization_thinking: false,
+    })
+  })
+
+  it("leaves out the thinking of a model that can't think, section by section", () => {
+    const saved = aPreferences()
+    const form = { ...formFrom(saved), summaries_thinking: false, categorization_thinking: false }
+
+    expect(
+      changedFields(saved, form, { summariesThinking: true, categorizationThinking: false }),
+    ).toEqual({ summaries_thinking: false })
+    expect(
+      changedFields(saved, form, { summariesThinking: false, categorizationThinking: true }),
+    ).toEqual({ categorization_thinking: false })
+  })
+
   it('sends the URL without surrounding spaces', () => {
     const saved = aPreferences({ ollama_url: 'http://mac.local:11434' })
 
@@ -87,5 +116,20 @@ describe('changedFields', () => {
         summaries_temperature: '',
       }),
     ).toEqual({ summaries_context_length: Number.NaN, summaries_temperature: Number.NaN })
+  })
+})
+
+describe('hasInvalidNumber', () => {
+  it('is false for numbers', () => {
+    expect(
+      hasInvalidNumber({ categorization_context_length: 4096, categorization_temperature: 0 }),
+    ).toBe(false)
+  })
+
+  it('catches each number field', () => {
+    expect(hasInvalidNumber({ summaries_context_length: Number.NaN })).toBe(true)
+    expect(hasInvalidNumber({ summaries_temperature: Number.NaN })).toBe(true)
+    expect(hasInvalidNumber({ categorization_context_length: Number.NaN })).toBe(true)
+    expect(hasInvalidNumber({ categorization_temperature: Number.NaN })).toBe(true)
   })
 })
