@@ -11,9 +11,9 @@ channel or playlist can be in several categories.
 
 ## Create one
 
-- Press **+** next to **Categories** in the sidebar, and pick a name and a
-  color.
-- Add channels and playlists with **Edit settings**, or from the
+- Press **+** next to **Categories** in the sidebar, and pick a name, a color
+  and its channels and playlists, all in one dialog.
+- Change any of them later with **Edit settings**, or add a source from the
   **Categories** field when adding or editing a channel or playlist.
 - New videos from those sources join the category on their own.
 
