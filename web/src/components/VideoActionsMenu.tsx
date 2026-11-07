@@ -1,11 +1,17 @@
-import { EllipsisVertical, Check, EyeOff } from 'lucide-react'
+import { useState } from 'react'
+import { EllipsisVertical, Check, EyeOff, Tags } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useMarkVideoWatched, useSetPlaylistExcludedFromHome } from '@/api/queries'
+import {
+  useCategoriesShown,
+  useMarkVideoWatched,
+  useSetPlaylistExcludedFromHome,
+} from '@/api/queries'
+import { VideoCategoriesDialog } from '@/components/VideoCategoriesDialog'
 import { errorMessage } from '@/lib/errorMessage'
 import { homeSettingAction } from '@/lib/homeSetting'
 import { cn } from '@/lib/utils'
@@ -29,17 +35,20 @@ interface VideoActionsMenuProps {
 /** A vertical "⋮" menu of actions on one video. */
 export function VideoActionsMenu({
   videoId,
-  recordId: _recordId,
+  recordId,
   title,
-  sourceName: _sourceName,
+  sourceName,
   markable,
   excludablePlaylist,
   className,
 }: VideoActionsMenuProps) {
   const markVideoWatched = useMarkVideoWatched()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
+  const categoriesShown = useCategoriesShown()
+  const [editingCategories, setEditingCategories] = useState(false)
 
   return (
+    <>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
         className={cn(
@@ -82,7 +91,23 @@ export function VideoActionsMenu({
             Exclude "{excludablePlaylist.name}" from home
           </DropdownMenuItem>
         )}
+        {categoriesShown && (
+          <DropdownMenuItem onSelect={() => setEditingCategories(true)}>
+            <Tags />
+            Edit categories…
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
+    {editingCategories && (
+      <VideoCategoriesDialog
+        recordId={recordId}
+        title={title}
+        sourceName={sourceName}
+        open
+        onOpenChange={setEditingCategories}
+      />
+    )}
+    </>
   )
 }

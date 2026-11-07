@@ -423,6 +423,7 @@ describe('Home', () => {
 
     expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([
       'Mark as watched',
+      'Edit categories…',
     ])
   })
 

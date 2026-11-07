@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VideoActionsMenu } from './VideoActionsMenu'
 import { useChannels, useRecentVideos } from '@/api/queries'
-import { aPlaylist, mockApi, renderWithProviders } from '@/test/helpers'
+import { aPlaylist, aPreferences, mockApi, renderWithProviders } from '@/test/helpers'
 
 /** Keeps the channel list and home videos observed, so a refetch of them shows up as a request. */
 function LibraryObserver() {
@@ -121,7 +121,7 @@ describe('VideoActionsMenu', () => {
   })
 
   it('offers no exclude item without a playlist', async () => {
-    mockApi({})
+    mockApi({ 'GET /api/preferences': aPreferences({ categories_enabled: false }) })
     renderWithProviders(<VideoActionsMenu videoId="abc" recordId="rec-abc" title="My Video" sourceName="My Channel" markable />)
 
     const user = userEvent.setup()
@@ -180,5 +180,47 @@ describe('VideoActionsMenu', () => {
       'pointer-coarse:after:absolute',
       'pointer-coarse:after:-inset-2',
     )
+  })
+
+  it('offers Edit categories only while categories are on', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({ categories_enabled: true }),
+      'GET /api/videos/rec-abc/categories': { categories: [] },
+    })
+    renderWithProviders(
+      <VideoActionsMenu
+        videoId="abc"
+        recordId="rec-abc"
+        title="My Video"
+        sourceName="My Channel"
+        markable
+      />,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit categories…' }))
+
+    expect(await screen.findByRole('dialog', { name: 'My Video' })).toBeInTheDocument()
+  })
+
+  it('offers no Edit categories while categories are off', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ categories_enabled: false }) })
+    const { queryClient } = renderWithProviders(
+      <VideoActionsMenu
+        videoId="abc"
+        recordId="rec-abc"
+        title="My Video"
+        sourceName="My Channel"
+        markable
+      />,
+    )
+    await waitFor(() => expect(queryClient.getQueryData(['preferences'])).toBeDefined())
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Mark as watched' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Edit categories…' })).not.toBeInTheDocument()
   })
 })
