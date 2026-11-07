@@ -304,6 +304,45 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         assert_eq!(asked, [(Ok(()), vec![]), (Ok(()), vec![])]);
     }
 
+    #[test]
+    fn it_should_not_store_a_verdict_for_a_category_deleted_during_its_call() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = summarized_video();
+        let sicilian = prompted_category("Sicilian");
+        seed(&db, &video, &[&sicilian]);
+        let (database, deleted) = (db.database(), sicilian.id.clone());
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply(YES)])
+                .with_on_chat(move || {
+                    SqliteCategoryRepository::new(database.clone())
+                        .delete(&deleted)
+                        .unwrap()
+                }),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,

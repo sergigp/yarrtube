@@ -133,6 +133,9 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         source: &CategoryMember,
     ) -> anyhow::Result<bool> {
         let _guard = self.lock();
+        if self.category_repository.find(&verdict.category_id)?.is_none() {
+            return Ok(false);
+        }
         self.video_category_verdict_repository.save(verdict)?;
         self.recompute(&verdict.video_id, source)?;
         Ok(true)
