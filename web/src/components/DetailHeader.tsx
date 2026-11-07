@@ -3,12 +3,14 @@ import {
   Bell,
   BellOff,
   CheckCheck,
+  Eraser,
   EllipsisVertical,
   ExternalLink,
   Eye,
   EyeOff,
   RotateCw,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
 } from 'lucide-react'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -193,6 +195,12 @@ interface DetailHeaderProps {
    * (e.g. "Open channel on YouTube") apart from the selected video's link.
    */
   youtubeLink?: { href: string; label: string }
+  /**
+   * Channels and playlists, while categories are on: deletes the source's AI
+   * verdicts, re-running its categorization when `enabled`, clearing its AI
+   * categories otherwise.
+   */
+  aiCategorization?: { enabled: boolean; onDeleteAiVerdicts: () => Promise<void> }
   onDelete: () => Promise<void>
   deleteDescription: string
 }
@@ -223,6 +231,7 @@ export function DetailHeader({
   onSetUnwatchedCountHidden,
   onEditRequest,
   youtubeLink,
+  aiCategorization,
   onDelete,
   deleteDescription,
 }: DetailHeaderProps) {
@@ -231,6 +240,7 @@ export function DetailHeader({
   const [markingWatched, setMarkingWatched] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [confirmingMarkWatched, setConfirmingMarkWatched] = useState(false)
+  const [confirmingAiDelete, setConfirmingAiDelete] = useState(false)
   const markWatchedPrompt = markWatchedConfirmation(name, unwatchedCount ?? 0)
   const summary = summaryFor(videos, unwatchedCount, summaryPrefix)
 
@@ -294,6 +304,18 @@ export function DetailHeader({
   if (youtubeLink) {
     actions.push({ label: youtubeLink.label, icon: <ExternalLink />, href: youtubeLink.href })
   }
+  const aiDeleteLabel = aiCategorization?.enabled
+    ? 'Re-run AI categorization'
+    : 'Clear AI categories'
+  if (aiCategorization) {
+    actions.push({
+      label: aiDeleteLabel,
+      icon: aiCategorization.enabled ? <Sparkles /> : <Eraser />,
+      // Wipes the AI's answers for every video: kept behind the menu.
+      menuOnDesktop: true,
+      onSelect: () => setConfirmingAiDelete(true),
+    })
+  }
   const requestDelete = () => setConfirmingDelete(true)
 
   return (
@@ -352,6 +374,21 @@ export function DetailHeader({
         description={deleteDescription}
         onConfirm={onDelete}
       />
+      {aiCategorization && (
+        <ConfirmDialog
+          open={confirmingAiDelete}
+          onOpenChange={setConfirmingAiDelete}
+          title={`${aiDeleteLabel} of "${name}"?`}
+          description={
+            aiCategorization.enabled
+              ? 'Its videos lose the categories the AI gave them and are evaluated again. Categories you set by hand stay.'
+              : 'Its videos lose the categories the AI gave them. Categories you set by hand stay.'
+          }
+          confirmLabel={aiCategorization.enabled ? 'Re-run' : 'Clear'}
+          pendingLabel={aiCategorization.enabled ? 'Re-running…' : 'Clearing…'}
+          onConfirm={aiCategorization.onDeleteAiVerdicts}
+        />
+      )}
       {onMarkWatched && markWatchedPrompt && (
         <ConfirmDialog
           open={confirmingMarkWatched}

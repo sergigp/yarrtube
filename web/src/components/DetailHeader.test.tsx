@@ -390,4 +390,38 @@ describe('DetailHeader', () => {
       expect(screen.getByRole('dialog', { name: 'Delete "The Channel"?' })).toBeVisible()
     })
   })
+
+  it('offers Re-run AI categorization or Clear AI categories after confirmation', async () => {
+    const onDelete = vi.fn(noop)
+    const header = (enabled: boolean) => (
+      <DetailHeader
+        name="@GothamChess"
+        videos={[]}
+        onSync={noop}
+        aiCategorization={{ enabled, onDeleteAiVerdicts: onDelete }}
+        onDelete={noop}
+        deleteDescription="desc"
+      />
+    )
+    const { rerender } = render(header(true))
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'More actions for @GothamChess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Re-run AI categorization' }))
+    const rerun = await screen.findByRole('dialog', {
+      name: 'Re-run AI categorization of "@GothamChess"?',
+    })
+    await user.click(within(rerun).getByRole('button', { name: 'Cancel' }))
+    expect(onDelete).not.toHaveBeenCalled()
+
+    rerender(header(false))
+    await user.click(screen.getByRole('button', { name: 'More actions for @GothamChess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Clear AI categories' }))
+    const clear = await screen.findByRole('dialog', {
+      name: 'Clear AI categories of "@GothamChess"?',
+    })
+    await user.click(within(clear).getByRole('button', { name: 'Clear' }))
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledOnce())
+  })
 })

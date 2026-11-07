@@ -2,12 +2,20 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   queryKeys,
+  useCategoriesShown,
+  useCategorizationAvailable,
   useChannels,
   useChannelVideos,
   useDeleteSource,
   useLibraryAction,
 } from '@/api/queries'
-import { reconcileChannel, deleteChannel, markChannelWatched, avatarMediaUrl } from '@/api/client'
+import {
+  reconcileChannel,
+  deleteChannel,
+  deleteSourceAiVerdicts,
+  markChannelWatched,
+  avatarMediaUrl,
+} from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
 import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
@@ -27,6 +35,8 @@ export function ChannelDetail() {
   const deleteSource = useDeleteSource()
   const saveChannelSettings = useSaveChannelSettings()
   const [editing, setEditing] = useState(false)
+  const categoriesShown = useCategoriesShown()
+  const categorizationAvailable = useCategorizationAvailable()
   const channel = channels?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = useChannelVideos(id)
@@ -62,6 +72,16 @@ export function ChannelDetail() {
         onMarkWatched={refreshing(() => markChannelWatched(id))}
         onEditRequest={() => setEditing(true)}
         youtubeLink={{ href: youtubeChannelUrl(id), label: 'Open channel on YouTube' }}
+        aiCategorization={
+          categoriesShown
+            ? {
+                enabled: categorizationAvailable && channel.categorization_enabled,
+                onDeleteAiVerdicts: refreshing(() =>
+                  deleteSourceAiVerdicts({ kind: 'channel', id }),
+                ),
+              }
+            : undefined
+        }
         onDelete={refreshing(async () => {
           await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
           navigate('/')

@@ -9,6 +9,7 @@ import {
   aChannel,
   aVideo,
   heldUntilReleased,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes as ApiRoutes,
@@ -16,7 +17,10 @@ import {
 import { channelPath } from '@/lib/sourcePath'
 
 function renderChannel(routes: ApiRoutes, route: string) {
-  const fetchMock = mockApi(routes)
+  const fetchMock = mockApi({
+    'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    ...routes,
+  })
   const { queryClient } = renderWithProviders(
     <Routes>
       <Route path="/channels/:id" element={<ChannelDetail />} />

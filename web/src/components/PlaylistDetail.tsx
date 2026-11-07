@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   queryKeys,
+  useCategoriesShown,
+  useCategorizationAvailable,
   useDeleteSource,
   useLibraryAction,
   usePlaylists,
@@ -10,7 +12,12 @@ import {
   useSetPlaylistUnwatchedCountHidden,
   useUpdatePlaylistSettings,
 } from '@/api/queries'
-import { reconcilePlaylist, deletePlaylist, markPlaylistWatched } from '@/api/client'
+import {
+  reconcilePlaylist,
+  deletePlaylist,
+  deleteSourceAiVerdicts,
+  markPlaylistWatched,
+} from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
 import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
@@ -31,6 +38,8 @@ export function PlaylistDetail() {
   const setPlaylistUnwatchedCountHidden = useSetPlaylistUnwatchedCountHidden()
   const updatePlaylistSettings = useUpdatePlaylistSettings()
   const [editing, setEditing] = useState(false)
+  const categoriesShown = useCategoriesShown()
+  const categorizationAvailable = useCategorizationAvailable()
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePlaylistVideos(id)
@@ -73,6 +82,16 @@ export function PlaylistDetail() {
           navigate('/')
         })}
         deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+        aiCategorization={
+          categoriesShown
+            ? {
+                enabled: categorizationAvailable && playlist.categorization_enabled,
+                onDeleteAiVerdicts: refreshing(() =>
+                  deleteSourceAiVerdicts({ kind: 'playlist', id }),
+                ),
+              }
+            : undefined
+        }
       />
       <EditPlaylistDialog
         playlist={playlist}

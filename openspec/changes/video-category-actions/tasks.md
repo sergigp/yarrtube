@@ -31,7 +31,7 @@
 - [x] 2.23 `VideoCategoriesDialog`: shows the error and keeps the chip when setting fails
 - [x] 2.24 `VideoCategoriesDialog`: re-runs AI only while AI categorization is available
 - [x] 2.25 `VideoActionsMenu`: offers Edit categories only while categories are on
-- [ ] 2.26 `DetailHeader`: offers Re-run AI categorization or Clear AI categories after confirmation
+- [x] 2.26 `DetailHeader`: offers Re-run AI categorization or Clear AI categories after confirmation
 - [ ] 2.27 `CategorySettingsDialog`: re-evaluates N videos after confirmation, hidden at 0
 - [ ] 2.28 `videoCategories.spec.js` (e2e): add and remove a category by hand on a seeded video; chip and category page follow
 - [ ] 2.29 Update `doc/CATEGORIES.md` and `doc/AI.md` (editing by hand, locked source chips, re-run per video, source and category, clear when off); verify they match the specs

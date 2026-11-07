@@ -8,6 +8,7 @@ import {
   aPlaylist,
   aVideo,
   heldUntilReleased,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes as ApiRoutes,
@@ -15,7 +16,10 @@ import {
 import { useDesktopViewport } from '@/test/viewport'
 
 function renderPlaylist(routes: ApiRoutes, route: string) {
-  const fetchMock = mockApi(routes)
+  const fetchMock = mockApi({
+    'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    ...routes,
+  })
   const rendered = renderWithProviders(
     <Routes>
       <Route path="/playlists/:id" element={<PlaylistDetail />} />
