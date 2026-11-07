@@ -12,7 +12,7 @@
 - [x] 2.4 `it_should_not_schedule_a_categorization_without_a_generated_summary`
 - [x] 2.5 `it_should_not_schedule_a_categorization_when_the_source_has_categorization_off`
 - [x] 2.6 `it_should_not_schedule_a_categorization_when_ai_categorization_is_off`
-- [ ] 2.7 `it_should_not_schedule_a_categorization_when_every_category_has_a_verdict`
+- [x] 2.7 `it_should_not_schedule_a_categorization_when_every_category_has_a_verdict`
 - [ ] 2.8 `it_should_not_count_a_category_given_by_the_source_or_without_a_prompt_as_pending`: `pending_categories`
 - [ ] 2.9 `it_should_not_schedule_a_second_categorization_while_one_is_pending`: task dedupe for `categorize_video`
 - [ ] 2.10 `it_should_store_a_yes_verdict_and_add_the_category_to_the_video`: `categorize` + `apply_verdict` + event

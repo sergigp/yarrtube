@@ -63,11 +63,14 @@ pub trait VideoCategorizerApi: Send + Sync {
 }
 
 impl VideoCategorizerApi for VideoCategorizer {
-    fn pending(&self, _video: &Video, owner: &VideoOwner) -> anyhow::Result<Vec<Category>> {
+    fn pending(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<Vec<Category>> {
+        let verdicts = self
+            .video_category_verdict_repository
+            .find_many(std::slice::from_ref(&video.id))?;
         Ok(pending_categories(
             self.category_repository.list()?,
             &owner.source,
-            &[],
+            &verdicts,
         ))
     }
 

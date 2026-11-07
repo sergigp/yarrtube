@@ -6,7 +6,14 @@ use crate::domain::category::{Category, CategoryMember};
 pub fn pending_categories(
     categories: Vec<Category>,
     _source: &CategoryMember,
-    _verdicts: &[VideoCategoryVerdict],
+    verdicts: &[VideoCategoryVerdict],
 ) -> Vec<Category> {
     categories
+        .into_iter()
+        .filter(|category| {
+            !verdicts
+                .iter()
+                .any(|verdict| verdict.category_id == category.id)
+        })
+        .collect()
 }
