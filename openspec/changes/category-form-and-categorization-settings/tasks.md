@@ -24,7 +24,7 @@
 - [x] 2.18 `Web CategoryDialog.test.tsx`: create shows name, color, prompt and chips in order, name focused, next free color preselected. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.19 `Web CategoryDialog.test.tsx`: create sends everything in one `POST` and navigates with no dialog open; `AddCategoryDialog` removed and `App.tsx` switched. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.20 `Web CategoryDialog.test.tsx`: create without categorization has no prompt field and sends no `ai_prompt`. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.21 `Web CategoryDialog.test.tsx`: create failing keeps everything and shows the error; a blank name disables it. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.21 `Web CategoryDialog.test.tsx`: create failing keeps everything and shows the error; a blank name disables it. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.22 `Web CategoryDialog.test.tsx`: create dismissal asks to discard only with something entered. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.23 `Web CategoryDialog.test.tsx`: edit prefills name and color; saving sends one update and no members. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.24 `Web CategoryDialog.test.tsx`: edit with a taken name keeps the dialog and doesn't send members. Verify: the test goes red on an assertion, then green with the full suite.

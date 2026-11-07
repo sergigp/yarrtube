@@ -194,6 +194,32 @@ describe('CategoryDialog', () => {
     ])
   })
 
+  it('needs a name to create, and keeps everything when creating fails', async () => {
+    const { onOpenChange } = renderCreating({
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'POST /api/categories': { status: 409, error: 'a category named "Chess" already exists' },
+    })
+    const user = userEvent.setup()
+    const name = screen.getByRole('textbox', { name: 'Name' })
+    const create = screen.getByRole('button', { name: 'Create' })
+
+    expect(create).toBeDisabled()
+    await user.type(name, '   ')
+    expect(create).toBeDisabled()
+
+    await user.type(name, 'Chess')
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), 'Chess games')
+    await user.click(await screen.findByRole('button', { name: 'Hikaru' }))
+    await user.click(create)
+
+    expect(await screen.findByText('a category named "Chess" already exists')).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(name).toHaveValue('   Chess')
+    expect(screen.getByRole('textbox', { name: 'AI prompt' })).toHaveValue('Chess games')
+    expect(screen.getByRole('button', { name: 'Hikaru' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 

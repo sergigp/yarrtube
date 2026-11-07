@@ -100,6 +100,7 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
   const promptChanged = withPrompt && prompt.trim() !== promptBase
   const dirty = sourcesChanged || promptChanged
   const categoryName = category?.name ?? 'this category'
+  const canSave = name.trim() !== '' && (!category || dirty) && !saving
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
 
   const requestClose = () => (dirty ? setConfirmingDiscard(true) : onClose())
@@ -284,7 +285,7 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
         <Button type="button" variant="outline" onClick={requestClose}>
           Cancel
         </Button>
-        <Button type="button" disabled={(category && !dirty) || saving} onClick={save}>
+        <Button type="button" disabled={!canSave} onClick={save}>
           {category ? (saving ? 'Saving…' : 'Save') : saving ? 'Creating…' : 'Create'}
         </Button>
       </div>
