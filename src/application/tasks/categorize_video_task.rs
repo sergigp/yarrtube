@@ -40,9 +40,7 @@ impl TaskHandler for CategorizeVideoTask {
 mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_lines;
-    use crate::domain::category::{
-        Category, CategoryColor, CategoryMember, CategoryName, CategoryPrompt,
-    };
+    use crate::domain::category::{Category, CategoryColor, CategoryName, CategoryPrompt};
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};

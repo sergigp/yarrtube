@@ -58,6 +58,6 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests)
+- [x] 4.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests)
 - [ ] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos` with Ollama reachable, seed via the HTTP API a channel with summaries and categorization on, a category with an AI prompt and AI/categories/categorization on; once a video has a summary, assert a `categorize_video` task runs (tasks API), the verdict appears in `video_category_verdicts`, a yes adds the category (category videos API, tasks view label "Categorizing …" via Playwright), and a second reconcile schedules no new `categorize_video`; then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir
 - [ ] 4.3 Manual (human): on the NAS with real Ollama, check verdict quality and timing on a real channel, and that Plex labels follow the new categories
