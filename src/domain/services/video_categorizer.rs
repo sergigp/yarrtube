@@ -22,6 +22,7 @@ use std::sync::Arc;
 struct CategorizationJob {
     url: OllamaUrl,
     settings: CategorizationSettings,
+    thinking: bool,
     owner: VideoOwner,
     summary: SummaryText,
     pending: Vec<Category>,
@@ -111,10 +112,18 @@ impl VideoCategorizer {
             .video_summary_repository
             .find(&video.id)?
             .context("the video has no summary")?;
+        let settings = preferences.categorization;
+        let thinking = self
+            .llm_server_repository
+            .find(&url)?
+            .model(settings.model.as_str())
+            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?
+            .thinking;
         let pending = self.pending(video, &owner)?;
         Ok(CategorizationJob {
             url,
-            settings: preferences.categorization,
+            settings,
+            thinking,
             owner,
             summary: summary.text,
             pending,
@@ -132,7 +141,7 @@ impl VideoCategorizer {
             CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, category);
         let reply = self
             .llm_server_repository
-            .chat(&job.url, &question.chat(&job.settings, false))?;
+            .chat(&job.url, &question.chat(&job.settings, job.thinking))?;
         let answer =
             CategorizationAnswer::parse(&reply.content).context("the answer isn't usable")?;
         let verdict = VideoCategoryVerdict::answered(

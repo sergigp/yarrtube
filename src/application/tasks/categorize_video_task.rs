@@ -45,13 +45,13 @@ mod tests {
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
-    use crate::domain::llm_server::{LlmModel, LlmReply, LlmServer, OllamaUrl};
+    use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::SummaryModel;
-    use crate::domain::preferences::{CategorizationSettings, Preferences};
+    use crate::domain::preferences::{CategorizationPrompt, CategorizationSettings, Preferences};
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoId};
+    use crate::domain::video::{Video, VideoChapter, VideoId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -165,6 +165,57 @@ mod tests {
             vec![VideoCategories::none(video.id.clone())]
         );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_send_the_video_details_and_category_prompt_with_the_categorization_settings() {
+        let db = TestDatabase::new();
+        let llm = llm_replying(vec![reply(YES)]);
+        let video = Video {
+            chapters: Some(vec![VideoChapter {
+                start_seconds: 0,
+                end_seconds: 60,
+                title: "Intro".to_string(),
+            }]),
+            ..summarized_video()
+        };
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(
+            llm.chats(),
+            vec![LlmChat {
+                model: "qwen3:4b".to_string(),
+                system: CategorizationPrompt::shipped().as_str().to_string(),
+                user: "Title: Crushing the Sicilian\n\
+                       Channel: Some Channel\n\
+                       Duration: 30 minutes\n\
+                       Chapters:\n\
+                       0:00 Intro\n\
+                       Summary: Three online games in the Najdorf Sicilian.\n\
+                       \n\
+                       Category: Sicilian\n\
+                       Description:\n\
+                       The video is about Sicilian.\n\
+                       \n\
+                       Answer in JSON: \"reason\", one sentence on what the video covers and how it fits, then \"belongs\", true or false."
+                    .to_string(),
+                context_length: 4096,
+                temperature: 0.0,
+                thinking: true,
+                max_output_tokens: 3072,
+                format: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "reason": {"type": "string"},
+                        "belongs": {"type": "boolean"},
+                    },
+                    "required": ["reason", "belongs"],
+                })),
+            }]
+        );
     }
 
     /// The task over `db`, asking `llm`.

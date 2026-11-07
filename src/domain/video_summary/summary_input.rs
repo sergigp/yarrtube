@@ -1,4 +1,5 @@
 use crate::domain::preferences::{ContextLength, SummaryPrompt, SummaryPromptSection};
+use crate::domain::video::video_chapter::clock;
 use crate::domain::video::{Video, VideoChapter};
 use crate::domain::video_summary::{PartAnswer, SummaryMessages, SummaryText};
 use crate::domain::video_transcript::{CaptionLanguage, TimedTranscript, TranscriptPart};
@@ -222,20 +223,7 @@ fn block(
 fn chapter_list(chapters: &[VideoChapter]) -> String {
     chapters
         .iter()
-        .map(|chapter| format!("{} {}", clock(chapter.start_seconds), chapter.title))
+        .map(VideoChapter::listed)
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-/// `seconds` as a viewer reads it: `2:05`, or `1:02:05` from an hour on.
-fn clock(seconds: i64) -> String {
-    match seconds >= 3600 {
-        true => format!(
-            "{}:{:02}:{:02}",
-            seconds / 3600,
-            seconds % 3600 / 60,
-            seconds % 60
-        ),
-        false => format!("{}:{:02}", seconds / 60, seconds % 60),
-    }
 }

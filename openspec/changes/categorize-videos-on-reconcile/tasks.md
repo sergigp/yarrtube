@@ -17,7 +17,7 @@
 - [x] 2.9 `it_should_not_schedule_a_second_categorization_while_one_is_pending`: task dedupe for `categorize_video`
 - [x] 2.10 `it_should_store_a_yes_verdict_and_add_the_category_to_the_video`: `categorize` + `apply_verdict` + event
 - [x] 2.11 `it_should_store_a_no_verdict_without_changing_the_video_categories`
-- [ ] 2.12 `it_should_send_the_video_details_and_category_prompt_with_the_categorization_settings`: `CategorizationQuestion::user_message`/`chat`
+- [x] 2.12 `it_should_send_the_video_details_and_category_prompt_with_the_categorization_settings`: `CategorizationQuestion::user_message`/`chat`
 - [ ] 2.13 `it_should_read_the_answer_after_leaked_thinking`: `CategorizationAnswer::parse`
 - [ ] 2.14 `it_should_only_ask_about_categories_pending_when_it_runs`
 - [ ] 2.15 `it_should_do_nothing_when_the_conditions_no_longer_hold`: `prepare` skips
