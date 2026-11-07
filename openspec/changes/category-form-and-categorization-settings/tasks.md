@@ -30,7 +30,7 @@
 - [x] 2.24 `Web CategoryDialog.test.tsx`: edit with a taken name keeps the dialog and doesn't send members. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.25 `Web CategoryDialog.test.tsx`: the new partial failure and discard messages. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.26 `Web CategoryDialog.test.tsx`: Enter in the search with several matches neither toggles nor saves; Enter in "Name" saves. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.27 `Web CategoryPromptHelp.test.tsx`: opening shows the good and bad examples and tips. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.27 `Web CategoryPromptHelp.test.tsx`: opening shows the good and bad examples and tips. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.28 `Web CategoryDialog.test.tsx`: closing the guide with Escape keeps the dialog and the staged change. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.29 `Web CategoryDetail.test.tsx`: no "Change color" action, and the color changes through "Edit settings"; `CategoryColorDialog` and `draftColor` removed. Verify: the test goes red on an assertion, then green with the full suite.
 
