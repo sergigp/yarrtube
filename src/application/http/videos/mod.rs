@@ -6266,6 +6266,39 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_report_the_source_for_a_member_category_even_with_a_verdict() {
+        let db = TestDatabase::new();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess", None))
+            .unwrap();
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+            0,
+        );
+        let chess = named_category("Chess", &[channel_member("@GothamChess")]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&chess)
+            .unwrap();
+        SqliteVideoCategoryVerdictRepository::new(db.database())
+            .save(&ai_verdict(&video, &chess, Verdict::No))
+            .unwrap();
+
+        let response =
+            list_categories_of(video_category_choice_searcher(&db), video.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(VideoCategoriesResponse {
+                categories: vec![choice_response(&chess, true, Some("source"), Some("no"))],
+            })
+        );
+    }
+
     async fn list_categories_of(
         video_category_choice_searcher: VideoCategoryChoiceSearcher,
         id: &str,

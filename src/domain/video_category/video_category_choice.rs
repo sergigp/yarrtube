@@ -64,11 +64,11 @@ impl VideoCategoryChoice {
         verdict: Option<&VideoCategoryVerdict>,
     ) -> Self {
         let (from, belongs) = match verdict {
+            _ if category.has_member(source) => (Some(CategoryOrigin::Source), true),
             Some(verdict) => (
                 Some(CategoryOrigin::of(verdict.decided_by)),
                 verdict.is_yes(),
             ),
-            None if category.has_member(source) => (Some(CategoryOrigin::Source), true),
             None => (None, false),
         };
         Self {
