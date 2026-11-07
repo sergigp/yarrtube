@@ -82,6 +82,9 @@ struct StoredPreferences {
     summaries_prompt: Option<String>,
     categorization_enabled: Option<bool>,
     categorization_model: Option<String>,
+    categorization_context_length: Option<i64>,
+    categorization_temperature: Option<f64>,
+    categorization_thinking: Option<bool>,
     /// Only once the user saved one: missing reads as the shipped prompt.
     categorization_prompt: Option<String>,
 }
@@ -109,6 +112,11 @@ impl From<&Preferences> for StoredPreferences {
                 .map(|prompt| prompt.as_str().to_string()),
             categorization_enabled: Some(preferences.categorization.enabled),
             categorization_model: Some(preferences.categorization.model.as_str().to_string()),
+            categorization_context_length: Some(
+                preferences.categorization.context_length.value().into(),
+            ),
+            categorization_temperature: Some(preferences.categorization.temperature.value()),
+            categorization_thinking: Some(preferences.categorization.thinking),
             categorization_prompt: preferences
                 .categorization
                 .prompt
@@ -176,9 +184,17 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_model
                     .and_then(|model| CategorizationModel::new(model).ok())
                     .unwrap_or(defaults.categorization.model),
-                context_length: defaults.categorization.context_length,
-                temperature: defaults.categorization.temperature,
-                thinking: defaults.categorization.thinking,
+                context_length: stored
+                    .categorization_context_length
+                    .and_then(|length| ContextLength::new(length).ok())
+                    .unwrap_or(defaults.categorization.context_length),
+                temperature: stored
+                    .categorization_temperature
+                    .and_then(|temperature| Temperature::new(temperature).ok())
+                    .unwrap_or(defaults.categorization.temperature),
+                thinking: stored
+                    .categorization_thinking
+                    .unwrap_or(defaults.categorization.thinking),
                 prompt: stored
                     .categorization_prompt
                     .map(CategorizationPrompt::from_stored),

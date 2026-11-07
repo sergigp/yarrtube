@@ -39,13 +39,10 @@ pub struct UpdatePreferencesRequest {
     #[serde(default)]
     pub categorization_model: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
     pub categorization_context_length: Option<i64>,
     #[serde(default)]
-    #[allow(dead_code)]
     pub categorization_temperature: Option<f64>,
     #[serde(default)]
-    #[allow(dead_code)]
     pub categorization_thinking: Option<bool>,
     /// Left out keeps the prompt, `null` goes back to the shipped one.
     #[serde(default, deserialize_with = "present")]

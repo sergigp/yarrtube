@@ -65,9 +65,15 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
             .categorization_model
             .map(CategorizationModel::new)
             .transpose()?,
-        categorization_context_length: None,
-        categorization_temperature: None,
-        categorization_thinking: None,
+        categorization_context_length: request
+            .categorization_context_length
+            .map(ContextLength::new)
+            .transpose()?,
+        categorization_temperature: request
+            .categorization_temperature
+            .map(Temperature::new)
+            .transpose()?,
+        categorization_thinking: request.categorization_thinking,
         categorization_prompt: request
             .categorization_prompt
             .map(|prompt| prompt.map(CategorizationPrompt::new).transpose())
@@ -315,6 +321,44 @@ mod tests {
                     enabled: true,
                     model: CategorizationModel::new("gemma3:4b").unwrap(),
                     prompt: Some(CategorizationPrompt::new("Answer yes or no.").unwrap()),
+                    ..CategorizationSettings::default()
+                },
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_save_the_categorization_generation_settings() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_context_length: Some(8192),
+            categorization_temperature: Some(0.5),
+            categorization_thinking: Some(false),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_enabled: false,
+                categorization_context_length: 8192,
+                categorization_temperature: 0.5,
+                categorization_thinking: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                categorization: CategorizationSettings {
+                    context_length: ContextLength::new(8192).unwrap(),
+                    temperature: Temperature::new(0.5).unwrap(),
+                    thinking: false,
                     ..CategorizationSettings::default()
                 },
                 ..Preferences::default()
