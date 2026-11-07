@@ -65,11 +65,13 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const [modelsUrl, setModelsUrl] = useState(saved.ollama_url)
   const { data: server } = useOllama(modelsUrl)
   // Known only when the server lists the model; unknown, the switch shows.
-  const cannotThink =
-    server?.models.find((model) => model.name === form.summaries_model)?.thinking === false
+  const modelCannotThink = (name: string) =>
+    server?.models.find((model) => model.name === name)?.thinking === false
+  const summariesCannotThink = modelCannotThink(form.summaries_model)
+  const categorizationCannotThink = modelCannotThink(form.categorization_model)
   const patch = changedFields(saved, form, {
-    summariesThinking: !cannotThink,
-    categorizationThinking: true,
+    summariesThinking: !summariesCannotThink,
+    categorizationThinking: !categorizationCannotThink,
   })
   const testConnection = async () => {
     const url = form.ollama_url.trim()
@@ -210,20 +212,14 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     onChange={(event) => set('summaries_temperature', event.target.value)}
                   />
                 </Field>
-                {cannotThink ? (
-                  <p className="text-sm text-muted-foreground">
-                    {form.summaries_model} doesn't support thinking
-                  </p>
-                ) : (
-                  <SwitchRow
-                    id="summaries-thinking"
-                    label="Thinking"
-                    help={THINKING_HELP}
-                    checked={form.summaries_thinking}
-                    disabled={aiOff}
-                    onChange={(value) => set('summaries_thinking', value)}
-                  />
-                )}
+                <ThinkingField
+                  id="summaries-thinking"
+                  model={form.summaries_model}
+                  cannotThink={summariesCannotThink}
+                  checked={form.summaries_thinking}
+                  disabled={aiOff}
+                  onChange={(value) => set('summaries_thinking', value)}
+                />
                 <PromptField
                   id="summaries-prompt"
                   help={<PromptHelp />}
@@ -297,11 +293,11 @@ function AiSettings({ saved }: { saved: Preferences }) {
                       onChange={(event) => set('categorization_temperature', event.target.value)}
                     />
                   </Field>
-                  <SwitchRow
+                  <ThinkingField
                     id="categorization-thinking"
-                    label="Thinking"
                     name="Categorization thinking"
-                    help={THINKING_HELP}
+                    model={form.categorization_model}
+                    cannotThink={categorizationCannotThink}
                     checked={form.categorization_thinking}
                     disabled={aiOff}
                     onChange={(value) => set('categorization_thinking', value)}
@@ -420,6 +416,41 @@ function AdvancedToggle({
       />
       Advanced
     </button>
+  )
+}
+
+/** The "Thinking" switch, or a note when `model` is known not to support it. */
+function ThinkingField({
+  id,
+  name,
+  model,
+  cannotThink,
+  checked,
+  disabled,
+  onChange,
+}: {
+  id: string
+  /** The switch's accessible name, when the label alone is ambiguous. */
+  name?: string
+  model: string
+  cannotThink: boolean
+  checked: boolean
+  disabled: boolean
+  onChange: (value: boolean) => void
+}) {
+  if (cannotThink) {
+    return <p className="text-sm text-muted-foreground">{model} doesn't support thinking</p>
+  }
+  return (
+    <SwitchRow
+      id={id}
+      label="Thinking"
+      name={name}
+      help={THINKING_HELP}
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+    />
   )
 }
 

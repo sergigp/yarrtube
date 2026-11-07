@@ -474,6 +474,35 @@ describe('AiSettingsView', () => {
     expect(patchBodies(fetchMock)).toEqual([{ summaries_model: 'gemma3:4b' }])
   })
 
+  it('decides thinking section by section', async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
+      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'PATCH /api/preferences': aiOn(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    await openAdvanced()
+    const user = userEvent.setup()
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+
+    await user.click(await screen.findByRole('switch', { name: 'Categorization thinking' }))
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Categorization model' }),
+      'gemma3:4b',
+    )
+
+    expect(screen.getByRole('switch', { name: 'Thinking' })).toBeChecked()
+    expect(
+      screen.queryByRole('switch', { name: 'Categorization thinking' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText("gemma3:4b doesn't support thinking")).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByText('Saved')
+    expect(patchBodies(fetchMock)).toEqual([{ categorization_model: 'gemma3:4b' }])
+  })
+
   it('offers thinking while the models are unknown', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
