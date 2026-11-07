@@ -245,6 +245,33 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         );
     }
 
+    #[test]
+    fn it_should_only_ask_about_categories_pending_when_it_runs() {
+        let db = TestDatabase::new();
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let llm = llm_replying(vec![reply(YES)]);
+        let video = summarized_video();
+        let sicilian = prompted_category("Sicilian");
+        let tech = unprompted_category("Tech");
+        seed(&db, &video, &[&sicilian, &tech]);
+        let task = categorize_video_task(&db, llm.clone());
+        category_repository.delete(&sicilian.id).unwrap();
+        let tech = tech.with_ai_prompt(prompted_category("Tech").ai_prompt);
+        category_repository.update(&tech).unwrap();
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(asked_categories(&llm), vec!["Tech"]);
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(&video, &tech, Verdict::Yes, "A Sicilian game.")]
+        );
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,
@@ -381,6 +408,23 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
                 .unwrap()
                 .unwrap(),
         ))
+    }
+
+    fn unprompted_category(name: &str) -> Category {
+        prompted_category(name).with_ai_prompt(None)
+    }
+
+    /// The category each chat asked about, in order.
+    fn asked_categories(llm: &FakeLlmServerRepository) -> Vec<String> {
+        llm.chats()
+            .iter()
+            .filter_map(|chat| {
+                chat.user
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Category: "))
+                    .map(str::to_string)
+            })
+            .collect()
     }
 
     fn ai_verdict(
