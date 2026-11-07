@@ -18,7 +18,8 @@ use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoS
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
 use std::sync::Arc;
-use tracing::{info, warn};
+use std::time::Instant;
+use tracing::{error, info, warn};
 
 /// Why a video isn't categorized now. Nothing about it changes.
 enum Skip {
@@ -219,7 +220,15 @@ impl VideoCategorizer {
             .iter()
             .filter_map(|category| match self.evaluate(video, job, category) {
                 Ok(Outcome::Answered) => None,
-                Ok(Outcome::Rejected(reason)) => Some(Ok((category, reason))),
+                Ok(Outcome::Rejected(reason)) => {
+                    error!(
+                        video_id = %video.id,
+                        category = %category.name.as_str(),
+                        %reason,
+                        "the model couldn't answer for a category"
+                    );
+                    Some(Ok((category, reason)))
+                }
                 Err(stop) => Some(Err(stop)),
             })
             .collect()
@@ -232,6 +241,7 @@ impl VideoCategorizer {
         job: &CategorizationJob,
         category: &Category,
     ) -> Result<Outcome, Stop> {
+        let started = Instant::now();
         let question =
             CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, category);
         let reply = self
@@ -260,6 +270,15 @@ impl VideoCategorizer {
         );
         self.video_category_assigner
             .apply_verdict(&verdict, &job.owner.source)?;
+        info!(
+            video_id = %video.id,
+            category = %category.name.as_str(),
+            verdict = %verdict.verdict.as_str(),
+            reason = %verdict.reason.as_deref().unwrap_or_default(),
+            input_tokens = reply.input_tokens,
+            duration_seconds = started.elapsed().as_secs_f64(),
+            "video categorized"
+        );
         Ok(Outcome::Answered)
     }
 

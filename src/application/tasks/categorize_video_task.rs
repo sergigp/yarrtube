@@ -39,6 +39,7 @@ impl TaskHandler for CategorizeVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_log_lines;
     use crate::domain::category::{
         Category, CategoryColor, CategoryMember, CategoryName, CategoryPrompt,
     };
@@ -505,6 +506,42 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
             outcomes,
             [(Ok(()), vec![]), (Ok(()), vec![]), (Ok(()), vec![])]
         );
+    }
+
+    #[test]
+    fn it_should_log_each_verdict() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[&prompted_category("Sicilian"), &prompted_category("Tech")],
+        );
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![reply(YES), reply("It might belong.")]),
+        );
+
+        let lines = captured_log_lines(|| {
+            run(&task, &video).unwrap_err();
+        });
+
+        let verdict = lines
+            .iter()
+            .find(|line| line.contains("category=Sicilian"))
+            .unwrap();
+        let rejected = lines
+            .iter()
+            .find(|line| line.contains("category=Tech"))
+            .unwrap();
+        assert!(verdict.starts_with("INFO "));
+        assert!(verdict.contains(&format!("video_id={}", video.id)));
+        assert!(verdict.contains("verdict=YES"));
+        assert!(verdict.contains("reason=A Sicilian game."));
+        assert!(verdict.contains("input_tokens=100"));
+        assert!(verdict.contains("duration_seconds="));
+        assert!(rejected.starts_with("ERROR "));
+        assert!(rejected.contains("reason=its answer isn't usable"));
     }
 
     /// The task over `db`, asking `llm`.
