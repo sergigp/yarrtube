@@ -272,6 +272,50 @@ mod tests {
     }
 
     #[test]
+    fn it_should_read_the_categorization_defaults_if_stored_preferences_predate_them() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"categorization_model\": \"gemma3:4b\", \"summaries_context_length\": 8192, \"summaries_temperature\": 0.7, \"summaries_thinking\": false}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().unwrap().map(|found| found.categorization),
+            Some(CategorizationSettings {
+                model: CategorizationModel::new("gemma3:4b").unwrap(),
+                context_length: ContextLength::new(4096).unwrap(),
+                temperature: Temperature::new(0.0).unwrap(),
+                thinking: true,
+                ..CategorizationSettings::default()
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_read_invalid_categorization_settings_as_their_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"categorization_context_length\": 5, \"categorization_temperature\": 9.0}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().unwrap().map(|found| found.categorization),
+            Some(CategorizationSettings {
+                context_length: ContextLength::new(4096).unwrap(),
+                temperature: Temperature::new(0.0).unwrap(),
+                ..CategorizationSettings::default()
+            })
+        );
+    }
+
+    #[test]
     fn it_should_read_missing_keys_as_defaults() {
         let db = TestDatabase::new();
         db.connection()

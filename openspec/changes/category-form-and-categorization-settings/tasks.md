@@ -36,8 +36,8 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `sqlite_preferences_repository`: `it_should_read_the_categorization_defaults_if_stored_preferences_predate_them`: 4096, 0, true, not the summary values. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 3.2 `sqlite_preferences_repository`: `it_should_read_invalid_categorization_settings_as_their_defaults`: out-of-range stored values fall back to 4096 and 0. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.1 `sqlite_preferences_repository`: `it_should_read_the_categorization_defaults_if_stored_preferences_predate_them`: 4096, 0, true, not the summary values. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 3.2 `sqlite_preferences_repository`: `it_should_read_invalid_categorization_settings_as_their_defaults`: out-of-range stored values fall back to 4096 and 0. Verify: the test goes red on an assertion, then green with the full suite.
 
 ## 4. Verification
 
