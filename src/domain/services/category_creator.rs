@@ -14,7 +14,6 @@ pub struct NewCategory {
     pub name: CategoryName,
     /// `None` takes the least used palette color.
     pub color: Option<CategoryColor>,
-    #[allow(dead_code)]
     pub ai_prompt: Option<CategoryPrompt>,
     #[allow(dead_code)]
     pub members: Vec<CategoryMember>,
@@ -65,7 +64,8 @@ impl CategoryCreatorApi for CategoryCreator {
         let color = category
             .color
             .unwrap_or_else(|| Self::least_used_color(&existing));
-        let category = Category::create(category.name, color, self.clock.now());
+        let category = Category::create(category.name, color, self.clock.now())
+            .with_ai_prompt(category.ai_prompt);
         self.repository
             .insert(&category)
             .map_err(CreateCategoryError::Repository)?;

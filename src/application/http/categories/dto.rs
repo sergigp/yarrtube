@@ -7,8 +7,8 @@ pub struct CreateCategoryRequest {
     pub name: Option<String>,
     #[serde(default)]
     pub color: Option<String>,
+    /// Blank creates the category without one.
     #[serde(default)]
-    #[allow(dead_code)]
     pub ai_prompt: Option<String>,
     #[serde(default)]
     #[allow(dead_code)]

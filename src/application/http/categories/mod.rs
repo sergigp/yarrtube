@@ -35,7 +35,11 @@ pub async fn create_category(
     let category = NewCategory {
         name,
         color,
-        ai_prompt: None,
+        ai_prompt: request
+            .ai_prompt
+            .map(CategoryPrompt::new)
+            .transpose()?
+            .flatten(),
         members: Vec::new(),
     };
 
@@ -246,6 +250,42 @@ mod tests {
             stored,
             vec![Category {
                 color: color("#d3ecf8"),
+                ..category(id, "Chess")
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_a_category_with_a_prompt() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator = category_creator(&db, repository.clone());
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                ai_prompt: Some("  Chess games  ".to_string()),
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        let stored = repository.list().unwrap();
+        let id = stored.first().map(|category| category.id.clone());
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                CategoryResponse {
+                    ai_prompt: Some("Chess games".to_string()),
+                    ..category_response(id.as_ref(), "Chess", &[], &[])
+                }
+            ))
+        );
+        assert_eq!(
+            stored,
+            vec![Category {
+                ai_prompt: CategoryPrompt::new("Chess games").unwrap(),
                 ..category(id, "Chess")
             }]
         );
