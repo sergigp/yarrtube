@@ -215,6 +215,19 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskFamily(aTask({ task_type: 'summarize_video' }), true)).toBe('ai')
   })
 
+  it('labels a categorize_video task and files it under AI', () => {
+    const task = aTask({
+      task_type: 'categorize_video',
+      payload: { video_title: 'Intro', channel_name: 'Chan' },
+    })
+
+    expect([describeTask(task), taskFamily(task, true), taskKind(task)]).toEqual([
+      'Categorizing Intro in Chan',
+      'ai',
+      'ai',
+    ])
+  })
+
   it('puts video summaries in the other family while AI is off', () => {
     expect(taskFamily(aTask({ task_type: 'summarize_video' }), false)).toBe('other')
   })
