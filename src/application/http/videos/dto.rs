@@ -217,7 +217,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
         });
         Self {
             id: video.id,
-            record_id: String::new(),
+            record_id: video.record_id,
             title: video.title,
             status: video.status,
             quality: video.quality,

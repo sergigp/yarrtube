@@ -477,6 +477,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_record_id_when_listing_category_videos() {
+        let db = TestDatabase::new();
+        let video = Video {
+            id: VideoRecordId::new("rec1").unwrap(),
+            ..downloaded_video("vid1", "My Video", None, 10)
+        };
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@somechannel",
+            &video,
+            0,
+        );
+        let chess = save_category_of(&db, &[channel_member("@somechannel")]);
+
+        let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![CategoryVideoResponse {
+                record_id: "rec1".to_string(),
+                ..category_video_in(
+                    category_video_response("vid1", "My Video", 10, channel_source(None)),
+                    &[&chess]
+                )
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_the_summary_when_listing_category_videos() {
         let db = TestDatabase::new();
         let video = downloaded_video("vid1", "My Video", None, 10);
@@ -6417,7 +6450,7 @@ mod tests {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
         CategoryVideoResponse {
             id: youtube_id.to_string(),
-            record_id: String::new(),
+            record_id: format!("rec-{youtube_id}"),
             title: title.to_string(),
             status: "DOWNLOADED".to_string(),
             quality: Some("high".to_string()),
