@@ -6,7 +6,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_include_the_record_id_when_listing_playlist_videos`
+- [x] 2.1 `it_should_include_the_record_id_when_listing_playlist_videos`
 - [ ] 2.2 `it_should_include_the_record_id_when_listing_category_videos`
 - [ ] 2.3 `it_should_include_the_record_id_on_home`: `HomeVideoView.record_id`
 - [ ] 2.4 `it_should_list_a_videos_categories_with_where_each_comes_from`: `VideoCategoryChoice::list` + searcher

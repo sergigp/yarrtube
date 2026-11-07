@@ -76,7 +76,7 @@ impl From<VideoView> for VideoResponse {
             watched: video.is_watched(),
             position_seconds: video.playback_position.seconds(),
             id: video.youtube_id.as_str().to_string(),
-            record_id: String::new(),
+            record_id: video.id.as_str().to_string(),
             title: video.title,
             status: video.status.as_str().to_string(),
             quality: video.quality.map(|q| q.as_str().to_string()),

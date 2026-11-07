@@ -296,7 +296,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_summary_when_listing_playlist_videos() {
         let db = TestDatabase::new();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -320,7 +320,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_when_ai_is_off() {
         let db = TestDatabase::new();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -354,7 +354,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_when_summaries_are_off() {
         let db = TestDatabase::new();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -381,7 +381,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_of_a_playlist_with_summaries_off() {
         let db = TestDatabase::new();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -402,7 +402,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_summary_when_listing_channel_videos() {
         let db = TestDatabase::new();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@somechannel", None).with_summaries_enabled(true))
             .unwrap();
@@ -430,7 +430,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_of_a_channel_with_summaries_off() {
         let db = TestDatabase::new();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@somechannel", None))
             .unwrap();
@@ -464,7 +464,7 @@ mod tests {
             &video_repository,
             &playlist_video_repository,
             "PL1",
-            &Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp()),
+            &new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp()),
         );
         save_preferences(&db, summaries_on());
 
@@ -622,7 +622,7 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -652,13 +652,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_record_id_when_listing_playlist_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = Video {
+            id: VideoRecordId::new("rec1").unwrap(),
+            ..new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        };
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                record_id: "rec1".to_string(),
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_download_details_of_downloaded_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp())
             .mark_downloaded(
                 Quality::High,
@@ -711,7 +753,7 @@ mod tests {
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let synced_at = DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp())
             .mark_downloaded(Quality::High, "My Video.mp4", None, None, synced_at);
         save_playlist_video(
@@ -758,7 +800,7 @@ mod tests {
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let video_dir = tempfile::tempdir().unwrap();
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp())
             .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
         save_playlist_video(
@@ -812,7 +854,7 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .with_chapters(game_chapters(), fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
@@ -853,7 +895,7 @@ mod tests {
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -899,7 +941,7 @@ mod tests {
             ("vid_first", "First", 0),
             ("vid_second", "Second", 1),
         ] {
-            let video = Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
+            let video = new_video(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
             video_repository.save(&video).unwrap();
             playlist_video_repository
                 .save(&PlaylistVideo::create(
@@ -945,7 +987,7 @@ mod tests {
         playlist_repository.insert(&playlist("PL1")).unwrap();
         for (video, position) in [
             (
-                Video::create(
+                new_video(
                     VideoId::new("vid_watched").unwrap(),
                     "Watched",
                     fixed_timestamp(),
@@ -956,7 +998,7 @@ mod tests {
             (
                 Video {
                     playback_position: PlaybackPosition::new(42).unwrap(),
-                    ..Video::create(
+                    ..new_video(
                         VideoId::new("vid_partly").unwrap(),
                         "Partly",
                         fixed_timestamp(),
@@ -1038,8 +1080,8 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let kept = Video::create(VideoId::new("vid_kept").unwrap(), "Kept", fixed_timestamp());
-        let excluded = Video::create(
+        let kept = new_video(VideoId::new("vid_kept").unwrap(), "Kept", fixed_timestamp());
+        let excluded = new_video(
             VideoId::new("vid_excluded").unwrap(),
             "Excluded",
             fixed_timestamp(),
@@ -1131,7 +1173,7 @@ mod tests {
         for (youtube_id, title, position) in
             [("vid_newest", "Newest", 0), ("vid_oldest", "Oldest", 1)]
         {
-            let video = Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
+            let video = new_video(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
             save_channel_video(
                 video_repository.as_ref(),
                 channel_video_repository.as_ref(),
@@ -1174,13 +1216,13 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
-        let unchecked = Video::create(
+        let unchecked = new_video(
             VideoId::new("vid1").unwrap(),
             "Unchecked",
             fixed_timestamp(),
         );
         let without_chapters =
-            Video::create(VideoId::new("vid2").unwrap(), "Without", fixed_timestamp())
+            new_video(VideoId::new("vid2").unwrap(), "Without", fixed_timestamp())
                 .with_chapters(vec![], fixed_timestamp());
         [&unchecked, &without_chapters]
             .into_iter()
@@ -1230,7 +1272,7 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp())
             .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
         save_channel_video(
@@ -1291,7 +1333,7 @@ mod tests {
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
             "@somechannel",
-            &Video::create(
+            &new_video(
                 VideoId::new("vid_watched").unwrap(),
                 "Watched",
                 fixed_timestamp(),
@@ -1305,7 +1347,7 @@ mod tests {
             "@somechannel",
             &Video {
                 playback_position: PlaybackPosition::new(42).unwrap(),
-                ..Video::create(
+                ..new_video(
                     VideoId::new("vid_partly").unwrap(),
                     "Partly",
                     fixed_timestamp(),
@@ -1380,8 +1422,8 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
-        let kept = Video::create(VideoId::new("vid_kept").unwrap(), "Kept", fixed_timestamp());
-        let excluded = Video::create(
+        let kept = new_video(VideoId::new("vid_kept").unwrap(), "Kept", fixed_timestamp());
+        let excluded = new_video(
             VideoId::new("vid_excluded").unwrap(),
             "Excluded",
             fixed_timestamp(),
@@ -2394,7 +2436,7 @@ mod tests {
             "PL1",
             &Video {
                 duration_seconds: Some(600),
-                ..Video::create(
+                ..new_video(
                     VideoId::new("vid_pending").unwrap(),
                     "Pending",
                     fixed_timestamp(),
@@ -2431,7 +2473,7 @@ mod tests {
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
-            &Video::create(
+            &new_video(
                 VideoId::new("vid_excluded").unwrap(),
                 "Excluded",
                 fixed_timestamp(),
@@ -3328,7 +3370,7 @@ mod tests {
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
-            &Video::create(
+            &new_video(
                 VideoId::new("vid1").unwrap(),
                 "Chess Tactics",
                 fixed_timestamp(),
@@ -3699,7 +3741,10 @@ mod tests {
             .insert(&channel("@somechannel", None))
             .unwrap();
         let channel_copy = video_with_duration("vid1", Some(100));
-        let playlist_copy = video_with_duration("vid1", Some(100));
+        let playlist_copy = Video {
+            id: VideoRecordId::new("rec-vid1-playlist").unwrap(),
+            ..video_with_duration("vid1", Some(100))
+        };
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -3940,7 +3985,10 @@ mod tests {
             .insert(&channel("@somechannel", None))
             .unwrap();
         let channel_copy = video_with_duration("vid1", Some(100));
-        let playlist_copy = video_with_duration("vid1", Some(100));
+        let playlist_copy = Video {
+            id: VideoRecordId::new("rec-vid1-playlist").unwrap(),
+            ..video_with_duration("vid1", Some(100))
+        };
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -4041,7 +4089,7 @@ mod tests {
     async fn it_should_fail_to_mark_watched_a_video_not_downloaded() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
@@ -5494,7 +5542,7 @@ mod tests {
             .insert(&channel("@somechannel", None))
             .unwrap();
         let pending = |youtube_id: &str| {
-            Video::create(
+            new_video(
                 VideoId::new(youtube_id).unwrap(),
                 "Not downloaded",
                 fixed_timestamp(),
@@ -6299,10 +6347,19 @@ mod tests {
         ]
     }
 
+    /// `Video::create` with the record id `rec-<youtube_id>`, so responses
+    /// can be expected without reading it back.
+    fn new_video(youtube_id: VideoId, title: &str, now: DateTime<Utc>) -> Video {
+        Video {
+            id: VideoRecordId::new(format!("rec-{}", youtube_id.as_str())).unwrap(),
+            ..Video::create(youtube_id, title, now)
+        }
+    }
+
     fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         VideoResponse {
             id: youtube_id.to_string(),
-            record_id: String::new(),
+            record_id: format!("rec-{youtube_id}"),
             title: title.to_string(),
             status: "PENDING".to_string(),
             quality: None,
@@ -6616,7 +6673,7 @@ mod tests {
         created_at_seconds: i64,
     ) -> Video {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
-        Video::create(VideoId::new(youtube_id).unwrap(), title, created_at).mark_downloaded(
+        new_video(VideoId::new(youtube_id).unwrap(), title, created_at).mark_downloaded(
             Quality::High,
             format!("{title}.mp4"),
             thumbnail_filename.map(str::to_string),
@@ -6655,7 +6712,7 @@ mod tests {
     }
 
     fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {
-        Video::create(
+        new_video(
             VideoId::new(youtube_id).unwrap(),
             "My Video",
             fixed_timestamp(),
