@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { CategoryColorPicker } from './CategoryColorPicker'
+import { CategoryPromptHelp } from './CategoryPromptHelp'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 
@@ -234,7 +235,10 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
           </div>
           {withPrompt && (
             <div className="flex flex-col gap-1.5 px-6 pb-4">
-              <Label htmlFor="category-ai-prompt">AI prompt</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="category-ai-prompt">AI prompt</Label>
+                <CategoryPromptHelp />
+              </div>
               <textarea
                 id="category-ai-prompt"
                 rows={6}

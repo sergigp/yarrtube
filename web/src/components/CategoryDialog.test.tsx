@@ -314,6 +314,27 @@ describe('CategoryDialog', () => {
     expect(bodies(fetchMock, 'PATCH')).toEqual([{ name: 'Chess club' }])
   })
 
+  it('keeps the dialog and what was staged when closing the prompt guide', async () => {
+    const { onOpenChange } = renderDialog(chess, {
+      ...library,
+      'GET /api/preferences': categorizationOn,
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'About AI prompt' }))
+    const guide = await screen.findByRole('region', { name: 'AI prompt guide' })
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(guide).not.toBeInTheDocument())
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'GothamChess' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
   it('shows channels and playlists as chips pressed by membership', async () => {
     renderDialog(chess, library)
 
