@@ -114,6 +114,6 @@ impl VideoCategoryVerdict {
     }
 
     pub fn is_yes(&self) -> bool {
-        false
+        self.verdict == Verdict::Yes
     }
 }

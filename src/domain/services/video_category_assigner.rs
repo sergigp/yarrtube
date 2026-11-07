@@ -100,6 +100,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         if category_ids.is_empty() {
             return Ok(());
         }
+        let category_ids = [category_ids, self.yes_category_ids(video_id)?].concat();
         self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
     }
 
@@ -214,6 +215,17 @@ impl VideoCategoryAssigner {
     fn categories_of(&self, source: &CategoryMember) -> anyhow::Result<Vec<CategoryId>> {
         let categories = self.category_repository.list()?;
         Ok(Self::source_category_ids(source, &categories))
+    }
+
+    /// The categories `video_id` has a yes verdict for.
+    fn yes_category_ids(&self, video_id: &VideoRecordId) -> anyhow::Result<Vec<CategoryId>> {
+        Ok(self
+            .video_category_verdict_repository
+            .find_many(std::slice::from_ref(video_id))?
+            .into_iter()
+            .filter(VideoCategoryVerdict::is_yes)
+            .map(|verdict| verdict.category_id)
+            .collect())
     }
 
     /// Each of `video_ids` in exactly `category_ids`.

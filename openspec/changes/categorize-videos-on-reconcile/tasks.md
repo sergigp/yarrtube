@@ -6,7 +6,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_give_a_video_its_source_categories_plus_its_yes_verdicts`: union in `assign_video`
+- [x] 2.1 `it_should_give_a_video_its_source_categories_plus_its_yes_verdicts`: union in `assign_video`
 - [ ] 2.2 `it_should_give_a_video_of_an_uncategorized_source_its_yes_verdicts`: no early return for a source in no category
 - [ ] 2.3 `it_should_schedule_a_categorization_for_a_summarized_video_with_pending_categories`: `categorization_wanted` + `Categorize` step
 - [ ] 2.4 `it_should_not_schedule_a_categorization_without_a_generated_summary`

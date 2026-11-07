@@ -47,7 +47,9 @@ mod tests {
         EpisodeNumber, LateDataChecks, SubtitleState, SummaryState, Video, VideoChapter, VideoId,
         VideoStatus,
     };
-    use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
+    use crate::domain::video_category::{
+        Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
+    };
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::{
@@ -74,7 +76,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::SqliteVideoCategoryVerdictRepository;
+    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
+        SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
@@ -1206,6 +1210,93 @@ mod tests {
                 DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged {
                     video_ids: vec![video.id.as_str().to_string()],
                 })
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_give_a_video_its_source_categories_plus_its_yes_verdicts() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let video = my_video();
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            &video,
+        );
+        let chess = category_with_members("Chess", &[CategoryMember::Channel(my_channel_id())]);
+        let (sicilian, tech) = (
+            category_with_members("Sicilian", &[]),
+            category_with_members("Tech", &[]),
+        );
+        [&chess, &sicilian, &tech]
+            .iter()
+            .for_each(|category| category_repository.insert(category).unwrap());
+        verdict_repository
+            .save(&ai_verdict(&video, &sicilian, Verdict::Yes))
+            .unwrap();
+        verdict_repository
+            .save(&ai_verdict(&video, &tech, Verdict::No))
+            .unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            Arc::new(video_repository),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            VideoCategoryAssigner::new(
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(verdict_repository),
+                video_categories_repository.clone(),
+                Arc::new(category_repository),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(CategoryLock::default()),
+            ),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            video_categorizer(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone(), sicilian.id.clone()]
             )]
         );
     }
@@ -2737,6 +2828,18 @@ mod tests {
             ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
+    }
+
+    fn ai_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            video_id: video.id.clone(),
+            category_id: category.id.clone(),
+            verdict,
+            decided_by: VerdictAuthor::Ai,
+            model: Some("qwen3:4b".to_string()),
+            reason: Some("A Sicilian game.".to_string()),
+            decided_at: fixed_timestamp(),
+        }
     }
 
     fn category_with_members(name: &str, members: &[CategoryMember]) -> Category {
