@@ -2,7 +2,7 @@ import { test, expect } from '../helpers/fixtures.js'
 import { PLAYLIST } from '../helpers/fakeYoutube.js'
 import { addPlaylist } from '../helpers/seed.js'
 
-test("a playlist page lays every header action but mark-all-watched and delete out as a button on desktop, both behind a ⋮", async ({ page }) => {
+test("a playlist page lays every header action but mark-all-watched, clearing AI categories and delete out as a button on desktop, all behind a ⋮", async ({ page }) => {
   const playlist = await addPlaylist(page.request, PLAYLIST, { downloaded: false })
   await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
   const main = page.locator('main')
@@ -19,5 +19,5 @@ test("a playlist page lays every header action but mark-all-watched and delete o
     await expect(main.getByRole('button', { name, exact: true })).toHaveCount(0)
   }
   await main.getByRole('button', { name: /^More actions for / }).click()
-  await expect(page.getByRole('menuitem')).toHaveText(['Mark all watched', 'Delete'])
+  await expect(page.getByRole('menuitem')).toHaveText(['Mark all watched', 'Clear AI categories', 'Delete'])
 })

@@ -53,7 +53,9 @@ export function hitRoutes() {
 }
 
 // `/api/playlists/PL123/videos` → `/api/playlists/{id}/videos`, and a
-// source's video (`…/videos/abc/subtitles.vtt`) → `…/videos/{video_id}/…`.
+// source's video (`…/videos/abc/subtitles.vtt`) → `…/videos/{video_id}/…`
+// and a video's category (`/api/videos/rec1/categories/c1`) →
+// `…/categories/{category_id}`.
 // Literal segments the router declares next to a parameter (`preview`,
 // `home`, `search`) are kept as they are.
 function toTemplate(pathname) {
@@ -64,6 +66,8 @@ function toTemplate(pathname) {
   }
   const param = resource === 'channels' ? '{handle}' : '{id}'
   const [nested, , ...nestedRest] = rest
-  const tail = nested === 'videos' && nestedRest.length > 0 ? [nested, '{video_id}', ...nestedRest] : rest
+  const nestedParam = { videos: '{video_id}', categories: '{category_id}' }[nested]
+  const tail =
+    nestedParam && rest.length > 1 ? [nested, nestedParam, ...nestedRest] : rest
   return ['', api, resource, param, ...tail].join('/')
 }
