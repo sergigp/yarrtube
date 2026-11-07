@@ -40,9 +40,9 @@
 
 `SqliteVideoCategoryVerdictRepository`
 
-- [ ] 3.1 `it_should_delete_only_ai_verdicts_of_the_given_videos_returning_them`
-- [ ] 3.2 `it_should_delete_only_ai_verdicts_of_a_category_returning_their_videos`
-- [ ] 3.3 `it_should_count_ai_verdicts_per_category`
+- [x] 3.1 `it_should_delete_only_ai_verdicts_of_the_given_videos_returning_them`
+- [x] 3.2 `it_should_delete_only_ai_verdicts_of_a_category_returning_their_videos`
+- [x] 3.3 `it_should_count_ai_verdicts_per_category`
 
 ## 4. Verification
 

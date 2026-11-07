@@ -397,6 +397,98 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_delete_only_ai_verdicts_of_the_given_videos_returning_them() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = [
+            user_verdict("rec1", "funny", Verdict::No),
+            ai_verdict("rec3", "chess", Verdict::Yes),
+            user_verdict("rec4", "chess", Verdict::Yes),
+        ];
+        [
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            ai_verdict("rec1", "tech", Verdict::No),
+            ai_verdict("rec2", "chess", Verdict::Unavailable),
+        ]
+        .iter()
+        .chain(&kept)
+        .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let deleted = repository.delete_ai_for_videos(&[
+            video_id("rec2"),
+            video_id("rec1"),
+            video_id("rec4"),
+        ]);
+
+        assert_eq!(
+            deleted.map_err(|e| e.to_string()),
+            Ok(vec![video_id("rec1"), video_id("rec2")])
+        );
+        assert_eq!(
+            repository
+                .find_many(&["rec1", "rec2", "rec3", "rec4"].map(video_id))
+                .unwrap(),
+            kept.to_vec()
+        );
+    }
+
+    #[test]
+    fn it_should_delete_only_ai_verdicts_of_a_category_returning_their_videos() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = [
+            ai_verdict("rec1", "funny", Verdict::Yes),
+            user_verdict("rec3", "chess", Verdict::No),
+        ];
+        [
+            ai_verdict("rec2", "chess", Verdict::No),
+            ai_verdict("rec1", "chess", Verdict::Unavailable),
+        ]
+        .iter()
+        .chain(&kept)
+        .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let deleted = repository.delete_ai_for_category(&CategoryId::new("chess").unwrap());
+
+        assert_eq!(
+            deleted.map_err(|e| e.to_string()),
+            Ok(vec![video_id("rec1"), video_id("rec2")])
+        );
+        assert_eq!(
+            repository
+                .find_many(&["rec1", "rec2", "rec3"].map(video_id))
+                .unwrap(),
+            kept.to_vec()
+        );
+    }
+
+    #[test]
+    fn it_should_count_ai_verdicts_per_category() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        [
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            ai_verdict("rec2", "chess", Verdict::No),
+            ai_verdict("rec3", "chess", Verdict::Unavailable),
+            user_verdict("rec4", "chess", Verdict::Yes),
+            ai_verdict("rec1", "funny", Verdict::No),
+            user_verdict("rec1", "tech", Verdict::Yes),
+        ]
+        .iter()
+        .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let counts = repository.count_ai_by_category();
+
+        assert_eq!(
+            counts.map_err(|e| e.to_string()),
+            Ok(HashMap::from([
+                (CategoryId::new("chess").unwrap(), 3),
+                (CategoryId::new("funny").unwrap(), 1),
+            ]))
+        );
+    }
+
     fn ai_verdict(video: &str, category: &str, verdict: Verdict) -> VideoCategoryVerdict {
         VideoCategoryVerdict {
             video_id: video_id(video),
