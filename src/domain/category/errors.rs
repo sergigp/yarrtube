@@ -6,7 +6,6 @@ use std::fmt;
 #[derive(Debug)]
 pub enum CreateCategoryError {
     NameTaken(CategoryName),
-    #[allow(dead_code)]
     MemberNotTracked(CategoryMember),
     Repository(anyhow::Error),
 }

@@ -412,6 +412,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_create_a_category_with_an_untracked_member() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator = category_creator(&db, repository.clone());
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                channels: vec!["@Ghost".to_string()],
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("channel @Ghost is not tracked"))
+        );
+        assert_eq!(repository.list().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_a_category_with_an_untracked_playlist() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator = category_creator(&db, repository.clone());
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                playlists: vec!["PLghost".to_string()],
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("playlist PLghost is not tracked"))
+        );
+        assert_eq!(repository.list().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_create_the_first_category_with_the_first_palette_color() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));

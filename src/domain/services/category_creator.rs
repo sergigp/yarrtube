@@ -22,9 +22,7 @@ pub struct NewCategory {
 #[derive(Clone)]
 pub struct CategoryCreator {
     repository: Arc<dyn CategoryRepository>,
-    #[allow(dead_code)]
     channel_repository: Arc<dyn ChannelRepository>,
-    #[allow(dead_code)]
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
@@ -49,9 +47,10 @@ impl CategoryCreator {
 }
 
 pub trait CategoryCreatorApi: Send + Sync {
-    /// Creates a category with no members, colored `color` or, without one,
-    /// the least used palette color. Another category with the same name
-    /// ignoring case → `NameTaken`.
+    /// Creates `category` with its prompt and members in one save, then
+    /// computes the categories of its members' stored videos. Another category
+    /// with the same name ignoring case → `NameTaken`. Every member must be a
+    /// tracked channel/playlist; the first that is not → `MemberNotTracked`.
     fn create(&self, category: NewCategory) -> Result<Category, CreateCategoryError>;
 }
 
@@ -60,6 +59,7 @@ impl CategoryCreatorApi for CategoryCreator {
         let _guard = self.video_category_assigner.lock();
         let existing = self.list_categories()?;
         Self::ensure_name_free(&existing, &category.name)?;
+        self.ensure_tracked(&category.members)?;
         let color = category
             .color
             .unwrap_or_else(|| Self::least_used_color(&existing));
@@ -92,6 +92,31 @@ impl CategoryCreator {
             return Err(CreateCategoryError::NameTaken(name.clone()));
         }
         Ok(())
+    }
+
+    /// Fails on the first of `members` that is not a tracked source.
+    fn ensure_tracked(&self, members: &[CategoryMember]) -> Result<(), CreateCategoryError> {
+        members.iter().try_for_each(|member| {
+            if self.is_tracked(member)? {
+                Ok(())
+            } else {
+                Err(CreateCategoryError::MemberNotTracked(member.clone()))
+            }
+        })
+    }
+
+    fn is_tracked(&self, member: &CategoryMember) -> Result<bool, CreateCategoryError> {
+        match member {
+            CategoryMember::Channel(handle) => self
+                .channel_repository
+                .find(handle)
+                .map(|channel| channel.is_some()),
+            CategoryMember::Playlist(id) => self
+                .playlist_repository
+                .find(id)
+                .map(|playlist| playlist.is_some()),
+        }
+        .map_err(CreateCategoryError::Repository)
     }
 
     /// Puts the stored videos of `category`'s members in it.
