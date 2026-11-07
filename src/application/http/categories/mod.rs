@@ -1261,6 +1261,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_verdicts_when_a_category_prompt_is_edited_or_cleared() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        let (yes, no) = (downloaded_video("vid1"), downloaded_video("vid2"));
+        let sicilian = Category {
+            ai_prompt: CategoryPrompt::new("The Sicilian Defense").unwrap(),
+            ..category(None, "Sicilian")
+        };
+        repository.insert(&sicilian).unwrap();
+        let mut verdicts = vec![
+            yes_verdict(&yes, &sicilian),
+            VideoCategoryVerdict {
+                verdict: Verdict::No,
+                ..yes_verdict(&no, &sicilian)
+            },
+        ];
+        verdicts
+            .iter()
+            .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+        verdicts.sort_by(|a, b| a.video_id.as_str().cmp(b.video_id.as_str()));
+        let category_updater = CategoryUpdater::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+            verdict_repository.clone(),
+        );
+
+        let edited = update(
+            category_updater.clone(),
+            sicilian.id.as_str(),
+            prompt_request("Any Sicilian line"),
+        )
+        .await;
+        let edited_verdicts = verdict_repository
+            .find_many(&[yes.id.clone(), no.id.clone()])
+            .unwrap();
+        let cleared = update(category_updater, sicilian.id.as_str(), prompt_request(" ")).await;
+
+        assert_eq!(
+            (edited, cleared),
+            (Ok(StatusCode::NO_CONTENT), Ok(StatusCode::NO_CONTENT))
+        );
+        assert_eq!(edited_verdicts, verdicts);
+        assert_eq!(
+            verdict_repository
+                .find_many(&[yes.id.clone(), no.id.clone()])
+                .unwrap(),
+            verdicts
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_remove_the_ai_prompt_of_a_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
@@ -3052,6 +3106,14 @@ mod tests {
             model: Some("qwen3:4b".to_string()),
             reason: Some("It fits.".to_string()),
             decided_at: fixed_timestamp(),
+        }
+    }
+
+    fn prompt_request(ai_prompt: &str) -> UpdateCategoryRequest {
+        UpdateCategoryRequest {
+            name: None,
+            color: None,
+            ai_prompt: Some(ai_prompt.to_string()),
         }
     }
 
