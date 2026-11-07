@@ -1,0 +1,53 @@
+# Tasks
+
+## 1. Walking skeleton
+
+- [ ] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures) across all layers: `VideoCategoryChoice`/`CategoryOrigin`, `EditVideoCategoriesError`, `VideoCategoryVerdict::by_user`, `VideoCategoryChoiceSearcher`, `VideoCategoryEditor`, `VideoCategoryAssignerApi::recompute`, the new `VideoCategoryVerdictRepository` methods, `CategoryView.ai_verdict_count`, the six HTTP handlers and DTOs with their routes registered, services constructed in `serve.rs`; web types, client calls, query hook, fixture builders, an empty `VideoCategoriesDialog`. Bodies return trivial values (`Ok(())`, empty `Vec`, `0`, `StatusCode::NO_CONTENT`). Done when `cargo build` and `npm run typecheck` succeed and all existing tests pass.
+
+## 2. Behaviour (TDD)
+
+- [ ] 2.1 `it_should_list_a_videos_categories_with_where_each_comes_from`: `VideoCategoryChoice::list` + searcher
+- [ ] 2.2 `it_should_report_the_source_for_a_member_category_even_with_a_verdict`
+- [ ] 2.3 `it_should_return_not_found_for_the_categories_of_an_unknown_video`
+- [ ] 2.4 `it_should_add_a_category_by_hand_replacing_an_ai_no`: `VideoCategoryEditor::set`
+- [ ] 2.5 `it_should_remove_an_ai_category_by_hand`
+- [ ] 2.6 `it_should_reject_setting_a_category_given_by_the_source`
+- [ ] 2.7 `it_should_reject_a_missing_or_non_boolean_belongs`
+- [ ] 2.8 `it_should_return_not_found_for_an_unknown_video_or_category_when_setting`
+- [ ] 2.9 `it_should_rerun_a_videos_ai_categorization`: `rerun_video` + `recompute` + `SyncVideo`
+- [ ] 2.10 `it_should_return_not_found_when_rerunning_an_unknown_video`
+- [ ] 2.11 `it_should_not_evaluate_a_pair_with_a_user_verdict`
+- [ ] 2.12 `it_should_clear_a_channels_ai_verdicts_keeping_user_ones`: `rerun_source` + `ReconcileChannel`
+- [ ] 2.13 `it_should_clear_a_playlists_ai_verdicts_keeping_user_ones`
+- [ ] 2.14 `it_should_return_not_found_when_clearing_an_unknown_source`
+- [ ] 2.15 `it_should_rerun_a_categorys_ai_verdicts`: `rerun_category`
+- [ ] 2.16 `it_should_return_not_found_when_rerunning_an_unknown_category`
+- [ ] 2.17 `it_should_count_ai_verdicts_per_category`: `CategoryViewSearcher`
+- [ ] 2.18 `VideoCategoriesDialog`: shows locked source chips, AI marks and filled chips
+- [ ] 2.19 `VideoCategoriesDialog`: sets a category by hand when a chip is clicked
+- [ ] 2.20 `VideoCategoriesDialog`: shows the error and keeps the chip when setting fails
+- [ ] 2.21 `VideoCategoriesDialog`: re-runs AI only while AI categorization is available
+- [ ] 2.22 `VideoActionsMenu`: offers Edit categories only while categories are on
+- [ ] 2.23 `DetailHeader`: offers Re-run AI categorization or Clear AI categories after confirmation
+- [ ] 2.24 `CategorySettingsDialog`: re-evaluates N videos after confirmation, hidden at 0
+- [ ] 2.25 `videoCategories.spec.js` (e2e): add and remove a category by hand on a seeded video; chip and category page follow
+- [ ] 2.26 Update `doc/CATEGORIES.md` and `doc/AI.md` (editing by hand, locked source chips, re-run per video, source and category, clear when off); verify they match the specs
+
+## 3. Infrastructure adapters (TDD)
+
+`SqliteVideoCategoryVerdictRepository`
+
+- [ ] 3.1 `it_should_delete_only_ai_verdicts_of_the_given_videos_returning_them`
+- [ ] 3.2 `it_should_delete_only_ai_verdicts_of_a_category_returning_their_videos`
+- [ ] 3.3 `it_should_count_ai_verdicts_per_category`
+
+## 4. Verification
+
+- [ ] 4.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests)
+- [ ] 4.2 `scripts/run-tests.sh --only e2e` passes (new `videoCategories.spec.js`)
+- [ ] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed via the HTTP API a channel in "Chess", a category "Sicilian" with a prompt and a video with an AI `yes` verdict for it (insert the verdict in SQLite); with Playwright open the video's "⋮" → "Edit categories…", assert "Chess" is locked with "From …", "Sicilian" has the AI mark, click it and assert the PUT and the outlined chip; use "Clear AI categories" from the channel menu and assert the DELETE and the confirmation; open the category settings and assert "Re-evaluate N videos"; take screenshots; then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir
+- [ ] 4.4 Manual (human): judge the dialog's look on desktop and phone widths (chip states readable, AI mark and lock clear), and that Plex labels follow a hand edit
+
+## Workflow follow-up
+
+- Archive `categorize-videos-on-reconcile` before applying this change, so `video-categorization` and the verdict repository exist.
