@@ -337,7 +337,8 @@ mod tests {
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
         let video_repository = SqliteVideoRepository::new(db.database());
         let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
-        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@Hikaru"))
@@ -349,7 +350,24 @@ mod tests {
             "@Hikaru",
             &video,
         );
-        let category_creator = category_creator(&db, repository.clone());
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_creator = CategoryCreator::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let response = create(
             category_creator,
