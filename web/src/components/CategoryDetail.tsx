@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Palette, Plus, Settings2 } from 'lucide-react'
+import { FolderPlus, Plus, Settings2 } from 'lucide-react'
 import { deleteCategory, updateCategory } from '@/api/client'
 import {
   useCategories,
@@ -14,8 +14,6 @@ import { useTheme } from '@/hooks/useTheme'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
 import { softTint } from '@/lib/categoryColors'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { CategoryColorPicker } from './CategoryColorPicker'
 import { CategoryPlayer } from './CategoryPlayer'
 import { DetailHeader } from './DetailHeader'
 import { CategoryDialog } from './CategoryDialog'
@@ -57,89 +55,6 @@ function EmptyCategory({ category, onAddSources }: { category: Category; onAddSo
   )
 }
 
-/** How long the chosen color must stay put before it is saved. */
-const COLOR_SAVE_DELAY_MS = 300
-
-/**
- * Saves the latest of a burst of choices (a hue slider drag) once it settles,
- * or at once on `flush` and unmount. Saves run one at a time, in order, so
- * the last choice is the one stored.
- */
-function useSettledSave(save: (color: string) => Promise<void>) {
-  const saveRef = useRef(save)
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const pending = useRef<string | null>(null)
-  const queue = useRef<Promise<void>>(Promise.resolve())
-  useEffect(() => {
-    saveRef.current = save
-  })
-  const flush = useCallback(() => {
-    clearTimeout(timer.current)
-    const color = pending.current
-    pending.current = null
-    if (color !== null) {
-      queue.current = queue.current.then(() => saveRef.current(color)).catch(() => {})
-    }
-  }, [])
-  useEffect(() => flush, [flush])
-  const schedule = (color: string) => {
-    pending.current = color
-    clearTimeout(timer.current)
-    timer.current = setTimeout(flush, COLOR_SAVE_DELAY_MS)
-  }
-  return { schedule, flush }
-}
-
-/**
- * The category color picker in a dialog. The header follows each choice at
- * once (`onDraft`), and the choice is saved once it settles (see
- * `useSettledSave`) or the dialog closes.
- */
-function CategoryColorDialog({
-  open,
-  onOpenChange,
-  color,
-  onDraft,
-  onChange,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  color: string
-  onDraft: (color: string | null) => void
-  onChange: (color: string) => Promise<void>
-}) {
-  const [draft, setDraft] = useState<string | null>(null)
-  const { schedule, flush } = useSettledSave(onChange)
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          flush()
-          setDraft(null)
-          onDraft(null)
-        }
-        onOpenChange(next)
-      }}
-    >
-      <DialogContent className="w-auto">
-        <DialogTitle>Change color</DialogTitle>
-        <DialogDescription className="sr-only">
-          The category's color, saved as soon as it is chosen.
-        </DialogDescription>
-        <CategoryColorPicker
-          value={draft ?? color}
-          onChange={(next) => {
-            setDraft(next)
-            onDraft(next)
-            schedule(next)
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /**
  * A category's view (`/categories/:id`): its header and videos, as a grid,
  * or, once one is picked (`?video=`), playing it with the category's videos
@@ -168,8 +83,6 @@ export function CategoryDetail() {
       navigate(location.pathname, { replace: true, state: null })
     }
   }, [arrivedEditing, location.pathname, navigate])
-  const [recoloring, setRecoloring] = useState(false)
-  const [draftColor, setDraftColor] = useState<string | null>(null)
   const { data } = useCategories()
   const { data: videos, error } = useCategoryVideos(id)
   const { data: preferences } = usePreferences()
@@ -198,13 +111,12 @@ export function CategoryDetail() {
     <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
       <DetailHeader
         name={category.name}
-        tint={softTint(draftColor ?? category.color, theme)}
+        tint={softTint(category.color, theme)}
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
         onRename={refreshing((name: string) => updateCategory(category.id, { name }))}
         extraActions={[
-          { label: 'Change color', icon: <Palette />, onSelect: () => setRecoloring(true) },
           { label: 'Edit settings', icon: <Settings2 />, onSelect: () => setEditingSettings(true) },
         ]}
         onMarkWatched={sources > 0 ? () => markCategoryWatched(category.id) : undefined}
@@ -231,13 +143,6 @@ export function CategoryDetail() {
         )
       )}
       <CategoryDialog category={category} open={editingSettings} onOpenChange={setEditingSettings} />
-      <CategoryColorDialog
-        open={recoloring}
-        onOpenChange={setRecoloring}
-        color={category.color}
-        onDraft={setDraftColor}
-        onChange={refreshing((color: string) => updateCategory(category.id, { color }))}
-      />
     </div>
   )
 }

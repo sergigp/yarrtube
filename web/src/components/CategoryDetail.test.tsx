@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
@@ -245,13 +245,13 @@ describe('CategoryDetail', () => {
     expect(explanation).toBe(
       'Add channels and playlists to Chess to watch their videos here, newest first.',
     )
-    expect(items).toEqual(['Change color', 'Edit settings', 'Delete'])
+    expect(items).toEqual(['Edit settings', 'Delete'])
     expect(dialogTitle).toBe('Edit Chess settings')
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
 
-  it('saves the color chosen through the "Change color" action and tints the header with it', async () => {
+  it('changes the color through "Edit settings" and tints the header with it', async () => {
     let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
       chess = { ...chess, color: '#8b5cf6' }
@@ -260,53 +260,26 @@ describe('CategoryDetail', () => {
     const { fetchMock } = renderCategory({
       'GET /api/categories': () => aCategoryList([chess]),
       'GET /api/categories/chess/videos': [],
+      'GET /api/channels': [],
+      'GET /api/playlists': [],
       'PATCH /api/categories/chess': recolor,
     })
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Change color' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
     await user.click(await screen.findByRole('radio', { name: 'Violet' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    // The open color dialog hides the page from assistive technology.
-    const header = screen.getByRole('heading', { name: 'Chess', hidden: true }).closest('header')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
     await waitFor(() => expect(header).toHaveStyle({ background: softTint('#8b5cf6') }))
-    await waitFor(() => expect(recolor).toHaveBeenCalledOnce())
+    expect(recolor).toHaveBeenCalledOnce()
     const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ]
     expect(JSON.parse(init.body as string)).toEqual({ color: '#8b5cf6' })
-  })
-
-  it('saves a custom hue once, when the slider settles', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] })
-    const recolor = vi.fn(() => {
-      chess = { ...chess, color: '#04a3aa' }
-      return null
-    })
-    const { fetchMock } = renderCategory({
-      'GET /api/categories': () => aCategoryList([chess]),
-      'GET /api/categories/chess/videos': [],
-      'PATCH /api/categories/chess': recolor,
-    })
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Change color' }))
-    await user.click(await screen.findByRole('radio', { name: 'Custom' }))
-    const hue = screen.getByRole('slider', { name: 'Hue' })
-    ;['120', '160', '187', '200'].forEach((value) => fireEvent.change(hue, { target: { value } }))
-
-    // The open color dialog hides the page from assistive technology.
-    const header = screen.getByRole('heading', { name: 'Chess', hidden: true }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#04a3aa') }))
-    await waitFor(() => expect(recolor).toHaveBeenCalledOnce())
-    const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/categories/chess') as [
-      string,
-      RequestInit,
-    ][]
-    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#04a3aa' }])
   })
 
   it('renames from the header', async () => {
