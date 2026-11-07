@@ -5,6 +5,7 @@ use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
 use crate::domain::video::{Video, VideoOwner};
+use crate::domain::video_category::categorization_question::MAX_OUTPUT_TOKENS;
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -120,7 +121,7 @@ impl VideoCategorizerApi for VideoCategorizer {
         ))
     }
 
-    fn categorize(&self, video: &Video, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn categorize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()> {
         let job = match self.prepare(video) {
             Ok(job) => job,
             Err(Skip::NotWanted(reason)) => {
@@ -138,6 +139,9 @@ impl VideoCategorizerApi for VideoCategorizer {
                 Err(Failure::Error(error)) => Some(Err(error)),
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
+        if is_last_attempt {
+            self.give_up(video, &job, &rejected)?;
+        }
         Self::fail_if_rejected(&rejected)
     }
 }
@@ -196,6 +200,16 @@ impl VideoCategorizer {
         let reply = self
             .llm_server_repository
             .chat(&job.url, &question.chat(&job.settings, job.thinking))?;
+        if let Some(refusal) = reply.refusal {
+            return Err(Failure::Rejected(format!(
+                "Ollama refused the call: {refusal}"
+            )));
+        }
+        if reply.stopped_at_limit {
+            return Err(Failure::Rejected(format!(
+                "it hit the {MAX_OUTPUT_TOKENS}-token output limit"
+            )));
+        }
         let answer = CategorizationAnswer::parse(&reply.content)
             .ok_or_else(|| Failure::Rejected("its answer isn't usable".to_string()))?;
         let verdict = VideoCategoryVerdict::answered(
@@ -208,6 +222,26 @@ impl VideoCategorizer {
         self.video_category_assigner
             .apply_verdict(&verdict, &job.owner.source)?;
         Ok(())
+    }
+
+    /// Gives each of `rejected` an unavailable verdict.
+    fn give_up(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        rejected: &[(&Category, String)],
+    ) -> anyhow::Result<()> {
+        rejected.iter().try_for_each(|(category, _)| {
+            let verdict = VideoCategoryVerdict::unavailable(
+                video.id.clone(),
+                category.id.clone(),
+                job.settings.model.as_str(),
+                self.clock.now(),
+            );
+            self.video_category_assigner
+                .apply_verdict(&verdict, &job.owner.source)
+                .map(|_| ())
+        })
     }
 
     /// An error naming each of `rejected`, with why; `Ok` when none was.

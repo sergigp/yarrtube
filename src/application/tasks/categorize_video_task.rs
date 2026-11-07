@@ -425,6 +425,58 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         assert_eq!(asked_categories(&llm), vec!["Tech"]);
     }
 
+    #[test]
+    fn it_should_mark_rejected_categories_unavailable_on_the_last_attempt() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let video = summarized_video();
+        let (food, sicilian, tech) = (
+            prompted_category("Food"),
+            prompted_category("Sicilian"),
+            prompted_category("Tech"),
+        );
+        seed(&db, &video, &[&food, &sicilian, &tech]);
+        let stopped_at_limit = Ok(LlmReply {
+            stopped_at_limit: true,
+            ..reply(YES).unwrap()
+        });
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![
+                stopped_at_limit,
+                Ok(LlmReply::refused("model is too large")),
+                reply("It might belong."),
+            ]),
+        );
+
+        let result = run_last_attempt(&task, &video);
+
+        assert_eq!(
+            result,
+            Err(
+                "the model couldn't answer for Food (it hit the 3072-token output limit), \
+                 Sicilian (Ollama refused the call: model is too large), \
+                 Tech (its answer isn't usable)"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category(
+                [&food, &sicilian, &tech].map(|category| unavailable_verdict(&video, category))
+            )
+        );
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+    }
+
     /// The task over `db`, asking `llm`.
     fn categorize_video_task(
         db: &TestDatabase,
@@ -465,6 +517,11 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
 
     fn run(task: &CategorizeVideoTask, video: &Video) -> Result<(), String> {
         task.handle(&payload_for(video), false)
+            .map_err(|error| error.to_string())
+    }
+
+    fn run_last_attempt(task: &CategorizeVideoTask, video: &Video) -> Result<(), String> {
+        task.handle(&payload_for(video), true)
             .map_err(|error| error.to_string())
     }
 
@@ -594,6 +651,22 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
             model: Some("qwen3:4b".to_string()),
             reason: Some(reason.to_string()),
             decided_at: later(),
+        }
+    }
+
+    /// `verdicts` in the order they are found: by category id.
+    fn by_category<const N: usize>(
+        mut verdicts: [VideoCategoryVerdict; N],
+    ) -> Vec<VideoCategoryVerdict> {
+        verdicts.sort_by(|a, b| a.category_id.cmp(&b.category_id));
+        verdicts.to_vec()
+    }
+
+    fn unavailable_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            verdict: Verdict::Unavailable,
+            reason: None,
+            ..ai_verdict(video, category, Verdict::Unavailable, "")
         }
     }
 
