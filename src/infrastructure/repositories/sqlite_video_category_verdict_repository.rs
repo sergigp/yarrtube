@@ -92,7 +92,16 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         Ok(())
     }
 
-    fn delete_for_video(&self, _video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete_for_video(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "DELETE FROM video_category_verdicts WHERE video_id = ?1",
+            params![video_id.as_str()],
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %video_id, error = %e, "failed to delete video category verdicts")
+        })
+        .context("failed to delete video category verdicts")?;
         Ok(())
     }
 
@@ -179,6 +188,30 @@ mod tests {
         assert_eq!(
             repository.find_many(&[video_id("rec1")]).unwrap(),
             vec![replacement]
+        );
+    }
+
+    #[test]
+    fn it_should_delete_a_videos_verdicts() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = ai_verdict("rec2", "chess", Verdict::Yes);
+        [
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            ai_verdict("rec1", "funny", Verdict::No),
+            kept.clone(),
+        ]
+        .iter()
+        .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let result = repository.delete_for_video(&video_id("rec1"));
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            repository
+                .find_many(&[video_id("rec1"), video_id("rec2")])
+                .unwrap(),
+            vec![kept]
         );
     }
 
