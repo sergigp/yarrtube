@@ -247,7 +247,7 @@ describe('CategoryDialog', () => {
   it('prefills the name and color, and saves them in one update without the members', async () => {
     const violetChess = { ...chess, color: '#8b5cf6' }
     const { fetchMock, onOpenChange } = renderDialog(violetChess, {
-      'PATCH /api/categories/chess': { status: 204 },
+      'PATCH /api/categories/chess': () => null,
     })
     const user = userEvent.setup()
     const name = screen.getByRole('textbox', { name: 'Name' })
@@ -623,7 +623,7 @@ describe('CategoryDialog', () => {
     expect(bodies(fetchMock, 'PATCH')).toEqual([{ ai_prompt: pasted }])
   })
 
-  it('says the prompt was saved when only the sources failed, and retries the sources', async () => {
+  it('says the other changes were saved when only the sources failed, and retries the sources', async () => {
     let failures = 1
     const { fetchMock, onOpenChange } = renderDialog(chess, {
       ...library,
@@ -639,7 +639,9 @@ describe('CategoryDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      await screen.findByText("The AI prompt was saved, but the sources weren't: database is locked"),
+      await screen.findByText(
+        "Your other changes were saved, but the sources weren't: database is locked",
+      ),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -648,7 +650,7 @@ describe('CategoryDialog', () => {
     expect(bodies(fetchMock, 'PUT')).toHaveLength(2)
   })
 
-  it('says the prompt stays saved when discarding after only the sources failed', async () => {
+  it('says the other changes stay saved when discarding after only the sources failed', async () => {
     const { onOpenChange } = renderDialog(chess, {
       ...library,
       'GET /api/preferences': categorizationOn,
@@ -665,7 +667,7 @@ describe('CategoryDialog', () => {
 
     const confirm = await screen.findByRole('dialog', { name: 'Discard changes?' })
     expect(confirm).toHaveTextContent(
-      "The AI prompt is already saved. Your changes to the sources in Chess won't be saved.",
+      "Your other changes are already saved. Your changes to the sources in Chess won't be saved.",
     )
     expect(onOpenChange).not.toHaveBeenCalled()
   })
