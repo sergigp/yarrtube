@@ -310,8 +310,7 @@ export function listCategories(): Promise<CategoryList> {
 
 /** Without a color, the daemon picks the least used palette color. */
 export function createCategory(
-  category: Omit<NewCategory, 'color' | 'channels' | 'playlists'> &
-    Partial<Pick<NewCategory, 'color' | 'channels' | 'playlists'>>,
+  category: Pick<NewCategory, 'name'> & Partial<NewCategory>,
 ): Promise<CreatedCategory> {
   return request('/categories', { method: 'POST', body: category, label: '/categories' })
 }

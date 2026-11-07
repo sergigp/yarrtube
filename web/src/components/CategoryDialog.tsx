@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Check, ListVideo, Plus, Search, X } from 'lucide-react'
-import { avatarMediaUrl, setCategoryMembers, updateCategory } from '@/api/client'
+import { avatarMediaUrl, createCategory, setCategoryMembers, updateCategory } from '@/api/client'
 import {
   useCategories,
   useCategorizationAvailable,
@@ -63,6 +64,7 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
   const { data: playlists } = usePlaylists()
   const { data: categories } = useCategories()
   const invalidateLibrary = useInvalidateLibrary()
+  const navigate = useNavigate()
   const saved = category ? membersOf(category) : NO_MEMBERS
   const [staged, setStaged] = useState(saved)
   const withPrompt = useCategorizationAvailable()
@@ -108,9 +110,29 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
     }
   }
 
+  const create = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const created = await createCategory({
+        name: name.trim(),
+        color,
+        ai_prompt: prompt.trim(),
+        ...staged,
+      })
+      invalidateLibrary()
+      onClose()
+      navigate(`/categories/${encodeURIComponent(created.id)}`)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const save = async () => {
     if (!category) {
-      return
+      return create()
     }
     setSaving(true)
     setError(null)
@@ -261,8 +283,8 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
         <Button type="button" variant="outline" onClick={requestClose}>
           Cancel
         </Button>
-        <Button type="button" disabled={!dirty || saving} onClick={save}>
-          {saving ? 'Saving…' : 'Save'}
+        <Button type="button" disabled={(category && !dirty) || saving} onClick={save}>
+          {category ? (saving ? 'Saving…' : 'Save') : saving ? 'Creating…' : 'Create'}
         </Button>
       </div>
       <ConfirmDialog

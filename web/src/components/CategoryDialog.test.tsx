@@ -1,19 +1,24 @@
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes as RouterRoutes } from 'react-router-dom'
 import type { Category } from '@/api/types'
 import { queryKeys } from '@/api/queries'
+import { CategoryDetail } from './CategoryDetail'
 import { CategoryDialog } from './CategoryDialog'
 import {
   aCategory,
   aCategoryList,
   aChannel,
+  aCreatedCategory,
   aPlaylist,
   aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
 } from '@/test/helpers'
+import { RouteProbe } from '@/test/RouteProbe'
 
 function renderDialog(category: Category | undefined, routes: Routes) {
   const fetchMock = mockApi({
@@ -31,6 +36,40 @@ function renderDialog(category: Category | undefined, routes: Routes) {
   const refetch = (refetched: Category) =>
     rerender(<CategoryDialog category={refetched} open onOpenChange={onOpenChange} />)
   return { fetchMock, onOpenChange, refetch, queryClient }
+}
+
+/** The dialog to add a category, beside the category view it navigates to. */
+function renderCreating(routes: Routes) {
+  const fetchMock = mockApi({
+    'GET /api/categories': aCategoryList(),
+    'GET /api/channels': [],
+    'GET /api/playlists': [],
+    'GET /api/preferences': aPreferences(),
+    ...routes,
+  })
+  const onOpenChange = vi.fn()
+  const Creating = () => {
+    const [open, setOpen] = useState(true)
+    return (
+      <CategoryDialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          onOpenChange(next)
+        }}
+      />
+    )
+  }
+  renderWithProviders(
+    <>
+      <Creating />
+      <RouterRoutes>
+        <Route path="/categories/:id" element={<CategoryDetail />} />
+      </RouterRoutes>
+      <RouteProbe />
+    </>,
+  )
+  return { fetchMock, onOpenChange }
 }
 
 /** Each chip of a group as its name and whether it's pressed. */
@@ -99,6 +138,41 @@ describe('CategoryDialog', () => {
     expect(inDocumentOrder([chip, prompt, color, name])).toEqual([name, color, prompt, chip])
     expect(screen.getByRole('radio', { name: /^In this category/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /^Not in this category/ })).toBeInTheDocument()
+  })
+
+  it('creates everything in one request and opens the category with no dialog open', async () => {
+    const { fetchMock } = renderCreating({
+      ...library,
+      'GET /api/preferences': categorizationOn,
+      'POST /api/categories': aCreatedCategory({ id: 'chess', name: 'Chess' }),
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] }),
+      ]),
+      'GET /api/categories/chess/videos': [],
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), '  Chess ')
+    await user.click(screen.getByRole('radio', { name: 'Violet' }))
+    await user.type(await screen.findByRole('textbox', { name: 'AI prompt' }), ' Chess games ')
+    await user.click(await screen.findByRole('button', { name: 'Hikaru' }))
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
+        '/categories/chess',
+      ),
+    )
+    expect(bodies(fetchMock, 'POST')).toEqual([
+      {
+        name: 'Chess',
+        color: '#8b5cf6',
+        ai_prompt: 'Chess games',
+        channels: ['@hikaru'],
+        playlists: [],
+      },
+    ])
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('shows channels and playlists as chips pressed by membership', async () => {

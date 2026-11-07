@@ -8,7 +8,7 @@ import { CategoryDetail } from './components/CategoryDetail'
 import { PreferencesView } from './components/PreferencesView'
 import { AddChannelDialog } from './components/AddChannelDialog'
 import { AddPlaylistDialog } from './components/AddPlaylistDialog'
-import { AddCategoryDialog } from './components/AddCategoryDialog'
+import { CategoryDialog } from './components/CategoryDialog'
 import { SIDEBAR_ID, Sidebar } from './components/Sidebar'
 import { SettingsMenu } from './components/SettingsMenu'
 import { AiSettingsView } from './components/AiSettingsView'
@@ -167,7 +167,7 @@ export function AppShell() {
         open={addDialog === 'playlist'}
         onOpenChange={(open) => !open && setAddDialog(null)}
       />
-      <AddCategoryDialog
+      <CategoryDialog
         open={addDialog === 'category'}
         onOpenChange={(open) => !open && setAddDialog(null)}
       />
