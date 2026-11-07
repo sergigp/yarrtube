@@ -1,3 +1,4 @@
+pub mod categorize_video_task;
 pub mod delete_channel_files_task;
 pub mod delete_playlist_files_task;
 pub mod delete_video_file_task;
@@ -17,14 +18,15 @@ pub mod upgrade_quality_task;
 
 use crate::domain::services::{
     ChannelVideoReconciler, ChapterFetcher, PlaylistVideoReconciler, PlexLabelSyncer,
-    QualityUpgrader, SubtitleFetcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
-    VideoReconciler, VideoSummarizer,
+    QualityUpgrader, SubtitleFetcher, ThumbnailFetcher, VideoCategorizer, VideoDownloader,
+    VideoFileDeleter, VideoReconciler, VideoSummarizer,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_executor::HandlerRegistry;
 use crate::infrastructure::shared::system_clock::Clock;
+use categorize_video_task::CategorizeVideoTask;
 use delete_channel_files_task::DeleteChannelFilesTask;
 use delete_playlist_files_task::DeletePlaylistFilesTask;
 use delete_video_file_task::DeleteVideoFileTask;
@@ -55,6 +57,7 @@ pub fn registry(
     chapter_fetcher: Arc<ChapterFetcher>,
     quality_upgrader: Arc<QualityUpgrader>,
     video_summarizer: Arc<VideoSummarizer>,
+    video_categorizer: Arc<VideoCategorizer>,
     video_reconciler: VideoReconciler,
     video_repository: Arc<dyn VideoRepository>,
     video_file_deleter: VideoFileDeleter,
@@ -101,7 +104,17 @@ pub fn registry(
     );
     registry.insert(
         "summarize_video".to_string(),
-        Arc::new(SummarizeVideoTask::new(video_repository, video_summarizer)),
+        Arc::new(SummarizeVideoTask::new(
+            video_repository.clone(),
+            video_summarizer,
+        )),
+    );
+    registry.insert(
+        "categorize_video".to_string(),
+        Arc::new(CategorizeVideoTask::new(
+            video_repository,
+            video_categorizer,
+        )),
     );
     registry.insert(
         "upgrade_quality".to_string(),

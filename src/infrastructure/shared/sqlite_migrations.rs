@@ -36,6 +36,8 @@ const LATE_VIDEO_DATA_SQL: &str = include_str!("../../../migrations/0021_late_vi
 const SOURCE_SUMMARIES_SQL: &str = include_str!("../../../migrations/0022_source_summaries.sql");
 const VIDEO_SUMMARIES_SQL: &str = include_str!("../../../migrations/0023_video_summaries.sql");
 const AI_CATEGORIZATION_SQL: &str = include_str!("../../../migrations/0024_ai_categorization.sql");
+const VIDEO_CATEGORY_VERDICTS_SQL: &str =
+    include_str!("../../../migrations/0025_video_category_verdicts.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -66,6 +68,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(SOURCE_SUMMARIES_SQL),
         M::up(VIDEO_SUMMARIES_SQL),
         M::up(AI_CATEGORIZATION_SQL),
+        M::up(VIDEO_CATEGORY_VERDICTS_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -138,6 +141,7 @@ mod tests {
                 "tasks",
                 "tasks_dead_letter",
                 "video_categories",
+                "video_category_verdicts",
                 "video_metadata",
                 "video_summaries",
                 "video_transcripts",

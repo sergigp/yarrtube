@@ -16,6 +16,7 @@ pub mod sqlite_playlist_video_repository;
 pub mod sqlite_preferences_repository;
 pub mod sqlite_task_repository;
 pub mod sqlite_video_categories_repository;
+pub mod sqlite_video_category_verdict_repository;
 pub mod sqlite_video_metadata_repository;
 pub mod sqlite_video_repository;
 pub mod sqlite_video_summary_repository;

@@ -11,4 +11,8 @@ pub struct VideoOwner {
     pub sort_position: Option<i64>,
     /// Whether the source opted in to AI summaries.
     pub summaries_enabled: bool,
+    /// Whether the source opted in to AI categorization.
+    pub categorization_enabled: bool,
+    /// The channel's or playlist's name.
+    pub source_name: String,
 }

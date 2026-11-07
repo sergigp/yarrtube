@@ -13,6 +13,7 @@ pub enum VideoSyncStep {
     FetchChapters,
     UpgradeQuality,
     Summarize,
+    Categorize,
 }
 
 impl VideoSyncStep {
@@ -36,6 +37,7 @@ impl VideoSyncStep {
             },
             Self::FetchChapters => Task::FetchChapters { video_id },
             Self::Summarize => Task::SummarizeVideo { video_id },
+            Self::Categorize => Task::CategorizeVideo { video_id },
             Self::UpgradeQuality => Task::UpgradeQuality {
                 video_id,
                 quality: target.quality.as_str().to_string(),

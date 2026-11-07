@@ -44,6 +44,9 @@ use crate::infrastructure::repositories::sqlite_task_repository::{
 use crate::infrastructure::repositories::sqlite_video_categories_repository::{
     SqliteVideoCategoriesRepository, VideoCategoriesRepository,
 };
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
+    SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
+};
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
     SqliteVideoMetadataRepository, VideoMetadataRepository,
 };
@@ -111,6 +114,7 @@ pub struct InfrastructureContainer {
     pub category_repository: Arc<dyn CategoryRepository>,
     pub video_repository: Arc<dyn VideoRepository>,
     pub video_categories_repository: Arc<dyn VideoCategoriesRepository>,
+    pub video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     pub playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     pub channel_video_repository: Arc<dyn ChannelVideoRepository>,
     pub video_metadata_repository: Arc<dyn VideoMetadataRepository>,
@@ -160,6 +164,9 @@ impl InfrastructureContainer {
             category_repository: Arc::new(SqliteCategoryRepository::new(db.clone())),
             video_repository: Arc::new(SqliteVideoRepository::new(db.clone())),
             video_categories_repository: Arc::new(SqliteVideoCategoriesRepository::new(db.clone())),
+            video_category_verdict_repository: Arc::new(SqliteVideoCategoryVerdictRepository::new(
+                db.clone(),
+            )),
             playlist_video_repository: Arc::new(SqlitePlaylistVideoRepository::new(db.clone())),
             channel_video_repository: Arc::new(SqliteChannelVideoRepository::new(db.clone())),
             video_metadata_repository: Arc::new(SqliteVideoMetadataRepository::new(db.clone())),

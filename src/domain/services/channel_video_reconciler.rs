@@ -13,6 +13,7 @@ use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepos
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
@@ -48,6 +49,8 @@ pub struct ChannelVideoReconciler {
     clock: Arc<dyn Clock>,
     show_locks: Arc<ShowLocks>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
+    #[allow(dead_code)]
+    video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
 }
 
 impl ChannelVideoReconciler {
@@ -67,6 +70,7 @@ impl ChannelVideoReconciler {
         clock: Arc<dyn Clock>,
         show_locks: Arc<ShowLocks>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
+        video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     ) -> Self {
         Self {
             channel_repository,
@@ -83,6 +87,7 @@ impl ChannelVideoReconciler {
             clock,
             show_locks,
             video_categories_repository,
+            video_category_verdict_repository,
         }
     }
 }

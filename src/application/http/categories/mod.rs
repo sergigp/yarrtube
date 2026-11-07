@@ -182,6 +182,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::SqliteVideoCategoryVerdictRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
@@ -1093,6 +1094,8 @@ mod tests {
         ];
         video_categories_repository.save_many(&stored).unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -1306,6 +1309,8 @@ mod tests {
             )])
             .unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -1623,6 +1628,8 @@ mod tests {
             )])
             .unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -1688,6 +1695,8 @@ mod tests {
             ])
             .unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -1910,6 +1919,8 @@ mod tests {
         let chess = category(None, "Chess");
         repository.insert(&chess).unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -1979,6 +1990,8 @@ mod tests {
             )])
             .unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -2050,6 +2063,8 @@ mod tests {
             )])
             .unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -2118,6 +2133,8 @@ mod tests {
         let chess = category(None, "Chess");
         repository.insert(&chess).unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -2182,6 +2199,8 @@ mod tests {
             )])
             .unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -2248,6 +2267,8 @@ mod tests {
             )])
             .unwrap();
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
@@ -2776,6 +2797,8 @@ mod tests {
 
     fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
         VideoCategoryAssigner::new(
+            Arc::new(crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository::new(database.clone())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
             Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
             Arc::new(SqliteCategoryRepository::new(database.clone())),
             Arc::new(SqliteChannelVideoRepository::new(database.clone())),

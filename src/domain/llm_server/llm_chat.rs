@@ -8,4 +8,6 @@ pub struct LlmChat {
     pub temperature: f64,
     pub thinking: bool,
     pub max_output_tokens: u32,
+    /// The JSON schema the answer must follow; `None` for free text.
+    pub format: Option<serde_json::Value>,
 }

@@ -8,6 +8,7 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRep
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
@@ -26,6 +27,8 @@ pub struct PlaylistDeleter {
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
+    #[allow(dead_code)]
+    video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
 }
 
 impl PlaylistDeleter {
@@ -39,6 +42,7 @@ impl PlaylistDeleter {
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
+        video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     ) -> Self {
         Self {
             repository,
@@ -49,6 +53,7 @@ impl PlaylistDeleter {
             event_publisher,
             task_repository,
             video_categories_repository,
+            video_category_verdict_repository,
         }
     }
 }

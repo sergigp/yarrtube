@@ -1,5 +1,5 @@
 use crate::domain::services::{
-    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategoryAssigner,
+    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategorizer, VideoCategoryAssigner,
     VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoRelocator,
     VideoRelocatorApi,
 };
@@ -36,6 +36,8 @@ pub struct VideoReconciler {
     clock: Arc<dyn Clock>,
     video_category_assigner: VideoCategoryAssigner,
     preferences_repository: Arc<dyn PreferencesRepository>,
+    #[allow(dead_code)]
+    video_categorizer: Arc<VideoCategorizer>,
 }
 
 impl VideoReconciler {
@@ -52,6 +54,7 @@ impl VideoReconciler {
         clock: Arc<dyn Clock>,
         video_category_assigner: VideoCategoryAssigner,
         preferences_repository: Arc<dyn PreferencesRepository>,
+        video_categorizer: Arc<VideoCategorizer>,
     ) -> Self {
         Self {
             video_repository,
@@ -65,6 +68,7 @@ impl VideoReconciler {
             clock,
             video_category_assigner,
             preferences_repository,
+            video_categorizer,
         }
     }
 }
@@ -250,7 +254,7 @@ impl VideoReconciler {
         target: &VideoTarget,
         summaries_wanted: bool,
     ) -> anyhow::Result<()> {
-        VideoSyncPlan::for_video(video, summaries_wanted, self.clock.now())
+        VideoSyncPlan::for_video(video, summaries_wanted, false, self.clock.now())
             .steps
             .iter()
             .try_for_each(|step| {

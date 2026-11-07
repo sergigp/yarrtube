@@ -27,6 +27,8 @@ export function describeTask(task: Task): string {
       return `Fetching chapters of ${videoInContainer(payload)}`
     case 'summarize_video':
       return `Summarizing ${videoInContainer(payload)}`
+    case 'categorize_video':
+      return `Categorizing ${videoInContainer(payload)}`
     case 'upgrade_quality':
       return `Checking the quality of ${videoInContainer(payload)}`
     case 'sync_video':
@@ -75,6 +77,7 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   reconcile_channel: 'syncs',
   sync_video: 'syncs',
   summarize_video: 'ai',
+  categorize_video: 'ai',
 }
 
 /** A task's family; AI tasks are 'other' unless `aiEnabled`. */
@@ -113,6 +116,7 @@ const KIND_BY_TYPE: Record<string, TaskKind> = {
   reconcile_channel: 'sync',
   sync_video: 'sync',
   summarize_video: 'ai',
+  categorize_video: 'ai',
   delete_video_file: 'delete',
   delete_playlist_files: 'delete',
   delete_channel_files: 'delete',

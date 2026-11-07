@@ -1,11 +1,15 @@
 use crate::domain::category::{Category, CategoryId, CategoryMember};
 use crate::domain::event::DomainEvent;
 use crate::domain::video::VideoRecordId;
-use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
+use crate::domain::video_category::{
+    VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::category_lock::CategoryLock;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::collections::HashMap;
@@ -15,6 +19,8 @@ use std::sync::{Arc, MutexGuard};
 /// (the source regime) and announces every change in one batched event.
 #[derive(Clone)]
 pub struct VideoCategoryAssigner {
+    video_repository: Arc<dyn VideoRepository>,
+    video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     category_repository: Arc<dyn CategoryRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
@@ -24,7 +30,10 @@ pub struct VideoCategoryAssigner {
 }
 
 impl VideoCategoryAssigner {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
+        video_repository: Arc<dyn VideoRepository>,
+        video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         category_repository: Arc<dyn CategoryRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
@@ -33,6 +42,8 @@ impl VideoCategoryAssigner {
         category_lock: Arc<CategoryLock>,
     ) -> Self {
         Self {
+            video_repository,
+            video_category_verdict_repository,
             video_categories_repository,
             category_repository,
             channel_video_repository,
@@ -64,6 +75,14 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
     ) -> anyhow::Result<()>;
     /// Announces a rename: one event naming every record holding `category_id`.
     fn announce_renamed(&self, category_id: &CategoryId) -> anyhow::Result<()>;
+    /// Under the lock: false, storing nothing, when the video or the
+    /// category is gone; else saves `verdict` and sets the record to its
+    /// `source`'s categories plus its yes verdicts, announcing a change.
+    fn apply_verdict(
+        &self,
+        verdict: &VideoCategoryVerdict,
+        source: &CategoryMember,
+    ) -> anyhow::Result<bool>;
 }
 
 impl VideoCategoryAssignerApi for VideoCategoryAssigner {
@@ -110,6 +129,14 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
             .video_categories_repository
             .list_in_category(category_id)?;
         self.announce(&holding)
+    }
+
+    fn apply_verdict(
+        &self,
+        _verdict: &VideoCategoryVerdict,
+        _source: &CategoryMember,
+    ) -> anyhow::Result<bool> {
+        Ok(false)
     }
 }
 

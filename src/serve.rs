@@ -9,8 +9,8 @@ use crate::domain::services::{
     PlaylistVideoReconciler, PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer,
     PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
     ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
-    VideoCategoryAssigner, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
-    VideoRelocator, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    VideoCategorizer, VideoCategoryAssigner, VideoDownloader, VideoFileDeleter, VideoOwnerFinder,
+    VideoReconciler, VideoRelocator, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -430,6 +430,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.event_publisher.clone(),
             infrastructure.task_repository.clone(),
             infrastructure.video_categories_repository.clone(),
+            infrastructure.video_category_verdict_repository.clone(),
         ),
         playlist_previewer: PlaylistPreviewer::new(
             infrastructure.youtube_playlist_repository.clone(),
@@ -488,6 +489,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.event_publisher.clone(),
             infrastructure.task_repository.clone(),
             infrastructure.video_categories_repository.clone(),
+            infrastructure.video_category_verdict_repository.clone(),
         ),
         channel_previewer: ChannelPreviewer::new(infrastructure.youtube_channel_repository.clone()),
         channel_updater: ChannelUpdater::new(
@@ -666,6 +668,7 @@ fn task_handlers(
         chapter_fetcher(infrastructure),
         quality_upgrader(infrastructure),
         video_summarizer(infrastructure),
+        video_categorizer(infrastructure),
         video_reconciler(infrastructure),
         infrastructure.video_repository.clone(),
         VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
@@ -693,6 +696,7 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         infrastructure.clock.clone(),
         infrastructure.show_locks.clone(),
         infrastructure.video_categories_repository.clone(),
+        infrastructure.video_category_verdict_repository.clone(),
     )
 }
 
@@ -716,6 +720,7 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         infrastructure.clock.clone(),
         infrastructure.show_locks.clone(),
         infrastructure.video_categories_repository.clone(),
+        infrastructure.video_category_verdict_repository.clone(),
     )
 }
 
@@ -770,6 +775,8 @@ fn internal_video_reconciler(
 
 fn video_category_assigner(infrastructure: &InfrastructureContainer) -> VideoCategoryAssigner {
     VideoCategoryAssigner::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.video_category_verdict_repository.clone(),
         infrastructure.video_categories_repository.clone(),
         infrastructure.category_repository.clone(),
         infrastructure.channel_video_repository.clone(),
@@ -792,6 +799,7 @@ fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler
         infrastructure.clock.clone(),
         video_category_assigner(infrastructure),
         infrastructure.preferences_repository.clone(),
+        video_categorizer(infrastructure),
     )
 }
 
@@ -832,6 +840,19 @@ fn video_summarizer(infrastructure: &InfrastructureContainer) -> Arc<VideoSummar
         infrastructure.video_file_repository.clone(),
         infrastructure.llm_server_repository.clone(),
         infrastructure.video_summary_repository.clone(),
+        infrastructure.clock.clone(),
+    ))
+}
+
+fn video_categorizer(infrastructure: &InfrastructureContainer) -> Arc<VideoCategorizer> {
+    Arc::new(VideoCategorizer::new(
+        infrastructure.preferences_repository.clone(),
+        video_owner_finder(infrastructure),
+        infrastructure.category_repository.clone(),
+        infrastructure.video_category_verdict_repository.clone(),
+        infrastructure.video_summary_repository.clone(),
+        infrastructure.llm_server_repository.clone(),
+        video_category_assigner(infrastructure),
         infrastructure.clock.clone(),
     ))
 }
@@ -1226,6 +1247,7 @@ mod tests {
         assert_eq!(
             handlers.keys().map(String::as_str).collect::<BTreeSet<_>>(),
             BTreeSet::from([
+                "categorize_video",
                 "delete_channel_files",
                 "delete_playlist_files",
                 "delete_video_file",

@@ -54,6 +54,9 @@ pub enum Task {
     SummarizeVideo {
         video_id: String,
     },
+    CategorizeVideo {
+        video_id: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,6 +127,11 @@ struct SummarizeVideoPayload {
 }
 
 #[derive(Debug, Deserialize)]
+struct CategorizeVideoPayload {
+    video_id: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct FetchChaptersPayload {
     video_id: String,
 }
@@ -144,6 +152,7 @@ impl Task {
             Self::SyncPlexLabels => "sync_plex_labels",
             Self::FetchChapters { .. } => "fetch_chapters",
             Self::SummarizeVideo { .. } => "summarize_video",
+            Self::CategorizeVideo { .. } => "categorize_video",
             Self::UpgradeQuality { .. } => "upgrade_quality",
         }
     }
@@ -189,6 +198,7 @@ impl Task {
             Self::SyncPlexLabels => json!({}),
             Self::FetchChapters { video_id } => json!({ "video_id": video_id }),
             Self::SummarizeVideo { video_id } => json!({ "video_id": video_id }),
+            Self::CategorizeVideo { video_id } => json!({ "video_id": video_id }),
             Self::UpgradeQuality {
                 video_id,
                 quality,
@@ -324,6 +334,14 @@ impl Task {
         Ok(parsed.video_id)
     }
 
+    /// Decodes a `categorize_video` task's raw JSON payload, as handed to a
+    /// `TaskHandler`, back into the video's surrogate ID.
+    pub fn decode_categorize_video_payload(payload: &str) -> Result<String, TaskError> {
+        let parsed: CategorizeVideoPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid categorize_video payload: {e}")))?;
+        Ok(parsed.video_id)
+    }
+
     /// The executor lane a task of `task_type` runs in. Unknown types fall
     /// into `Light`.
     pub fn lane_for(task_type: &str) -> TaskLane {
@@ -333,14 +351,14 @@ impl Task {
             "fetch_subtitles" | "fetch_chapters" => TaskLane::Subtitles,
             "sync_video" => TaskLane::VideoSync,
             "sync_plex_labels" => TaskLane::Plex,
-            "summarize_video" => TaskLane::Summaries,
+            "summarize_video" | "categorize_video" => TaskLane::Summaries,
             "update_ytdlp" => TaskLane::Exclusive,
             _ => TaskLane::Light,
         }
     }
 
     /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail`,
-    /// `fetch_subtitles`, `fetch_chapters`, `upgrade_quality`, `summarize_video` and `sync_video`: two tasks sharing a key never run
+    /// `fetch_subtitles`, `fetch_chapters`, `upgrade_quality`, `summarize_video`, `categorize_video` and `sync_video`: two tasks sharing a key never run
     /// at the same time, and a task with a key is not scheduled twice while
     /// one is pending (or running, see `dedupes_running`).
     pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
@@ -357,6 +375,7 @@ impl Task {
             "sync_video" => Self::decode_sync_video_payload(payload).ok(),
             "fetch_chapters" => Self::decode_fetch_chapters_payload(payload).ok(),
             "summarize_video" => Self::decode_summarize_video_payload(payload).ok(),
+            "categorize_video" => Self::decode_categorize_video_payload(payload).ok(),
             "upgrade_quality" => Self::decode_upgrade_quality_payload(payload)
                 .ok()
                 .map(|(video_id, _, _)| video_id),

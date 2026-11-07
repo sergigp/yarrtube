@@ -225,6 +225,7 @@ mod tests {
                 context_length: 8192,
                 temperature: 0.5,
                 max_output_tokens: 8192,
+                format: None,
                 ..one_call_chat()
             }]
         );
@@ -1661,6 +1662,7 @@ mod tests {
             temperature: 0.3,
             thinking: true,
             max_output_tokens: 12288,
+            format: None,
         }
     }
 

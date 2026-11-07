@@ -564,6 +564,7 @@ mod tests {
             temperature: 0.3,
             thinking: true,
             max_output_tokens: 3288,
+            format: None,
         }
     }
 }

@@ -62,6 +62,12 @@ impl Preferences {
         self.ollama_url != other.ollama_url || settings != other.summaries
     }
 
+    /// Whether `other` categorizes differently: another Ollama URL,
+    /// categorization model or prompt.
+    pub fn changes_categorization(&self, _other: &Self) -> bool {
+        false
+    }
+
     /// These preferences with `change` applied, as long as the result is
     /// consistent: AI can't be on without an Ollama URL.
     pub fn apply(self, change: PreferencesChange) -> Result<Self, ValidationError> {

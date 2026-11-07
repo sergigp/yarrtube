@@ -300,6 +300,7 @@ impl VideoSummarizer {
                     temperature: job.settings.temperature.value(),
                     thinking: job.thinking,
                     max_output_tokens: context_length.value(),
+                    format: None,
                 },
             )
             .map_err(Failure::Server)?;
