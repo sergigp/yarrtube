@@ -39,7 +39,7 @@
 - [x] 2.31 `it_should_delete_the_verdicts_of_a_deleted_channels_videos`: `ChannelDeleter`
 - [x] 2.32 `it_should_delete_the_verdicts_of_a_deleted_playlists_videos`: `PlaylistDeleter`
 - [x] 2.33 `labels a categorize_video task and files it under AI` (web `tasks.test.ts`)
-- [ ] 2.34 Update `doc/AI.md` and `doc/CATEGORIES.md` (when a video is categorized, verdicts are final, summaries needed, toggle-off keeps categories) and `prompts/categorization/README.md` (v2 shipped); verify the docs match the specs
+- [x] 2.34 Update `doc/AI.md` and `doc/CATEGORIES.md` (when a video is categorized, verdicts are final, summaries needed, toggle-off keeps categories) and `prompts/categorization/README.md` (v2 shipped); verify the docs match the specs
 
 ## 3. Infrastructure adapters (TDD)
 

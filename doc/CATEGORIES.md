@@ -26,6 +26,33 @@ channel or playlist can be in several categories.
 - **Colored chips** on video cards and **unwatched counts** in the sidebar.
 - **Mark all watched** for the whole category at once.
 
+## Let AI fill them
+
+With [AI](AI.md) on, a category can also gather videos from sources outside
+it:
+
+1. In **Settings → AI**, turn on categorization (summaries too: a video is
+   judged from its summary).
+2. Give the category an **AI prompt** in its **Edit settings**, describing the
+   videos it should hold.
+3. Turn on categorization for the channels and playlists whose videos should
+   be judged.
+
+Once a video of those sources has a summary, the AI asks once per category
+with a prompt whether it belongs, and adds it to every category it fits. It
+never removes a category a video gets from its source.
+
+Good to know:
+
+- Each answer is final: editing a category's prompt, turning a source's
+  categorization off or turning AI off doesn't re-judge anything or remove
+  the categories the AI gave.
+- A video the AI couldn't judge is tried again after you change the model,
+  the categorization prompt, the Ollama URL, or that category's prompt.
+- Judging takes a while (10 s to 100 s per video and category on a small
+  machine) and runs in the background: look for _Categorizing …_ in the
+  Tasks page (**AI** tab).
+
 ## In Plex
 
 Each category becomes a **smart playlist** in Plex: its unwatched episodes,
