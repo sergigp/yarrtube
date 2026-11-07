@@ -93,32 +93,35 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
     }
 
     fn delete_for_video(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
-        self.delete_where("video_id = ?1", video_id.as_str())
+        self.delete_where("video_id = ?1", &[video_id.as_str()])
     }
 
     fn delete_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()> {
-        self.delete_where("category_id = ?1", category_id.as_str())
+        self.delete_where("category_id = ?1", &[category_id.as_str()])
     }
 
     fn delete_unavailable(&self) -> anyhow::Result<()> {
-        self.delete_where("verdict = ?1", Verdict::Unavailable.as_str())
+        self.delete_where("verdict = ?1", &[Verdict::Unavailable.as_str()])
     }
 
-    fn delete_unavailable_for_category(&self, _category_id: &CategoryId) -> anyhow::Result<()> {
-        Ok(())
+    fn delete_unavailable_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()> {
+        self.delete_where(
+            "verdict = ?1 AND category_id = ?2",
+            &[Verdict::Unavailable.as_str(), category_id.as_str()],
+        )
     }
 }
 
 impl SqliteVideoCategoryVerdictRepository {
-    /// Deletes the verdicts matching `predicate`, with `value` as `?1`.
-    fn delete_where(&self, predicate: &str, value: &str) -> anyhow::Result<()> {
+    /// Deletes the verdicts matching `predicate`, with `values` as `?1`, `?2`…
+    fn delete_where(&self, predicate: &str, values: &[&str]) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
             &format!("DELETE FROM video_category_verdicts WHERE {predicate}"),
-            params![value],
+            params_from_iter(values),
         )
         .inspect_err(|e| {
-            tracing::error!(predicate, value, error = %e, "failed to delete video category verdicts")
+            tracing::error!(predicate, ?values, error = %e, "failed to delete video category verdicts")
         })
         .context("failed to delete video category verdicts")?;
         Ok(())
@@ -261,6 +264,30 @@ mod tests {
         .for_each(|verdict| repository.save(verdict).unwrap());
 
         let result = repository.delete_unavailable();
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            repository
+                .find_many(&[video_id("rec1"), video_id("rec2")])
+                .unwrap(),
+            kept.to_vec()
+        );
+    }
+
+    #[test]
+    fn it_should_delete_the_unavailable_verdicts_of_one_category() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = [
+            ai_verdict("rec1", "tech", Verdict::Unavailable),
+            ai_verdict("rec2", "chess", Verdict::Yes),
+        ];
+        [ai_verdict("rec1", "chess", Verdict::Unavailable)]
+            .iter()
+            .chain(&kept)
+            .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let result = repository.delete_unavailable_for_category(&CategoryId::new("chess").unwrap());
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         assert_eq!(
