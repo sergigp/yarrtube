@@ -1,7 +1,9 @@
-use crate::domain::category::{CategoryId, CategoryMember};
-use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
+use crate::domain::category::{Category, CategoryId, CategoryMember};
+use crate::domain::services::{
+    VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
+};
 use crate::domain::video::VideoRecordId;
-use crate::domain::video_category::EditVideoCategoriesError;
+use crate::domain::video_category::{EditVideoCategoriesError, VideoCategoryVerdict};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -83,10 +85,21 @@ pub trait VideoCategoryEditorApi: Send + Sync {
 impl VideoCategoryEditorApi for VideoCategoryEditor {
     fn set(
         &self,
-        _video_id: &VideoRecordId,
-        _category_id: &CategoryId,
-        _belongs: bool,
+        video_id: &VideoRecordId,
+        category_id: &CategoryId,
+        belongs: bool,
     ) -> Result<(), EditVideoCategoriesError> {
+        let source = self.find_source(video_id)?;
+        self.find_category(category_id)?;
+        let verdict = VideoCategoryVerdict::by_user(
+            video_id.clone(),
+            category_id.clone(),
+            belongs,
+            self.clock.now(),
+        );
+        self.video_category_assigner
+            .apply_verdict(&verdict, &source)
+            .map_err(EditVideoCategoriesError::Repository)?;
         Ok(())
     }
 
@@ -100,5 +113,34 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
 
     fn rerun_category(&self, _category_id: &CategoryId) -> Result<(), EditVideoCategoriesError> {
         Ok(())
+    }
+}
+
+impl VideoCategoryEditor {
+    /// The channel or playlist holding the stored `video_id`.
+    fn find_source(
+        &self,
+        video_id: &VideoRecordId,
+    ) -> Result<CategoryMember, EditVideoCategoriesError> {
+        let video = self
+            .video_repository
+            .find(video_id)
+            .map_err(EditVideoCategoriesError::Repository)?
+            .ok_or(EditVideoCategoriesError::VideoNotFound)?;
+        self.video_owner_finder
+            .find(&video)
+            .map_err(EditVideoCategoriesError::Repository)?
+            .map(|owner| owner.source)
+            .ok_or(EditVideoCategoriesError::VideoNotFound)
+    }
+
+    fn find_category(
+        &self,
+        category_id: &CategoryId,
+    ) -> Result<Category, EditVideoCategoriesError> {
+        self.category_repository
+            .find(category_id)
+            .map_err(EditVideoCategoriesError::Repository)?
+            .ok_or(EditVideoCategoriesError::CategoryNotFound)
     }
 }

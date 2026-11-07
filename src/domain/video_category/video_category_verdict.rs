@@ -120,11 +120,13 @@ impl VideoCategoryVerdict {
         belongs: bool,
         now: DateTime<Utc>,
     ) -> Self {
-        let _ = belongs;
         Self {
             video_id,
             category_id,
-            verdict: Verdict::No,
+            verdict: match belongs {
+                true => Verdict::Yes,
+                false => Verdict::No,
+            },
             decided_by: VerdictAuthor::User,
             model: None,
             reason: None,
