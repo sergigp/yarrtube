@@ -2956,6 +2956,64 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_count_ai_verdicts_per_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let funny = category(None, "Funny");
+        let sicilian = category(None, "Sicilian");
+        [&funny, &sicilian]
+            .into_iter()
+            .for_each(|category| repository.insert(category).unwrap());
+        let [first, second, third] = ["vid1", "vid2", "vid3"].map(pending_video);
+        let video_repository = SqliteVideoRepository::new(db.database());
+        [&first, &second, &third]
+            .into_iter()
+            .for_each(|video| video_repository.save(video).unwrap());
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        [
+            yes_verdict(&first, &sicilian),
+            unavailable_verdict(&second, &sicilian),
+            VideoCategoryVerdict::by_user(
+                third.id.clone(),
+                sicilian.id.clone(),
+                true,
+                fixed_timestamp(),
+            ),
+            VideoCategoryVerdict::by_user(
+                first.id.clone(),
+                funny.id.clone(),
+                false,
+                fixed_timestamp(),
+            ),
+        ]
+        .iter()
+        .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            category_video_collector(&db),
+            verdict_repository,
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![
+                    list_item(&funny, 0, &[], &[]),
+                    CategoryListItemResponse {
+                        ai_verdict_count: 2,
+                        ..list_item(&sicilian, 0, &[], &[])
+                    },
+                ],
+                unwatched_total: 0,
+            })
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

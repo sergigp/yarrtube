@@ -49,11 +49,17 @@ impl CategoryViewSearcherApi for CategoryViewSearcher {
         let tracked = self.tracked_members(&playlists)?;
         let hidden = Self::hidden_count_playlists(&playlists);
         let unwatched = self.unwatched_by_category(&hidden)?;
+        let ai_verdicts = self
+            .video_category_verdict_repository
+            .count_ai_by_category()?;
         Ok(CategoryViews {
             unwatched_total: Self::distinct_total(&unwatched),
             categories: unwatched
                 .into_iter()
-                .map(|(category, ids)| Self::category_view(category, &tracked, ids.len()))
+                .map(|(category, ids)| {
+                    let ai_verdict_count = ai_verdicts.get(&category.id).copied().unwrap_or(0);
+                    Self::category_view(category, &tracked, ids.len(), ai_verdict_count)
+                })
                 .collect(),
         })
     }
@@ -133,6 +139,7 @@ impl CategoryViewSearcher {
         category: Category,
         tracked: &HashSet<CategoryMember>,
         unwatched_count: usize,
+        ai_verdict_count: u64,
     ) -> CategoryView {
         let members: Vec<&CategoryMember> = category
             .members
@@ -159,7 +166,7 @@ impl CategoryViewSearcher {
             color: category.color,
             ai_prompt: category.ai_prompt,
             unwatched_count,
-            ai_verdict_count: 0,
+            ai_verdict_count,
         }
     }
 }

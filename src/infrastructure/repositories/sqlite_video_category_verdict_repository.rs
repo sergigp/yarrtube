@@ -151,7 +151,23 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
     }
 
     fn count_ai_by_category(&self) -> anyhow::Result<HashMap<CategoryId, u64>> {
-        Ok(HashMap::new())
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT category_id, COUNT(*) FROM video_category_verdicts
+                 WHERE decided_by = ?1 GROUP BY category_id",
+            )
+            .context("failed to prepare count of AI verdicts")?;
+        stmt.query_map(params![VerdictAuthor::Ai.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .inspect_err(|e| tracing::error!(error = %e, "failed to count AI verdicts"))
+        .context("failed to count AI verdicts")?
+        .map(|row| {
+            let (category_id, count) = row.context("failed to read AI verdict count row")?;
+            Ok((CategoryId::new(category_id)?, u64::try_from(count)?))
+        })
+        .collect()
     }
 }
 

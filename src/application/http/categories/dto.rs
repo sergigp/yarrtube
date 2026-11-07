@@ -98,7 +98,7 @@ impl From<CategoryView> for CategoryListItemResponse {
                 .as_ref()
                 .map(|prompt| prompt.as_str().to_string()),
             unwatched_count: category.unwatched_count,
-            ai_verdict_count: 0,
+            ai_verdict_count: category.ai_verdict_count,
             channels: category
                 .channels
                 .iter()
