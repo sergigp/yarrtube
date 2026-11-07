@@ -42,6 +42,10 @@ Once a video of those sources has a summary, the AI asks once per category
 with a prompt whether it belongs, and adds it to every category it fits. It
 never removes a category a video gets from its source.
 
+This happens on the video's next sync after its summary, at the latest its
+source's next reconcile pass (every 3 hours by default), so a new video
+shows its AI categories some time after it appears.
+
 Good to know:
 
 - Each answer is final: editing a category's prompt, turning a source's
