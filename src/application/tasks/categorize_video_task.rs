@@ -278,6 +278,39 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     }
 
     #[test]
+    fn it_should_not_evaluate_a_pair_with_a_user_verdict() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let llm = llm_replying(vec![reply(YES)]);
+        let video = summarized_video();
+        let sicilian = prompted_category("Sicilian");
+        let tech = prompted_category("Tech");
+        seed(&db, &video, &[&sicilian, &tech]);
+        let user_yes = VideoCategoryVerdict::by_user(
+            video.id.clone(),
+            tech.id.clone(),
+            true,
+            fixed_timestamp(),
+        );
+        verdict_repository.save(&user_yes).unwrap();
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(asked_categories(&llm), vec!["Sicilian"]);
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                user_yes,
+            ])
+        );
+    }
+
+    #[test]
     fn it_should_do_nothing_when_the_conditions_no_longer_hold() {
         let source_off = |db: &TestDatabase| {
             SqliteChannelRepository::new(db.database())
