@@ -155,6 +155,7 @@ CategoryDialog.save()
           ensure_tracked(members) -> channel_repository.find / playlist_repository.find
           Category::create(name, color, now).with_ai_prompt(..).with_members(..)
           repository.insert(category)                                 // one transaction
+          repository.list() -> categories                             // re-read: includes the new one, like set_members
           video_category_assigner.reassign_category(id, &[], categories)
   invalidateLibrary(); onClose(); navigate(`/categories/${id}`)
 ```
