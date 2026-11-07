@@ -3289,6 +3289,28 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_return_not_found_when_clearing_an_unknown_source() {
+        let db = TestDatabase::new();
+
+        let response = delete_channel_ai_verdicts(
+            State(video_category_editor(db.database())),
+            Path("@unknown".to_string()),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(StatusCode::NOT_FOUND, "source not found"))
+        );
+        assert_eq!(
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+                .list_non_completed()
+                .unwrap(),
+            vec![]
+        );
+    }
+
     fn any_channel_creator() -> ChannelCreator {
         ChannelCreator::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
