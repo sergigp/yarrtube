@@ -7,8 +7,8 @@
 - [x] 2.1 `http/preferences`: `it_should_ship_the_categorization_prompt_v2`: `SHIPPED`, `preferences/mod.rs:238` and `helpers.tsx` use `v2.md`. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.2 `http/preferences`: `it_should_return_the_categorization_generation_defaults_if_nothing_saved`: 4096, 0, thinking on. Verify: the test goes red on an assertion, then green with the full suite.
 - [x] 2.3 `http/preferences`: `it_should_save_the_categorization_generation_settings`: returned and stored, summary values unchanged. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.4 `http/preferences`: `it_should_fail_if_the_categorization_context_length_is_out_of_range`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.
-- [ ] 2.5 `http/preferences`: `it_should_fail_if_the_categorization_temperature_is_out_of_range`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.4 `http/preferences`: `it_should_fail_if_the_categorization_context_length_is_out_of_range`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.
+- [x] 2.5 `http/preferences`: `it_should_fail_if_the_categorization_temperature_is_out_of_range`: 400 with its message. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.6 `http/categories`: `it_should_create_a_category_with_a_prompt`: response and stored prompt, trimmed. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.7 `http/categories`: `it_should_create_a_category_with_members`: response holds the lists, members stored. Verify: the test goes red on an assertion, then green with the full suite.
 - [ ] 2.8 `http/categories`: `it_should_put_the_videos_of_its_members_in_a_created_category`: stored videos belong to it, events announced. Verify: the test goes red on an assertion, then green with the full suite.

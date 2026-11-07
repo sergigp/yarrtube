@@ -367,6 +367,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_if_the_categorization_context_length_is_out_of_range() {
+        let request = UpdatePreferencesRequest {
+            categorization_context_length: Some(512),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Context length must be between 1024 and 131072 (got 512)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_if_the_categorization_temperature_is_out_of_range() {
+        let request = UpdatePreferencesRequest {
+            categorization_temperature: Some(2.5),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Temperature must be between 0 and 2 (got 2.5)"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_go_back_to_the_shipped_categorization_prompt() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
