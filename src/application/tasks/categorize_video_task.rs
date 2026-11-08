@@ -413,6 +413,86 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     }
 
     #[test]
+    fn it_should_not_override_a_user_verdict_set_during_its_call() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let video = summarized_video();
+        let tech = prompted_category("Tech");
+        seed(&db, &video, &[&tech]);
+        let user_no = VideoCategoryVerdict::by_user(
+            video.id.clone(),
+            tech.id.clone(),
+            false,
+            fixed_timestamp(),
+        );
+        let (database, decided) = (db.database(), user_no.clone());
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply(YES)])
+                .with_on_chat(move || {
+                    SqliteVideoCategoryVerdictRepository::new(database.clone())
+                        .save(&decided)
+                        .unwrap()
+                }),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![user_no]
+        );
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+    }
+
+    #[test]
+    fn it_should_not_store_an_answer_to_a_prompt_changed_during_its_call() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let tech = prompted_category("Tech");
+        seed(&db, &video, &[&tech]);
+        let (database, edited) = (
+            db.database(),
+            tech.clone().with_ai_prompt(Some(
+                CategoryPrompt::new("The video is about cooking.")
+                    .unwrap()
+                    .unwrap(),
+            )),
+        );
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply(YES)])
+                .with_on_chat(move || {
+                    SqliteCategoryRepository::new(database.clone())
+                        .update(&edited)
+                        .unwrap()
+                }),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![]
+        );
+    }
+
+    #[test]
     fn it_should_not_keep_a_verdict_for_a_video_removed_while_it_was_stored() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());

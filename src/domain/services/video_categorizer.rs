@@ -273,8 +273,19 @@ impl VideoCategorizer {
             job.settings.model.as_str(),
             self.clock.now(),
         );
-        self.video_category_assigner
-            .apply_verdict(&verdict, &job.owner.source)?;
+        let stored =
+            self.video_category_assigner
+                .apply_verdict_if(&verdict, &job.owner.source, &|| {
+                    self.still_pending(video, job, category)
+                })?;
+        if !stored {
+            info!(
+                video_id = %video.id,
+                category = %category.name.as_str(),
+                "dropped a verdict: the pair was decided or changed during its call"
+            );
+            return Ok(Outcome::Answered);
+        }
         info!(
             video_id = %video.id,
             category = %category.name.as_str(),
@@ -287,9 +298,8 @@ impl VideoCategorizer {
         Ok(Outcome::Answered)
     }
 
-    /// Gives each of `rejected` an unavailable verdict, unless the settings
-    /// or its prompt changed since the job started: that change reset its
-    /// unavailable verdicts, so the new ones may answer.
+    /// Gives each of `rejected` an unavailable verdict, unless it is no
+    /// longer pending as the job started (see `still_pending`).
     fn give_up(
         &self,
         video: &Video,
@@ -305,10 +315,27 @@ impl VideoCategorizer {
             );
             self.video_category_assigner
                 .apply_verdict_if(&verdict, &job.owner.source, &|| {
-                    self.unchanged_since(job, category)
+                    self.still_pending(video, job, category)
                 })
                 .map(|_| ())
         })
+    }
+
+    /// Whether `video`'s pair with `category` is still as the job found it:
+    /// without a verdict (the user may have decided it), with the same
+    /// settings and prompt (a change, then a re-run, wants the new ones).
+    fn still_pending(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        category: &Category,
+    ) -> anyhow::Result<bool> {
+        let decided = self
+            .video_category_verdict_repository
+            .find_many(std::slice::from_ref(&video.id))?
+            .iter()
+            .any(|verdict| verdict.category_id == category.id);
+        Ok(!decided && self.unchanged_since(job, category)?)
     }
 
     /// Whether the categorization settings and `category`'s prompt are
