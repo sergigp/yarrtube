@@ -266,6 +266,7 @@ fn vtt_response(vtt: WebVtt) -> VttResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::http::test_support::{ai_verdict, user_verdict};
     use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
@@ -279,9 +280,7 @@ mod tests {
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoRecordId};
     use crate::domain::video_category::VideoCategories;
-    use crate::domain::video_category::{
-        Verdict, VerdictAuthor, VideoCategoriesChanged, VideoCategoryVerdict,
-    };
+    use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::domain::video_summary::{SummaryText, VideoSummary};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -6251,9 +6250,6 @@ mod tests {
         );
     }
 
-    /// A searcher for tests whose request is rejected before reaching it. Its
-    /// repositories sit on an unmigrated in-memory database, so a request that
-    /// wrongly got through would fail loudly instead of passing.
     #[tokio::test]
     async fn it_should_list_a_videos_categories_with_where_each_comes_from() {
         let db = TestDatabase::new();
@@ -6818,27 +6814,9 @@ mod tests {
         }
     }
 
-    fn ai_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
-        VideoCategoryVerdict {
-            video_id: video.id.clone(),
-            category_id: category.id.clone(),
-            verdict,
-            decided_by: VerdictAuthor::Ai,
-            model: Some("qwen3:4b".to_string()),
-            reason: Some("A reason.".to_string()),
-            decided_at: fixed_timestamp(),
-        }
-    }
-
-    fn user_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
-        VideoCategoryVerdict {
-            decided_by: VerdictAuthor::User,
-            model: None,
-            reason: None,
-            ..ai_verdict(video, category, verdict)
-        }
-    }
-
+    /// A searcher for tests whose request is rejected before reaching it. Its
+    /// repositories sit on an unmigrated in-memory database, so a request that
+    /// wrongly got through would fail loudly instead of passing.
     fn any_video_searcher() -> VideoSearcher {
         VideoSearcher::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),

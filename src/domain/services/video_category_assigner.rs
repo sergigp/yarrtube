@@ -166,11 +166,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
     fn recompute(&self, video_ids: &[VideoRecordId]) -> anyhow::Result<()> {
         let _guard = self.lock();
         let categories = self.category_repository.list()?;
-        let desired = video_ids
-            .iter()
-            .map(|video_id| self.desired_for_record(video_id, &categories))
-            .collect::<anyhow::Result<Vec<_>>>()?
-            .concat();
+        let desired = self.desired_for_records(video_ids, &categories)?;
         self.save_and_announce(desired)
     }
 }
@@ -296,20 +292,41 @@ impl VideoCategoryAssigner {
         self.save_and_announce(desired)
     }
 
-    /// `video_id` with its source's categories in `categories` plus its yes
-    /// verdicts; nothing when no source holds it.
-    fn desired_for_record(
+    /// Each of `video_ids` held by a source, in order, with its source's
+    /// categories in `categories` plus its yes verdicts; the others are left
+    /// out.
+    fn desired_for_records(
         &self,
-        video_id: &VideoRecordId,
+        video_ids: &[VideoRecordId],
         categories: &[Category],
     ) -> anyhow::Result<Vec<VideoCategories>> {
-        match self.source_of(video_id)? {
-            Some(source) => self.with_yes_verdicts(
-                vec![video_id.clone()],
-                &Self::source_category_ids(&source, categories),
-            ),
-            None => Ok(Vec::new()),
+        let records = video_ids
+            .iter()
+            .map(|video_id| {
+                Ok(self.source_of(video_id)?.map(|source| {
+                    (
+                        video_id.clone(),
+                        Self::source_category_ids(&source, categories),
+                    )
+                }))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        if records.is_empty() {
+            return Ok(Vec::new());
         }
+        let held: Vec<VideoRecordId> = records.iter().map(|(id, _)| id.clone()).collect();
+        let yes = self.yes_categories(&held)?;
+        Ok(records
+            .into_iter()
+            .map(|(video_id, category_ids)| {
+                let mut ids = category_ids;
+                ids.extend(yes.get(&video_id).cloned().unwrap_or_default());
+                VideoCategories::new(video_id, ids)
+            })
+            .collect())
     }
 
     /// The channel holding `video_id`, else the playlist holding it.
@@ -344,20 +361,7 @@ impl VideoCategoryAssigner {
         if video_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut yes = self
-            .video_category_verdict_repository
-            .find_many(&video_ids)?
-            .into_iter()
-            .filter(VideoCategoryVerdict::is_yes)
-            .fold(
-                HashMap::<VideoRecordId, Vec<CategoryId>>::new(),
-                |mut yes, verdict| {
-                    yes.entry(verdict.video_id)
-                        .or_default()
-                        .push(verdict.category_id);
-                    yes
-                },
-            );
+        let mut yes = self.yes_categories(&video_ids)?;
         Ok(video_ids
             .into_iter()
             .map(|video_id| {
@@ -366,6 +370,24 @@ impl VideoCategoryAssigner {
                 VideoCategories::new(video_id, ids)
             })
             .collect())
+    }
+
+    /// The categories of the yes verdicts of each of `video_ids` having one.
+    fn yes_categories(
+        &self,
+        video_ids: &[VideoRecordId],
+    ) -> anyhow::Result<HashMap<VideoRecordId, Vec<CategoryId>>> {
+        Ok(self
+            .video_category_verdict_repository
+            .find_many(video_ids)?
+            .into_iter()
+            .filter(VideoCategoryVerdict::is_yes)
+            .fold(HashMap::new(), |mut yes, verdict| {
+                yes.entry(verdict.video_id)
+                    .or_default()
+                    .push(verdict.category_id);
+                yes
+            }))
     }
 
     fn record_ids(&self, source: &CategoryMember) -> anyhow::Result<Vec<VideoRecordId>> {

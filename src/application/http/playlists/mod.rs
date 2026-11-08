@@ -209,7 +209,10 @@ pub async fn mark_playlist_watched(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryName};
+    use crate::application::http::test_support::{
+        ai_verdict, named_category, user_verdict, video_category_assigner, video_category_editor,
+    };
+    use crate::domain::category::CategoryId;
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
@@ -225,7 +228,7 @@ mod tests {
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
     use crate::domain::services::VideoCategorizer;
-    use crate::domain::services::VideoCategoryAssigner;
+
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::services::VideoReconciler;
     use crate::domain::services::VideoRelocator;
@@ -290,7 +293,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_playlist_repository::{
         FakeYoutubePlaylistRepository, ResolvedPlaylist, YoutubePlaylistRepository,
     };
-    use crate::infrastructure::shared::category_lock::CategoryLock;
+
     use crate::infrastructure::shared::domain_events::event_publisher::{
         EventPublisher, SqliteEventPublisher,
     };
@@ -4036,9 +4039,6 @@ mod tests {
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
-    /// A creator for tests whose request is rejected before reaching it. Its
-    /// repositories sit on an unmigrated in-memory database, so a request that
-    /// wrongly got through would fail loudly instead of passing.
     #[tokio::test]
     async fn it_should_clear_a_playlists_ai_verdicts_keeping_user_ones() {
         let db = TestDatabase::new();
@@ -4114,6 +4114,9 @@ mod tests {
         );
     }
 
+    /// A creator for tests whose request is rejected before reaching it. Its
+    /// repositories sit on an unmigrated in-memory database, so a request that
+    /// wrongly got through would fail loudly instead of passing.
     fn any_playlist_creator() -> PlaylistCreator {
         PlaylistCreator::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
@@ -4889,22 +4892,6 @@ mod tests {
         )
     }
 
-    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
-        VideoCategoryAssigner::new(
-            Arc::new(SqliteVideoRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
-            Arc::new(SqliteCategoryRepository::new(database.clone())),
-            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-            Arc::new(SqliteEventPublisher::new(
-                database,
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(CategoryLock::default()),
-        )
-    }
-
     fn video_categorizer(database: Database) -> Arc<VideoCategorizer> {
         Arc::new(VideoCategorizer::new(
             Arc::new(SqlitePreferencesRepository::new(database.clone())),
@@ -4922,57 +4909,5 @@ mod tests {
             video_category_assigner(database),
             Arc::new(FixedClock(fixed_timestamp())),
         ))
-    }
-
-    fn video_category_editor(database: Database) -> VideoCategoryEditor {
-        let clock = Arc::new(FixedClock(fixed_timestamp()));
-        VideoCategoryEditor::new(
-            Arc::new(SqliteVideoRepository::new(database.clone())),
-            Arc::new(VideoOwnerFinder::new(
-                Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-                Arc::new(SqliteChannelRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistRepository::new(database.clone())),
-                "/videos",
-            )),
-            Arc::new(SqliteCategoryRepository::new(database.clone())),
-            Arc::new(SqliteChannelRepository::new(database.clone())),
-            Arc::new(SqlitePlaylistRepository::new(database.clone())),
-            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
-            video_category_assigner(database.clone()),
-            Arc::new(SqliteTaskRepository::new(database, clock.clone())),
-            clock,
-        )
-    }
-
-    fn named_category(name: &str) -> Category {
-        Category::create(
-            CategoryName::new(name).unwrap(),
-            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
-            fixed_timestamp(),
-        )
-    }
-
-    fn ai_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
-        VideoCategoryVerdict {
-            video_id: video.id.clone(),
-            category_id: category.id.clone(),
-            verdict,
-            decided_by: VerdictAuthor::Ai,
-            model: Some("qwen3:4b".to_string()),
-            reason: Some("A reason.".to_string()),
-            decided_at: fixed_timestamp(),
-        }
-    }
-
-    fn user_verdict(video: &Video, category: &Category, verdict: Verdict) -> VideoCategoryVerdict {
-        VideoCategoryVerdict {
-            decided_by: VerdictAuthor::User,
-            model: None,
-            reason: None,
-            ..ai_verdict(video, category, verdict)
-        }
     }
 }

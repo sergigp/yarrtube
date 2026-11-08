@@ -167,15 +167,14 @@ fn update_category_error(error: UpdateCategoryError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::http::test_support::{video_category_assigner, video_category_editor};
     use crate::domain::category::Category;
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::services::{
-        CategoryVideoCollector, VideoCategoryAssigner, VideoOwnerFinder,
-    };
+    use crate::domain::services::{CategoryVideoCollector, VideoCategoryAssigner};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::{Video, VideoId, VideoRecordId};
@@ -3365,45 +3364,6 @@ mod tests {
             reason: None,
             ..yes_verdict(video, category)
         }
-    }
-
-    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
-        VideoCategoryAssigner::new(
-            Arc::new(SqliteVideoRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
-            Arc::new(SqliteCategoryRepository::new(database.clone())),
-            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-            Arc::new(SqliteEventPublisher::new(
-                database,
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(CategoryLock::default()),
-        )
-    }
-
-    fn video_category_editor(database: Database) -> VideoCategoryEditor {
-        let clock = Arc::new(FixedClock(fixed_timestamp()));
-        VideoCategoryEditor::new(
-            Arc::new(SqliteVideoRepository::new(database.clone())),
-            Arc::new(VideoOwnerFinder::new(
-                Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-                Arc::new(SqliteChannelRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistRepository::new(database.clone())),
-                "/videos",
-            )),
-            Arc::new(SqliteCategoryRepository::new(database.clone())),
-            Arc::new(SqliteChannelRepository::new(database.clone())),
-            Arc::new(SqlitePlaylistRepository::new(database.clone())),
-            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
-            video_category_assigner(database.clone()),
-            Arc::new(SqliteTaskRepository::new(database, clock.clone())),
-            clock,
-        )
     }
 
     /// The pending `sync_video` row of `video`, `id`th scheduled.

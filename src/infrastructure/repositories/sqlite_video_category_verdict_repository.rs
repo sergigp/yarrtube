@@ -5,7 +5,7 @@ use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Row, params, params_from_iter};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 /// Each (video, category) pair's verdict, at most one per pair.
 pub trait VideoCategoryVerdictRepository: Send + Sync {
@@ -194,32 +194,18 @@ impl SqliteVideoCategoryVerdictRepository {
         values: &[&str],
     ) -> anyhow::Result<Vec<VideoRecordId>> {
         let conn = self.db.write()?;
-        let tx = conn
-            .unchecked_transaction()
-            .context("failed to start deleting video category verdicts")?;
-        let video_ids = tx
+        let video_ids = conn
             .prepare(&format!(
-                "SELECT DISTINCT video_id FROM video_category_verdicts WHERE {predicate}
-                 ORDER BY video_id"
+                "DELETE FROM video_category_verdicts WHERE {predicate} RETURNING video_id"
             ))
             .and_then(|mut stmt| {
                 stmt.query_map(params_from_iter(values), |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .collect::<rusqlite::Result<BTreeSet<_>>>()
             })
             .inspect_err(|e| {
-                tracing::error!(predicate, ?values, error = %e, "failed to find video category verdicts to delete")
+                tracing::error!(predicate, ?values, error = %e, "failed to delete video category verdicts")
             })
-            .context("failed to find video category verdicts to delete")?;
-        tx.execute(
-            &format!("DELETE FROM video_category_verdicts WHERE {predicate}"),
-            params_from_iter(values),
-        )
-        .inspect_err(|e| {
-            tracing::error!(predicate, ?values, error = %e, "failed to delete video category verdicts")
-        })
-        .context("failed to delete video category verdicts")?;
-        tx.commit()
-            .context("failed to commit deleting video category verdicts")?;
+            .context("failed to delete video category verdicts")?;
         video_ids
             .into_iter()
             .map(|id| Ok(VideoRecordId::new(id)?))

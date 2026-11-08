@@ -7,6 +7,8 @@ pub mod ollama;
 pub mod playlists;
 pub mod preferences;
 pub mod tasks;
+#[cfg(test)]
+mod test_support;
 pub mod validation;
 pub mod version;
 pub mod videos;
