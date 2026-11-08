@@ -40,11 +40,11 @@ impl TaskHandler for FetchChaptersTask {
 mod tests {
     use super::*;
     use crate::domain::shared::Quality;
-    use crate::domain::video::{LateDataChecks, PlaybackPosition, Video, VideoChapter, VideoId};
-    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-        ChaptersProbe, FakeVideoDownloaderRepository,
+    use crate::domain::video::{
+        ChaptersProbe, LateDataChecks, PlaybackPosition, Video, VideoChapter, VideoId,
     };
+    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::youtube_chapter_repository::FakeChapterRepository;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
@@ -53,16 +53,15 @@ mod tests {
     fn it_should_settle_chapters_found() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
-        );
+        let chapter_repository =
+            Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -84,7 +83,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            *chapter_repository.calls.lock().unwrap(),
             vec![YT1_URL.to_string()]
         );
     }
@@ -93,9 +92,8 @@ mod tests {
     fn it_should_recheck_unsettled_empty_chapters() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
-        );
+        let chapter_repository =
+            Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = Video {
             chapters_checks: LateDataChecks {
                 last_checked_at: Some(fixed_timestamp()),
@@ -108,7 +106,7 @@ mod tests {
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -130,7 +128,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            *chapter_repository.calls.lock().unwrap(),
             vec![YT1_URL.to_string()]
         );
     }
@@ -139,15 +137,14 @@ mod tests {
     fn it_should_keep_empty_chapters_unsettled_for_a_young_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository =
-            Arc::new(FakeVideoDownloaderRepository::default().with_chapters_result(Ok(vec![])));
+        let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Ok(vec![])));
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -173,19 +170,17 @@ mod tests {
     fn it_should_settle_empty_chapters_of_an_old_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_chapters_probe(Ok(ChaptersProbe {
-                chapters: vec![],
-                published_at: Some(later() - Duration::days(30)),
-            })),
-        );
+        let chapter_repository = Arc::new(FakeChapterRepository::with_probe(Ok(ChaptersProbe {
+            chapters: vec![],
+            published_at: Some(later() - Duration::days(30)),
+        })));
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -212,17 +207,16 @@ mod tests {
     fn it_should_count_a_failed_chapters_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_chapters_result(Err(anyhow::anyhow!("Video unavailable"))),
-        );
+        let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Err(
+            anyhow::anyhow!("Video unavailable"),
+        )));
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -242,7 +236,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            *chapter_repository.calls.lock().unwrap(),
             vec![YT1_URL.to_string()]
         );
     }
@@ -251,10 +245,9 @@ mod tests {
     fn it_should_settle_chapters_as_none_after_three_failed_checks_of_an_old_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_chapters_result(Err(anyhow::anyhow!("Video unavailable"))),
-        );
+        let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Err(
+            anyhow::anyhow!("Video unavailable"),
+        )));
         let video = Video {
             created_at: later() - Duration::days(30),
             chapters_checks: LateDataChecks {
@@ -268,7 +261,7 @@ mod tests {
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -290,7 +283,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            *chapter_repository.calls.lock().unwrap(),
             vec![YT1_URL.to_string()]
         );
     }
@@ -299,9 +292,8 @@ mod tests {
     fn it_should_skip_settled_chapters() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
-        );
+        let chapter_repository =
+            Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = Video {
             chapters_settled: true,
             ..downloaded_video().with_chapters(vec![], fixed_timestamp())
@@ -311,7 +303,7 @@ mod tests {
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -321,7 +313,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(
-            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            *chapter_repository.calls.lock().unwrap(),
             Vec::<String>::new()
         );
     }
@@ -330,14 +322,13 @@ mod tests {
     fn it_should_skip_if_the_video_is_gone() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
-        );
+        let chapter_repository =
+            Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                chapter_repository.clone(),
                 Arc::new(FixedClock(later())),
             )),
         );
@@ -347,7 +338,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
-            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            *chapter_repository.calls.lock().unwrap(),
             Vec::<String>::new()
         );
     }
@@ -364,18 +355,17 @@ mod tests {
             false,
             fixed_timestamp(),
         );
-        let video_downloader_repository = Arc::new({
+        let chapter_repository = Arc::new({
             let video_repository = video_repository.clone();
             let played = played.clone();
-            FakeVideoDownloaderRepository::default()
-                .with_chapters_result(Ok(intro_chapters()))
-                .with_on_fetch_chapters(move || video_repository.update(&played).unwrap())
+            FakeChapterRepository::with_chapters(Ok(intro_chapters()))
+                .with_on_fetch(move || video_repository.update(&played).unwrap())
         });
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository,
+                chapter_repository,
                 Arc::new(FixedClock(later())),
             )),
         );

@@ -2,16 +2,15 @@ use crate::domain::event::DomainEvent;
 use crate::domain::services::{MetadataGenerator, MetadataGeneratorApi};
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    EpisodeNumber, EpisodePaths, Video, VideoDownloaded, VideoRecordId, staging_dir,
+    DownloadAttempt, DownloadedVideo, EpisodeNumber, EpisodePaths, Video, VideoDownloaded,
+    VideoRecordId, staging_dir,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-    DownloadAttempt, DownloadedVideo, VideoDownloaderRepository,
-};
+use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::{Path, PathBuf};

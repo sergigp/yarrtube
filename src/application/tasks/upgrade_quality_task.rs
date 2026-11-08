@@ -36,15 +36,14 @@ mod tests {
     use super::*;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, PlaybackPosition, Video, VideoDownloaded, VideoId,
+        DownloadedVideo, EpisodeNumber, LateDataChecks, PlaybackPosition, QualityProbe, Video,
+        VideoDownloaded, VideoId,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-        DownloadedVideo, FakeVideoDownloaderRepository, QualityProbe,
-    };
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,

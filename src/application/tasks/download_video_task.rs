@@ -40,6 +40,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::services::MetadataGenerator;
+    use crate::domain::video::DownloadedVideo;
     use crate::domain::video::EpisodeNumber;
     use crate::domain::video::LateDataChecks;
     use crate::domain::video::PlaybackPosition;
@@ -67,8 +68,7 @@ mod tests {
         YoutubeMetadataRepository,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-        DownloadedVideo, FakeVideoDownloaderRepository, VideoDownloaderRepository,
-        YtDlpVideoDownloaderRepository,
+        FakeVideoDownloaderRepository, VideoDownloaderRepository, YtDlpVideoDownloaderRepository,
     };
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{

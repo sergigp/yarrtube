@@ -50,7 +50,9 @@ mod tests {
     use crate::domain::show::ShowKey;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::{EpisodeNumber, PlaylistEpisodeNumber, VideoId, VideoRecordId};
+    use crate::domain::video::{
+        EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId, VideoRecordId,
+    };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -97,7 +99,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
     };
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::repositories::youtube_thumbnail_repository::FakeThumbnailRepository;
     use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
@@ -107,7 +109,6 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::video_lock::VideoLock;
-    use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
     use std::path::PathBuf;
@@ -1711,10 +1712,9 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let event_repository = SqliteEventRepository::new(db.database());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_thumbnail_result(Some(fetched_thumbnail())),
-        );
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::with_result(Some(
+            fetched_thumbnail(),
+        )));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
             playlist_repository,
@@ -1793,10 +1793,7 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![]
-        );
+        assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             vec![
