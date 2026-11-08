@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { EllipsisVertical, Check, EyeOff, Tags } from 'lucide-react'
 import {
   DropdownMenu,
@@ -11,7 +10,7 @@ import {
   useMarkVideoWatched,
   useSetPlaylistExcludedFromHome,
 } from '@/api/queries'
-import { VideoCategoriesDialog } from '@/components/VideoCategoriesDialog'
+import { useEditVideoCategories } from '@/hooks/useEditVideoCategories'
 import { errorMessage } from '@/lib/errorMessage'
 import { homeSettingAction } from '@/lib/homeSetting'
 import { cn } from '@/lib/utils'
@@ -45,10 +44,9 @@ export function VideoActionsMenu({
   const markVideoWatched = useMarkVideoWatched()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const categoriesShown = useCategoriesShown()
-  const [editingCategories, setEditingCategories] = useState(false)
+  const editCategories = useEditVideoCategories()
 
   return (
-    <>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
         className={cn(
@@ -92,22 +90,12 @@ export function VideoActionsMenu({
           </DropdownMenuItem>
         )}
         {categoriesShown && (
-          <DropdownMenuItem onSelect={() => setEditingCategories(true)}>
+          <DropdownMenuItem onSelect={() => editCategories({ recordId, title, sourceName })}>
             <Tags />
             Edit categories…
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
-    {editingCategories && (
-      <VideoCategoriesDialog
-        recordId={recordId}
-        title={title}
-        sourceName={sourceName}
-        open
-        onOpenChange={setEditingCategories}
-      />
-    )}
-    </>
   )
 }
