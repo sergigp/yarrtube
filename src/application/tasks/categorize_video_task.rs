@@ -48,7 +48,8 @@ mod tests {
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::SummaryModel;
     use crate::domain::preferences::{
-        CategorizationModel, CategorizationPrompt, CategorizationSettings, Preferences,
+        CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength,
+        Preferences, Temperature,
     };
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
@@ -170,6 +171,41 @@ mod tests {
             vec![VideoCategories::none(video.id.clone())]
         );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_ask_with_the_saved_context_length_temperature_and_thinking() {
+        let db = TestDatabase::new();
+        let llm = llm_replying(vec![reply(YES)]);
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        SqlitePreferencesRepository::new(db.database())
+            .save(&Preferences {
+                categorization: CategorizationSettings {
+                    context_length: ContextLength::new(2048).unwrap(),
+                    temperature: Temperature::new(0.7).unwrap(),
+                    thinking: false,
+                    ..categorization_on().categorization
+                },
+                ..categorization_on()
+            })
+            .unwrap();
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(
+            llm.chats()
+                .into_iter()
+                .map(|chat| (
+                    chat.context_length,
+                    chat.temperature,
+                    chat.thinking,
+                    chat.max_output_tokens
+                ))
+                .collect::<Vec<_>>(),
+            vec![(2048, 0.7, false, 2048)]
+        );
     }
 
     #[test]

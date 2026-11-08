@@ -4,8 +4,6 @@ use crate::domain::preferences::CategorizationSettings;
 use crate::domain::video::{Video, VideoChapter};
 use crate::domain::video_summary::SummaryText;
 
-/// Context of one categorization call: prompts, details and answer fit.
-pub const CONTEXT_LENGTH: u32 = 4096;
 /// Stops runaway thinking loops.
 pub const MAX_OUTPUT_TOKENS: u32 = 3072;
 
@@ -65,10 +63,10 @@ impl CategorizationQuestion {
             model: settings.model.as_str().to_string(),
             system: settings.effective_prompt().as_str().to_string(),
             user: self.user_message(),
-            context_length: CONTEXT_LENGTH,
-            temperature: 0.0,
+            context_length: settings.context_length.value(),
+            temperature: settings.temperature.value(),
             thinking,
-            max_output_tokens: MAX_OUTPUT_TOKENS,
+            max_output_tokens: MAX_OUTPUT_TOKENS.min(settings.context_length.value()),
             format: Some(answer_schema()),
         }
     }

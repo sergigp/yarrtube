@@ -174,12 +174,13 @@ impl VideoCategorizer {
             .find(&video.id)?
             .context("the video has no summary")?;
         let settings = preferences.categorization.clone();
-        let thinking = self
-            .llm_server_repository
-            .find(&url)?
-            .model(settings.model.as_str())
-            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?
-            .thinking;
+        let thinking = settings.thinking
+            && self
+                .llm_server_repository
+                .find(&url)?
+                .model(settings.model.as_str())
+                .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?
+                .thinking;
         let pending = self.pending(video, &owner)?;
         Ok(CategorizationJob {
             preferences,
