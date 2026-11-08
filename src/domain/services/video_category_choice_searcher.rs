@@ -1,7 +1,8 @@
-use crate::domain::category::CategoryMember;
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
-use crate::domain::video::VideoRecordId;
-use crate::domain::video_category::{EditVideoCategoriesError, VideoCategoryChoice};
+use crate::domain::video::{VideoOwner, VideoRecordId};
+use crate::domain::video_category::{
+    EditVideoCategoriesError, VideoCategoryChoice, VideoCategoryChoices,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -33,19 +34,20 @@ impl VideoCategoryChoiceSearcher {
 }
 
 pub trait VideoCategoryChoiceSearcherApi: Send + Sync {
-    /// Every category, name order, as offered for `video_id`.
+    /// Every category, name order, as offered for `video_id`, and whether
+    /// its source has categorization on.
     fn search(
         &self,
         video_id: &VideoRecordId,
-    ) -> Result<Vec<VideoCategoryChoice>, EditVideoCategoriesError>;
+    ) -> Result<VideoCategoryChoices, EditVideoCategoriesError>;
 }
 
 impl VideoCategoryChoiceSearcherApi for VideoCategoryChoiceSearcher {
     fn search(
         &self,
         video_id: &VideoRecordId,
-    ) -> Result<Vec<VideoCategoryChoice>, EditVideoCategoriesError> {
-        let source = self.find_source(video_id)?;
+    ) -> Result<VideoCategoryChoices, EditVideoCategoriesError> {
+        let owner = self.find_owner(video_id)?;
         let categories = self
             .category_repository
             .list()
@@ -54,16 +56,16 @@ impl VideoCategoryChoiceSearcherApi for VideoCategoryChoiceSearcher {
             .video_category_verdict_repository
             .find_many(std::slice::from_ref(video_id))
             .map_err(EditVideoCategoriesError::Repository)?;
-        Ok(VideoCategoryChoice::list(&categories, &source, &verdicts))
+        Ok(VideoCategoryChoices {
+            choices: VideoCategoryChoice::list(&categories, &owner.source, &verdicts),
+            categorization_enabled: owner.categorization_enabled,
+        })
     }
 }
 
 impl VideoCategoryChoiceSearcher {
     /// The channel or playlist holding the stored `video_id`.
-    fn find_source(
-        &self,
-        video_id: &VideoRecordId,
-    ) -> Result<CategoryMember, EditVideoCategoriesError> {
+    fn find_owner(&self, video_id: &VideoRecordId) -> Result<VideoOwner, EditVideoCategoriesError> {
         let video = self
             .video_repository
             .find(video_id)
@@ -72,7 +74,6 @@ impl VideoCategoryChoiceSearcher {
         self.video_owner_finder
             .find(&video)
             .map_err(EditVideoCategoriesError::Repository)?
-            .map(|owner| owner.source)
             .ok_or(EditVideoCategoriesError::VideoNotFound)
     }
 }

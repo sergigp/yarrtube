@@ -6286,6 +6286,7 @@ mod tests {
         assert_eq!(
             response,
             Ok(VideoCategoriesResponse {
+                categorization_enabled: false,
                 categories: vec![
                     choice_response(&chess, true, Some("source"), None),
                     choice_response(&funny, true, Some("user"), Some("yes")),
@@ -6325,7 +6326,35 @@ mod tests {
         assert_eq!(
             response,
             Ok(VideoCategoriesResponse {
+                categorization_enabled: false,
                 categories: vec![choice_response(&chess, true, Some("source"), Some("no"))],
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_say_whether_the_videos_source_has_categorization_on() {
+        let db = TestDatabase::new();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess", None).with_categorization_enabled(true))
+            .unwrap();
+        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+            0,
+        );
+
+        let response =
+            list_categories_of(video_category_choice_searcher(&db), video.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(VideoCategoriesResponse {
+                categorization_enabled: true,
+                categories: vec![],
             })
         );
     }
@@ -6373,6 +6402,7 @@ mod tests {
         assert_eq!(
             response,
             Ok(VideoCategoriesResponse {
+                categorization_enabled: false,
                 categories: vec![choice_response(&sicilian, true, Some("user"), Some("yes"))],
             })
         );
@@ -6437,6 +6467,7 @@ mod tests {
         assert_eq!(
             response,
             Ok(VideoCategoriesResponse {
+                categorization_enabled: false,
                 categories: vec![choice_response(&food, false, Some("user"), Some("no"))],
             })
         );

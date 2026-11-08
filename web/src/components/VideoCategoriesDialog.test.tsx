@@ -47,7 +47,7 @@ const sicilian = aVideoCategoryChoice({
 })
 
 function categoriesOf(...categories: VideoCategoryChoice[]) {
-  return { categories }
+  return { categorization_enabled: true, categories }
 }
 
 /** The bodies sent with `method`, in order. */

@@ -352,5 +352,7 @@ export interface VideoCategoryChoice {
 
 /** Response of `GET /api/videos/:record_id/categories`, in name order. */
 export interface VideoCategories {
+  /** Whether the video's channel or playlist has AI categorization on. */
+  categorization_enabled: boolean
   categories: VideoCategoryChoice[]
 }

@@ -1,4 +1,4 @@
-use crate::domain::video_category::VideoCategoryChoice;
+use crate::domain::video_category::{VideoCategoryChoice, VideoCategoryChoices};
 use serde::{Deserialize, Serialize};
 
 pub const INVALID_BELONGS: &str = "belongs must be true or false";
@@ -22,6 +22,7 @@ pub struct VideoCategoryChoiceResponse {
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct VideoCategoriesResponse {
+    pub categorization_enabled: bool,
     pub categories: Vec<VideoCategoryChoiceResponse>,
 }
 
@@ -40,10 +41,12 @@ impl From<VideoCategoryChoice> for VideoCategoryChoiceResponse {
     }
 }
 
-impl From<Vec<VideoCategoryChoice>> for VideoCategoriesResponse {
-    fn from(choices: Vec<VideoCategoryChoice>) -> Self {
+impl From<VideoCategoryChoices> for VideoCategoriesResponse {
+    fn from(choices: VideoCategoryChoices) -> Self {
         Self {
+            categorization_enabled: choices.categorization_enabled,
             categories: choices
+                .choices
                 .into_iter()
                 .map(VideoCategoryChoiceResponse::from)
                 .collect(),

@@ -55,7 +55,7 @@
 
 - [x] 5.1 `it_should_not_override_a_user_verdict_set_during_its_call`, `it_should_not_store_an_answer_to_a_prompt_changed_during_its_call`: `VideoCategorizer::still_pending` guards `evaluate` and `give_up`
 - [x] 5.2 `CategorySettingsDialog`: keeps re-evaluate disabled while the prompt has unsaved edits
-- [ ] 5.3 `it_should_say_whether_the_videos_source_has_categorization_on`: `VideoCategoryChoices`, `categorization_enabled` on `GET /api/videos/{id}/categories` and the PUT response; web type and the dialog fixtures in `web/src/test/helpers.tsx`
+- [x] 5.3 `it_should_say_whether_the_videos_source_has_categorization_on`: `VideoCategoryChoices`, `categorization_enabled` on `GET /api/videos/{id}/categories` and the PUT response; web type and the dialog fixtures in `web/src/test/helpers.tsx`
 - [ ] 5.4 `VideoCategoriesDialog`: offers Clear AI categories when the source has categorization off
 - [ ] 5.5 Update `doc/AI.md` and `doc/CATEGORIES.md`: the per-video button clears when the source is off; an answer in flight never overrides a hand edit or a changed prompt; re-evaluate needs the prompt saved
 - [ ] 5.6 `scripts/run-tests.sh --only web --only rust` passes
