@@ -1,7 +1,7 @@
 use crate::domain::services::{VideoReconciler, VideoReconcilerApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Syncs one stored video: brings it to its desired state and schedules
 /// whichever of its steps it still needs (`VideoReconciler`). Scheduled by
@@ -18,8 +18,11 @@ impl SyncVideoTask {
 }
 
 impl TaskHandler for SyncVideoTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let video_id = VideoRecordId::new(Task::decode_sync_video_payload(payload)?)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::SyncVideo { video_id } = task else {
+            return Err(unexpected_task(task));
+        };
+        let video_id = VideoRecordId::new(video_id.clone())?;
         self.video_reconciler.reconcile(&video_id)
     }
 }
@@ -158,7 +161,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -233,7 +236,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -306,7 +309,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -375,7 +378,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -444,7 +447,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -502,7 +505,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -572,7 +575,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -641,7 +644,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -712,7 +715,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -774,7 +777,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -836,7 +839,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -897,7 +900,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -955,7 +958,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -1010,7 +1013,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1071,7 +1074,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1126,7 +1129,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -1195,7 +1198,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1291,7 +1294,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1377,7 +1380,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1461,7 +1464,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1509,7 +1512,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&my_video()));
+        let result = run(&task, &task_for(&my_video()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -1554,7 +1557,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -1606,7 +1609,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1683,7 +1686,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1767,7 +1770,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1831,7 +1834,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1895,7 +1898,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -1956,7 +1959,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2045,7 +2048,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2155,7 +2158,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2225,7 +2228,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2321,7 +2324,7 @@ mod tests {
             video_categorizer(db.database()),
         ));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -2376,7 +2379,7 @@ mod tests {
         ));
 
         let mut result = Err(String::new());
-        let logs = captured_log_messages(|| result = run(&task, &payload_for(&video)));
+        let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -2436,7 +2439,7 @@ mod tests {
         ));
 
         let mut result = Err(String::new());
-        let logs = captured_log_messages(|| result = run(&task, &payload_for(&video)));
+        let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -2501,7 +2504,7 @@ mod tests {
         ));
 
         let mut result = Err(String::new());
-        let logs = captured_log_messages(|| result = run(&task, &payload_for(&video)));
+        let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -2562,7 +2565,7 @@ mod tests {
         ));
 
         let mut result = Err(String::new());
-        let logs = captured_log_messages(|| result = run(&task, &payload_for(&video)));
+        let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2598,7 +2601,7 @@ mod tests {
             preferences_repository,
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2627,7 +2630,7 @@ mod tests {
             preferences_repository,
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -2666,7 +2669,7 @@ mod tests {
                 preferences_repository,
             );
 
-            run(&task, &payload_for(&video)).unwrap();
+            run(&task, &task_for(&video)).unwrap();
 
             task_repository.list_non_completed().unwrap()
         });
@@ -2700,7 +2703,7 @@ mod tests {
                 preferences_repository,
             );
 
-            run(&task, &payload_for(&video)).unwrap();
+            run(&task, &task_for(&video)).unwrap();
 
             task_repository.list_non_completed().unwrap()
         });
@@ -2735,7 +2738,7 @@ mod tests {
                 preferences_repository,
             );
 
-            run(&task, &payload_for(&video)).unwrap();
+            run(&task, &task_for(&video)).unwrap();
 
             task_repository.list_non_completed().unwrap()
         });
@@ -2766,7 +2769,7 @@ mod tests {
             preferences_repository,
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2803,7 +2806,7 @@ mod tests {
                 preferences_repository,
             );
 
-            run(&task, &payload_for(&video)).unwrap();
+            run(&task, &task_for(&video)).unwrap();
 
             task_repository.list_non_completed().unwrap()
         });
@@ -2834,7 +2837,7 @@ mod tests {
             preferences_repository,
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -2880,7 +2883,7 @@ mod tests {
                 preferences_repository,
             );
 
-            run(&task, &payload_for(&video)).unwrap();
+            run(&task, &task_for(&video)).unwrap();
 
             task_repository.list_non_completed().unwrap()
         });
@@ -2922,7 +2925,7 @@ mod tests {
             preferences_repository,
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -2955,7 +2958,7 @@ mod tests {
             preferences_repository,
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
@@ -2987,7 +2990,7 @@ mod tests {
             preferences_repository,
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -3283,12 +3286,10 @@ mod tests {
         }
     }
 
-    fn payload_for(video: &Video) -> String {
+    fn task_for(video: &Video) -> Task {
         Task::SyncVideo {
             video_id: video.id.as_str().to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     /// The download `my_channel()` wants for `video`.
@@ -3329,8 +3330,7 @@ mod tests {
     fn pending_task(id: i64, task: &Task) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at: fixed_timestamp(),
@@ -3348,8 +3348,8 @@ mod tests {
         fixed_timestamp() - Duration::hours(24)
     }
 
-    fn run(task: &SyncVideoTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &SyncVideoTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 
     fn video_category_assigner(database: Database) -> VideoCategoryAssigner {

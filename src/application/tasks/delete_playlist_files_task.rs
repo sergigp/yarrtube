@@ -1,7 +1,7 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Recursively deletes a deleted playlist's output directory, scheduled by
 /// `subscribers::delete_playlist_files_on_playlist_deleted` whenever a
@@ -17,13 +17,15 @@ impl DeletePlaylistFilesTask {
 }
 
 impl TaskHandler for DeletePlaylistFilesTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (playlist_id, path) = Task::decode_delete_playlist_files_payload(payload)?;
-        let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::DeletePlaylistFiles { playlist_id, path } = task else {
+            return Err(unexpected_task(task));
+        };
+        let Ok(playlist_id) = PlaylistId::new(playlist_id.clone()) else {
             return Ok(());
         };
         self.video_file_deleter
-            .delete_playlist_video_files(playlist_id, path)
+            .delete_playlist_video_files(playlist_id, path.clone())
     }
 }
 
@@ -42,7 +44,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for("PL1", "music/chill"));
+        let result = run(&task, &task_for("PL1", "music/chill"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -59,7 +61,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for("", "music/chill"));
+        let result = run(&task, &task_for("", "music/chill"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -69,21 +71,18 @@ mod tests {
     }
 
     #[test]
-    fn it_should_reject_a_malformed_payload() {
+    fn it_should_fail_if_handed_another_task() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = DeletePlaylistFilesTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
             "/videos",
         ));
 
-        let result = run(&task, "not json");
+        let result = run(&task, &Task::UpdateYtdlp);
 
         assert_eq!(
             result,
-            Err(
-                "invalid delete_playlist_files payload: expected ident at line 1 column 2"
-                    .to_string()
-            )
+            Err("unexpected update_ytdlp task for this handler".to_string())
         );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
@@ -91,16 +90,14 @@ mod tests {
         );
     }
 
-    fn payload_for(playlist_id: &str, path: &str) -> String {
+    fn task_for(playlist_id: &str, path: &str) -> Task {
         Task::DeletePlaylistFiles {
             playlist_id: playlist_id.to_string(),
             path: path.to_string(),
         }
-        .payload()
-        .to_string()
     }
 
-    fn run(task: &DeletePlaylistFilesTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &DeletePlaylistFilesTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

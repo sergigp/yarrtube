@@ -1,4 +1,3 @@
-pub mod errors;
 pub mod scheduled_task;
 #[allow(clippy::module_inception)]
 pub mod task;

@@ -2,7 +2,6 @@ use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistPath};
 use crate::domain::show::{MoveShowError, ShowKey, ShowMoved, has_work_in_progress};
-use crate::domain::task::ScheduledTask;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -243,7 +242,7 @@ impl ShowMover {
             .map_err(MoveShowError::Repository)?;
         Ok(tasks
             .iter()
-            .filter_map(ScheduledTask::deleted_path)
+            .filter_map(|task| task.task.deleted_path().map(str::to_string))
             .chain(events.iter().filter_map(ScheduledEvent::deleted_path))
             .filter_map(|path| PlaylistPath::new(path).ok())
             .collect())

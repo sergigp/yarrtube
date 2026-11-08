@@ -37,7 +37,7 @@ mod tests {
     use super::*;
     use crate::domain::plex_label::EpisodeLabels;
     use crate::domain::services::VideoOwnerFinder;
-    use crate::domain::task::{ScheduledTask, TaskStatus};
+    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
     use crate::infrastructure::repositories::sqlite_category_playlist_repository::SqliteCategoryPlaylistRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
@@ -123,8 +123,7 @@ mod tests {
     fn pending_sync(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: "sync_plex_labels".to_string(),
-            payload: "{}".to_string(),
+            task: Task::SyncPlexLabels,
             status: TaskStatus::Pending,
             retries: 0,
             run_at,

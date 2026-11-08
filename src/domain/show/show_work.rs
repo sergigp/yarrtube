@@ -1,5 +1,5 @@
 use crate::domain::event::ScheduledEvent;
-use crate::domain::task::ScheduledTask;
+use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::Video;
 use std::path::Path;
 
@@ -20,10 +20,10 @@ pub fn has_work_in_progress(
     videos.iter().any(|video| !video.is_download_settled())
         || tasks
             .iter()
-            .any(|task| task.output_dir().is_some_and(|dir| dir == show_dir))
+            .any(|task| task.task.output_dir().is_some_and(|dir| dir == show_dir))
         || tasks.iter().any(|task| {
-            task.sync_video_id()
-                .is_some_and(|id| videos.iter().any(|video| video.id.as_str() == id))
+            matches!(&task.task, Task::SyncVideo { video_id }
+                if videos.iter().any(|video| video.id.as_str() == video_id))
         })
         || events
             .iter()
