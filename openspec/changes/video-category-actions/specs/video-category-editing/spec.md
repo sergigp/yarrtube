@@ -14,7 +14,7 @@ Every video in the channel, playlist, category, home and search listings SHALL i
 - **THEN** the channel's and the playlist's listings show the same `id` and different `record_id`s
 
 ### Requirement: Read A Video's Categories
-The daemon SHALL provide `GET /api/videos/{id}/categories` for a stored video copy, responding with HTTP status 200 and every category in name order, each with `id`, `name`, `color`, `belongs` (whether the video belongs to it), `from` (`source`, `ai`, `user`, or `null` when it has no verdict and the source isn't a member) and `verdict` (`yes`, `no`, `unavailable` or `null`). `from` SHALL be `source` whenever the source is a member, whatever the verdict. An unknown video SHALL get HTTP status 404.
+The daemon SHALL provide `GET /api/videos/{id}/categories` for a stored video copy, responding with HTTP status 200, `categorization_enabled` (whether the video's channel or playlist has categorization on) and every category in name order, each with `id`, `name`, `color`, `belongs` (whether the video belongs to it), `from` (`source`, `ai`, `user`, or `null` when it has no verdict and the source isn't a member) and `verdict` (`yes`, `no`, `unavailable` or `null`). `from` SHALL be `source` whenever the source is a member, whatever the verdict. An unknown video SHALL get HTTP status 404.
 
 #### Scenario: Categories from every origin
 - **WHEN** a video of "@GothamChess", a member of "Chess", has an AI `yes` for "Sicilian", an AI `no` for "Tech", a user `yes` for "Funny", and no verdict for "Politics"
@@ -47,11 +47,15 @@ Setting a category by hand SHALL change nothing when the video's playlist or cha
 - **THEN** nothing changes and the response is a 400 with `belongs must be true or false`
 
 ### Requirement: User Verdicts Are Never Overridden By The AI
-A pair with a user verdict SHALL NOT be evaluated by the AI, and SHALL keep its verdict through every re-run and clear.
+A pair with a user verdict SHALL NOT be evaluated by the AI, and SHALL keep its verdict through every re-run and clear. An AI answer SHALL NOT be stored for a pair the user decided while the model was being asked.
 
 #### Scenario: User verdict before the AI got to it
 - **WHEN** a video has a user `yes` for "Tech" and no other verdict, and its categorization runs
 - **THEN** the model is not asked about "Tech"
+
+#### Scenario: User verdict set while the AI is asking
+- **WHEN** the model is being asked about "Tech" for a video and the user sets "Tech" for it meanwhile
+- **THEN** the model's answer is not stored and the user's verdict stays
 
 #### Scenario: Re-run keeps user verdicts
 - **WHEN** a video has a user `no` for "Food for thought" and its AI verdicts are re-run
@@ -81,6 +85,10 @@ A pair with a user verdict SHALL NOT be evaluated by the AI, and SHALL keep its 
 #### Scenario: Prompt edited then re-evaluated
 - **WHEN** "Food for thought"'s prompt is edited, 40 videos have AI verdicts for it, and a client re-evaluates it
 - **THEN** those 40 verdicts are deleted, the videos' AI membership of it goes, and their syncs are scheduled
+
+#### Scenario: Prompt changed while the AI is asking
+- **WHEN** the model is being asked about "Food for thought" for a video and its prompt or the categorization settings change before it answers
+- **THEN** the answer is not stored and the pair stays pending, to be asked with the new prompt
 
 ### Requirement: Verdict Changes Announced
 Storing a user verdict and deleting AI verdicts SHALL publish one video-categories-changed event per request naming every video whose categories changed, and nothing when none did.

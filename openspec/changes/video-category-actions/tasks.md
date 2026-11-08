@@ -51,6 +51,15 @@
 - [x] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed via the HTTP API a channel in "Chess", a category "Sicilian" with a prompt and a video with an AI `yes` verdict for it (insert the verdict in SQLite); with Playwright open the video's "⋮" → "Edit categories…", assert "Chess" is locked with "From …", "Sicilian" has the AI mark, click it and assert the PUT and the outlined chip; use "Clear AI categories" from the channel menu and assert the DELETE and the confirmation; open the category settings and assert "Re-evaluate N videos"; take screenshots; then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir
 - [ ] 4.4 Manual (human): judge the dialog's look on desktop and phone widths (chip states readable, AI mark and lock clear), and that Plex labels follow a hand edit
 
+## 5. Audit follow-ups
+
+- [x] 5.1 `it_should_not_override_a_user_verdict_set_during_its_call`, `it_should_not_store_an_answer_to_a_prompt_changed_during_its_call`: `VideoCategorizer::still_pending` guards `evaluate` and `give_up`
+- [x] 5.2 `CategorySettingsDialog`: keeps re-evaluate disabled while the prompt has unsaved edits
+- [ ] 5.3 `it_should_say_whether_the_videos_source_has_categorization_on`: `VideoCategoryChoices`, `categorization_enabled` on `GET /api/videos/{id}/categories` and the PUT response; web type and the dialog fixtures in `web/src/test/helpers.tsx`
+- [ ] 5.4 `VideoCategoriesDialog`: offers Clear AI categories when the source has categorization off
+- [ ] 5.5 Update `doc/AI.md` and `doc/CATEGORIES.md`: the per-video button clears when the source is off; an answer in flight never overrides a hand edit or a changed prompt; re-evaluate needs the prompt saved
+- [ ] 5.6 `scripts/run-tests.sh --only web --only rust` passes
+
 ## Workflow follow-up
 
 - Archive `categorize-videos-on-reconcile` before applying this change, so `video-categorization` and the verdict repository exist.
