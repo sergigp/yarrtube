@@ -1,7 +1,13 @@
 import { useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ListVideo, Plus, Search, X } from 'lucide-react'
-import { avatarMediaUrl, createCategory, setCategoryMembers, updateCategory } from '@/api/client'
+import { Check, ListVideo, Plus, RotateCcw, Search, X } from 'lucide-react'
+import {
+  avatarMediaUrl,
+  createCategory,
+  deleteCategoryAiVerdicts,
+  setCategoryMembers,
+  updateCategory,
+} from '@/api/client'
 import {
   useCategories,
   useCategorizationAvailable,
@@ -89,6 +95,9 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
   const [detailsSaved, setDetailsSaved] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<SourceFilter>('all')
+  const [confirmingReevaluate, setConfirmingReevaluate] = useState(false)
+  const reevaluated = category?.ai_verdict_count ?? 0
+  const reevaluatedVideos = reevaluated === 1 ? '1 video' : `${reevaluated} videos`
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -107,6 +116,7 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
     { withPrompt },
   )
   const detailsChanged = Object.keys(details).length > 0
+  const promptChanged = 'ai_prompt' in details
   const dirty = sourcesChanged || detailsChanged
   const categoryName = category?.name ?? 'this category'
   const canSave = name.trim() !== '' && (!category || dirty) && !saving
@@ -258,6 +268,27 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
               <p id="category-ai-prompt-hint" className="text-xs text-muted-foreground">
                 Describe the videos that belong in this category.
               </p>
+              {reevaluated > 0 && (
+                // An unsaved prompt would be ignored: the AI asks with the saved one.
+                <div className="flex flex-col gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    disabled={promptChanged}
+                    onClick={() => setConfirmingReevaluate(true)}
+                  >
+                    <RotateCcw />
+                    Re-evaluate {reevaluatedVideos}
+                  </Button>
+                  {promptChanged && (
+                    <p className="text-xs text-muted-foreground">
+                      Save the prompt first to re-evaluate with it.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-border bg-popover px-6 pb-4">
@@ -326,6 +357,20 @@ function CategoryDialogContent({ category, onClose }: { category?: Category; onC
           </Button>
         </div>
       </form>
+      {category && (
+        <ConfirmDialog
+          open={confirmingReevaluate}
+          onOpenChange={setConfirmingReevaluate}
+          title={`Re-evaluate ${reevaluatedVideos}?`}
+          description={`The AI will evaluate ${reevaluated === 1 ? 'this video' : `these ${reevaluatedVideos}`} for ${category.name} again. Categories you set by hand stay.`}
+          confirmLabel="Re-evaluate"
+          pendingLabel="Re-evaluating…"
+          onConfirm={async () => {
+            await deleteCategoryAiVerdicts(category.id)
+            await invalidateLibrary()
+          }}
+        />
+      )}
       <ConfirmDialog
         open={confirmingDiscard}
         onOpenChange={setConfirmingDiscard}

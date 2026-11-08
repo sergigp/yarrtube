@@ -13,7 +13,8 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdate,
     CategoryUpdater, CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi,
-    VideoCategoryEditor, VideoCategoryEditorApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    NewCategory, VideoCategoryEditor, VideoCategoryEditorApi, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -374,6 +375,8 @@ mod tests {
             &video,
         );
         let video_category_assigner = VideoCategoryAssigner::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             video_categories_repository.clone(),
             repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),

@@ -2578,3 +2578,14 @@ The category settings dialog SHALL show "Re-evaluate <N> videos" below the AI pr
 #### Scenario: Unsaved prompt
 - **WHEN** "Food for thought" has `ai_verdict_count` 40 and the user edits its prompt without saving
 - **THEN** "Re-evaluate 40 videos" is disabled and "Save the prompt first to re-evaluate with it." is shown
+
+### Requirement: Category Prompt Guide
+A "?" control with the accessible name "About AI prompt" SHALL sit next to the "AI prompt" label and open, on click or tap, a guide to writing the prompt, with a good example, bad examples with the reason each is bad, and tips. Opening or closing it SHALL NOT stage a change or close the dialog.
+
+#### Scenario: Opening the guide
+- **WHEN** a user activates "About AI prompt"
+- **THEN** the guide shows a good example saying what the video is about with "Belongs:" and "Does not belong:", bad examples with their reasons, and the tips: name what is close but doesn't belong, use words a title, chapter or summary would contain, and say whether one part of a video is enough
+
+#### Scenario: Closing the guide
+- **WHEN** a user with a staged change opens the guide and presses Escape
+- **THEN** the guide closes, the dialog stays open and nothing is lost
