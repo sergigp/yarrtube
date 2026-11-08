@@ -29,8 +29,11 @@ export async function addPlaylist(request, playlist, { downloaded = true } = {})
   return { id, name, path, videos }
 }
 
-/** As `addPlaylist`, for the fake-YouTube channel's `videoLimit` newest videos. */
-export async function addChannel(request, channel, { videoLimit, downloaded = true }) {
+/**
+ * As `addPlaylist`, for the fake-YouTube channel's `videoLimit` newest videos;
+ * `ai` turns its summaries and categorization on.
+ */
+export async function addChannel(request, channel, { videoLimit, downloaded = true, ai = false }) {
   const created = await request.post('/api/channels', {
     data: {
       channel: channel.handle,
@@ -38,8 +41,8 @@ export async function addChannel(request, channel, { videoLimit, downloaded = tr
       video_limit: videoLimit,
       path: `channels/${slugOf(channel.handle)}`,
       reconcile_interval_minutes: 180,
-      summaries_enabled: false,
-      categorization_enabled: false,
+      summaries_enabled: ai,
+      categorization_enabled: ai,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()

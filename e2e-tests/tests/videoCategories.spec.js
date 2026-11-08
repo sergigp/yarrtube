@@ -1,6 +1,7 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { addChannel, addPlaylist } from '../helpers/seed.js'
 import { CHANNEL, PLAYLIST } from '../helpers/fakeYoutube.js'
+import { STUB_SUMMARY } from '../ollama-stub.js'
 
 /** Creates a category named `name` holding `members`, returning its id. */
 async function addCategory(request, name, members) {
@@ -121,5 +122,77 @@ test.describe('with a channel in "Chess" and a "Sicilian" category', () => {
         await expect(confirmation).toBeHidden()
       })
     }
+  })
+})
+
+test('the AI fits a video into a category, and re-evaluating the category clears its verdicts', async ({
+  page,
+  request,
+  daemon,
+}) => {
+  const preferences = await request.patch('/api/preferences', {
+    data: {
+      ai_enabled: true,
+      ollama_url: daemon.ollamaUrl,
+      summaries_enabled: true,
+      summaries_model: 'gemma3:4b',
+      categorization_enabled: true,
+      categorization_model: 'gemma3:4b',
+    },
+  })
+  expect(preferences.ok(), await preferences.text()).toBeTruthy()
+  const openingsId = await addCategory(request, 'Openings', { channels: [], playlists: [] })
+  const prompt = await request.patch(`/api/categories/${openingsId}`, {
+    data: { ai_prompt: 'Videos about chess openings.' },
+  })
+  expect(prompt.ok(), await prompt.text()).toBeTruthy()
+  const channel = await addChannel(request, CHANNEL, { videoLimit: 1, ai: true })
+  const [{ title }] = channel.videos
+  const videosUrl = `/api/channels/${encodeURIComponent(channel.handle)}/videos`
+  await expect
+    .poll(async () => (await (await request.get(videosUrl)).json())[0].summary, {
+      message: 'the stub summarized the video',
+      timeout: 30_000,
+    })
+    .toBe(STUB_SUMMARY)
+  // A new summary waits for the video's next sync to be categorized: re-running
+  // the channel's AI categorization reconciles it now. The stub fits the video
+  // into every category.
+  const rerun = await request.delete(`/api/channels/${encodeURIComponent(channel.handle)}/ai-verdicts`)
+  expect(rerun.ok(), await rerun.text()).toBeTruthy()
+  await expect
+    .poll(
+      async () => {
+        const { categories } = await (await request.get('/api/categories')).json()
+        return categories.find((category) => category.id === openingsId)?.ai_verdict_count
+      },
+      { message: 'the AI decided on Openings', timeout: 30_000 },
+    )
+    .toBe(1)
+
+  await test.step('the video\'s dialog marks "Openings" as decided by the AI', async () => {
+    await page.goto(`/channels/${encodeURIComponent(channel.handle)}`)
+    const dialog = await openEditCategories(page, title)
+    await expect(dialog.getByRole('button', { name: 'Openings, decided by AI' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+  })
+
+  await test.step('re-evaluating "Openings" from its settings clears the AI\'s verdict', async () => {
+    await page.goto(`/categories/${encodeURIComponent(openingsId)}`)
+    await page.getByRole('button', { name: 'Edit settings' }).click()
+    await page.getByRole('button', { name: 'Re-evaluate 1 video' }).click()
+    const confirmation = page.getByRole('dialog', { name: 'Re-evaluate 1 video?' })
+    const deleted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' &&
+        response.url().endsWith(`/api/categories/${openingsId}/ai-verdicts`),
+    )
+    await confirmation.getByRole('button', { name: 'Re-evaluate', exact: true }).click()
+    expect((await deleted).status()).toBe(204)
+    await expect(confirmation).toBeHidden()
   })
 })

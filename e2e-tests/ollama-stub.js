@@ -1,9 +1,12 @@
 // A stand-in Ollama server for the end-to-end suite: answers the requests
 // yarrtube makes to check a server (version, installed models, each model's
-// capabilities). qwen3:4b can think, gemma3:4b can't.
+// capabilities) and its chats. qwen3:4b can think, gemma3:4b can't.
 import { createServer } from 'node:http'
 
 export const OLLAMA_VERSION = '0.40.13'
+
+/** What every summary chat answers. */
+export const STUB_SUMMARY = 'A chess video.'
 
 const MODELS = [
   { name: 'qwen3:4b', size: 2497293918, capabilities: ['completion', 'thinking'] },
@@ -28,6 +31,9 @@ export function startOllamaStub(port) {
           : res.writeHead(404).end()
       })
     }
+    if (req.method === 'POST' && pathname === '/api/chat') {
+      return readJson(req).then((chat) => json(res, chatReply(chat)))
+    }
     res.writeHead(404).end()
   })
   return new Promise((resolve) => {
@@ -35,6 +41,17 @@ export function startOllamaStub(port) {
       resolve({ port, close: () => new Promise((done) => server.close(done)) }),
     )
   })
+}
+
+/**
+ * A categorization chat (it asks for a JSON `format`) always fits the
+ * category; any other chat is a summary.
+ */
+function chatReply({ format }) {
+  const content = format
+    ? JSON.stringify({ reason: 'The stub says every video fits.', belongs: true })
+    : STUB_SUMMARY
+  return { message: { role: 'assistant', content }, prompt_eval_count: 100, done_reason: 'stop' }
 }
 
 function readJson(req) {

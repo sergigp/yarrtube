@@ -47,7 +47,7 @@
 ## 4. Verification
 
 - [x] 4.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests)
-- [ ] 4.2 `scripts/run-tests.sh --only e2e` passes (new `videoCategories.spec.js`)
+- [x] 4.2 `scripts/run-tests.sh --only e2e` passes (new `videoCategories.spec.js`)
 - [x] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed via the HTTP API a channel in "Chess", a category "Sicilian" with a prompt and a video with an AI `yes` verdict for it (insert the verdict in SQLite); with Playwright open the video's "⋮" → "Edit categories…", assert "Chess" is locked with "From …", "Sicilian" has the AI mark, click it and assert the PUT and the outlined chip; use "Clear AI categories" from the channel menu and assert the DELETE and the confirmation; open the category settings and assert "Re-evaluate N videos"; take screenshots; then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir
 - [ ] 4.4 Manual (human): judge the dialog's look on desktop and phone widths (chip states readable, AI mark and lock clear), and that Plex labels follow a hand edit
 
