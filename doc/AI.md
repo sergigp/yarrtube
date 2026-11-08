@@ -135,8 +135,10 @@ spec: decisions here feed OpenSpec changes later.
   category name and AI prompt as user message. Temperature 0, context 4096,
   at most 3072 output tokens (stops runaway thinking), the answer's JSON
   schema as `format`, and thinking when the model supports it. Each verdict is
-  stored as it comes, unless its category was deleted or its video removed
-  meanwhile.
+  stored as it comes, unless meanwhile its category was deleted, its video
+  removed, the user set that pair by hand, or the categorization settings or
+  the category's AI prompt changed: then the answer is dropped and the pair
+  stays pending, asked again with the new prompt.
 - The answer is read after the last `</think>`: a JSON object with a boolean
   `belongs` and a `reason`.
 - A rejected call (unusable answer, output limit hit, refused, past the
@@ -164,7 +166,11 @@ spec: decisions here feed OpenSpec changes later.
   /api/{channels,playlists}/{id}/ai-verdicts`, then its reconcile pass) and per
   category (`DELETE /api/categories/{id}/ai-verdicts`, then each affected
   video's sync). With categorization off nothing is asked again, so it just
-  clears. `GET /api/categories` reports each category's `ai_verdict_count`.
+  clears: the video dialog and the source menu then read **Clear AI
+  categories** (`GET /api/videos/{record_id}/categories` reports the source's
+  `categorization_enabled`). **Re-evaluate** in a category's settings is
+  disabled while its prompt has unsaved edits, since the AI asks with the
+  saved one. `GET /api/categories` reports each category's `ai_verdict_count`.
 - Each verdict is logged at info level with the video, category, verdict,
   reason, tokens and duration; skips at info, rejected calls at error.
 

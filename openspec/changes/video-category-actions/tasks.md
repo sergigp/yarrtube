@@ -57,7 +57,7 @@
 - [x] 5.2 `CategorySettingsDialog`: keeps re-evaluate disabled while the prompt has unsaved edits
 - [x] 5.3 `it_should_say_whether_the_videos_source_has_categorization_on`: `VideoCategoryChoices`, `categorization_enabled` on `GET /api/videos/{id}/categories` and the PUT response; web type and the dialog fixtures in `web/src/test/helpers.tsx`
 - [x] 5.4 `VideoCategoriesDialog`: offers Clear AI categories when the source has categorization off
-- [ ] 5.5 Update `doc/AI.md` and `doc/CATEGORIES.md`: the per-video button clears when the source is off; an answer in flight never overrides a hand edit or a changed prompt; re-evaluate needs the prompt saved
+- [x] 5.5 Update `doc/AI.md` and `doc/CATEGORIES.md`: the per-video button clears when the source is off; an answer in flight never overrides a hand edit or a changed prompt; re-evaluate needs the prompt saved
 - [ ] 5.6 `scripts/run-tests.sh --only web --only rust` passes
 
 ## Workflow follow-up

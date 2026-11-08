@@ -37,7 +37,8 @@ category or take it out.
 - A chip marked **AI** was decided by the AI (see below). Clicking it replaces
   the AI's answer with yours.
 - What you set by hand is never changed by the AI, nor by any **Re-run AI**
-  or **Clear AI categories**.
+  or **Clear AI categories**, even when you set it while the AI is still
+  answering for that video.
 
 ## Let AI fill them
 
@@ -62,13 +63,15 @@ shows its AI categories some time after it appears.
 To ask the AI again, deleting its answers (not yours) so the categories it
 gave go at once:
 
-- **One video**: **Re-run AI** in its **Edit categories…** dialog.
+- **One video**: **Re-run AI** in its **Edit categories…** dialog. With its
+  source's categorization off it reads **Clear AI categories**.
 - **A channel or playlist**: **Re-run AI categorization** in its page's **⋮**
   menu. With categorization off, for that source or in **Settings → AI**, it
   reads **Clear AI categories**: the AI categories go and nothing is asked
   again.
 - **A category**, e.g. after editing its prompt: **Re-evaluate N videos** in
-  its **Edit settings**, below the AI prompt.
+  its **Edit settings**, below the AI prompt. Save the prompt first: the
+  button waits for it, since the AI asks with the saved prompt.
 
 The videos are synced straight away, so the AI asks again within minutes when
 categorization is on.
