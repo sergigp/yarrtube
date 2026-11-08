@@ -1,7 +1,5 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::video::{
-    EpisodePaths, LateDataOutcome, Video, VideoSubtitlesFetched, subtitle_staging_dir,
-};
+use crate::domain::video::{EpisodePaths, LateDataOutcome, Video, VideoSubtitlesFetched};
 use crate::domain::video_transcript::{CaptionTrack, TranscriptText, VideoTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -10,6 +8,7 @@ use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     CaptionProbe, VideoDownloaderRepository,
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::staging_area::StagingArea;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::path::Path;
@@ -28,7 +27,7 @@ pub struct SubtitleFetcher {
     video_file_repository: Arc<dyn VideoFileRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
-    videos_path: String,
+    staging_area: Arc<StagingArea>,
 }
 
 impl SubtitleFetcher {
@@ -40,7 +39,7 @@ impl SubtitleFetcher {
         video_file_repository: Arc<dyn VideoFileRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
-        videos_path: impl Into<String>,
+        staging_area: Arc<StagingArea>,
     ) -> Self {
         Self {
             video_repository,
@@ -49,7 +48,7 @@ impl SubtitleFetcher {
             video_file_repository,
             event_publisher,
             clock,
-            videos_path: videos_path.into(),
+            staging_area,
         }
     }
 }
@@ -71,28 +70,30 @@ impl SubtitleFetcherApi for SubtitleFetcher {
         if !video.is_subtitle_fetchable() {
             return;
         }
-        if let Err(e) = self.fetch_and_place(video, output_dir) {
+        let staged = self.staging_area.for_subtitles(&video.id);
+        if let Err(e) = self.fetch_and_place(video, staged.path(), output_dir) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video subtitles");
             self.record_failed_fetch(video);
         }
-        self.discard_staging(video);
     }
 }
 
 impl SubtitleFetcher {
-    fn fetch_and_place(&self, video: &Video, output_dir: &Path) -> anyhow::Result<()> {
+    fn fetch_and_place(
+        &self,
+        video: &Video,
+        staging: &Path,
+        output_dir: &Path,
+    ) -> anyhow::Result<()> {
         let Some(filename) = video.filename.as_deref() else {
             return Ok(());
         };
         let paths = EpisodePaths::from_media(filename);
-        let staging = subtitle_staging_dir(&self.videos_path, &video.id);
         let probe = self
             .video_downloader_repository
-            .probe_captions(&video.youtube_id.to_url(), &staging)?;
+            .probe_captions(&video.youtube_id.to_url(), staging)?;
         match probe.tracks.original() {
-            Some(track) => {
-                self.place_subtitles(video, &paths, &probe, &track, &staging, output_dir)
-            }
+            Some(track) => self.place_subtitles(video, &paths, &probe, &track, staging, output_dir),
             None if !probe.warnings.is_empty() => {
                 Self::log_inconclusive(video, &probe);
                 self.record_check(video, LateDataOutcome::Failed, probe.published_at)
@@ -195,15 +196,6 @@ impl SubtitleFetcher {
         });
         if let Err(e) = self.event_publisher.publish(&event) {
             warn!(video_id = %video.id, error = %e, "failed to publish that the video's subtitles were fetched");
-        }
-    }
-
-    /// Best-effort: a leftover staging dir is harmless, Plex and Kodi ignore
-    /// the staging root.
-    fn discard_staging(&self, video: &Video) {
-        let dir = subtitle_staging_dir(&self.videos_path, &video.id);
-        if let Err(e) = self.video_file_repository.delete_dir_recursive(&dir) {
-            warn!(video_id = %video.id, error = %e, "failed to discard the subtitle staging dir");
         }
     }
 }

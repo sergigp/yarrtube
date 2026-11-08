@@ -57,6 +57,7 @@ mod tests {
         FakeVideoDownloaderRepository, FetchedThumbnail,
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::staging_area::StagingArea;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::path::PathBuf;
@@ -91,7 +92,7 @@ mod tests {
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(FixedClock(later())),
-                "/videos",
+                Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
             )),
         );
 
@@ -141,7 +142,10 @@ mod tests {
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
-                "/videos",
+                Arc::new(StagingArea::new(
+                    Arc::new(FakeVideoFileRepository::default()),
+                    "/videos",
+                )),
             )),
         );
 
@@ -176,7 +180,10 @@ mod tests {
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
-                "/videos",
+                Arc::new(StagingArea::new(
+                    Arc::new(FakeVideoFileRepository::default()),
+                    "/videos",
+                )),
             )),
         );
 
@@ -211,7 +218,10 @@ mod tests {
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
-                "/videos",
+                Arc::new(StagingArea::new(
+                    Arc::new(FakeVideoFileRepository::default()),
+                    "/videos",
+                )),
             )),
         );
 
@@ -237,7 +247,10 @@ mod tests {
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
-                "/videos",
+                Arc::new(StagingArea::new(
+                    Arc::new(FakeVideoFileRepository::default()),
+                    "/videos",
+                )),
             )),
         );
 
@@ -267,7 +280,7 @@ mod tests {
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(FixedClock(later())),
-                "/videos",
+                Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
             )),
         );
 
