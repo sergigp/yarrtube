@@ -1233,7 +1233,7 @@ mod tests {
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::with_failed_stderr(
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "HTTP Error 403: Forbidden",
             )),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1317,7 +1317,7 @@ mod tests {
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::with_failed_stderr_and_sabr(
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason_and_sabr(
                 "HTTP Error 403: Forbidden",
                 "SABR-only streaming experiment",
             )),
@@ -1376,7 +1376,7 @@ mod tests {
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::with_failed_stderr_and_sabr(
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason_and_sabr(
                 "HTTP Error 403: Forbidden",
                 "SABR-only streaming experiment",
             )),
@@ -1463,12 +1463,9 @@ mod tests {
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(
-                FakeVideoDownloaderRepository::with_failed_stderr("Video unavailable")
-                    .with_diagnosed_reason(
-                        "It was blocked due to the claimed content by Mediatoon.",
-                    ),
-            ),
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
+                "It was blocked due to the claimed content by Mediatoon. | Video unavailable",
+            )),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
@@ -1496,12 +1493,9 @@ mod tests {
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(
-                FakeVideoDownloaderRepository::with_failed_stderr("Video unavailable")
-                    .with_diagnosed_reason(
-                        "It was blocked due to the claimed content by Mediatoon.",
-                    ),
-            ),
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
+                "It was blocked due to the claimed content by Mediatoon. | Video unavailable",
+            )),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
@@ -1529,7 +1523,7 @@ mod tests {
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(false).with_diagnosed_reason(
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "Join this channel to get access to members-only content like this video, and other exclusive perks.",
             )),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1559,7 +1553,7 @@ mod tests {
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::with_failed_stderr(
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "Video unavailable",
             )),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1570,37 +1564,6 @@ mod tests {
         let result = run(&task, &payload_for(video.id.as_str()), false);
 
         assert_eq!(result, Err("Video unavailable".to_string()));
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![
-                video
-                    .start_download(fixed_timestamp())
-                    .mark_errored_retrying(fixed_timestamp())
-            ]
-        );
-    }
-
-    #[test]
-    fn it_should_treat_a_failed_diagnostic_probe_as_undetermined() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video();
-        video_repository.save(&video).unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(false).with_diagnose_error()),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
-
-        let result = run(&task, &payload_for(video.id.as_str()), false);
-
-        assert_eq!(
-            result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
-        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
@@ -1851,11 +1814,12 @@ mod tests {
             &db,
             video_repository.clone(),
             Arc::new(
-                FakeVideoDownloaderRepository::new(false)
-                    .with_diagnosed_reason("This video has been removed by the uploader.")
-                    .with_on_download(move || {
-                        record_watch_state_meanwhile(&watching_repository, &watched_id)
-                    }),
+                FakeVideoDownloaderRepository::with_failed_reason(
+                    "This video has been removed by the uploader.",
+                )
+                .with_on_download(move || {
+                    record_watch_state_meanwhile(&watching_repository, &watched_id)
+                }),
             ),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),

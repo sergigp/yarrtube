@@ -1,5 +1,5 @@
 use crate::domain::shared::Quality;
-use crate::domain::video::VideoChapter;
+use crate::domain::video::{DownloadFailure, VideoChapter};
 use crate::domain::video_transcript::{CaptionSource, CaptionTrack, CaptionTracks};
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
@@ -97,12 +97,12 @@ pub struct QualityProbe {
 
 /// The outcome of a `download_video` attempt: either a `DownloadedVideo`, or
 /// a clean `yt-dlp` failure (non-zero exit) carrying whatever text `yt-dlp`
-/// wrote to its stderr, trimmed and `None` if it wrote nothing.
+/// wrote to its stderr, trimmed and empty if it wrote nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DownloadAttempt {
     Succeeded(DownloadedVideo),
     Failed {
-        stderr: Option<String>,
+        failure: DownloadFailure,
         /// `Some(reason)` when `yt-dlp` reported the SABR-only streaming
         /// experiment while failing; see `DownloadedVideo::sabr_notice`.
         sabr_notice: Option<String>,
@@ -134,7 +134,7 @@ const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
 /// after_move:filename`), in quiet mode so those are the only lines on
 /// stdout, filename last; each is read by its position from the end.
 /// Returns `Ok(DownloadAttempt::Succeeded(..))` on a successful download,
-/// `Ok(DownloadAttempt::Failed { stderr })` for a clean `yt-dlp` failure
+/// `Ok(DownloadAttempt::Failed { failure })` for a clean `yt-dlp` failure
 /// (non-zero exit), carrying whatever `yt-dlp` wrote to its stderr. Returns
 /// `Err` only for a systemic problem: no binary at `ytdlp_path`, a failure
 /// creating the staging dir, or a successful exit that didn't print a
@@ -197,7 +197,9 @@ pub fn download_video(
         RunOutcome::Success(output) => output,
         RunOutcome::CleanFailure { stderr_raw } => {
             return Ok(DownloadAttempt::Failed {
-                stderr: reason_excluding_warnings(&stderr_raw),
+                failure: DownloadFailure::new(
+                    reason_excluding_warnings(&stderr_raw).unwrap_or_default(),
+                ),
                 sabr_notice: sabr_reason(&stderr_raw),
             });
         }
@@ -1181,10 +1183,8 @@ mod tests {
     fn unwrap_succeeded(attempt: DownloadAttempt) -> DownloadedVideo {
         match attempt {
             DownloadAttempt::Succeeded(video) => video,
-            DownloadAttempt::Failed { stderr, .. } => {
-                panic!(
-                    "expected a successful download attempt, got Failed {{ stderr: {stderr:?} }}"
-                )
+            DownloadAttempt::Failed { failure, .. } => {
+                panic!("expected a successful download attempt, got Failed {{ {failure:?} }}")
             }
         }
     }
@@ -1275,7 +1275,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: Some("HTTP Error 403: Forbidden".to_string()),
+                failure: DownloadFailure::new("HTTP Error 403: Forbidden"),
                 sabr_notice: None,
             }
         );
@@ -1302,7 +1302,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: None,
+                failure: DownloadFailure::new(""),
                 sabr_notice: None,
             }
         );
@@ -2489,7 +2489,9 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: Some("ERROR: [youtube] abc123: This video is not available".to_string()),
+                failure: DownloadFailure::new(
+                    "ERROR: [youtube] abc123: This video is not available"
+                ),
                 sabr_notice: Some(SABR_WARNING.to_string()),
             }
         );

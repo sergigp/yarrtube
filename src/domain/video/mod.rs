@@ -1,5 +1,6 @@
 pub mod category_video_view;
 pub mod channel_episode_number;
+pub mod download_failure;
 pub mod episode_number;
 pub mod episode_paths;
 pub mod errors;
@@ -34,6 +35,7 @@ pub mod web_vtt;
 
 pub use category_video_view::CategoryVideoView;
 pub use channel_episode_number::ChannelEpisodeNumber;
+pub use download_failure::DownloadFailure;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
 pub use errors::{ListVideosError, ReadSubtitlesError, UpdateWatchStateError};

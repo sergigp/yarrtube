@@ -136,9 +136,11 @@ impl QualityUpgrader {
                 downloaded.height,
                 video.downloaded_height
             )),
-            DownloadAttempt::Failed { stderr, .. } => Err(anyhow!(
+            DownloadAttempt::Failed { failure, .. } => Err(anyhow!(
                 "yt-dlp failed to download a higher quality: {}",
-                stderr.as_deref().unwrap_or("no reason given")
+                Some(failure.reason())
+                    .filter(|reason| !reason.is_empty())
+                    .unwrap_or("no reason given")
             )),
         }
     }

@@ -316,7 +316,7 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::with_failed_stderr("HTTP Error 403: Forbidden")
+            FakeVideoDownloaderRepository::with_failed_reason("HTTP Error 403: Forbidden")
                 .with_quality_probe(Ok(QualityProbe {
                     degraded: false,
                     height: Some(1080),

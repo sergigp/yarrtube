@@ -2,7 +2,8 @@ use crate::domain::event::DomainEvent;
 use crate::domain::services::{MetadataGenerator, MetadataGeneratorApi};
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    EpisodeNumber, EpisodePaths, Video, VideoDownloaded, VideoRecordId, staging_dir,
+    DownloadFailure, EpisodeNumber, EpisodePaths, Video, VideoDownloaded, VideoRecordId,
+    staging_dir,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -17,44 +18,6 @@ use crate::infrastructure::shared::system_clock::Clock;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
-
-/// Substrings that, found (case-insensitively) in a diagnosed failure reason,
-/// mark a video permanently unavailable — see design.md's token table. This
-/// is an allowlist of *permanent* reasons, never an inverted "everything
-/// except transient" rule, so an unseen `yt-dlp`/YouTube wording is never
-/// silently excluded forever.
-const PERMANENT_UNAVAILABILITY_TOKENS: [&str; 8] = [
-    "members-only",
-    "claimed content",
-    "copyright",
-    "in your country",
-    "private video",
-    "has been removed",
-    "no longer available",
-    "account associated with this video has been terminated",
-];
-
-/// Whether a diagnosed failure `reason` names a block that can never succeed
-/// on a later attempt, so the video should be excluded rather than retried.
-fn is_permanently_unavailable_reason(reason: &str) -> bool {
-    let reason = reason.to_lowercase();
-    PERMANENT_UNAVAILABILITY_TOKENS
-        .iter()
-        .any(|token| reason.contains(token))
-}
-
-/// Joins the diagnosed reason (the richer signal) with the download's own
-/// stderr (the fallback) for logging and classification, skipping whichever
-/// is absent or empty.
-fn combined_reason(diagnosed: Option<&str>, stderr: Option<&str>) -> String {
-    [diagnosed, stderr]
-        .into_iter()
-        .flatten()
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" | ")
-}
 
 /// Emits the dedicated, greppable SABR event when `yt-dlp` reported YouTube's
 /// SABR-only streaming experiment for this download (see the `video-download`
@@ -164,12 +127,12 @@ impl VideoDownloaderApi for VideoDownloader {
                 .or_else(|e| self.record_placement_errored(started, e, is_last_attempt))
             }
             Ok(DownloadAttempt::Failed {
-                stderr,
+                failure,
                 sabr_notice,
             }) => {
                 log_sabr(&started, sabr_notice.as_deref());
                 self.discard_staging(&started);
-                self.record_failed(started, stderr, is_last_attempt)
+                self.record_failed(started, failure, is_last_attempt)
             }
             Err(e) => {
                 self.discard_staging(&started);
@@ -368,43 +331,28 @@ impl VideoDownloader {
         }
     }
 
-    /// A clean `yt-dlp` failure: diagnoses the precise reason (see design.md),
-    /// logs it, and either excludes a permanently-unavailable video (settling
-    /// the task with `Ok(())`, so it is neither retried nor dead-lettered) or
-    /// keeps the current errored/retry behavior and returns `Err`.
+    /// A clean `yt-dlp` failure: either excludes a permanently-unavailable
+    /// video (settling the task with `Ok(())`, so it is neither retried nor
+    /// dead-lettered) or keeps the errored/retry behavior and returns `Err`.
     fn record_failed(
         &self,
         started: Video,
-        stderr: Option<String>,
+        failure: DownloadFailure,
         is_last_attempt: bool,
     ) -> anyhow::Result<()> {
-        let diagnosed = self.diagnose_failure(&started.youtube_id.to_url());
-        let reason = combined_reason(diagnosed.as_deref(), stderr.as_deref());
-        if is_permanently_unavailable_reason(&reason) {
-            self.exclude(started, &reason)
+        if failure.is_permanent() {
+            self.exclude(started, &failure)
         } else {
-            self.fail_retryably(started, reason, is_last_attempt)
-        }
-    }
-
-    /// Diagnoses a failed download's precise reason, swallowing a probe error
-    /// (logged) as undetermined so the probe failing never fails the handling.
-    fn diagnose_failure(&self, video_url: &str) -> Option<String> {
-        match self.video_downloader_repository.diagnose(video_url) {
-            Ok(reason) => reason,
-            Err(e) => {
-                warn!(error = %e, "diagnostic probe failed; treating the failure reason as undetermined");
-                None
-            }
+            self.fail_retryably(started, &failure, is_last_attempt)
         }
     }
 
     /// Marks a permanently-unavailable video excluded and settles the task
     /// without error, so no retry is scheduled and it is not dead-lettered.
-    fn exclude(&self, started: Video, reason: &str) -> anyhow::Result<()> {
+    fn exclude(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
         let video_id = started.id.clone();
         self.save(started.mark_excluded(self.clock.now()))?;
-        info!(video_id = %video_id, reason = %reason, "excluding permanently-unavailable video");
+        info!(video_id = %video_id, reason = %failure.reason(), "excluding permanently-unavailable video");
         Ok(())
     }
 
@@ -414,16 +362,12 @@ impl VideoDownloader {
     fn fail_retryably(
         &self,
         started: Video,
-        reason: String,
+        failure: &DownloadFailure,
         is_last_attempt: bool,
     ) -> anyhow::Result<()> {
         let video_id = started.id.clone();
         self.mark_errored(started, is_last_attempt)?;
-        let error_message = if reason.is_empty() {
-            format!("yt-dlp failed to download video {video_id}")
-        } else {
-            reason
-        };
+        let error_message = failure.message_for(&video_id);
         warn!(video_id = %video_id, error = %error_message, "yt-dlp reported a failed download");
         Err(anyhow::anyhow!(error_message))
     }
@@ -530,54 +474,5 @@ impl EpisodeFiles {
             nfo_path: output_dir.join(paths.nfo()),
             thumb: has_thumbnail.then(|| paths.thumb()),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_permanently_unavailable_reason;
-
-    #[test]
-    fn it_should_classify_permanently_unavailable_reasons() {
-        let reasons = [
-            "Join this channel to get access to members-only content like this video, and other exclusive perks.",
-            "It was blocked due to the claimed content by Mediatoon.",
-            "Video unavailable. This video contains content that has been blocked on copyright grounds.",
-            "The uploader has not made this video available in your country.",
-            "Private video. Sign in if you've been granted access to this video.",
-            "This video has been removed by the uploader.",
-            "This video is no longer available.",
-            "This video is not available because the YouTube account associated with this video has been terminated.",
-        ];
-
-        assert_eq!(
-            reasons.map(is_permanently_unavailable_reason),
-            [true, true, true, true, true, true, true, true]
-        );
-    }
-
-    #[test]
-    fn it_should_classify_permanently_unavailable_reasons_case_insensitively() {
-        let reasons = [
-            "JOIN THIS CHANNEL FOR MEMBERS-ONLY CONTENT",
-            "It was blocked due to the CLAIMED CONTENT by X.",
-        ];
-
-        assert_eq!(reasons.map(is_permanently_unavailable_reason), [true, true]);
-    }
-
-    #[test]
-    fn it_should_not_classify_generic_or_transient_reasons() {
-        let reasons = [
-            "Video unavailable",
-            "HTTP Error 403: Forbidden",
-            "Unable to download webpage: The read operation timed out",
-            "HTTP Error 429: Too Many Requests",
-            "Sign in to confirm you're not a bot",
-            "Unable to download video data: fragment 3 not found",
-            "Connection reset by peer",
-        ];
-
-        assert_eq!(reasons.map(is_permanently_unavailable_reason), [false; 7]);
     }
 }
