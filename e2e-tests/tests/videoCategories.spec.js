@@ -30,8 +30,7 @@ test.describe('with a channel in "Chess" and a "Sicilian" category', () => {
     channel = await addChannel(request, CHANNEL, { videoLimit: 1 })
     playlist = await addPlaylist(request, PLAYLIST)
     await addCategory(request, 'Chess', { channels: [channel.handle], playlists: [] })
-    // A member, so the category page lists videos rather than its empty state.
-    sicilianId = await addCategory(request, 'Sicilian', { channels: [], playlists: [playlist.id] })
+    sicilianId = await addCategory(request, 'Sicilian', { channels: [], playlists: [] })
   })
 
   test("edit a video's categories by hand: its chip and the category page follow", async ({
@@ -70,17 +69,17 @@ test.describe('with a channel in "Chess" and a "Sicilian" category', () => {
       await expect(card(title)).toBeVisible()
     })
 
-    await test.step('removing it by hand takes the video out of "Sicilian"', async () => {
-      await page.goto(`/channels/${encodeURIComponent(channel.handle)}`)
+    await test.step('removing it by hand from the "Sicilian" page empties it, the dialog staying open', async () => {
       const dialog = await openEditCategories(page, title)
       await dialog.getByRole('button', { name: 'Sicilian' }).click()
       await expect(dialog.getByRole('button', { name: 'Sicilian' })).toHaveAttribute(
         'aria-pressed',
         'false',
       )
+      await expect(page.getByText('Nothing in Sicilian yet')).toBeVisible()
+      await expect(dialog).toBeVisible()
       await page.keyboard.press('Escape')
-      await page.goto(sicilianPage)
-      await expect(card(playlist.videos[0].title)).toBeVisible()
+      await expect(dialog).toBeHidden()
       await expect(page.locator('main li').filter({ hasText: title })).toHaveCount(0)
     })
   })

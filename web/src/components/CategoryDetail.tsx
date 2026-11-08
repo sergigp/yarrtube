@@ -106,6 +106,9 @@ export function CategoryDetail() {
     return <p className="text-sm text-muted-foreground">Category not found.</p>
   }
   const sources = memberCount(category)
+  // Videos set by hand or by the AI fill a category without sources too.
+  const empty = sources === 0 && videos?.length === 0
+  const hasVideos = sources > 0 || (videos?.length ?? 0) > 0
 
   return (
     <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
@@ -119,14 +122,14 @@ export function CategoryDetail() {
         extraActions={[
           { label: 'Edit settings', icon: <Settings2 />, onSelect: () => setEditingSettings(true) },
         ]}
-        onMarkWatched={sources > 0 ? () => markCategoryWatched(category.id) : undefined}
+        onMarkWatched={hasVideos ? () => markCategoryWatched(category.id) : undefined}
         onDelete={refreshing(async () => {
           await deleteCategory(category.id)
           navigate('/')
         })}
         deleteDescription={deleteCategoryDescription(category)}
       />
-      {sources === 0 ? (
+      {empty ? (
         <EmptyCategory category={category} onAddSources={() => setEditingSettings(true)} />
       ) : playing ? (
         <CategoryPlayer key={category.id} videos={videos} error={error} />

@@ -13,6 +13,7 @@ import {
   aHomeVideo,
   aPlaylist,
   aPreferences,
+  aVideoCategoryChoice,
   mockApi,
   pendingForever,
   renderWithProviders,
@@ -305,6 +306,56 @@ describe('CategoryDetail', () => {
       RequestInit,
     ]
     expect(JSON.parse(init.body as string)).toEqual({ name: 'Board games' })
+  })
+
+  it('lists the videos of a category without sources, set by hand or by the AI, and marks them watched', async () => {
+    const markWatched = vi.fn(() => null)
+    renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', unwatched_count: 1 }),
+      ]),
+      'GET /api/categories/chess/videos': [aHomeVideo({ id: 'v1', title: 'Najdorf in 10 minutes' })],
+      'POST /api/categories/chess/watched': markWatched,
+    })
+    const user = userEvent.setup()
+
+    await screen.findByText('Najdorf in 10 minutes')
+    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    expect(screen.queryByRole('region', { name: 'Nothing in Chess yet' })).not.toBeInTheDocument()
+    await waitFor(() => expect(markWatched).toHaveBeenCalledOnce())
+  })
+
+  it("keeps a video's categories dialog open after taking it out of the category shown", async () => {
+    let inChess = true
+    const choices = () => ({
+      categories: [
+        aVideoCategoryChoice({ id: 'chess', name: 'Chess', belongs: inChess, from: inChess ? 'user' : null }),
+      ],
+    })
+    renderCategory({
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
+      'GET /api/categories/chess/videos': () =>
+        inChess ? [aHomeVideo({ id: 'v1', record_id: 'rec1', title: 'Najdorf in 10 minutes' })] : [],
+      'GET /api/videos/rec1/categories': choices,
+      'PUT /api/videos/rec1/categories/chess': () => {
+        inChess = false
+        return choices()
+      },
+      'GET /api/videos/home': [],
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Najdorf in 10 minutes' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit categories…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Najdorf in 10 minutes' })
+    await user.click(await within(dialog).findByRole('button', { name: 'Chess' }))
+
+    // Behind the open dialog, so hidden from the accessibility tree.
+    await screen.findByText('Nothing in Chess yet')
+    expect(screen.getByRole('dialog', { name: 'Najdorf in 10 minutes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Chess' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('opens the dialog on arrival with CategorySettingsState, once', async () => {
