@@ -84,7 +84,8 @@ test.describe('with a channel in "Chess" and a "Sicilian" category', () => {
     })
   })
 
-  test("re-run a video's AI categorization from its dialog", async ({ page, request, daemon }) => {
+  // The seeded channel has categorization off: the dialog's button clears.
+  test("clear a video's AI categories from its dialog", async ({ page, request, daemon }) => {
     const preferences = await request.patch('/api/preferences', {
       data: { ai_enabled: true, ollama_url: daemon.ollamaUrl, categorization_enabled: true },
     })
@@ -97,7 +98,7 @@ test.describe('with a channel in "Chess" and a "Sicilian" category', () => {
       (response) =>
         response.request().method() === 'DELETE' && /\/api\/videos\/[^/]+\/ai-verdicts$/.test(response.url()),
     )
-    await dialog.getByRole('button', { name: 'Re-run AI' }).click()
+    await dialog.getByRole('button', { name: 'Clear AI categories' }).click()
 
     expect((await deleted).status()).toBe(204)
   })
