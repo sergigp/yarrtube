@@ -82,6 +82,7 @@ mod tests {
         EventRepository, SqliteEventRepository,
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::staging_area::StagingArea;
     use crate::infrastructure::shared::system_clock::FixedClock;
     #[cfg(unix)]
     use crate::infrastructure::shared::ytdlp::test_support::{FakeYtDlp, unique_temp_dir};
@@ -2340,7 +2341,10 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            videos_root.to_string_lossy(),
+            Arc::new(StagingArea::new(
+                Arc::new(FilesystemVideoFileRepository),
+                videos_root.to_string_lossy(),
+            )),
         ));
 
         let result = run(&task, &output_dir_task(&video, &output_dir), false);
@@ -2383,7 +2387,7 @@ mod tests {
         VideoDownloader::new(
             video_repository,
             video_downloader_repository,
-            video_file_repository,
+            video_file_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(MetadataGenerator::new(
                 youtube_metadata_repository,
@@ -2395,7 +2399,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository, "/videos")),
         )
     }
 
@@ -2419,7 +2423,10 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            "/videos",
+            Arc::new(StagingArea::new(
+                Arc::new(FakeVideoFileRepository::default()),
+                "/videos",
+            )),
         ))
     }
 

@@ -3,7 +3,7 @@ use crate::domain::services::{MetadataGenerator, MetadataGeneratorApi};
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     DownloadAttempt, DownloadedVideo, EpisodeNumber, EpisodePaths, Video, VideoDownloaded,
-    VideoRecordId, staging_dir,
+    VideoRecordId,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -12,6 +12,7 @@ use crate::infrastructure::repositories::sqlite_video_metadata_repository::Video
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::staging_area::StagingArea;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -84,7 +85,7 @@ pub struct VideoDownloader {
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
-    videos_path: String,
+    staging_area: Arc<StagingArea>,
 }
 
 impl VideoDownloader {
@@ -98,7 +99,7 @@ impl VideoDownloader {
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
-        videos_path: impl Into<String>,
+        staging_area: Arc<StagingArea>,
     ) -> Self {
         Self {
             video_repository,
@@ -109,7 +110,7 @@ impl VideoDownloader {
             video_metadata_repository,
             event_publisher,
             clock,
-            videos_path: videos_path.into(),
+            staging_area,
         }
     }
 }
@@ -150,7 +151,8 @@ impl VideoDownloaderApi for VideoDownloader {
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;
         let metadata = self.fetch_metadata(&started);
-        match self.run_download(&started, quality, output_dir) {
+        let staged = self.staging_area.for_video(&started.id);
+        match self.run_download(&started, quality, staged.path()) {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
                 log_sabr(&started, downloaded.sabr_notice.as_deref());
                 self.record_unless_deleted(
@@ -167,13 +169,9 @@ impl VideoDownloaderApi for VideoDownloader {
                 sabr_notice,
             }) => {
                 log_sabr(&started, sabr_notice.as_deref());
-                self.discard_staging(&started);
                 self.record_failed(started, stderr, is_last_attempt)
             }
-            Err(e) => {
-                self.discard_staging(&started);
-                self.record_errored(started, e, is_last_attempt)
-            }
+            Err(e) => self.record_errored(started, e, is_last_attempt),
         }
     }
 }
@@ -183,19 +181,16 @@ impl VideoDownloader {
         &self,
         video: &Video,
         quality: Quality,
-        _output_dir: &Path,
+        staging: &Path,
     ) -> anyhow::Result<DownloadAttempt> {
         info!(video_id = %video.id, "downloading video");
-        self.video_downloader_repository.download(
-            &video.youtube_id.to_url(),
-            quality,
-            &staging_dir(&self.videos_path, &video.id),
-        )
+        self.video_downloader_repository
+            .download(&video.youtube_id.to_url(), quality, staging)
     }
 
     /// The video (or its whole playlist/channel) may have been deleted while
-    /// it downloaded: then its staging dir is discarded instead of placed,
-    /// so nothing outlives it.
+    /// it downloaded: then nothing is placed, and `download` discards its
+    /// staging dir like on every other outcome, so nothing outlives it.
     fn record_unless_deleted(
         &self,
         started: Video,
@@ -205,7 +200,6 @@ impl VideoDownloader {
         metadata: Option<VideoMetadata>,
     ) -> anyhow::Result<()> {
         if self.video_repository.find(&started.id)?.is_none() {
-            self.discard_staging(&started);
             return Ok(());
         }
         self.place_download(started, downloaded, quality, output_dir, metadata)
@@ -232,7 +226,6 @@ impl VideoDownloader {
         let downloaded_video =
             self.record_downloaded(video, &downloaded, &files, quality, number)?;
         self.save_metadata(&downloaded_video, metadata, &number, &files);
-        self.discard_staging(&downloaded_video);
         self.publish_downloaded(&downloaded_video, output_dir, &number.season_folder());
         Ok(())
     }
@@ -357,16 +350,6 @@ impl VideoDownloader {
         }
     }
 
-    /// Best-effort: removes the video's staging dir and whatever a download
-    /// or thumbnail fetch left in it; a leftover is harmless, Plex and Kodi
-    /// ignore the staging root.
-    fn discard_staging(&self, video: &Video) {
-        let dir = staging_dir(&self.videos_path, &video.id);
-        if let Err(e) = self.video_file_repository.delete_dir_recursive(&dir) {
-            warn!(video_id = %video.id, error = %e, "failed to discard the staging dir");
-        }
-    }
-
     /// A clean `yt-dlp` failure: diagnoses the precise reason (see design.md),
     /// logs it, and either excludes a permanently-unavailable video (settling
     /// the task with `Ok(())`, so it is neither retried nor dead-lettered) or
@@ -442,17 +425,16 @@ impl VideoDownloader {
     }
 
     /// Placing a successful download failed (numbering, moving or recording
-    /// it): discards the staging dir and errors the video like a failed
-    /// download, so it settles as errored instead of staying in progress.
-    /// Re-reads the video so a number assigned before the failure is kept; a
-    /// video deleted meanwhile gets nothing recorded.
+    /// it): errors the video like a failed download, so it settles as
+    /// errored instead of staying in progress. Re-reads the video so a
+    /// number assigned before the failure is kept; a video deleted meanwhile
+    /// gets nothing recorded.
     fn record_placement_errored(
         &self,
         started: Video,
         error: anyhow::Error,
         is_last_attempt: bool,
     ) -> anyhow::Result<()> {
-        self.discard_staging(&started);
         match self.video_repository.find(&started.id)? {
             Some(current) => self.record_errored(current, error, is_last_attempt),
             None => Err(error),
