@@ -56,6 +56,7 @@ mod tests {
         EventRepository, SqliteEventRepository,
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::staging_area::StagingArea;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
     use std::path::PathBuf;
@@ -88,7 +89,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -173,7 +174,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -250,7 +251,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -293,7 +294,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -340,7 +341,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -393,7 +394,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -446,7 +447,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -495,7 +496,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -542,7 +543,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -596,7 +597,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -645,7 +646,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
@@ -682,7 +683,7 @@ mod tests {
                 Arc::new(FixedClock(now())),
             )),
             Arc::new(FixedClock(now())),
-            "/videos",
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
         )));
 
         let result = run(&task, &task_for(&video));
