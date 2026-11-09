@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YoutubePlaylistItem {
-    pub video_id: String,
+    pub youtube_id: String,
     pub title: String,
     pub position: i64,
 }
@@ -179,7 +179,7 @@ impl YoutubeApiPlaylistItemsRepository {
             .into_iter()
             .filter(|item| !not_yet_watchable.contains(&item.snippet.resource_id.video_id))
             .map(|item| YoutubePlaylistItem {
-                video_id: item.snippet.resource_id.video_id,
+                youtube_id: item.snippet.resource_id.video_id,
                 title: item.snippet.title,
                 position: item.snippet.position,
             })
@@ -364,17 +364,17 @@ mod tests {
             videos,
             vec![
                 YoutubePlaylistItem {
-                    video_id: "1".to_string(),
+                    youtube_id: "1".to_string(),
                     title: "One".to_string(),
                     position: 0,
                 },
                 YoutubePlaylistItem {
-                    video_id: "2".to_string(),
+                    youtube_id: "2".to_string(),
                     title: "Two".to_string(),
                     position: 1,
                 },
                 YoutubePlaylistItem {
-                    video_id: "3".to_string(),
+                    youtube_id: "3".to_string(),
                     title: "Three".to_string(),
                     position: 2,
                 },
@@ -411,7 +411,7 @@ mod tests {
         assert_eq!(
             videos,
             Ok(vec![YoutubePlaylistItem {
-                video_id: "1".to_string(),
+                youtube_id: "1".to_string(),
                 title: "One".to_string(),
                 position: 0,
             }])
@@ -444,7 +444,7 @@ mod tests {
         assert_eq!(
             videos,
             vec![YoutubePlaylistItem {
-                video_id: "2".to_string(),
+                youtube_id: "2".to_string(),
                 title: "Two".to_string(),
                 position: 1,
             }]
@@ -477,7 +477,7 @@ mod tests {
         assert_eq!(
             videos,
             vec![YoutubePlaylistItem {
-                video_id: "2".to_string(),
+                youtube_id: "2".to_string(),
                 title: "Two".to_string(),
                 position: 1,
             }]
@@ -510,7 +510,7 @@ mod tests {
         assert_eq!(
             videos,
             vec![YoutubePlaylistItem {
-                video_id: "2".to_string(),
+                youtube_id: "2".to_string(),
                 title: "Two".to_string(),
                 position: 1,
             }]
@@ -542,7 +542,7 @@ mod tests {
         assert_eq!(
             videos,
             vec![YoutubePlaylistItem {
-                video_id: "1".to_string(),
+                youtube_id: "1".to_string(),
                 title: "Unlisted".to_string(),
                 position: 3,
             }]
@@ -585,7 +585,7 @@ mod tests {
         assert_eq!(
             videos,
             vec![YoutubePlaylistItem {
-                video_id: "2".to_string(),
+                youtube_id: "2".to_string(),
                 title: "Two".to_string(),
                 position: 1,
             }]
@@ -628,7 +628,7 @@ mod tests {
         assert_eq!(
             videos,
             vec![YoutubePlaylistItem {
-                video_id: "2".to_string(),
+                youtube_id: "2".to_string(),
                 title: "Two".to_string(),
                 position: 1,
             }]
@@ -674,7 +674,7 @@ mod tests {
         assert_eq!(
             videos,
             Ok(vec![YoutubePlaylistItem {
-                video_id: "2".to_string(),
+                youtube_id: "2".to_string(),
                 title: "Two".to_string(),
                 position: 1,
             }])
@@ -717,12 +717,12 @@ mod tests {
             videos,
             vec![
                 YoutubePlaylistItem {
-                    video_id: "1".to_string(),
+                    youtube_id: "1".to_string(),
                     title: "One".to_string(),
                     position: 0,
                 },
                 YoutubePlaylistItem {
-                    video_id: "2".to_string(),
+                    youtube_id: "2".to_string(),
                     title: "Two".to_string(),
                     position: 1,
                 },
@@ -837,7 +837,7 @@ mod youtube_contract_tests {
         assert_eq!(
             videos,
             vec![YoutubePlaylistItem {
-                video_id: CAPTIONED_VIDEO_ID.to_string(),
+                youtube_id: CAPTIONED_VIDEO_ID.to_string(),
                 title: "Big Buck Bunny".to_string(),
                 position: 0,
             }]

@@ -1,6 +1,6 @@
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::services::{VideoReconciler, VideoReconcilerApi};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::domain::video::{
     EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, SubtitleState, Video, VideoStatus,
     is_episode_path, is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
@@ -21,7 +21,7 @@ const EPISODE_FILE_EXTENSIONS: [&str; 3] = ["mp4", "jpg", "nfo"];
 pub struct DesiredState {
     pub path: PlaylistPath,
     /// The videos the folder holds, in their owner's order.
-    pub video_ids: Vec<VideoRecordId>,
+    pub video_ids: Vec<VideoId>,
 }
 
 /// Reconciles our database with our filesystem: brings a playlist's or
@@ -224,7 +224,7 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::Quality;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::YoutubeVideoId;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
@@ -485,7 +485,11 @@ mod tests {
     }
 
     fn my_video() -> Video {
-        Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
     }
 
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {

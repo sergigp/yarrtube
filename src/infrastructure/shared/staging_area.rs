@@ -1,4 +1,4 @@
-use crate::domain::video::{VideoRecordId, staging_dir, subtitle_staging_dir};
+use crate::domain::video::{VideoId, staging_dir, subtitle_staging_dir};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -17,7 +17,7 @@ pub struct StagingArea {
 /// staging root, so a failed removal is only logged.
 pub struct StagedDir {
     video_file_repository: Arc<dyn VideoFileRepository>,
-    video_id: VideoRecordId,
+    video_id: VideoId,
     path: PathBuf,
 }
 
@@ -33,17 +33,17 @@ impl StagingArea {
     }
 
     /// The staging dir a video's download or thumbnail fetch writes into.
-    pub fn for_video(&self, video_id: &VideoRecordId) -> StagedDir {
+    pub fn for_video(&self, video_id: &VideoId) -> StagedDir {
         self.staged(video_id, staging_dir(&self.videos_path, video_id))
     }
 
     /// The staging dir a video's subtitle fetch writes into, a sibling of
     /// its download's.
-    pub fn for_subtitles(&self, video_id: &VideoRecordId) -> StagedDir {
+    pub fn for_subtitles(&self, video_id: &VideoId) -> StagedDir {
         self.staged(video_id, subtitle_staging_dir(&self.videos_path, video_id))
     }
 
-    fn staged(&self, video_id: &VideoRecordId, path: PathBuf) -> StagedDir {
+    fn staged(&self, video_id: &VideoId, path: PathBuf) -> StagedDir {
         StagedDir {
             video_file_repository: self.video_file_repository.clone(),
             video_id: video_id.clone(),
@@ -124,7 +124,7 @@ mod tests {
         std::fs::remove_dir_all(&videos_root).unwrap();
     }
 
-    fn video_id() -> VideoRecordId {
-        VideoRecordId::new("v1").unwrap()
+    fn video_id() -> VideoId {
+        VideoId::new("v1").unwrap()
     }
 }

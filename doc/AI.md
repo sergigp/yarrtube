@@ -158,18 +158,18 @@ spec: decisions here feed OpenSpec changes later.
   source, deletes the video's.
 - A verdict is **decided by** the AI or the user. The user sets one per pair
   from a video's **Edit categories…** dialog (`PUT
-  /api/videos/{record_id}/categories/{category_id}`), replacing the AI's; a
+  /api/videos/{id}/categories/{category_id}`), replacing the AI's; a
   category the video's source is a member of can't be set (409). A pair with
   a user verdict is never pending, so the AI never asks about it.
 - **Re-running** deletes AI verdicts (`yes`, `no` and `unavailable`) and keeps
   user ones, then recomputes the categories of the videos that had one, in one
-  `video_categories_changed`: per video (`DELETE /api/videos/{record_id}/ai-verdicts`,
+  `video_categories_changed`: per video (`DELETE /api/videos/{id}/ai-verdicts`,
   then its sync), per channel or playlist (`DELETE
   /api/{channels,playlists}/{id}/ai-verdicts`, then its reconcile pass) and per
   category (`DELETE /api/categories/{id}/ai-verdicts`, then each affected
   video's sync). With categorization off nothing is asked again, so it just
   clears: the video dialog and the source menu then read **Clear AI
-  categories** (`GET /api/videos/{record_id}/categories` reports the source's
+  categories** (`GET /api/videos/{id}/categories` reports the source's
   `categorization_enabled`). **Re-evaluate** in a category's settings is
   disabled while its prompt has unsaved edits, since the AI asks with the
   saved one. `GET /api/categories` reports each category's `ai_verdict_count`.

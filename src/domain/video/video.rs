@@ -8,8 +8,8 @@ use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_output_entry::is_episode_path;
-use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
+use super::youtube_video_id::YoutubeVideoId;
 use crate::domain::shared::Quality;
 use chrono::{DateTime, Duration, Utc};
 
@@ -28,14 +28,15 @@ const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
 /// A video shorter than this (15 minutes) counts as a quick watch.
 const QUICK_WATCH_MAX_DURATION_SECONDS: i64 = 900;
 
-/// A downloaded (or to-be-downloaded) video's own record: its download
+/// A stored (downloaded or to-be-downloaded) video, identified by its own
+/// `id` (one per source holding it), not its `youtube_id`: its download
 /// state, independent of any container. Container membership — which
 /// playlist(s) or channel(s) this video belongs to, and its position within
 /// each — is recorded separately by `PlaylistVideo`/`ChannelVideo`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Video {
-    pub id: VideoRecordId,
-    pub youtube_id: VideoId,
+    pub id: VideoId,
+    pub youtube_id: YoutubeVideoId,
     pub title: String,
     pub status: VideoStatus,
     pub quality: Option<Quality>,
@@ -80,9 +81,13 @@ const WATCHED_THRESHOLD: f64 = 0.9;
 const REWATCH_RESET_THRESHOLD: f64 = 0.1;
 
 impl Video {
-    pub fn create(youtube_id: VideoId, title: impl Into<String>, now: DateTime<Utc>) -> Self {
+    pub fn create(
+        youtube_id: YoutubeVideoId,
+        title: impl Into<String>,
+        now: DateTime<Utc>,
+    ) -> Self {
         Self {
-            id: VideoRecordId::new_generated(),
+            id: VideoId::new_generated(),
             youtube_id,
             title: title.into(),
             status: VideoStatus::Pending,
@@ -594,7 +599,7 @@ mod tests {
     fn it_should_build_a_pending_video() {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", now);
+        let video = Video::create(YoutubeVideoId::new("vid1").unwrap(), "My Video", now);
 
         assert_eq!(video.status, VideoStatus::Pending);
         assert_eq!(video.title, "My Video");
@@ -610,15 +615,15 @@ mod tests {
     fn it_should_generate_a_distinct_surrogate_id_per_video() {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
-        let a = Video::create(VideoId::new("vid1").unwrap(), "First", now);
-        let b = Video::create(VideoId::new("vid2").unwrap(), "Second", now);
+        let a = Video::create(YoutubeVideoId::new("vid1").unwrap(), "First", now);
+        let b = Video::create(YoutubeVideoId::new("vid2").unwrap(), "Second", now);
 
         assert_ne!(a.id, b.id);
     }
 
     fn video() -> Video {
         Video::create(
-            VideoId::new("vid1").unwrap(),
+            YoutubeVideoId::new("vid1").unwrap(),
             "My Video",
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         )

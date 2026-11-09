@@ -1,7 +1,7 @@
 use crate::domain::category::{Category, CategoryMember, CategoryView, CategoryViews};
 use crate::domain::playlist::{Playlist, PlaylistId};
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
-use crate::domain::video::{SourcedVideo, VideoId, VideoSource};
+use crate::domain::video::{SourcedVideo, VideoSource, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -93,7 +93,7 @@ impl CategoryViewSearcher {
     fn unwatched_by_category(
         &self,
         hidden: &HashSet<PlaylistId>,
-    ) -> anyhow::Result<Vec<(Category, HashSet<VideoId>)>> {
+    ) -> anyhow::Result<Vec<(Category, HashSet<YoutubeVideoId>)>> {
         self.repository
             .list()?
             .into_iter()
@@ -110,7 +110,7 @@ impl CategoryViewSearcher {
         &self,
         category: &Category,
         hidden: &HashSet<PlaylistId>,
-    ) -> anyhow::Result<HashSet<VideoId>> {
+    ) -> anyhow::Result<HashSet<YoutubeVideoId>> {
         Ok(self
             .collector
             .downloaded_videos(category)?
@@ -126,7 +126,7 @@ impl CategoryViewSearcher {
     }
 
     /// The distinct YouTube IDs across every category's unwatched set.
-    fn distinct_total(unwatched: &[(Category, HashSet<VideoId>)]) -> usize {
+    fn distinct_total(unwatched: &[(Category, HashSet<YoutubeVideoId>)]) -> usize {
         unwatched
             .iter()
             .flat_map(|(_, ids)| ids)

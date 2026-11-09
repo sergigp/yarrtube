@@ -1,4 +1,4 @@
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use std::path::{Path, PathBuf};
 
 /// Where downloads are staged under the videos root; dot-prefixed so Plex
@@ -75,20 +75,21 @@ pub fn nfo_path_for(relative_path: &str) -> String {
 }
 
 /// Where a video's download or thumbnail fetch is staged before being moved
-/// into its show: `<videos root>/.downloads/<video record id>`. Keyed by the
-/// record, not the YouTube id: the same YouTube video tracked by two shows is
-/// two records that may download at once, and each discards its own dir.
-pub fn staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf {
+/// into its show: `<videos root>/.downloads/<video id>`. Keyed by the
+/// video's own id, not the YouTube id: the same YouTube video tracked by
+/// two shows is two stored videos that may download at once, and each
+/// discards its own dir.
+pub fn staging_dir(videos_path: &str, video_id: &VideoId) -> PathBuf {
     Path::new(videos_path)
         .join(STAGING_DIRNAME)
         .join(video_id.as_str())
 }
 
 /// Where a video's subtitle fetch is staged: a sibling of its download and
-/// thumbnail staging dir, `<videos root>/.downloads/<video record id>-subtitles`,
+/// thumbnail staging dir, `<videos root>/.downloads/<video id>-subtitles`,
 /// since a thumbnail fetch discards its own dir whole, possibly while a
 /// subtitle fetch of the same video runs in its own lane.
-pub fn subtitle_staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf {
+pub fn subtitle_staging_dir(videos_path: &str, video_id: &VideoId) -> PathBuf {
     Path::new(videos_path)
         .join(STAGING_DIRNAME)
         .join(format!("{}-subtitles", video_id.as_str()))

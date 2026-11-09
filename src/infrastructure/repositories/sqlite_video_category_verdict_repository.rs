@@ -1,5 +1,5 @@
 use crate::domain::category::CategoryId;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -10,26 +10,20 @@ use std::collections::{BTreeSet, HashMap};
 /// Each (video, category) pair's verdict, at most one per pair.
 pub trait VideoCategoryVerdictRepository: Send + Sync {
     /// Every verdict of `video_ids`, by video then category.
-    fn find_many(&self, video_ids: &[VideoRecordId]) -> anyhow::Result<Vec<VideoCategoryVerdict>>;
+    fn find_many(&self, video_ids: &[VideoId]) -> anyhow::Result<Vec<VideoCategoryVerdict>>;
     /// Replaces the pair's verdict.
     fn save(&self, verdict: &VideoCategoryVerdict) -> anyhow::Result<()>;
-    fn delete_for_video(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
+    fn delete_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
     /// Every `unavailable` verdict.
     fn delete_unavailable(&self) -> anyhow::Result<()>;
     /// `category_id`'s `unavailable` verdicts.
     fn delete_unavailable_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
-    /// Deletes the AI verdicts of `video_ids`; returns the records that had
+    /// Deletes the AI verdicts of `video_ids`; returns the videos that had
     /// one.
-    fn delete_ai_for_videos(
-        &self,
-        video_ids: &[VideoRecordId],
-    ) -> anyhow::Result<Vec<VideoRecordId>>;
-    /// Deletes `category_id`'s AI verdicts; returns the records that had one.
-    fn delete_ai_for_category(
-        &self,
-        category_id: &CategoryId,
-    ) -> anyhow::Result<Vec<VideoRecordId>>;
+    fn delete_ai_for_videos(&self, video_ids: &[VideoId]) -> anyhow::Result<Vec<VideoId>>;
+    /// Deletes `category_id`'s AI verdicts; returns the videos that had one.
+    fn delete_ai_for_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoId>>;
     /// How many AI verdicts each category has; categories without any are
     /// absent.
     fn count_ai_by_category(&self) -> anyhow::Result<HashMap<CategoryId, u64>>;
@@ -58,7 +52,7 @@ impl SqliteVideoCategoryVerdictRepository {
 }
 
 impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
-    fn find_many(&self, video_ids: &[VideoRecordId]) -> anyhow::Result<Vec<VideoCategoryVerdict>> {
+    fn find_many(&self, video_ids: &[VideoId]) -> anyhow::Result<Vec<VideoCategoryVerdict>> {
         let conn = self.db.read()?;
         let placeholders = vec!["?"; video_ids.len()].join(", ");
         let mut stmt = conn
@@ -107,7 +101,7 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         Ok(())
     }
 
-    fn delete_for_video(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete_for_video(&self, video_id: &VideoId) -> anyhow::Result<()> {
         self.delete_where("video_id = ?1", &[video_id.as_str()])
     }
 
@@ -126,13 +120,10 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         )
     }
 
-    fn delete_ai_for_videos(
-        &self,
-        video_ids: &[VideoRecordId],
-    ) -> anyhow::Result<Vec<VideoRecordId>> {
+    fn delete_ai_for_videos(&self, video_ids: &[VideoId]) -> anyhow::Result<Vec<VideoId>> {
         let placeholders = vec!["?"; video_ids.len()].join(", ");
         let values: Vec<&str> = std::iter::once(VerdictAuthor::Ai.as_str())
-            .chain(video_ids.iter().map(VideoRecordId::as_str))
+            .chain(video_ids.iter().map(VideoId::as_str))
             .collect();
         self.delete_returning_videos(
             &format!("decided_by = ?1 AND video_id IN ({placeholders})"),
@@ -140,10 +131,7 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         )
     }
 
-    fn delete_ai_for_category(
-        &self,
-        category_id: &CategoryId,
-    ) -> anyhow::Result<Vec<VideoRecordId>> {
+    fn delete_ai_for_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoId>> {
         self.delete_returning_videos(
             "decided_by = ?1 AND category_id = ?2",
             &[VerdictAuthor::Ai.as_str(), category_id.as_str()],
@@ -192,7 +180,7 @@ impl SqliteVideoCategoryVerdictRepository {
         &self,
         predicate: &str,
         values: &[&str],
-    ) -> anyhow::Result<Vec<VideoRecordId>> {
+    ) -> anyhow::Result<Vec<VideoId>> {
         let conn = self.db.write()?;
         let video_ids = conn
             .prepare(&format!(
@@ -208,7 +196,7 @@ impl SqliteVideoCategoryVerdictRepository {
             .context("failed to delete video category verdicts")?;
         video_ids
             .into_iter()
-            .map(|id| Ok(VideoRecordId::new(id)?))
+            .map(|id| Ok(VideoId::new(id)?))
             .collect()
     }
 
@@ -226,7 +214,7 @@ impl SqliteVideoCategoryVerdictRepository {
 
     fn row_to_verdict(row: VerdictRow) -> anyhow::Result<VideoCategoryVerdict> {
         Ok(VideoCategoryVerdict {
-            video_id: VideoRecordId::new(row.video_id)?,
+            video_id: VideoId::new(row.video_id)?,
             category_id: CategoryId::new(row.category_id)?,
             verdict: Verdict::parse(&row.verdict)?,
             decided_by: VerdictAuthor::parse(&row.decided_by)?,
@@ -496,7 +484,7 @@ mod tests {
         }
     }
 
-    fn video_id(value: &str) -> VideoRecordId {
-        VideoRecordId::new(value).unwrap()
+    fn video_id(value: &str) -> VideoId {
+        VideoId::new(value).unwrap()
     }
 }

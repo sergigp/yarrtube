@@ -3,7 +3,7 @@ use crate::domain::playlist::{Playlist, PlaylistPath};
 use crate::domain::services::{
     Relocation, ShowFileWriter, ShowFileWriterApi, SkipReason, VideoRelocator, VideoRelocatorApi,
 };
-use crate::domain::video::{Video, VideoRecordId, resolve_output_dir};
+use crate::domain::video::{Video, VideoId, resolve_output_dir};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -145,7 +145,7 @@ impl LayoutMigrator {
         &self,
         path: &PlaylistPath,
         write_show: impl FnOnce() -> anyhow::Result<()>,
-        list_video_ids: impl FnOnce() -> anyhow::Result<Vec<VideoRecordId>>,
+        list_video_ids: impl FnOnce() -> anyhow::Result<Vec<VideoId>>,
         legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
@@ -163,7 +163,7 @@ impl LayoutMigrator {
     fn migrate_videos(
         &self,
         path: &PlaylistPath,
-        video_ids: &[VideoRecordId],
+        video_ids: &[VideoId],
         legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
@@ -203,7 +203,7 @@ impl LayoutMigrator {
     fn by_publish_time(
         &self,
         legacy: &[Video],
-        video_ids: &[VideoRecordId],
+        video_ids: &[VideoId],
     ) -> anyhow::Result<Vec<(Video, Option<DateTime<Utc>>)>> {
         let video_ids = video_ids.iter().collect::<HashSet<_>>();
         let mut videos = legacy
@@ -280,7 +280,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{
-        ChannelEpisodeNumber, EpisodeNumber, PlaylistEpisodeNumber, Video, VideoId,
+        ChannelEpisodeNumber, EpisodeNumber, PlaylistEpisodeNumber, Video, YoutubeVideoId,
     };
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
@@ -1109,16 +1109,20 @@ mod tests {
             .unwrap();
         let numbered = legacy_video("yt1", "Numbered", "Numbered/Numbered.mp4", None)
             .with_episode_number(episode(2026, 31501), fixed_timestamp());
-        let in_place = Video::create(VideoId::new("yt2").unwrap(), "In Place", fixed_timestamp())
-            .start_download(fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                "Season 2026/S2026E031502 - In Place.mp4",
-                None,
-                None,
-                fixed_timestamp(),
-            )
-            .with_episode_number(episode(2026, 31502), fixed_timestamp());
+        let in_place = Video::create(
+            YoutubeVideoId::new("yt2").unwrap(),
+            "In Place",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(
+            Quality::High,
+            "Season 2026/S2026E031502 - In Place.mp4",
+            None,
+            None,
+            fixed_timestamp(),
+        )
+        .with_episode_number(episode(2026, 31502), fixed_timestamp());
         let unnumbered = legacy_video("yt3", "Unnumbered", "Unnumbered/Unnumbered.mp4", None);
         seed_channel_video(&db, &numbered);
         seed_channel_video(&db, &in_place);
@@ -1342,15 +1346,19 @@ mod tests {
         filename: &str,
         thumbnail_filename: Option<&str>,
     ) -> Video {
-        Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
-            .start_download(fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                filename,
-                thumbnail_filename.map(str::to_string),
-                None,
-                fixed_timestamp(),
-            )
+        Video::create(
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            title,
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(
+            Quality::High,
+            filename,
+            thumbnail_filename.map(str::to_string),
+            None,
+            fixed_timestamp(),
+        )
     }
 
     /// A playlist video downloaded in the per-video-folder layout, numbered

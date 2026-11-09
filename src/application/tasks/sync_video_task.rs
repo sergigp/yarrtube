@@ -1,6 +1,6 @@
 use crate::domain::services::{VideoReconciler, VideoReconcilerApi};
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Syncs one stored video: brings it to its desired state and schedules
@@ -22,7 +22,7 @@ impl TaskHandler for SyncVideoTask {
         let Task::SyncVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
-        let video_id = VideoRecordId::new(video_id.clone())?;
+        let video_id = VideoId::new(video_id.clone())?;
         self.video_reconciler.reconcile(&video_id)
     }
 }
@@ -49,8 +49,8 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, SubtitleState, SummaryState, Video, VideoChapter, VideoId,
-        VideoStatus,
+        EpisodeNumber, LateDataChecks, SubtitleState, SummaryState, Video, VideoChapter,
+        VideoStatus, YoutubeVideoId,
     };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
@@ -3118,7 +3118,11 @@ mod tests {
     }
 
     fn my_video() -> Video {
-        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+        Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
     }
 
     /// Downloaded and numbered in its season folder, with its thumbnail

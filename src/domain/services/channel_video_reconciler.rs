@@ -8,7 +8,7 @@ use crate::domain::services::{
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
+use crate::domain::video::{Video, VideoId, VideoStatus, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -215,7 +215,7 @@ impl ChannelVideoReconciler {
         for current in &current_videos {
             match known_videos.get(&current.youtube_id) {
                 None => {
-                    let youtube_id = VideoId::new(&current.youtube_id)?;
+                    let youtube_id = YoutubeVideoId::new(&current.youtube_id)?;
                     let added = self.add_video(channel, youtube_id, current, now)?;
                     known_videos.insert(current.youtube_id.clone(), added);
                 }
@@ -267,11 +267,11 @@ impl ChannelVideoReconciler {
         let channel_videos = self
             .channel_video_repository
             .list_for_channel(&channel.id)?;
-        let video_ids: Vec<VideoRecordId> = channel_videos
+        let video_ids: Vec<VideoId> = channel_videos
             .iter()
             .map(|cv| cv.video_id.clone())
             .collect();
-        let mut videos: HashMap<VideoRecordId, Video> = self
+        let mut videos: HashMap<VideoId, Video> = self
             .video_repository
             .find_many(&video_ids)?
             .into_iter()
@@ -289,7 +289,7 @@ impl ChannelVideoReconciler {
     fn add_video(
         &self,
         channel: &Channel,
-        youtube_id: VideoId,
+        youtube_id: YoutubeVideoId,
         current: &ChannelVideoListing,
         now: DateTime<Utc>,
     ) -> anyhow::Result<(ChannelVideo, Video)> {
@@ -300,7 +300,7 @@ impl ChannelVideoReconciler {
         self.channel_video_repository.save(&channel_video)?;
         info!(
             channel_id = %channel.id,
-            video_id = %video.youtube_id,
+            youtube_id = %video.youtube_id,
             title = %current.title,
             "added video to channel"
         );
@@ -352,11 +352,10 @@ impl ChannelVideoReconciler {
             .try_for_each(|video| {
                 info!(
                     channel_id = %channel.id,
-                    video_id = %video.youtube_id,
+                    youtube_id = %video.youtube_id,
                     "removing video from channel (no longer among its most recent uploads)"
                 );
-                self.channel_video_repository
-                    .delete(&channel.id, &video.youtube_id)?;
+                self.channel_video_repository.delete(&video.id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
                 self.video_summary_repository.delete(&video.id)?;

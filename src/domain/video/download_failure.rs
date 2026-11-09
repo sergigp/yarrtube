@@ -1,4 +1,4 @@
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 
 /// Substrings that, found (case-insensitively) in a failure reason, mark a
 /// video permanently unavailable — see design.md's token table. This is an
@@ -44,7 +44,7 @@ impl DownloadFailure {
     }
 
     /// The reason, or a generic message naming `video_id` when there is none.
-    pub fn message_for(&self, video_id: &VideoRecordId) -> String {
+    pub fn message_for(&self, video_id: &VideoId) -> String {
         if self.reason.is_empty() {
             format!("yt-dlp failed to download video {video_id}")
         } else {
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn it_should_describe_itself_by_its_reason() {
-        let video_id = VideoRecordId::new("v1").unwrap();
+        let video_id = VideoId::new("v1").unwrap();
 
         assert_eq!(
             DownloadFailure::new("HTTP Error 403: Forbidden").message_for(&video_id),
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn it_should_describe_itself_generically_if_it_has_no_reason() {
-        let video_id = VideoRecordId::new("v1").unwrap();
+        let video_id = VideoId::new("v1").unwrap();
 
         assert_eq!(
             DownloadFailure::new("").message_for(&video_id),

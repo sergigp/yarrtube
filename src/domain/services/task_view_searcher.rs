@@ -1,7 +1,7 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::task::{ScheduledTask, Task, TaskView};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -85,9 +85,7 @@ impl TaskViewSearcher {
             | Task::SummarizeVideo { video_id }
             | Task::CategorizeVideo { video_id }
             | Task::UpgradeQuality { video_id, .. }
-            | Task::SyncVideo { video_id } => {
-                self.resolve_video(VideoRecordId::new(video_id.clone())?)
-            }
+            | Task::SyncVideo { video_id } => self.resolve_video(VideoId::new(video_id.clone())?),
             Task::DeleteVideoFile { filename, .. } => Ok(filename
                 .iter()
                 .map(|filename| ("filename".to_string(), filename.clone()))
@@ -132,7 +130,7 @@ impl TaskViewSearcher {
 
     /// The video's title, plus the name of the playlist or channel it
     /// belongs to.
-    fn resolve_video(&self, video_id: VideoRecordId) -> anyhow::Result<HashMap<String, String>> {
+    fn resolve_video(&self, video_id: VideoId) -> anyhow::Result<HashMap<String, String>> {
         let mut view = HashMap::new();
 
         if let Some(video) = self.video_repository.find(&video_id)? {

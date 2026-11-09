@@ -337,7 +337,7 @@ describe('CategoryDetail', () => {
     renderCategory({
       'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
       'GET /api/categories/chess/videos': () =>
-        inChess ? [aHomeVideo({ id: 'v1', record_id: 'rec1', title: 'Najdorf in 10 minutes' })] : [],
+        inChess ? [aHomeVideo({ id: 'rec1', title: 'Najdorf in 10 minutes' })] : [],
       'GET /api/videos/rec1/categories': choices,
       'PUT /api/videos/rec1/categories/chess': () => {
         inChess = false

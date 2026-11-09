@@ -2,7 +2,7 @@ use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistPath};
 use crate::domain::show::{MoveShowError, ShowKey, ShowMoved, has_work_in_progress};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 /// Moves a tracked playlist's or channel's show directory to a new storage
-/// path, keeping every video record, episode number and watch state.
+/// path, keeping every stored video, episode number and watch state.
 #[derive(Clone)]
 pub struct ShowMover {
     playlist_repository: Arc<dyn PlaylistRepository>,
@@ -149,7 +149,7 @@ impl ShowMover {
         &self,
         current: &PlaylistPath,
         path: &PlaylistPath,
-        video_ids: impl FnOnce() -> Result<Vec<VideoRecordId>, MoveShowError>,
+        video_ids: impl FnOnce() -> Result<Vec<VideoId>, MoveShowError>,
         record: impl FnOnce() -> Result<(), MoveShowError>,
     ) -> Result<(), MoveShowError> {
         self.ensure_destination_free(current, path)?;
@@ -177,7 +177,7 @@ impl ShowMover {
         Ok(())
     }
 
-    fn playlist_video_ids(&self, id: &PlaylistId) -> Result<Vec<VideoRecordId>, MoveShowError> {
+    fn playlist_video_ids(&self, id: &PlaylistId) -> Result<Vec<VideoId>, MoveShowError> {
         Ok(self
             .playlist_video_repository
             .list_for_playlist(id)
@@ -187,7 +187,7 @@ impl ShowMover {
             .collect())
     }
 
-    fn channel_video_ids(&self, id: &ChannelHandle) -> Result<Vec<VideoRecordId>, MoveShowError> {
+    fn channel_video_ids(&self, id: &ChannelHandle) -> Result<Vec<VideoId>, MoveShowError> {
         Ok(self
             .channel_video_repository
             .list_for_channel(id)
@@ -199,7 +199,7 @@ impl ShowMover {
 
     /// Nothing writes into the show directory on its own any more (see
     /// `has_work_in_progress`).
-    fn ensure_settled(&self, ids: &[VideoRecordId], show_dir: &Path) -> Result<(), MoveShowError> {
+    fn ensure_settled(&self, ids: &[VideoId], show_dir: &Path) -> Result<(), MoveShowError> {
         let videos = self
             .video_repository
             .find_many(ids)

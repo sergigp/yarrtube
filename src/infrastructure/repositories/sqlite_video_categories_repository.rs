@@ -1,20 +1,20 @@
 use crate::domain::category::CategoryId;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::domain::video_category::VideoCategories;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use rusqlite::{Connection, params, params_from_iter};
 use std::collections::HashMap;
 
-/// Which categories each stored video record belongs to.
+/// Which categories each stored video belongs to.
 pub trait VideoCategoriesRepository: Send + Sync {
     /// One per requested id, `VideoCategories::none` when it has no row.
-    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<VideoCategories>>;
-    /// Every record belonging to `category_id`, with its full set.
+    fn find_many(&self, ids: &[VideoId]) -> anyhow::Result<Vec<VideoCategories>>;
+    /// Every video belonging to `category_id`, with its full set.
     fn list_in_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoCategories>>;
-    /// Replaces each record's rows with its set, all in one transaction.
+    /// Replaces each video's rows with its set, all in one transaction.
     fn save_many(&self, categories: &[VideoCategories]) -> anyhow::Result<()>;
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()>;
 }
 
 pub struct SqliteVideoCategoriesRepository {
@@ -28,7 +28,7 @@ impl SqliteVideoCategoriesRepository {
 }
 
 impl VideoCategoriesRepository for SqliteVideoCategoriesRepository {
-    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<VideoCategories>> {
+    fn find_many(&self, ids: &[VideoId]) -> anyhow::Result<Vec<VideoCategories>> {
         let conn = self.db.read()?;
         let placeholders = vec!["?"; ids.len()].join(", ");
         let mut stmt = conn
@@ -72,18 +72,15 @@ impl VideoCategoriesRepository for SqliteVideoCategoriesRepository {
             .context("failed to commit video categories save")
     }
 
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         Self::delete_rows(&conn, video_id)
     }
 }
 
 impl SqliteVideoCategoriesRepository {
-    /// The records holding `category_id`, by id.
-    fn video_ids_in_category(
-        &self,
-        category_id: &CategoryId,
-    ) -> anyhow::Result<Vec<VideoRecordId>> {
+    /// The videos holding `category_id`, by id.
+    fn video_ids_in_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoId>> {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
@@ -97,7 +94,7 @@ impl SqliteVideoCategoriesRepository {
             .collect::<rusqlite::Result<Vec<_>>>()
             .context("failed to read video category row")?;
         ids.into_iter()
-            .map(|id| VideoRecordId::new(id).map_err(anyhow::Error::from))
+            .map(|id| VideoId::new(id).map_err(anyhow::Error::from))
             .collect()
     }
 
@@ -105,7 +102,7 @@ impl SqliteVideoCategoriesRepository {
         Ok((row.get(0)?, row.get(1)?))
     }
 
-    /// Replaces the record's rows with its set.
+    /// Replaces the video's rows with its set.
     fn replace(conn: &Connection, video_categories: &VideoCategories) -> anyhow::Result<()> {
         let video_id = &video_categories.video_id;
         Self::delete_rows(conn, video_id)?;
@@ -123,7 +120,7 @@ impl SqliteVideoCategoriesRepository {
             })
     }
 
-    fn delete_rows(conn: &Connection, video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete_rows(conn: &Connection, video_id: &VideoId) -> anyhow::Result<()> {
         conn.execute(
             "DELETE FROM video_categories WHERE video_id = ?1",
             params![video_id.as_str()],
@@ -161,8 +158,8 @@ mod tests {
         let repository = SqliteVideoCategoriesRepository::new(db.database());
 
         assert_eq!(
-            repository.find_many(&[record("rec1")]).unwrap(),
-            vec![VideoCategories::none(record("rec1"))]
+            repository.find_many(&[video_id("rec1")]).unwrap(),
+            vec![VideoCategories::none(video_id("rec1"))]
         );
     }
 
@@ -183,7 +180,7 @@ mod tests {
 
         assert_eq!(
             repository
-                .find_many(&[record("rec1"), record("rec2")])
+                .find_many(&[video_id("rec1"), video_id("rec2")])
                 .unwrap(),
             vec![
                 categories("rec1", &["chess", "science"]),
@@ -201,12 +198,12 @@ mod tests {
             .unwrap();
 
         repository
-            .save_many(&[VideoCategories::none(record("rec1"))])
+            .save_many(&[VideoCategories::none(video_id("rec1"))])
             .unwrap();
 
         assert_eq!(
-            repository.find_many(&[record("rec1")]).unwrap(),
-            vec![VideoCategories::none(record("rec1"))]
+            repository.find_many(&[video_id("rec1")]).unwrap(),
+            vec![VideoCategories::none(video_id("rec1"))]
         );
     }
 
@@ -242,22 +239,22 @@ mod tests {
             ])
             .unwrap();
 
-        repository.delete(&record("rec1")).unwrap();
+        repository.delete(&video_id("rec1")).unwrap();
 
         assert_eq!(
             repository
-                .find_many(&[record("rec1"), record("rec2")])
+                .find_many(&[video_id("rec1"), video_id("rec2")])
                 .unwrap(),
             vec![
-                VideoCategories::none(record("rec1")),
+                VideoCategories::none(video_id("rec1")),
                 categories("rec2", &["chess"]),
             ]
         );
     }
 
-    fn categories(video_id: &str, category_ids: &[&str]) -> VideoCategories {
+    fn categories(id: &str, category_ids: &[&str]) -> VideoCategories {
         VideoCategories::new(
-            record(video_id),
+            video_id(id),
             category_ids
                 .iter()
                 .map(|id| CategoryId::new(*id).unwrap())
@@ -269,7 +266,7 @@ mod tests {
         CategoryId::new(id).unwrap()
     }
 
-    fn record(id: &str) -> VideoRecordId {
-        VideoRecordId::new(id).unwrap()
+    fn video_id(id: &str) -> VideoId {
+        VideoId::new(id).unwrap()
     }
 }

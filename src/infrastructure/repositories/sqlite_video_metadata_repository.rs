@@ -1,4 +1,4 @@
-use crate::domain::video::{EpisodeNumber, VideoRecordId};
+use crate::domain::video::{EpisodeNumber, VideoId};
 use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -19,12 +19,12 @@ use std::path::Path;
 pub trait VideoMetadataRepository: Send + Sync {
     fn save(
         &self,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
         metadata: &VideoMetadata,
         number: &EpisodeNumber,
         nfo_path: &Path,
     ) -> anyhow::Result<()>;
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>>;
+    fn find(&self, video_id: &VideoId) -> anyhow::Result<Option<VideoMetadata>>;
     /// Writes only the episode NFO at `nfo_path`, recording nothing, so it
     /// can be in place before the video's media file is moved next to it.
     fn write_nfo(
@@ -67,7 +67,7 @@ impl SqliteVideoMetadataRepository {
 impl VideoMetadataRepository for SqliteVideoMetadataRepository {
     fn save(
         &self,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
         metadata: &VideoMetadata,
         number: &EpisodeNumber,
         nfo_path: &Path,
@@ -115,7 +115,7 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
         Ok(())
     }
 
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>> {
+    fn find(&self, video_id: &VideoId) -> anyhow::Result<Option<VideoMetadata>> {
         let conn = self.db.read()?;
         conn.query_row(
             "SELECT title, plot, studio, director, published_at, genre, tags, uniqueid, thumb, sorttitle, created_at, updated_at
@@ -211,7 +211,7 @@ impl SqliteVideoMetadataRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::video::{MOVIE_NFO_FILENAME, VideoId};
+    use crate::domain::video::{MOVIE_NFO_FILENAME, YoutubeVideoId};
 
     fn metadata() -> VideoMetadata {
         VideoMetadata::new(
@@ -297,7 +297,7 @@ mod tests {
         let repo = repo();
         let dir = unique_temp_dir("video-metadata-unwritable-season");
         std::fs::write(dir.join("Season 2024"), b"not a folder").unwrap();
-        let video_id = VideoRecordId::new_generated();
+        let video_id = VideoId::new_generated();
 
         let result = repo.save(
             &video_id,
@@ -315,7 +315,7 @@ mod tests {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-orphan-file");
         std::fs::write(video_dir.join(MOVIE_NFO_FILENAME), "<movie></movie>").unwrap();
-        let video_id = VideoRecordId::new_generated();
+        let video_id = VideoId::new_generated();
 
         let found = repo.find(&video_id).unwrap();
 
@@ -327,7 +327,7 @@ mod tests {
     fn it_should_overwrite_an_existing_row_on_a_second_save() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-overwrite");
-        let video_id = VideoRecordId::new_generated();
+        let video_id = VideoId::new_generated();
         repo.save(&video_id, &metadata(), &number(), &video_dir.join(NFO))
             .unwrap();
 
@@ -347,7 +347,7 @@ mod tests {
     fn it_should_round_trip_a_video_with_no_genre_no_tags_and_no_thumbnail() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-minimal");
-        let video_id = VideoRecordId::new_generated();
+        let video_id = VideoId::new_generated();
         let minimal = VideoMetadata {
             genre: None,
             tags: Vec::new(),
@@ -377,7 +377,7 @@ mod tests {
             std::fs::read_to_string(&nfo_path).ok(),
             Some(render_episode_nfo(&metadata(), &number()))
         );
-        assert_eq!(repo.find(&VideoRecordId::new_generated()).unwrap(), None);
+        assert_eq!(repo.find(&VideoId::new_generated()).unwrap(), None);
         std::fs::remove_dir_all(&show_dir).unwrap();
     }
 
@@ -433,7 +433,7 @@ mod tests {
     fn it_should_return_none_when_finding_an_untracked_video() {
         let repo = repo();
 
-        let found = repo.find(&VideoRecordId::new_generated()).unwrap();
+        let found = repo.find(&VideoId::new_generated()).unwrap();
 
         assert!(found.is_none());
     }
@@ -442,9 +442,12 @@ mod tests {
     fn it_should_scope_metadata_lookup_by_youtube_id() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-youtube-id");
-        let video_id = VideoRecordId::new_generated();
+        let video_id = VideoId::new_generated();
         let metadata_for_id = VideoMetadata {
-            uniqueid: VideoId::new("yt-specific").unwrap().as_str().to_string(),
+            uniqueid: YoutubeVideoId::new("yt-specific")
+                .unwrap()
+                .as_str()
+                .to_string(),
             ..metadata()
         };
 

@@ -48,7 +48,7 @@ mod tests {
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::{PlaylistEpisodeNumber, Video, VideoId, VideoRecordId};
+    use crate::domain::video::{PlaylistEpisodeNumber, Video, VideoId, YoutubeVideoId};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -192,7 +192,7 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
-        let ids: Vec<VideoRecordId> = videos.iter().map(|video| video.id.clone()).collect();
+        let ids: Vec<VideoId> = videos.iter().map(|video| video.id.clone()).collect();
         assert_eq!(
             videos,
             vec![
@@ -548,9 +548,9 @@ mod tests {
         )
     }
 
-    fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
+    fn playlist_item(youtube_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
         YoutubePlaylistItem {
-            video_id: video_id.to_string(),
+            youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             position,
         }
@@ -558,11 +558,15 @@ mod tests {
 
     /// A newly stored playlist video numbered `episode`.
     fn playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
-        Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
-            .with_episode_number(
-                PlaylistEpisodeNumber::new(episode).unwrap().into(),
-                fixed_timestamp(),
-            )
+        Video::create(
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            title,
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            PlaylistEpisodeNumber::new(episode).unwrap().into(),
+            fixed_timestamp(),
+        )
     }
 
     fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {

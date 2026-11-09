@@ -1,7 +1,7 @@
 use crate::domain::services::{QualityUpgrader, QualityUpgraderApi};
 use crate::domain::shared::Quality;
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 use std::sync::Arc;
@@ -31,7 +31,7 @@ impl TaskHandler for UpgradeQualityTask {
             return Err(unexpected_task(task));
         };
         self.quality_upgrader.upgrade(
-            &VideoRecordId::new(video_id.clone())?,
+            &VideoId::new(video_id.clone())?,
             Quality::new(quality.clone())?,
             Path::new(output_dir),
         )
@@ -44,7 +44,7 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::video::{
         DownloadedVideo, EpisodeNumber, LateDataChecks, PlaybackPosition, QualityProbe, Video,
-        VideoDownloaded, VideoId,
+        VideoDownloaded, YoutubeVideoId,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
@@ -713,26 +713,30 @@ mod tests {
                 failed_attempts: 0,
             },
             chapters_settled: true,
-            ..Video::create(VideoId::new("yt1").unwrap(), "My Video", downloaded_at)
-                .with_episode_number(
-                    EpisodeNumber::from_columns(2026, 31501).unwrap(),
-                    downloaded_at,
-                )
-                .mark_downloaded(
-                    Quality::High,
-                    FILENAME,
-                    Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
-                    Some(600),
-                    downloaded_at,
-                )
-                .mark_subtitles_fetched("Season 2026/S2026E031501 - My Video.en.srt", downloaded_at)
-                .with_chapters(vec![], downloaded_at)
-                .update_watch_state(
-                    PlaybackPosition::new(300).unwrap(),
-                    None,
-                    false,
-                    downloaded_at,
-                )
+            ..Video::create(
+                YoutubeVideoId::new("yt1").unwrap(),
+                "My Video",
+                downloaded_at,
+            )
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                downloaded_at,
+            )
+            .mark_downloaded(
+                Quality::High,
+                FILENAME,
+                Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                Some(600),
+                downloaded_at,
+            )
+            .mark_subtitles_fetched("Season 2026/S2026E031501 - My Video.en.srt", downloaded_at)
+            .with_chapters(vec![], downloaded_at)
+            .update_watch_state(
+                PlaybackPosition::new(300).unwrap(),
+                None,
+                false,
+                downloaded_at,
+            )
         }
     }
 

@@ -235,7 +235,7 @@ mod tests {
     use crate::domain::services::VideoRelocator;
     use crate::domain::show::ShowMoved;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::VideoId;
+    use crate::domain::video::YoutubeVideoId;
     use crate::domain::video::{PlaybackPosition, Video};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
@@ -2686,7 +2686,11 @@ mod tests {
             videos,
             vec![Video {
                 id: video_id.clone(),
-                ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+                ..Video::create(
+                    YoutubeVideoId::new("yt1").unwrap(),
+                    "One",
+                    fixed_timestamp()
+                )
             }]
         );
         assert_eq!(
@@ -3713,7 +3717,7 @@ mod tests {
         position: i64,
     ) -> (Video, ChannelVideo) {
         let video = Video::create(
-            VideoId::new(youtube_id).unwrap(),
+            YoutubeVideoId::new(youtube_id).unwrap(),
             format!("Video {youtube_id}"),
             fixed_timestamp(),
         );
@@ -3757,7 +3761,7 @@ mod tests {
 
     fn downloaded_video(youtube_id: &str) -> Video {
         Video::create(
-            VideoId::new(youtube_id).unwrap(),
+            YoutubeVideoId::new(youtube_id).unwrap(),
             format!("Video {youtube_id}"),
             fixed_timestamp(),
         )

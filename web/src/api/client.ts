@@ -116,15 +116,9 @@ export function videoMediaUrl(playlistPath: string, filename: string): string {
   return `/media/${encodedPath}/${encodedFilename}`
 }
 
-/** The playlist or channel a video is played from. */
-export interface VideoSourceRef {
-  kind: 'playlist' | 'channel'
-  id: string
-}
-
-/** The WebVTT subtitles of `videoId` as recorded for `source`. */
-export function videoSubtitlesUrl(source: VideoSourceRef, videoId: string): string {
-  return `/api/${source.kind}s/${encodeURIComponent(source.id)}/videos/${encodeURIComponent(videoId)}/subtitles.vtt`
+/** The WebVTT subtitles of the stored video `videoId`. */
+export function videoSubtitlesUrl(videoId: string): string {
+  return `/api/videos/${encodeURIComponent(videoId)}/subtitles.vtt`
 }
 
 export function avatarMediaUrl(filename: string): string {
@@ -278,21 +272,21 @@ export async function markPlaylistWatched(id: string): Promise<void> {
   })
 }
 
-export async function markVideoWatched(youtubeId: string): Promise<void> {
-  await send(`/videos/${encodeURIComponent(youtubeId)}/watched`, {
+export async function markVideoWatched(videoId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(videoId)}/watched`, {
     method: 'POST',
-    label: `mark video ${youtubeId} watched`,
+    label: `mark video ${videoId} watched`,
   })
 }
 
 export function recordVideoProgress(
-  youtubeId: string,
+  videoId: string,
   progress: VideoProgress,
 ): Promise<RecordProgressResponse> {
-  return request(`/videos/${encodeURIComponent(youtubeId)}/progress`, {
+  return request(`/videos/${encodeURIComponent(videoId)}/progress`, {
     method: 'POST',
     body: progress,
-    label: `record progress of video ${youtubeId}`,
+    label: `record progress of video ${videoId}`,
   })
 }
 
@@ -300,9 +294,9 @@ export function recordVideoProgress(
  * Records progress with `navigator.sendBeacon`, which the browser still
  * delivers while the page is being closed or hidden.
  */
-export function beaconVideoProgress(youtubeId: string, progress: VideoProgress): void {
+export function beaconVideoProgress(videoId: string, progress: VideoProgress): void {
   const body = new Blob([JSON.stringify(progress)], { type: 'application/json' })
-  navigator.sendBeacon(`/api/videos/${encodeURIComponent(youtubeId)}/progress`, body)
+  navigator.sendBeacon(`/api/videos/${encodeURIComponent(videoId)}/progress`, body)
 }
 
 export function listCategories(): Promise<CategoryList> {
@@ -355,28 +349,28 @@ export async function markCategoryWatched(id: string): Promise<void> {
   })
 }
 
-/** A video copy's categories, `recordId` being its `record_id`, never its YouTube id. */
-export function getVideoCategories(recordId: string): Promise<VideoCategories> {
-  return request(`/videos/${encodeURIComponent(recordId)}/categories`)
+/** A stored video's categories, `videoId` being its `id`, never its YouTube id. */
+export function getVideoCategories(videoId: string): Promise<VideoCategories> {
+  return request(`/videos/${encodeURIComponent(videoId)}/categories`)
 }
 
 /** Sets a video copy's category by hand; responds with its categories as they are now. */
 export function setVideoCategory(
-  recordId: string,
+  videoId: string,
   categoryId: string,
   belongs: boolean,
 ): Promise<VideoCategories> {
   return request(
-    `/videos/${encodeURIComponent(recordId)}/categories/${encodeURIComponent(categoryId)}`,
-    { method: 'PUT', body: { belongs }, label: `set category ${categoryId} of video ${recordId}` },
+    `/videos/${encodeURIComponent(videoId)}/categories/${encodeURIComponent(categoryId)}`,
+    { method: 'PUT', body: { belongs }, label: `set category ${categoryId} of video ${videoId}` },
   )
 }
 
 /** Deletes a video copy's AI verdicts so the AI is asked again. */
-export async function deleteVideoAiVerdicts(recordId: string): Promise<void> {
-  await send(`/videos/${encodeURIComponent(recordId)}/ai-verdicts`, {
+export async function deleteVideoAiVerdicts(videoId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(videoId)}/ai-verdicts`, {
     method: 'DELETE',
-    label: `re-run AI for video ${recordId}`,
+    label: `re-run AI for video ${videoId}`,
   })
 }
 

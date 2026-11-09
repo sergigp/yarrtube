@@ -116,7 +116,7 @@ impl SubtitleFetcher {
 
     /// Records a check that found no selectable track (`Incomplete`) or was
     /// inconclusive (`Failed`), dated by the video's publish time (its
-    /// record's creation time when none is known): Unavailable once the
+    /// video's creation time when none is known): Unavailable once the
     /// `late-video-data` policy settles it, Missing otherwise.
     fn record_check(
         &self,

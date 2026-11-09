@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-/// The category set of stored video records, or the name of a category in
+/// The category set of stored videos, or the name of a category in
 /// it, changed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VideoCategoriesChanged {

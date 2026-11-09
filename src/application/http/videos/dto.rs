@@ -23,8 +23,7 @@ pub struct RecordProgressResponse {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct VideoResponse {
     pub id: String,
-    /// This stored copy's id; `id` is the YouTube video's.
-    pub record_id: String,
+    pub youtube_id: String,
     pub title: String,
     pub status: String,
     pub quality: Option<String>,
@@ -75,8 +74,8 @@ impl From<VideoView> for VideoResponse {
             subtitle_language: video.subtitle_language(),
             watched: video.is_watched(),
             position_seconds: video.playback_position.seconds(),
-            id: video.youtube_id.as_str().to_string(),
-            record_id: video.id.as_str().to_string(),
+            id: video.id.as_str().to_string(),
+            youtube_id: video.youtube_id.as_str().to_string(),
             title: video.title,
             status: video.status.as_str().to_string(),
             quality: video.quality.map(|q| q.as_str().to_string()),
@@ -122,8 +121,7 @@ pub struct SearchVideosResponse {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct HomeVideoResponse {
     pub id: String,
-    /// This stored copy's id; `id` is the YouTube video's.
-    pub record_id: String,
+    pub youtube_id: String,
     pub title: String,
     pub thumbnail_filename: Option<String>,
     pub duration_seconds: Option<i64>,
@@ -164,8 +162,8 @@ impl From<HomeVideoView> for HomeVideoResponse {
     fn from(view: HomeVideoView) -> Self {
         let source = HomeVideoSourceResponse::from(view.source);
         Self {
-            id: view.youtube_id.as_str().to_string(),
-            record_id: view.record_id.as_str().to_string(),
+            id: view.id.as_str().to_string(),
+            youtube_id: view.youtube_id.as_str().to_string(),
             title: view.title,
             thumbnail_filename: view.thumbnail_filename,
             duration_seconds: view.duration_seconds,
@@ -185,8 +183,7 @@ impl From<HomeVideoView> for HomeVideoResponse {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct CategoryVideoResponse {
     pub id: String,
-    /// This stored copy's id; `id` is the YouTube video's.
-    pub record_id: String,
+    pub youtube_id: String,
     pub title: String,
     pub status: String,
     pub quality: Option<String>,
@@ -217,7 +214,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
         });
         Self {
             id: video.id,
-            record_id: video.record_id,
+            youtube_id: video.youtube_id,
             title: video.title,
             status: video.status,
             quality: video.quality,

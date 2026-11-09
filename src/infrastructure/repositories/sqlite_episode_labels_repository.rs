@@ -1,6 +1,6 @@
 use crate::domain::plex::PlexLabels;
 use crate::domain::plex_label::EpisodeLabels;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -8,10 +8,10 @@ use rusqlite::{Connection, params, params_from_iter};
 
 const COLUMNS: &str = "video_id, dirty, rating_key, section_id, labels, checked_at, generation";
 
-/// The Plex label state of each stored video record.
+/// The Plex label state of each stored video.
 pub trait EpisodeLabelsRepository: Send + Sync {
     /// Only the ids that have a row.
-    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<EpisodeLabels>>;
+    fn find_many(&self, ids: &[VideoId]) -> anyhow::Result<Vec<EpisodeLabels>>;
     /// Dirty rows, never checked first then least recently checked, at most
     /// `limit`.
     fn list_dirty(&self, limit: usize) -> anyhow::Result<Vec<EpisodeLabels>>;
@@ -20,7 +20,7 @@ pub trait EpisodeLabelsRepository: Send + Sync {
     /// Inserts or replaces each row, all in one transaction; a row whose
     /// stored generation is newer (marked since it was read) is left as is.
     fn save_many(&self, rows: &[EpisodeLabels]) -> anyhow::Result<()>;
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()>;
 }
 
 pub struct SqliteEpisodeLabelsRepository {
@@ -34,7 +34,7 @@ impl SqliteEpisodeLabelsRepository {
 }
 
 impl EpisodeLabelsRepository for SqliteEpisodeLabelsRepository {
-    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<EpisodeLabels>> {
+    fn find_many(&self, ids: &[VideoId]) -> anyhow::Result<Vec<EpisodeLabels>> {
         let placeholders = vec!["?"; ids.len()].join(", ");
         let found = self.query(
             &format!("SELECT {COLUMNS} FROM episode_labels WHERE video_id IN ({placeholders})"),
@@ -77,7 +77,7 @@ impl EpisodeLabelsRepository for SqliteEpisodeLabelsRepository {
         tx.commit().context("failed to commit episode labels save")
     }
 
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
             "DELETE FROM episode_labels WHERE video_id = ?1",
@@ -150,7 +150,7 @@ impl SqliteEpisodeLabelsRepository {
 
     fn to_episode_labels(row: RawRow) -> anyhow::Result<EpisodeLabels> {
         Ok(EpisodeLabels {
-            video_id: VideoRecordId::new(row.video_id)?,
+            video_id: VideoId::new(row.video_id)?,
             dirty: row.dirty,
             rating_key: row.rating_key,
             section_id: row.section_id,
@@ -202,7 +202,7 @@ mod tests {
             .unwrap();
 
         let found = repository
-            .find_many(&[record("rec1"), record("rec2"), record("rec3")])
+            .find_many(&[video_id("rec1"), video_id("rec2"), video_id("rec3")])
             .unwrap();
 
         assert_eq!(found, vec![synced, pending("rec2")]);
@@ -257,7 +257,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            repository.find_many(&[record("rec1")]).unwrap(),
+            repository.find_many(&[video_id("rec1")]).unwrap(),
             vec![marked]
         );
     }
@@ -289,7 +289,7 @@ mod tests {
 
     fn pending(id: &str) -> EpisodeLabels {
         EpisodeLabels {
-            video_id: record(id),
+            video_id: video_id(id),
             dirty: true,
             rating_key: None,
             section_id: None,
@@ -299,8 +299,8 @@ mod tests {
         }
     }
 
-    fn record(id: &str) -> VideoRecordId {
-        VideoRecordId::new(id.to_string()).unwrap()
+    fn video_id(id: &str) -> VideoId {
+        VideoId::new(id.to_string()).unwrap()
     }
 
     fn at(timestamp: &str) -> DateTime<Utc> {

@@ -1,4 +1,4 @@
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use std::collections::HashSet;
 use std::sync::{Condvar, Mutex, PoisonError};
 
@@ -8,19 +8,19 @@ use std::sync::{Condvar, Mutex, PoisonError};
 /// restart.
 #[derive(Default)]
 pub struct VideoLock {
-    held: Mutex<HashSet<VideoRecordId>>,
+    held: Mutex<HashSet<VideoId>>,
     released: Condvar,
 }
 
 /// Holds a video's lock until dropped.
 pub struct VideoLockGuard<'a> {
     lock: &'a VideoLock,
-    video_id: VideoRecordId,
+    video_id: VideoId,
 }
 
 impl VideoLock {
     /// Locks `video_id`, waiting while another holder has it; released on drop.
-    pub fn lock(&self, video_id: &VideoRecordId) -> VideoLockGuard<'_> {
+    pub fn lock(&self, video_id: &VideoId) -> VideoLockGuard<'_> {
         let held = self.held.lock().unwrap_or_else(PoisonError::into_inner);
         let mut held = self
             .released
@@ -93,7 +93,7 @@ mod tests {
     /// machine never fails the test, and only waited out on a regression.
     const TIMEOUT: Duration = Duration::from_secs(5);
 
-    fn video_id(id: &str) -> VideoRecordId {
-        VideoRecordId::new(id).unwrap()
+    fn video_id(id: &str) -> VideoId {
+        VideoId::new(id).unwrap()
     }
 }

@@ -178,7 +178,7 @@ mod tests {
     use crate::domain::services::{CategoryVideoCollector, VideoCategoryAssigner};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::{Video, VideoId, VideoRecordId};
+    use crate::domain::video::{Video, VideoId, YoutubeVideoId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -3134,7 +3134,7 @@ mod tests {
 
     fn pending_video(youtube_id: &str) -> Video {
         Video::create(
-            VideoId::new(youtube_id).unwrap(),
+            YoutubeVideoId::new(youtube_id).unwrap(),
             format!("Video {youtube_id}"),
             fixed_timestamp(),
         )
@@ -3224,7 +3224,7 @@ mod tests {
 
     /// Seeds every stored video of `source` as belonging to `categories`.
     fn categorize_source(db: &TestDatabase, source: &CategoryMember, categories: &[&Category]) {
-        let video_ids: Vec<VideoRecordId> = match source {
+        let video_ids: Vec<VideoId> = match source {
             CategoryMember::Channel(handle) => SqliteChannelVideoRepository::new(db.database())
                 .list_for_channel(handle)
                 .unwrap()
@@ -3253,7 +3253,7 @@ mod tests {
     }
 
     /// The pending `VideoCategoriesChanged` event `id`, naming `videos` in
-    /// record id order.
+    /// video id order.
     fn categories_changed_event(id: i64, videos: &[&Video]) -> ScheduledEvent {
         let mut video_ids: Vec<String> = videos
             .iter()

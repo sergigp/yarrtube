@@ -159,7 +159,7 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
   uniqueId += 1
   return {
     id: `video-${uniqueId}`,
-    record_id: `record-${uniqueId}`,
+    youtube_id: `youtube-${uniqueId}`,
     title: `Video ${uniqueId}`,
     status: 'DOWNLOADED',
     quality: 'high',
@@ -184,7 +184,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
   uniqueId += 1
   return {
     id: `video-${uniqueId}`,
-    record_id: `record-${uniqueId}`,
+    youtube_id: `youtube-${uniqueId}`,
     title: `Video ${uniqueId}`,
     thumbnail_filename: null,
     duration_seconds: 120,

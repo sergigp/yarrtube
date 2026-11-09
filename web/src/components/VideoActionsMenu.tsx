@@ -16,10 +16,8 @@ import { homeSettingAction } from '@/lib/homeSetting'
 import { cn } from '@/lib/utils'
 
 interface VideoActionsMenuProps {
-  /** The YouTube video id. */
+  /** The stored video's `id`. */
   videoId: string
-  /** The stored copy's `record_id`, naming it to the categories routes. */
-  recordId: string
   /** Names the video in the trigger's label and the failure alert. */
   title: string
   /** The channel or playlist the copy comes from. */
@@ -34,7 +32,6 @@ interface VideoActionsMenuProps {
 /** A vertical "⋮" menu of actions on one video. */
 export function VideoActionsMenu({
   videoId,
-  recordId,
   title,
   sourceName,
   markable,
@@ -90,7 +87,7 @@ export function VideoActionsMenu({
           </DropdownMenuItem>
         )}
         {categoriesShown && (
-          <DropdownMenuItem onSelect={() => editCategories({ recordId, title, sourceName })}>
+          <DropdownMenuItem onSelect={() => editCategories({ videoId, title, sourceName })}>
             <Tags />
             Edit categories…
           </DropdownMenuItem>

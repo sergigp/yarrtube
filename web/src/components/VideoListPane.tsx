@@ -124,7 +124,6 @@ export function VideoListPane<T extends Video>({
                 </button>
                 <VideoActionsMenu
                   videoId={video.id}
-                  recordId={video.record_id}
                   title={video.title}
                   sourceName={sourceNameOf(video)}
                   markable={!video.watched && video.status === 'DOWNLOADED'}

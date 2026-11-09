@@ -3,7 +3,7 @@ use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::domain::video_category::{EditVideoCategoriesError, VideoCategoryVerdict};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -69,16 +69,16 @@ pub trait VideoCategoryEditorApi: Send + Sync {
     /// categories; `FromSource` when the video's source is a member.
     fn set(
         &self,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
         category_id: &CategoryId,
         belongs: bool,
     ) -> Result<(), EditVideoCategoriesError>;
     /// Deletes the video's AI verdicts, recomputes its categories and
     /// schedules its sync.
-    fn rerun_video(&self, video_id: &VideoRecordId) -> Result<(), EditVideoCategoriesError>;
-    /// The same for every record of `source`; schedules its reconcile pass.
+    fn rerun_video(&self, video_id: &VideoId) -> Result<(), EditVideoCategoriesError>;
+    /// The same for every video of `source`; schedules its reconcile pass.
     fn rerun_source(&self, source: &CategoryMember) -> Result<(), EditVideoCategoriesError>;
-    /// Deletes the category's AI verdicts, recomputes and syncs the records
+    /// Deletes the category's AI verdicts, recomputes and syncs the videos
     /// that had one.
     fn rerun_category(&self, category_id: &CategoryId) -> Result<(), EditVideoCategoriesError>;
 }
@@ -86,7 +86,7 @@ pub trait VideoCategoryEditorApi: Send + Sync {
 impl VideoCategoryEditorApi for VideoCategoryEditor {
     fn set(
         &self,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
         category_id: &CategoryId,
         belongs: bool,
     ) -> Result<(), EditVideoCategoriesError> {
@@ -104,7 +104,7 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
         Ok(())
     }
 
-    fn rerun_video(&self, video_id: &VideoRecordId) -> Result<(), EditVideoCategoriesError> {
+    fn rerun_video(&self, video_id: &VideoId) -> Result<(), EditVideoCategoriesError> {
         self.find_source(video_id)?;
         self.clear_ai_verdicts(std::slice::from_ref(video_id))?;
         self.schedule(&Task::SyncVideo {
@@ -113,7 +113,7 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
     }
 
     fn rerun_source(&self, source: &CategoryMember) -> Result<(), EditVideoCategoriesError> {
-        let video_ids = self.record_ids(source)?;
+        let video_ids = self.video_ids(source)?;
         self.clear_ai_verdicts(&video_ids)?;
         self.schedule(&Self::reconcile_task(source))
     }
@@ -135,10 +135,7 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
 
 impl VideoCategoryEditor {
     /// The channel or playlist holding the stored `video_id`.
-    fn find_source(
-        &self,
-        video_id: &VideoRecordId,
-    ) -> Result<CategoryMember, EditVideoCategoriesError> {
+    fn find_source(&self, video_id: &VideoId) -> Result<CategoryMember, EditVideoCategoriesError> {
         let video = self
             .video_repository
             .find(video_id)
@@ -153,10 +150,7 @@ impl VideoCategoryEditor {
 
     /// Deletes the AI verdicts of `video_ids` and recomputes the categories
     /// of those that had one.
-    fn clear_ai_verdicts(
-        &self,
-        video_ids: &[VideoRecordId],
-    ) -> Result<(), EditVideoCategoriesError> {
+    fn clear_ai_verdicts(&self, video_ids: &[VideoId]) -> Result<(), EditVideoCategoriesError> {
         let affected = self
             .video_category_verdict_repository
             .delete_ai_for_videos(video_ids)
@@ -164,17 +158,14 @@ impl VideoCategoryEditor {
         self.recompute(&affected)
     }
 
-    fn recompute(&self, video_ids: &[VideoRecordId]) -> Result<(), EditVideoCategoriesError> {
+    fn recompute(&self, video_ids: &[VideoId]) -> Result<(), EditVideoCategoriesError> {
         self.video_category_assigner
             .recompute(video_ids)
             .map_err(EditVideoCategoriesError::Repository)
     }
 
-    /// The stored records of `source`; `SourceNotFound` when it isn't tracked.
-    fn record_ids(
-        &self,
-        source: &CategoryMember,
-    ) -> Result<Vec<VideoRecordId>, EditVideoCategoriesError> {
+    /// The stored videos of `source`; `SourceNotFound` when it isn't tracked.
+    fn video_ids(&self, source: &CategoryMember) -> Result<Vec<VideoId>, EditVideoCategoriesError> {
         self.find_tracked(source)?;
         let video_ids = match source {
             CategoryMember::Channel(handle) => self

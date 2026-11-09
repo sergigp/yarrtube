@@ -57,7 +57,7 @@ mod tests {
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{
-        EpisodeNumber, FetchedThumbnail, VideoId, VideoRecordId, VideoStatus,
+        EpisodeNumber, FetchedThumbnail, VideoId, VideoStatus, YoutubeVideoId,
     };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
@@ -195,7 +195,11 @@ mod tests {
             videos,
             vec![Video {
                 id: video_id.clone(),
-                ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+                ..Video::create(
+                    YoutubeVideoId::new("yt1").unwrap(),
+                    "One",
+                    fixed_timestamp()
+                )
             }]
         );
         assert_eq!(
@@ -245,7 +249,11 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let existing = Video::create(VideoId::new("yt1").unwrap(), "Original", fixed_timestamp());
+        let existing = Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "Original",
+            fixed_timestamp(),
+        );
         let existing_channel_video = save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -301,7 +309,11 @@ mod tests {
             channel_video_repository.as_ref(),
             &existing,
         );
-        let other = Video::create(VideoId::new("yt2").unwrap(), "Other", fixed_timestamp());
+        let other = Video::create(
+            YoutubeVideoId::new("yt2").unwrap(),
+            "Other",
+            fixed_timestamp(),
+        );
         save_channel_video_at(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -675,7 +687,11 @@ mod tests {
                 ..channel("@somechannel")
             })
             .unwrap();
-        let existing = Video::create(VideoId::new("yt_old").unwrap(), "Old", fixed_timestamp());
+        let existing = Video::create(
+            YoutubeVideoId::new("yt_old").unwrap(),
+            "Old",
+            fixed_timestamp(),
+        );
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -1046,9 +1062,21 @@ mod tests {
             ..channel("@somechannel")
         };
         channel_repository.insert(&original).unwrap();
-        let newest = Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp());
-        let middle = Video::create(VideoId::new("yt2").unwrap(), "Two", fixed_timestamp());
-        let oldest = Video::create(VideoId::new("yt3").unwrap(), "Three", fixed_timestamp());
+        let newest = Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "One",
+            fixed_timestamp(),
+        );
+        let middle = Video::create(
+            YoutubeVideoId::new("yt2").unwrap(),
+            "Two",
+            fixed_timestamp(),
+        );
+        let oldest = Video::create(
+            YoutubeVideoId::new("yt3").unwrap(),
+            "Three",
+            fixed_timestamp(),
+        );
         let newest_channel_video = save_channel_video_at(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -1142,7 +1170,11 @@ mod tests {
             ..channel("@somechannel")
         };
         channel_repository.insert(&original).unwrap();
-        let newest = Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp());
+        let newest = Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "One",
+            fixed_timestamp(),
+        );
         let newest_channel_video = save_channel_video_at(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -1182,7 +1214,11 @@ mod tests {
                 newest.clone(),
                 Video {
                     id: added_id.clone(),
-                    ..Video::create(VideoId::new("yt2").unwrap(), "Two", fixed_timestamp())
+                    ..Video::create(
+                        YoutubeVideoId::new("yt2").unwrap(),
+                        "Two",
+                        fixed_timestamp()
+                    )
                 },
             ]
         );
@@ -1238,7 +1274,11 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let existing = Video::create(VideoId::new("yt_old").unwrap(), "Old", fixed_timestamp());
+        let existing = Video::create(
+            YoutubeVideoId::new("yt_old").unwrap(),
+            "Old",
+            fixed_timestamp(),
+        );
         let existing_channel_video = save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -2121,7 +2161,11 @@ mod tests {
             videos,
             vec![Video {
                 id: video_id.clone(),
-                ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+                ..Video::create(
+                    YoutubeVideoId::new("yt1").unwrap(),
+                    "One",
+                    fixed_timestamp()
+                )
             }]
         );
         assert_eq!(
@@ -2243,7 +2287,11 @@ mod tests {
             videos,
             vec![Video {
                 id: video_id.clone(),
-                ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+                ..Video::create(
+                    YoutubeVideoId::new("yt1").unwrap(),
+                    "One",
+                    fixed_timestamp()
+                )
             }]
         );
         assert_eq!(
@@ -2481,7 +2529,7 @@ mod tests {
             fixed_timestamp(),
         );
         let unavailable = Video {
-            youtube_id: VideoId::new("yt2").unwrap(),
+            youtube_id: YoutubeVideoId::new("yt2").unwrap(),
             ..downloaded_episode().mark_subtitles_unavailable(fixed_timestamp())
         };
         save_channel_video_at(
@@ -2895,11 +2943,19 @@ mod tests {
             vec![
                 Video {
                     id: first_id.clone(),
-                    ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+                    ..Video::create(
+                        YoutubeVideoId::new("yt1").unwrap(),
+                        "One",
+                        fixed_timestamp()
+                    )
                 },
                 Video {
                     id: second_id.clone(),
-                    ..Video::create(VideoId::new("yt2").unwrap(), "Two", fixed_timestamp())
+                    ..Video::create(
+                        YoutubeVideoId::new("yt2").unwrap(),
+                        "Two",
+                        fixed_timestamp()
+                    )
                 },
             ]
         );
@@ -3306,7 +3362,11 @@ mod tests {
     }
 
     fn my_video() -> Video {
-        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+        Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
     }
 
     /// Its chapters and quality settled, so a sync schedules no chapters fetch or
@@ -3381,7 +3441,7 @@ mod tests {
         )
     }
 
-    fn download_video_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+    fn download_video_task(id: i64, video_id: &VideoId) -> ScheduledTask {
         pending_task(
             id,
             &Task::DownloadVideo {
@@ -3393,7 +3453,7 @@ mod tests {
         )
     }
 
-    fn fetch_thumbnail_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+    fn fetch_thumbnail_task(id: i64, video_id: &VideoId) -> ScheduledTask {
         pending_task(
             id,
             &Task::FetchThumbnail {
@@ -3404,7 +3464,7 @@ mod tests {
         )
     }
 
-    fn fetch_subtitles_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+    fn fetch_subtitles_task(id: i64, video_id: &VideoId) -> ScheduledTask {
         pending_task(
             id,
             &Task::FetchSubtitles {

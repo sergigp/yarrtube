@@ -1,5 +1,5 @@
 use crate::domain::playlist::PlaylistId;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use chrono::{DateTime, Utc};
 
 /// Records that a `Video` belongs to a `Playlist`, and its position in that
@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 pub struct PlaylistVideo {
     pub id: i64,
     pub playlist_id: PlaylistId,
-    pub video_id: VideoRecordId,
+    pub video_id: VideoId,
     pub position: i64,
     pub created_at: DateTime<Utc>,
 }
@@ -19,7 +19,7 @@ impl PlaylistVideo {
     /// that playlist.
     pub fn create(
         playlist_id: PlaylistId,
-        video_id: VideoRecordId,
+        video_id: VideoId,
         position: i64,
         now: DateTime<Utc>,
     ) -> Self {
@@ -43,7 +43,7 @@ mod tests {
 
         let playlist_video = PlaylistVideo::create(
             PlaylistId::new("PL1").unwrap(),
-            VideoRecordId::new_generated(),
+            VideoId::new_generated(),
             3,
             now,
         );

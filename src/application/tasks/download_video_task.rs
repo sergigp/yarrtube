@@ -1,7 +1,7 @@
 use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
 use crate::domain::shared::Quality;
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 
@@ -28,7 +28,7 @@ impl TaskHandler for DownloadVideoTask {
         else {
             return Err(unexpected_task(task));
         };
-        let Ok(video_id) = VideoRecordId::new(video_id.clone()) else {
+        let Ok(video_id) = VideoId::new(video_id.clone()) else {
             return Ok(());
         };
         let Ok(quality) = Quality::new(quality.clone()) else {
@@ -55,7 +55,7 @@ mod tests {
     use crate::domain::video::Video;
     use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::YoutubeVideoId;
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
@@ -785,7 +785,7 @@ mod tests {
         let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
         let output_dir = tempfile::tempdir().unwrap();
         let first = Video::create(
-            VideoId::new("yt0").unwrap(),
+            YoutubeVideoId::new("yt0").unwrap(),
             "First Video",
             fixed_timestamp(),
         )
@@ -1902,7 +1902,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let output_dir = tempfile::tempdir().unwrap();
         let video = Video::create(
-            VideoId::new("yt1").unwrap(),
+            YoutubeVideoId::new("yt1").unwrap(),
             "My: Messy / Title?",
             fixed_timestamp(),
         );
@@ -2423,7 +2423,11 @@ mod tests {
     }
 
     fn my_video() -> Video {
-        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+        Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
     }
 
     fn youtube_metadata() -> YoutubeMetadata {
@@ -2543,7 +2547,7 @@ mod tests {
 
     /// Stores the video as played and watched, the way marking another copy
     /// watched or playing it does while its download runs.
-    fn record_watch_state_meanwhile(video_repository: &SqliteVideoRepository, id: &VideoRecordId) {
+    fn record_watch_state_meanwhile(video_repository: &SqliteVideoRepository, id: &VideoId) {
         let current = video_repository.find(id).unwrap().unwrap();
         video_repository
             .update(&with_watch_state_recorded_meanwhile(current))

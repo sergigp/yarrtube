@@ -71,7 +71,7 @@ export function VideoDetail({
             onRateChange={onPlaybackRateChange}
             disabled={video.status !== 'DOWNLOADED'}
           />
-          <YouTubeLink videoId={video.id} />
+          <YouTubeLink youtubeId={video.youtube_id} />
         </div>
       </div>
       <MetaLine video={video} showChannelName={!channel} />
@@ -100,14 +100,14 @@ function AiSummary({ summary }: { summary: string }) {
 }
 
 /** An icon link opening the video on YouTube in a new tab. */
-function YouTubeLink({ videoId }: { videoId: string }) {
+function YouTubeLink({ youtubeId }: { youtubeId: string }) {
   const label = 'Open video on YouTube'
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <a
-            href={`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`}
+            href={`https://www.youtube.com/watch?v=${encodeURIComponent(youtubeId)}`}
             target="_blank"
             rel="noopener"
             aria-label={label}

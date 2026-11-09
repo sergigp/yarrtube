@@ -3,7 +3,7 @@ use crate::domain::video::{
     ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, SubtitleState,
     SummaryState, Video, VideoChapter, VideoStatus,
 };
-use crate::domain::video::{VideoId, VideoRecordId};
+use crate::domain::video::{VideoId, YoutubeVideoId};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -50,22 +50,17 @@ pub trait VideoRepository: Send + Sync {
     /// Plain insert-or-full-replace of every column — no conflict-merge
     /// policy. Callers decide what `Video` value to persist.
     fn save(&self, video: &Video) -> anyhow::Result<()>;
-    fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>>;
+    fn find(&self, id: &VideoId) -> anyhow::Result<Option<Video>>;
     /// The stored videos among `ids`, in the order given, skipping ids with
     /// no stored video. One query however many ids.
-    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<Video>>;
+    fn find_many(&self, ids: &[VideoId]) -> anyhow::Result<Vec<Video>>;
     /// Writes every mutable column, including `status` — unlike `save`,
     /// which is a plain insert-or-replace, `update` only touches a row that
     /// still exists.
     fn update(&self, video: &Video) -> anyhow::Result<()>;
     /// Writes only `title` (and `updated_at`), leaving the download's fields
     /// untouched even if they changed since the caller read the video.
-    fn update_title(
-        &self,
-        id: &VideoRecordId,
-        title: &str,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<()>;
+    fn update_title(&self, id: &VideoId, title: &str, now: DateTime<Utc>) -> anyhow::Result<()>;
     /// Writes only `subtitle_state`, `subtitle_filename`, the subtitle
     /// checks and `updated_at`,
     /// leaving the download's fields untouched even if they changed since
@@ -81,7 +76,7 @@ pub trait VideoRepository: Send + Sync {
     /// read the video.
     fn update_thumbnail(
         &self,
-        id: &VideoRecordId,
+        id: &VideoId,
         thumbnail_filename: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()>;
@@ -93,9 +88,9 @@ pub trait VideoRepository: Send + Sync {
     /// settlement (and `updated_at`), leaving every other field untouched
     /// even if it changed since the caller read the video.
     fn update_quality(&self, video: &Video) -> anyhow::Result<()>;
-    fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()>;
+    fn delete(&self, id: &VideoId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
-    fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>>;
+    fn find_by_youtube_id(&self, youtube_id: &YoutubeVideoId) -> anyhow::Result<Vec<Video>>;
     /// The video's episode number: the one already recorded, if any, else the
     /// next free same-day index among the videos of the same channel
     /// published on `published_at`'s day, recorded in one write. Fails for an
@@ -103,7 +98,7 @@ pub trait VideoRepository: Send + Sync {
     /// added to its playlist, never by publish date.
     fn assign_episode_number(
         &self,
-        id: &VideoRecordId,
+        id: &VideoId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber>;
     /// Every `Downloaded` video, across all playlists and channels.
@@ -115,7 +110,7 @@ pub trait VideoRepository: Send + Sync {
     /// recording it.
     fn next_episode_number(
         &self,
-        id: &VideoRecordId,
+        id: &VideoId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber>;
 }
@@ -140,7 +135,7 @@ impl SqliteVideoRepository {
                 .collect::<Result<_, _>>()?
         };
         ids.into_iter()
-            .map(|id| Ok(self.find(&VideoRecordId::new(id)?)?.unwrap()))
+            .map(|id| Ok(self.find(&VideoId::new(id)?)?.unwrap()))
             .collect()
     }
 }
@@ -221,7 +216,7 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>> {
+    fn find(&self, id: &VideoId) -> anyhow::Result<Option<Video>> {
         let conn = self.db.read()?;
         conn.query_row(
             &format!("SELECT {VIDEO_COLUMNS} FROM videos WHERE id = ?1"),
@@ -235,7 +230,7 @@ impl VideoRepository for SqliteVideoRepository {
         .transpose()
     }
 
-    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<Video>> {
+    fn find_many(&self, ids: &[VideoId]) -> anyhow::Result<Vec<Video>> {
         let conn = self.db.read()?;
         let placeholders = vec!["?"; ids.len()].join(", ");
         let mut stmt = conn
@@ -304,12 +299,7 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn update_title(
-        &self,
-        id: &VideoRecordId,
-        title: &str,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
+    fn update_title(&self, id: &VideoId, title: &str, now: DateTime<Utc>) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
             "UPDATE videos SET title = ?2, updated_at = ?3 WHERE id = ?1",
@@ -375,7 +365,7 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn update_thumbnail(
         &self,
-        id: &VideoRecordId,
+        id: &VideoId,
         thumbnail_filename: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
@@ -432,7 +422,7 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete(&self, id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute("DELETE FROM videos WHERE id = ?1", params![id.as_str()])
             .inspect_err(|e| tracing::error!(video_id = %id, error = %e, "failed to delete video"))
@@ -440,7 +430,7 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>> {
+    fn find_by_youtube_id(&self, youtube_id: &YoutubeVideoId) -> anyhow::Result<Vec<Video>> {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(&format!(
@@ -460,7 +450,7 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn assign_episode_number(
         &self,
-        id: &VideoRecordId,
+        id: &VideoId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber> {
         let conn = self.db.write()?;
@@ -481,7 +471,7 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn next_episode_number(
         &self,
-        id: &VideoRecordId,
+        id: &VideoId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber> {
         let conn = self.db.read()?;
@@ -547,7 +537,7 @@ impl SqliteVideoRepository {
 
     fn recorded_episode_number(
         conn: &Connection,
-        id: &VideoRecordId,
+        id: &VideoId,
     ) -> anyhow::Result<Option<EpisodeNumber>> {
         let (season, episode): (Option<i32>, Option<u32>) = conn
             .query_row(
@@ -566,7 +556,7 @@ impl SqliteVideoRepository {
     /// sharing a channel with `id`.
     fn next_free_episode_number(
         conn: &Connection,
-        id: &VideoRecordId,
+        id: &VideoId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber> {
         if !Self::is_channel_video(conn, id)? {
@@ -581,7 +571,7 @@ impl SqliteVideoRepository {
         }
     }
 
-    fn is_channel_video(conn: &Connection, id: &VideoRecordId) -> anyhow::Result<bool> {
+    fn is_channel_video(conn: &Connection, id: &VideoId) -> anyhow::Result<bool> {
         conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM channel_videos WHERE video_id = ?1)",
             params![id.as_str()],
@@ -597,7 +587,7 @@ impl SqliteVideoRepository {
     /// a channel with `id`.
     fn last_sibling_episode_of_day(
         conn: &Connection,
-        id: &VideoRecordId,
+        id: &VideoId,
         first: &ChannelEpisodeNumber,
     ) -> anyhow::Result<Option<u32>> {
         conn.query_row(
@@ -651,8 +641,8 @@ impl SqliteVideoRepository {
 
     fn row_to_video(row: VideoRow) -> anyhow::Result<Video> {
         Ok(Video {
-            id: VideoRecordId::new(row.id)?,
-            youtube_id: VideoId::new(row.youtube_id)?,
+            id: VideoId::new(row.id)?,
+            youtube_id: YoutubeVideoId::new(row.youtube_id)?,
             title: row.title,
             status: VideoStatus::parse(&row.status)?,
             quality: row.quality.map(Quality::new).transpose()?,
@@ -797,7 +787,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
         let unavailable = video("Unavailable", now).mark_summary_unavailable(now);
-        let generated = Video::create(VideoId::new("yt2").unwrap(), "Generated", now)
+        let generated = Video::create(YoutubeVideoId::new("yt2").unwrap(), "Generated", now)
             .mark_summary_generated(now);
         repo.save(&unavailable).unwrap();
         repo.save(&generated).unwrap();
@@ -844,7 +834,7 @@ mod tests {
     }
 
     fn video(title: &str, now: DateTime<Utc>) -> Video {
-        Video::create(VideoId::new("yt1").unwrap(), title, now)
+        Video::create(YoutubeVideoId::new("yt1").unwrap(), title, now)
     }
 
     #[test]
@@ -875,7 +865,7 @@ mod tests {
 
         let found = repo.find_many(&[
             second.id.clone(),
-            VideoRecordId::new_generated(),
+            VideoId::new_generated(),
             first.id.clone(),
         ]);
 
@@ -897,8 +887,8 @@ mod tests {
     fn it_should_allow_two_videos_to_share_the_same_youtube_id() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let a = Video::create(VideoId::new("shared").unwrap(), "A", now);
-        let b = Video::create(VideoId::new("shared").unwrap(), "B", now);
+        let a = Video::create(YoutubeVideoId::new("shared").unwrap(), "A", now);
+        let b = Video::create(YoutubeVideoId::new("shared").unwrap(), "B", now);
 
         repo.save(&a).unwrap();
         repo.save(&b).unwrap();
@@ -1021,14 +1011,14 @@ mod tests {
     fn it_should_succeed_when_deleting_a_missing_video() {
         let repo = repo();
 
-        assert!(repo.delete(&VideoRecordId::new_generated()).is_ok());
+        assert!(repo.delete(&VideoId::new_generated()).is_ok());
     }
 
     #[test]
     fn it_should_return_none_when_finding_a_missing_video() {
         let repo = repo();
 
-        let found = repo.find(&VideoRecordId::new_generated()).unwrap();
+        let found = repo.find(&VideoId::new_generated()).unwrap();
 
         assert!(found.is_none());
     }
@@ -1118,10 +1108,10 @@ mod tests {
     fn it_should_round_trip_chapters_none_empty_and_some() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let unchecked = Video::create(VideoId::new("yt1").unwrap(), "Unchecked", now);
-        let without =
-            Video::create(VideoId::new("yt2").unwrap(), "Without", now).with_chapters(vec![], now);
-        let with = Video::create(VideoId::new("yt3").unwrap(), "With", now).with_chapters(
+        let unchecked = Video::create(YoutubeVideoId::new("yt1").unwrap(), "Unchecked", now);
+        let without = Video::create(YoutubeVideoId::new("yt2").unwrap(), "Without", now)
+            .with_chapters(vec![], now);
+        let with = Video::create(YoutubeVideoId::new("yt3").unwrap(), "With", now).with_chapters(
             vec![
                 VideoChapter {
                     start_seconds: 0,
@@ -1331,14 +1321,14 @@ mod tests {
     fn it_should_find_every_copy_of_a_youtube_video() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let first_copy = Video::create(VideoId::new("shared").unwrap(), "A", now);
-        let other = Video::create(VideoId::new("other").unwrap(), "B", now);
-        let second_copy = Video::create(VideoId::new("shared").unwrap(), "C", now);
+        let first_copy = Video::create(YoutubeVideoId::new("shared").unwrap(), "A", now);
+        let other = Video::create(YoutubeVideoId::new("other").unwrap(), "B", now);
+        let second_copy = Video::create(YoutubeVideoId::new("shared").unwrap(), "C", now);
         repo.save(&first_copy).unwrap();
         repo.save(&other).unwrap();
         repo.save(&second_copy).unwrap();
 
-        let found = repo.find_by_youtube_id(&VideoId::new("shared").unwrap());
+        let found = repo.find_by_youtube_id(&YoutubeVideoId::new("shared").unwrap());
 
         assert_eq!(found.unwrap(), vec![first_copy, second_copy]);
     }
@@ -1349,7 +1339,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         repo.save(&video("First", now)).unwrap();
 
-        let found = repo.find_by_youtube_id(&VideoId::new("unknown").unwrap());
+        let found = repo.find_by_youtube_id(&YoutubeVideoId::new("unknown").unwrap());
 
         assert_eq!(found.unwrap(), vec![]);
     }
@@ -1594,7 +1584,7 @@ mod tests {
 
     fn downloaded(title: &str, created_at_seconds: i64) -> Video {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
-        Video::create(VideoId::new("yt1").unwrap(), title, created_at)
+        Video::create(YoutubeVideoId::new("yt1").unwrap(), title, created_at)
             .start_download(created_at)
             .mark_downloaded(
                 Quality::High,
