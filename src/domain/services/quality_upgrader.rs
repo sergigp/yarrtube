@@ -1,11 +1,11 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::shared::Quality;
-use crate::domain::video::{Video, VideoDownloaded, VideoRecordId, staging_dir};
+use crate::domain::video::{
+    DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoRecordId, staging_dir,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-    DownloadAttempt, DownloadedVideo, VideoDownloaderRepository,
-};
+use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::anyhow;

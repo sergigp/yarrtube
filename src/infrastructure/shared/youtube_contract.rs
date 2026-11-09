@@ -5,6 +5,7 @@
 //! playlists and channels that are Creative-Commons licensed or maintained by
 //! the project, and unlikely to change.
 
+use crate::domain::video::VideoChapter;
 use std::path::{Path, PathBuf};
 
 /// "Boat in Island [UHD]", 14 s, CC BY, by "Free HD videos - no copyright".
@@ -31,6 +32,28 @@ pub(crate) fn video_url(id: &str) -> String {
 /// `YTDLP_PATH`, else `yt-dlp` on `PATH`.
 pub(crate) fn ytdlp_path() -> PathBuf {
     PathBuf::from(std::env::var("YTDLP_PATH").unwrap_or_else(|_| "yt-dlp".to_string()))
+}
+
+/// The chapters YouTube reports for `CHAPTERED_VIDEO_ID`.
+pub(crate) fn flamenco_chapters() -> Vec<VideoChapter> {
+    [
+        (0, 33, "Flamenco overview"),
+        (33, 68, "Setting up shared storage"),
+        (68, 104, "Installing the manager"),
+        (104, 133, "Configuring the manager"),
+        (133, 156, "Installing the Blender add-on"),
+        (156, 215, "Submitting a render job"),
+        (215, 244, "Setting up the worker"),
+        (244, 271, "Monitoring rendering progress"),
+        (271, 299, "Reviewing final output"),
+    ]
+    .into_iter()
+    .map(|(start_seconds, end_seconds, title)| VideoChapter {
+        start_seconds,
+        end_seconds,
+        title: title.to_string(),
+    })
+    .collect()
 }
 
 /// The real YouTube Data API's root.
