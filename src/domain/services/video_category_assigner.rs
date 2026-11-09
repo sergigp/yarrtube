@@ -103,7 +103,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
 
     fn assign_video(&self, video_id: &VideoId, source: &CategoryMember) -> anyhow::Result<()> {
         let _guard = self.lock();
-        self.recompute_record(video_id, source)
+        self.recompute_video(video_id, source)
     }
 
     fn reassign_category(
@@ -161,7 +161,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
     fn recompute(&self, video_ids: &[VideoId]) -> anyhow::Result<()> {
         let _guard = self.lock();
         let categories = self.category_repository.list()?;
-        let desired = self.desired_for_records(video_ids, &categories)?;
+        let desired = self.desired_for_videos(video_ids, &categories)?;
         self.save_and_announce(desired)
     }
 }
@@ -263,7 +263,7 @@ impl VideoCategoryAssigner {
 
     /// Sets `video_id`, a video of `source`, to the source's categories plus
     /// its yes verdicts; the caller holds the lock.
-    fn recompute_record(&self, video_id: &VideoId, source: &CategoryMember) -> anyhow::Result<()> {
+    fn recompute_video(&self, video_id: &VideoId, source: &CategoryMember) -> anyhow::Result<()> {
         let categories = self.category_repository.list()?;
         self.recompute_with(video_id, source, &categories)
     }
@@ -286,7 +286,7 @@ impl VideoCategoryAssigner {
     /// Each of `video_ids` held by a source, in order, with its source's
     /// categories in `categories` plus its yes verdicts; the others are left
     /// out.
-    fn desired_for_records(
+    fn desired_for_videos(
         &self,
         video_ids: &[VideoId],
         categories: &[Category],

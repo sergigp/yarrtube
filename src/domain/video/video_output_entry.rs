@@ -77,7 +77,8 @@ pub fn nfo_path_for(relative_path: &str) -> String {
 /// Where a video's download or thumbnail fetch is staged before being moved
 /// into its show: `<videos root>/.downloads/<video id>`. Keyed by the
 /// video's own id, not the YouTube id: the same YouTube video tracked by
-/// two shows is two stored videos that may download at once, and each discards its own dir.
+/// two shows is two stored videos that may download at once, and each
+/// discards its own dir.
 pub fn staging_dir(videos_path: &str, video_id: &VideoId) -> PathBuf {
     Path::new(videos_path)
         .join(STAGING_DIRNAME)

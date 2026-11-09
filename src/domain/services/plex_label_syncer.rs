@@ -157,8 +157,8 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
             }
         };
         self.mark_reimported(&library.episodes)?;
-        self.track_categorized_records()?;
-        let backlog = self.label_dirty_records(&library.episodes)?;
+        self.track_categorized_videos()?;
+        let backlog = self.label_dirty_videos(&library.episodes)?;
         self.reconcile_playlists(&library.sections)?;
         self.request_next_sync(backlog)
     }
@@ -169,7 +169,7 @@ impl PlexLabelSyncer {
     /// returns whether more may be labellable right away: the batch was full
     /// and at least one of its rows was synced or deleted, so a batch of
     /// videos none of which can be labelled yet never chains syncs.
-    fn label_dirty_records(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<bool> {
+    fn label_dirty_videos(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<bool> {
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
         let taken = rows.len();
         let desired = self.desired_labels(&rows)?;
@@ -353,8 +353,8 @@ impl PlexLabelSyncer {
 
     /// Starts tracking, dirty, every categorized video without a row: one
     /// categorized before this sync existed, or whose row was lost.
-    fn track_categorized_records(&self) -> anyhow::Result<()> {
-        let categorized = self.categorized_records()?;
+    fn track_categorized_videos(&self) -> anyhow::Result<()> {
+        let categorized = self.categorized_videos()?;
         let tracked: HashSet<VideoId> = self
             .episode_labels_repository
             .find_many(&categorized)?
@@ -370,7 +370,7 @@ impl PlexLabelSyncer {
     }
 
     /// Every video in at least one category, each once.
-    fn categorized_records(&self) -> anyhow::Result<Vec<VideoId>> {
+    fn categorized_videos(&self) -> anyhow::Result<Vec<VideoId>> {
         let ids: HashSet<VideoId> = self
             .category_repository
             .list()?

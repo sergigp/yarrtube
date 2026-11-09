@@ -11,8 +11,8 @@ use rusqlite::{OptionalExtension, params};
 pub trait ChannelVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(channel_id, video_id)`.
     fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()>;
-    /// Finds whichever channel a video belongs to, keyed by the video's own
-    /// surrogate ID rather than a `(channel_id, youtube_video_id)` pair.
+    /// Finds whichever channel a video belongs to, keyed by the stored
+    /// video's `VideoId` rather than a `(channel_id, youtube_id)` pair.
     fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<ChannelVideo>>;
     /// Ordered by recency position (`0` = most recent).
     fn list_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<Vec<ChannelVideo>>;

@@ -71,7 +71,7 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    a `FetchThumbnail` task, a `DownloadVideo` task and a `FetchSubtitles`
    task.
 4. The `TaskExecutor` runs them. The download calls `yt-dlp` inside the
-   video's staging folder (`<videos root>/.downloads/<youtube id>`), takes
+   video's staging folder (`<videos root>/.downloads/<video id>`), takes
    its episode number from the publish time `yt-dlp` reports, and moves the
    result into the show's season folder (see below). It also records the
    chapters `yt-dlp` reports and embeds them in the mp4 (`videos.chapters`,
@@ -180,7 +180,7 @@ Each tracked playlist or channel is a TV show under its storage path:
   (`VideoRepository::assign_episode_number`). Playlists: the next number
   from `Playlist::last_episode`, assigned by `PlaylistVideoReconciler`, so
   a removed video's number is never reused.
-- **Staging**: `yt-dlp` writes into `.downloads/<youtube id>`, then files
+- **Staging**: `yt-dlp` writes into `.downloads/<video id>`, then files
   are moved into the season folder, so players never see a partial file.
 - **Legacy layout** (per-video folders from 0.8.x) is still served;
   `VideoRelocator` moves it into the TV layout via `migrate-layout` or

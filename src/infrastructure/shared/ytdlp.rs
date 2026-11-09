@@ -20,7 +20,7 @@ use tracing::info;
 /// printed it (newest first).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelVideoEntry {
-    pub video_id: String,
+    pub youtube_id: String,
     pub title: String,
 }
 
@@ -667,7 +667,7 @@ fn channel_video_entries(stdout: &[u8]) -> Result<Vec<ChannelVideoEntry>> {
         .into_iter()
         .filter(FlatPlaylistEntry::is_watchable)
         .map(|entry| ChannelVideoEntry {
-            video_id: entry.id,
+            youtube_id: entry.id,
             title: entry.title,
         })
         .collect())
@@ -1154,7 +1154,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_download_into_the_staging_dir_with_the_video_id_as_name() {
+    fn it_should_download_into_the_staging_dir_with_the_youtube_id_as_name() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
         let staging_dir = unique_temp_dir("ytdlp-staging").join("yt1");
@@ -2762,11 +2762,11 @@ mod tests {
             videos,
             vec![
                 ChannelVideoEntry {
-                    video_id: "vid1".to_string(),
+                    youtube_id: "vid1".to_string(),
                     title: "One".to_string()
                 },
                 ChannelVideoEntry {
-                    video_id: "vid2".to_string(),
+                    youtube_id: "vid2".to_string(),
                     title: "Two".to_string()
                 },
             ]
@@ -2790,11 +2790,11 @@ mod tests {
             videos,
             vec![
                 ChannelVideoEntry {
-                    video_id: "vid1".to_string(),
+                    youtube_id: "vid1".to_string(),
                     title: "One".to_string()
                 },
                 ChannelVideoEntry {
-                    video_id: "vid2".to_string(),
+                    youtube_id: "vid2".to_string(),
                     title: "Two".to_string()
                 },
             ]
@@ -2817,7 +2817,7 @@ mod tests {
         assert_eq!(
             videos,
             vec![ChannelVideoEntry {
-                video_id: "vid1".to_string(),
+                youtube_id: "vid1".to_string(),
                 title: "One".to_string()
             }]
         );
@@ -2840,15 +2840,15 @@ mod tests {
             videos,
             vec![
                 ChannelVideoEntry {
-                    video_id: "vod".to_string(),
+                    youtube_id: "vod".to_string(),
                     title: "Past stream".to_string()
                 },
                 ChannelVideoEntry {
-                    video_id: "vid1".to_string(),
+                    youtube_id: "vid1".to_string(),
                     title: "One".to_string()
                 },
                 ChannelVideoEntry {
-                    video_id: "vid2".to_string(),
+                    youtube_id: "vid2".to_string(),
                     title: "Two".to_string()
                 },
             ]
@@ -2975,11 +2975,11 @@ mod tests {
             videos,
             vec![
                 ChannelVideoEntry {
-                    video_id: "vid1".to_string(),
+                    youtube_id: "vid1".to_string(),
                     title: "Before | After".to_string()
                 },
                 ChannelVideoEntry {
-                    video_id: "vid2".to_string(),
+                    youtube_id: "vid2".to_string(),
                     title: "Untouched".to_string()
                 },
             ]

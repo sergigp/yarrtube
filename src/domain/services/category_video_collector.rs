@@ -53,8 +53,8 @@ pub trait CategoryVideoCollectorApi: Send + Sync {
 impl CategoryVideoCollectorApi for CategoryVideoCollector {
     fn downloaded_videos(&self, category: &Category) -> anyhow::Result<Vec<SourcedVideo>> {
         let video_ids = self.video_ids_in(category)?;
-        let from_members = self.member_records(category, &video_ids)?;
-        let from_former_members = self.former_member_records(&video_ids, &from_members)?;
+        let from_members = self.member_videos(category, &video_ids)?;
+        let from_former_members = self.former_member_videos(&video_ids, &from_members)?;
         Ok(from_members
             .iter()
             .chain(&from_former_members)
@@ -78,7 +78,7 @@ impl CategoryVideoCollector {
     /// The videos of `video_ids` held by each of the category's members,
     /// channels first then playlists, each in member order, videos in their
     /// source's order. Members holding none are left out.
-    fn member_records(
+    fn member_videos(
         &self,
         category: &Category,
         video_ids: &[VideoId],
@@ -105,7 +105,7 @@ impl CategoryVideoCollector {
 
     /// The videos of `video_ids` not held by a member (their source left the
     /// category), grouped by source, channels first then playlists.
-    fn former_member_records(
+    fn former_member_videos(
         &self,
         video_ids: &[VideoId],
         from_members: &[(CategoryMember, Vec<VideoId>)],

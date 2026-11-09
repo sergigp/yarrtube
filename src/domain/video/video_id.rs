@@ -11,11 +11,6 @@ use uuid::Uuid;
 pub struct VideoId(String);
 
 impl VideoId {
-    /// Generates a new, unique ID for a freshly created `Video`.
-    pub fn new_generated() -> Self {
-        Self(Uuid::new_v4().to_string())
-    }
-
     /// Parses an ID as stored (or as supplied by a caller that
     /// already has one, e.g. a task payload).
     pub fn new(id: impl Into<String>) -> Result<Self, ValidationError> {
@@ -24,6 +19,11 @@ impl VideoId {
             return Err(ValidationError("Video ID must not be empty".to_string()));
         }
         Ok(Self(id))
+    }
+
+    /// Generates a new, unique ID for a freshly created `Video`.
+    pub fn new_generated() -> Self {
+        Self(Uuid::new_v4().to_string())
     }
 
     pub fn as_str(&self) -> &str {

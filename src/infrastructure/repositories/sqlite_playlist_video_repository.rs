@@ -11,8 +11,8 @@ use rusqlite::{OptionalExtension, params};
 pub trait PlaylistVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(playlist_id, video_id)`.
     fn save(&self, playlist_video: &PlaylistVideo) -> anyhow::Result<()>;
-    /// Finds whichever playlist a video belongs to, keyed by the video's own
-    /// surrogate ID rather than a `(playlist_id, youtube_video_id)` pair.
+    /// Finds whichever playlist a video belongs to, keyed by the stored
+    /// video's `VideoId` rather than a `(playlist_id, youtube_id)` pair.
     fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<PlaylistVideo>>;
     /// Ordered by position (YouTube-defined order), then by insertion order.
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
