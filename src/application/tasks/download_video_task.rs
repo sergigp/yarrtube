@@ -2367,6 +2367,7 @@ mod tests {
                         EpisodeNumber::from_columns(2023, 111401).unwrap(),
                         fixed_timestamp()
                     )
+                    .record_chapters_check(Some(vec![]), fixed_timestamp(), fixed_timestamp())
             ]
         );
         std::fs::remove_dir_all(&videos_root).unwrap();

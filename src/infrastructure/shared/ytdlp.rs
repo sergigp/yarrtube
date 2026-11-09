@@ -8,31 +8,51 @@ use crate::domain::video_transcript::{
 };
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer};
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
+use tracing::info;
 
-/// Runs `cmd`, retrying briefly on a transient "text file busy" error. The
-/// `yt-dlp` binary can be mid-replacement by a concurrent `update-ytdlp` run
-/// (which swaps it in via an atomic rename, but the exec of the old inode
-/// can still transiently race the kernel's write-lock teardown), and the
-/// same race shows up in tests that write a fake binary and exec it right
-/// away.
-fn output_retrying_busy(cmd: &mut Command) -> io::Result<std::process::Output> {
-    const MAX_ATTEMPTS: u32 = 5;
-    const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
-
-    let mut attempt = 0;
-    loop {
-        attempt += 1;
-        match cmd.output() {
-            Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy && attempt < MAX_ATTEMPTS => {
-                std::thread::sleep(RETRY_DELAY);
-            }
-            result => return result,
-        }
-    }
+/// One video discovered by `list_channel_videos`, in the order `yt-dlp`
+/// printed it (newest first).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelVideoEntry {
+    pub video_id: String,
+    pub title: String,
 }
+
+/// Names every staged file after the video's YouTube id, so the media and
+/// its thumbnail share one stem whatever the title.
+const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
+
+/// Where `probe_captions` writes the video's info JSON in the staging dir.
+const INFO_JSON_FILENAME: &str = "info.json";
+
+/// What a download prints once the file is in its final place: a single
+/// JSON object (`%(.{..})j`, yt-dlp's dictionary-of-fields output template)
+/// read into `PrintedVideo`. yt-dlp leaves a field out of the object when
+/// the video has no value for it. `filename` is relative to the staging dir
+/// (the working directory).
+const DOWNLOAD_PRINT: &str =
+    "after_move:%(.{filename,height,duration,timestamp,upload_date,chapters})j";
+
+/// What a chapters probe prints, downloading nothing.
+const CHAPTERS_PRINT: &str = "%(.{chapters,timestamp,upload_date})j";
+
+/// What a quality probe prints, downloading nothing: the height the format
+/// selector picked.
+const QUALITY_PRINT: &str = "%(.{height,timestamp,upload_date})j";
+
+/// What a thumbnail-only fetch prints. `after_video` is the only print scope
+/// that still fires with `--skip-download` once the thumbnail is written
+/// and converted (`post_process`/`after_move` never do, since no video is
+/// downloaded), and `thumbnails.-1.filepath` is the exact converted file
+/// on disk. A dictionary key may be a dotted path: yt-dlp keeps the path as
+/// the key, and leaves it out when no thumbnail was written.
+const THUMBNAIL_PRINT: &str = "after_video:%(.{timestamp,upload_date,thumbnails.-1.filepath})j";
 
 /// Maps a playlist's `quality` tier to the `yt-dlp` args that select its
 /// resolution cap while softly preferring mp4/h264/aac (falling back to the
@@ -60,36 +80,24 @@ pub fn args_for_quality(quality: Quality) -> Vec<String> {
         .collect()
 }
 
-/// Parses `yt-dlp`'s `--print %(duration)s` line into whole seconds.
-/// `yt-dlp` prints `NA` for an unknown duration; an empty line or anything
-/// else unparsable as a number is likewise treated as unknown rather than
-/// failing the download. A fractional value (seen for some extractors) is
-/// truncated to whole seconds.
-fn parse_duration_seconds(line: &str) -> Option<i64> {
-    let trimmed = line.trim();
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("na") {
-        return None;
-    }
-    trimmed.parse::<f64>().ok().map(|seconds| seconds as i64)
-}
-
-/// Names every staged file after the video's YouTube id, so the media and
-/// its thumbnail share one stem whatever the title.
-const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
-
 /// Runs `<ytdlp_path> <args> <video_url>` inside `staging_dir` (created
 /// first), outside any show directory, so partial files never reach the
 /// library. This is a pure process-invocation layer with no YouTube API or
-/// XML knowledge. Asks `yt-dlp` to print its chapters, publish timestamp,
-/// upload date and duration followed by the exact filename it saved (`--print
-/// after_move:filename`), in quiet mode so those are the only lines on
-/// stdout, filename last; each is read by its position from the end.
+/// XML knowledge. Asks `yt-dlp` to print, once the file is in place, one
+/// JSON object with the saved filename, height, duration, publish
+/// timestamp, upload date and chapters (`DOWNLOAD_PRINT`), in quiet mode so
+/// it is the only output on stdout.
+///
+/// Keeps warnings on (no `--no-warnings`), unlike the thumbnail, diagnose
+/// and listing invocations, so `yt-dlp`'s SABR-only streaming warning
+/// reaches the captured stderr, where `sabr_reason` detects it.
+///
 /// Returns `Ok(DownloadAttempt::Succeeded(..))` on a successful download,
 /// `Ok(DownloadAttempt::Failed { stderr })` for a clean `yt-dlp` failure
 /// (non-zero exit), carrying whatever `yt-dlp` wrote to its stderr. Returns
 /// `Err` only for a systemic problem: no binary at `ytdlp_path`, a failure
 /// creating the staging dir, or a successful exit that didn't print a
-/// parseable filename. Discarding the staging dir is the caller's job.
+/// filename. Discarding the staging dir is the caller's job.
 pub fn download_video(
     ytdlp_path: &Path,
     video_url: &str,
@@ -97,147 +105,72 @@ pub fn download_video(
     staging_dir: &Path,
 ) -> Result<DownloadAttempt> {
     ensure_output_dir(staging_dir)?;
-    let mut args = args_for_quality(quality);
-    args.extend([
-        "-o".to_string(),
-        STAGED_OUTPUT_TEMPLATE.to_string(),
-        "--concurrent-fragments".to_string(),
-        "4".to_string(),
-        "--embed-thumbnail".to_string(),
-        "--write-thumbnail".to_string(),
-        "--convert-thumbnails".to_string(),
-        "jpg".to_string(),
-        // Chapter markers in the mp4, for Plex, Kodi and Jellyfin.
-        "--embed-chapters".to_string(),
-        // Note: unlike the thumbnail/diagnose/listing invocations, this one
-        // deliberately keeps warnings on (no `--no-warnings`) so `yt-dlp`'s
-        // SABR-only streaming warning reaches our captured stderr, where
-        // `sabr_reason` can detect it. `--quiet` still gives us the clean
-        // `--print` stdout. See the `log-sabr-detection` change.
-        "--quiet".to_string(),
-        "--print".to_string(),
-        "%(height)s".to_string(),
-        "--print".to_string(),
-        "%(chapters)j".to_string(),
-        "--print".to_string(),
-        "%(timestamp)s".to_string(),
-        "--print".to_string(),
-        "%(upload_date)s".to_string(),
-        "--print".to_string(),
-        "%(duration)s".to_string(),
-        "--print".to_string(),
-        "after_move:filename".to_string(),
-    ]);
-    println!(
-        "Running: {} {} {video_url} (in {})",
-        ytdlp_path.display(),
-        args.join(" "),
-        staging_dir.display()
-    );
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.args(&args)
+    let command = YtDlpCommand::new(ytdlp_path)
+        .args(args_for_quality(quality))
+        .args([
+            "-o",
+            STAGED_OUTPUT_TEMPLATE,
+            "--concurrent-fragments",
+            "4",
+            "--embed-thumbnail",
+            "--write-thumbnail",
+            "--convert-thumbnails",
+            "jpg",
+            // Chapter markers in the mp4, for Plex, Kodi and Jellyfin.
+            "--embed-chapters",
+            "--quiet",
+            "--print",
+            DOWNLOAD_PRINT,
+        ])
         .arg(video_url)
-        .current_dir(staging_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let output = match run(
-        &mut cmd,
-        || not_found_message(ytdlp_path),
-        |e| format!("Failed to run yt-dlp for {video_url}: {e}"),
-    )? {
-        RunOutcome::Success(output) => output,
-        RunOutcome::CleanFailure { stderr_raw } => {
-            return Ok(DownloadAttempt::Failed {
-                stderr: reason_excluding_warnings(&stderr_raw),
-                sabr_notice: sabr_reason(&stderr_raw),
-            });
+        .in_dir(staging_dir);
+    info!(command = %command.describe(), directory = ?staging_dir, "running yt-dlp download");
+    match command.run(&format!("for {video_url}"))? {
+        RunOutcome::Success(output) => {
+            downloaded_video(&output, video_url, staging_dir).map(DownloadAttempt::Succeeded)
         }
-    };
-
-    let sabr_notice = sabr_reason(&String::from_utf8_lossy(&output.stderr));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let lines: Vec<&str> = stdout.lines().collect();
-    let filename = match lines.last().map(|s| s.trim()) {
-        Some(filename) if !filename.is_empty() => filename.to_string(),
-        _ => {
-            return Err(anyhow!(
-                "yt-dlp exited successfully but did not print an output filename for {video_url}"
-            ));
-        }
-    };
-    let duration_seconds = line_before_last(&lines, 1).and_then(parse_duration_seconds);
-    let published_at = parse_published_at(line_before_last(&lines, 3), line_before_last(&lines, 2));
-    let chapters = line_before_last(&lines, 4).and_then(parse_chapters);
-    let height = line_before_last(&lines, 5).and_then(|line| line.trim().parse().ok());
-
-    let media_path = staging_dir.join(filename);
-    Ok(DownloadAttempt::Succeeded(DownloadedVideo {
-        thumbnail_path: staged_thumbnail(&media_path),
-        media_path,
-        duration_seconds,
-        published_at,
-        sabr_notice,
-        chapters,
-        height,
-    }))
+        RunOutcome::CleanFailure { stderr_raw } => Ok(DownloadAttempt::Failed {
+            stderr: reason_excluding_warnings(&stderr_raw),
+            sabr_notice: sabr_reason(&stderr_raw),
+        }),
+    }
 }
 
-/// Reads the video's chapters and publish time via `yt-dlp --print
-/// %(chapters)j --print %(timestamp)s --print %(upload_date)s`, downloading
-/// nothing; `vec![]` when the video has none. `Err` on any failure, clean or
-/// systemic, including a printed line that can't be read as chapters.
+/// Reads the video's chapters and publish time (`CHAPTERS_PRINT`),
+/// downloading nothing; `vec![]` when the video has none. `Err` on any
+/// failure, clean or systemic, including printed chapters that can't be
+/// read.
 pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProbe> {
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.args([
-        "--skip-download",
-        "--quiet",
-        "--no-warnings",
-        "--print",
-        "%(chapters)j",
-        "--print",
-        "%(timestamp)s",
-        "--print",
-        "%(upload_date)s",
-    ])
-    .arg(video_url)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
-    match run(
-        &mut cmd,
-        || not_found_message(ytdlp_path),
-        |e| format!("Failed to run yt-dlp to fetch the chapters of {video_url}: {e}"),
-    )? {
-        RunOutcome::Success(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let lines: Vec<&str> = stdout.lines().collect();
-            line_before_last(&lines, 2)
-                .and_then(parse_chapters)
-                .map(|chapters| ChaptersProbe {
-                    chapters,
-                    published_at: published_at_from_tail(&lines),
+    let command = YtDlpCommand::new(ytdlp_path)
+        .args([
+            "--skip-download",
+            "--quiet",
+            "--no-warnings",
+            "--print",
+            CHAPTERS_PRINT,
+        ])
+        .arg(video_url);
+    match command.run(&format!("to fetch the chapters of {video_url}"))? {
+        RunOutcome::Success(output) => printed_video(&output.stdout)
+            .and_then(|printed| {
+                Some(ChaptersProbe {
+                    chapters: printed.chapters()?,
+                    published_at: printed.published_at(),
                 })
-                .ok_or_else(|| anyhow!("yt-dlp printed unreadable chapters for {video_url}"))
-        }
-        RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
-            "yt-dlp failed to fetch the chapters of {video_url}: {}",
-            reason_excluding_warnings(&stderr_raw).unwrap_or_else(|| "no reason given".to_string())
+            })
+            .ok_or_else(|| anyhow!("yt-dlp printed unreadable chapters for {video_url}")),
+        RunOutcome::CleanFailure { stderr_raw } => Err(probe_failure(
+            "fetch the chapters of",
+            video_url,
+            &stderr_raw,
         )),
     }
 }
 
 /// Runs `yt-dlp --skip-download --write-thumbnail --convert-thumbnails jpg`
 /// for `video_url` inside `staging_dir` (created first), sibling to
-/// `download_video`.
-///
-/// Asks `yt-dlp` to print the actually-written thumbnail's path via
-/// `--print after_video:thumbnails.-1.filepath`: verified against real
-/// `yt-dlp` that (a) this is the only print scope that still fires with
-/// `--skip-download` (`post_process`/`after_move` never do, since no video
-/// download happens for them to hook off), (b) it resolves to the exact
-/// on-disk filename after `--convert-thumbnails` has run, and (c) it prints
-/// the literal string `NA` — yt-dlp's own convention for an unset field —
-/// when the extractor has no thumbnail to write, cleanly distinguishing
-/// "no thumbnail for this video" from a systemic failure.
+/// `download_video`, printing the written thumbnail's path and the publish
+/// time (`THUMBNAIL_PRINT`).
 ///
 /// Returns `Ok(ThumbnailFetch::Fetched(..))` when a thumbnail was written,
 /// `Ok(ThumbnailFetch::Unavailable { .. })` for a clean `yt-dlp` exit with
@@ -254,117 +187,53 @@ pub fn fetch_thumbnail(
     staging_dir: &Path,
 ) -> Result<ThumbnailFetch> {
     ensure_output_dir(staging_dir)?;
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.args([
-        "-o",
-        STAGED_OUTPUT_TEMPLATE,
-        "--skip-download",
-        "--write-thumbnail",
-        "--convert-thumbnails",
-        "jpg",
-        "--quiet",
-        "--no-warnings",
-        "--print",
-        "%(timestamp)s",
-        "--print",
-        "%(upload_date)s",
-        "--print",
-        "after_video:thumbnails.-1.filepath",
-    ])
-    .arg(video_url)
-    .current_dir(staging_dir)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
-    let output = match run(
-        &mut cmd,
-        || not_found_message(ytdlp_path),
-        |e| format!("Failed to run yt-dlp thumbnail fetch for {video_url}: {e}"),
-    )? {
-        RunOutcome::Success(output) => output,
-        RunOutcome::CleanFailure { stderr_raw } => {
-            return Ok(ThumbnailFetch::Unavailable {
+    let command = YtDlpCommand::new(ytdlp_path)
+        .args([
+            "-o",
+            STAGED_OUTPUT_TEMPLATE,
+            "--skip-download",
+            "--write-thumbnail",
+            "--convert-thumbnails",
+            "jpg",
+            "--quiet",
+            "--no-warnings",
+            "--print",
+            THUMBNAIL_PRINT,
+        ])
+        .arg(video_url)
+        .in_dir(staging_dir);
+    Ok(
+        match command.run(&format!("thumbnail fetch for {video_url}"))? {
+            RunOutcome::Success(output) => fetched_thumbnail(&output.stdout, staging_dir),
+            RunOutcome::CleanFailure { stderr_raw } => ThumbnailFetch::Unavailable {
                 reason: reason_excluding_warnings(&stderr_raw),
-            });
-        }
-    };
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let lines: Vec<&str> = stdout.lines().collect();
-    let printed = lines.last().map(|s| s.trim());
-    let filename = match printed {
-        Some(printed) if !printed.is_empty() && !printed.eq_ignore_ascii_case("na") => {
-            Path::new(printed)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .map(str::to_string)
-        }
-        _ => None,
-    };
-
-    Ok(match filename {
-        Some(filename) => ThumbnailFetch::Fetched(FetchedThumbnail {
-            path: staging_dir.join(filename),
-            published_at: parse_published_at(
-                line_before_last(&lines, 2),
-                line_before_last(&lines, 1),
-            ),
-        }),
-        None => ThumbnailFetch::Unavailable { reason: None },
-    })
-}
-
-/// Where `probe_captions` writes the video's info JSON in the staging dir.
-const INFO_JSON_FILENAME: &str = "info.json";
-
-/// The fields of yt-dlp's info JSON a caption probe reads. Track lists are
-/// keyed by yt-dlp's `--sub-langs` key, sorted; absent or `null` when the
-/// video has none.
-#[derive(serde::Deserialize)]
-struct CaptionInfo {
-    language: Option<String>,
-    timestamp: Option<i64>,
-    upload_date: Option<String>,
-    subtitles: Option<std::collections::BTreeMap<String, serde_json::Value>>,
-    automatic_captions: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+            },
+        },
+    )
 }
 
 /// The height `quality`'s format selector picks for the video now, and its
-/// publish time, downloading nothing. Keeps warnings on (no
-/// `--no-warnings`) so the SABR-only streaming signal reaches stderr and
-/// marks the probe degraded. `Err` on any failure, clean or systemic.
+/// publish time (`QUALITY_PRINT`), downloading nothing. Keeps warnings on
+/// (no `--no-warnings`) so the SABR-only streaming signal reaches stderr
+/// and marks the probe degraded. `Err` on any failure, clean or systemic.
 pub fn probe_quality(ytdlp_path: &Path, video_url: &str, quality: Quality) -> Result<QualityProbe> {
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.args(format_selection_args(quality))
-        .args([
-            "--skip-download",
-            "--quiet",
-            "--print",
-            "%(height)s",
-            "--print",
-            "%(timestamp)s",
-            "--print",
-            "%(upload_date)s",
-        ])
-        .arg(video_url)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    match run(
-        &mut cmd,
-        || not_found_message(ytdlp_path),
-        |e| format!("Failed to run yt-dlp to probe the quality of {video_url}: {e}"),
-    )? {
+    let command = YtDlpCommand::new(ytdlp_path)
+        .args(format_selection_args(quality))
+        .args(["--skip-download", "--quiet", "--print", QUALITY_PRINT])
+        .arg(video_url);
+    match command.run(&format!("to probe the quality of {video_url}"))? {
         RunOutcome::Success(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let lines: Vec<&str> = stdout.lines().collect();
+            let printed = printed_video(&output.stdout).unwrap_or_default();
             Ok(QualityProbe {
-                height: line_before_last(&lines, 2).and_then(|line| line.trim().parse().ok()),
-                published_at: published_at_from_tail(&lines),
+                height: printed.height,
+                published_at: printed.published_at(),
                 degraded: sabr_reason(&String::from_utf8_lossy(&output.stderr)).is_some(),
             })
         }
-        RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
-            "yt-dlp failed to probe the quality of {video_url}: {}",
-            reason_excluding_warnings(&stderr_raw).unwrap_or_else(|| "no reason given".to_string())
+        RunOutcome::CleanFailure { stderr_raw } => Err(probe_failure(
+            "probe the quality of",
+            video_url,
+            &stderr_raw,
         )),
     }
 }
@@ -379,26 +248,374 @@ pub fn probe_captions(
     staging_dir: &Path,
 ) -> Result<CaptionProbe> {
     ensure_output_dir(staging_dir)?;
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.args(["-J", "--skip-download", "--write-subs"])
+    let command = YtDlpCommand::new(ytdlp_path)
+        .args(["-J", "--skip-download", "--write-subs"])
         .arg(video_url)
-        .current_dir(staging_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let output = match run(
-        &mut cmd,
-        || not_found_message(ytdlp_path),
-        |e| format!("Failed to run yt-dlp caption probe for {video_url}: {e}"),
-    )? {
-        RunOutcome::Success(output) => output,
-        RunOutcome::CleanFailure { stderr_raw } => {
-            let reason = failure_reason(&stderr_raw);
-            return Err(anyhow!(
-                "yt-dlp failed to probe captions for {video_url}: {reason}"
-            ));
-        }
-    };
+        .in_dir(staging_dir);
+    match command.run(&format!("caption probe for {video_url}"))? {
+        RunOutcome::Success(output) => caption_probe(&output, video_url, staging_dir),
+        RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
+            "yt-dlp failed to probe captions for {video_url}: {}",
+            failure_reason(&stderr_raw)
+        )),
+    }
+}
 
+/// `--load-info-json --skip-download --write-subs|--write-auto-subs
+/// --sub-langs <key> --sub-format vtt --convert-subs srt`.
+pub fn fetch_subtitles(
+    ytdlp_path: &Path,
+    probe: &CaptionProbe,
+    track: &CaptionTrack,
+    staging_dir: &Path,
+) -> Result<FetchedSubtitles> {
+    let write_flag = match track.source {
+        CaptionSource::Manual => "--write-subs",
+        CaptionSource::Automatic => "--write-auto-subs",
+    };
+    let command = YtDlpCommand::new(ytdlp_path)
+        .arg("--load-info-json")
+        .arg(&probe.info_json)
+        .args([
+            "-o",
+            STAGED_OUTPUT_TEMPLATE,
+            "--skip-download",
+            write_flag,
+            "--sub-langs",
+            &track.key,
+            "--sub-format",
+            "vtt",
+            "--convert-subs",
+            "srt",
+            "--quiet",
+            "--no-warnings",
+        ])
+        .in_dir(staging_dir);
+    if let RunOutcome::CleanFailure { stderr_raw } =
+        command.run(&format!("subtitle download for {}", track.key))?
+    {
+        return Err(anyhow!(
+            "yt-dlp failed to download the {} subtitles: {}",
+            track.key,
+            failure_reason(&stderr_raw)
+        ));
+    }
+    staged_subtitles(staging_dir, &track.key)
+}
+
+/// Runs a simulate-only `yt-dlp` probe for `video_url`, forcing the
+/// alternate player clients, to reveal the *precise* reason a download
+/// failed — `yt-dlp`'s default clients collapse many distinct permanent
+/// blocks into a bare "Video unavailable". The probe never downloads (it only
+/// reveals the reason; a blocked video stays blocked), so it is safe and
+/// cheap.
+///
+/// Returns `Ok(Some(reason))` with the reason `yt-dlp` printed to stderr
+/// (its `ERROR: [<extractor>] <id>:` prefix stripped), `Ok(None)` when no
+/// precise reason can be determined (the probe exited cleanly with no error,
+/// or printed only a bare "Video unavailable" with no further detail).
+/// Returns `Err` only for a systemic problem: no binary at `ytdlp_path`, or a
+/// spawn failure — the caller swallows that and treats the reason as
+/// undetermined.
+pub fn diagnose(ytdlp_path: &Path, video_url: &str) -> Result<Option<String>> {
+    let output = YtDlpCommand::new(ytdlp_path)
+        .args([
+            "--simulate",
+            "--no-warnings",
+            "--extractor-args",
+            "youtube:player_client=android,tv,ios,web_safari",
+        ])
+        .arg(video_url)
+        .output(&format!("diagnostic probe for {video_url}"))?;
+    Ok(extract_reason(&output.stderr))
+}
+
+/// Lists a channel's `limit` most recent uploads via
+/// `yt-dlp --flat-playlist --print-json -I 1:<limit>` against `channel_url`,
+/// parsing one JSON object per stdout line. Empty output means "no videos"
+/// (`Ok(vec![])`). Returns `Err` when `yt-dlp` exits non-zero (carrying its
+/// warning-free stderr as the reason, so a failed listing is never mistaken
+/// for an empty channel), when there's no binary at `ytdlp_path`, or for
+/// output that doesn't parse as one JSON object per line. stderr is
+/// captured, never inherited, so none of it reaches the daemon's own output.
+pub fn list_channel_videos(
+    ytdlp_path: &Path,
+    channel_url: &str,
+    limit: u32,
+) -> Result<Vec<ChannelVideoEntry>> {
+    let command = YtDlpCommand::new(ytdlp_path)
+        .args([
+            "--flat-playlist",
+            "--print-json",
+            "-I",
+            &format!("1:{limit}"),
+            "--quiet",
+            "--no-warnings",
+        ])
+        .arg(channel_url);
+    match command.run(&format!("for {channel_url}"))? {
+        RunOutcome::Success(output) => channel_video_entries(&output.stdout),
+        RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
+            "yt-dlp failed to list channel videos for {channel_url}: {}",
+            failure_reason(&stderr_raw)
+        )),
+    }
+}
+
+/// One `yt-dlp` invocation: the binary, its args in order and the working
+/// directory it runs in (the caller's when unset). stdout and stderr are
+/// always captured, never inherited, so none of it reaches the daemon's own
+/// output.
+struct YtDlpCommand<'a> {
+    ytdlp_path: &'a Path,
+    args: Vec<OsString>,
+    working_dir: Option<&'a Path>,
+}
+
+impl<'a> YtDlpCommand<'a> {
+    fn new(ytdlp_path: &'a Path) -> Self {
+        Self {
+            ytdlp_path,
+            args: vec![],
+            working_dir: None,
+        }
+    }
+
+    fn arg(self, arg: impl AsRef<OsStr>) -> Self {
+        self.args([arg])
+    }
+
+    fn args<I, S>(self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        Self {
+            args: self
+                .args
+                .into_iter()
+                .chain(args.into_iter().map(|arg| arg.as_ref().to_os_string()))
+                .collect(),
+            ..self
+        }
+    }
+
+    fn in_dir(self, working_dir: &'a Path) -> Self {
+        Self {
+            working_dir: Some(working_dir),
+            ..self
+        }
+    }
+
+    /// Runs the command, telling a successful exit from a clean failure
+    /// (non-zero exit). `Err` only for a systemic problem: no binary at the
+    /// path, or a spawn failure, described as `Failed to run yt-dlp
+    /// <purpose>: <error>`.
+    fn run(&self, purpose: &str) -> Result<RunOutcome> {
+        let output = self.output(purpose)?;
+        Ok(if output.status.success() {
+            RunOutcome::Success(output)
+        } else {
+            RunOutcome::CleanFailure {
+                stderr_raw: String::from_utf8_lossy(&output.stderr).into_owned(),
+            }
+        })
+    }
+
+    /// Runs the command and returns its output whatever its exit status,
+    /// retrying on a transient busy error. `Err` as `run`.
+    fn output(&self, purpose: &str) -> Result<Output> {
+        let mut command = Command::new(self.ytdlp_path);
+        command
+            .args(&self.args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(working_dir) = self.working_dir {
+            command.current_dir(working_dir);
+        }
+        output_retrying_busy(&mut command).map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => anyhow!(not_found_message(self.ytdlp_path)),
+            _ => anyhow!("Failed to run yt-dlp {purpose}: {e}"),
+        })
+    }
+
+    /// The command line, for logging.
+    fn describe(&self) -> String {
+        std::iter::once(self.ytdlp_path.as_os_str())
+            .chain(self.args.iter().map(OsString::as_os_str))
+            .map(OsStr::to_string_lossy)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+/// The outcome of running a fully-configured `yt-dlp` invocation:
+/// `Success` carries the process's output for the caller to parse,
+/// `CleanFailure` a non-zero exit carrying `yt-dlp`'s full (lossy, untrimmed)
+/// stderr for the caller to interpret — the download caller both derives its
+/// recorded failure reason from it (warnings filtered out) and scans it for
+/// the SABR signal.
+enum RunOutcome {
+    Success(Output),
+    CleanFailure { stderr_raw: String },
+}
+
+/// The JSON object one of the `*_PRINT` templates prints. yt-dlp leaves out
+/// every field the video has no value for, so each is optional; a field
+/// whose value has an unexpected shape is read as unknown rather than
+/// failing the whole object (see `lenient`).
+#[derive(Deserialize, Default)]
+struct PrintedVideo {
+    #[serde(default, deserialize_with = "lenient")]
+    filename: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    height: Option<u32>,
+    /// Seconds, possibly fractional for some extractors.
+    #[serde(default, deserialize_with = "lenient")]
+    duration: Option<f64>,
+    /// Unix seconds.
+    #[serde(default, deserialize_with = "lenient")]
+    timestamp: Option<i64>,
+    /// `YYYYMMDD`.
+    #[serde(default, deserialize_with = "lenient")]
+    upload_date: Option<String>,
+    /// Kept raw: chapters that can't be read leave the video's chapters
+    /// unchecked, which is not the same as having none.
+    #[serde(default)]
+    chapters: Option<serde_json::Value>,
+    #[serde(
+        default,
+        rename = "thumbnails.-1.filepath",
+        deserialize_with = "lenient"
+    )]
+    thumbnail_filepath: Option<String>,
+}
+
+impl PrintedVideo {
+    /// Whole seconds, a fractional duration truncated.
+    fn duration_seconds(&self) -> Option<i64> {
+        self.duration.map(|seconds| seconds as i64)
+    }
+
+    /// The publish timestamp, else midnight UTC of the upload date.
+    fn published_at(&self) -> Option<DateTime<Utc>> {
+        self.timestamp
+            .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
+            .or_else(|| self.upload_date.as_deref().and_then(parse_upload_date))
+    }
+
+    /// The chapters, times floored to whole seconds: `Some(vec![])` when
+    /// yt-dlp printed none, `None` when they can't be read.
+    fn chapters(&self) -> Option<Vec<VideoChapter>> {
+        let Some(chapters) = &self.chapters else {
+            return Some(vec![]);
+        };
+        Vec::<PrintedChapter>::deserialize(chapters)
+            .ok()
+            .map(|chapters| {
+                chapters
+                    .into_iter()
+                    .map(|chapter| VideoChapter {
+                        start_seconds: chapter.start_time as i64,
+                        end_seconds: chapter.end_time as i64,
+                        title: chapter.title,
+                    })
+                    .collect()
+            })
+    }
+}
+
+/// One of `PrintedVideo::chapters`, times in (possibly fractional) seconds.
+#[derive(Deserialize)]
+struct PrintedChapter {
+    start_time: f64,
+    end_time: f64,
+    title: String,
+}
+
+/// The fields of yt-dlp's info JSON a caption probe reads. Track lists are
+/// keyed by yt-dlp's `--sub-langs` key, sorted; absent or `null` when the
+/// video has none.
+#[derive(Deserialize)]
+struct CaptionInfo {
+    language: Option<String>,
+    timestamp: Option<i64>,
+    upload_date: Option<String>,
+    subtitles: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    automatic_captions: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+}
+
+#[derive(Deserialize)]
+struct FlatPlaylistEntry {
+    id: String,
+    title: String,
+    live_status: Option<String>,
+}
+
+impl FlatPlaylistEntry {
+    /// False for an upcoming premiere or stream, one that is live now, or one
+    /// that ended but isn't processed yet: none of them can be downloaded.
+    fn is_watchable(&self) -> bool {
+        !matches!(
+            self.live_status.as_deref(),
+            Some("is_upcoming" | "is_live" | "post_live")
+        )
+    }
+}
+
+/// A successful download's result, from its printed object and stderr.
+/// `Err` when it printed no filename.
+fn downloaded_video(
+    output: &Output,
+    video_url: &str,
+    staging_dir: &Path,
+) -> Result<DownloadedVideo> {
+    let printed = printed_video(&output.stdout).unwrap_or_default();
+    let filename = printed
+        .filename
+        .as_deref()
+        .map(str::trim)
+        .filter(|filename| !filename.is_empty())
+        .ok_or_else(|| {
+            anyhow!(
+                "yt-dlp exited successfully but did not print an output filename for {video_url}"
+            )
+        })?;
+    let media_path = staging_dir.join(filename);
+    Ok(DownloadedVideo {
+        thumbnail_path: staged_thumbnail(&media_path),
+        media_path,
+        duration_seconds: printed.duration_seconds(),
+        published_at: printed.published_at(),
+        sabr_notice: sabr_reason(&String::from_utf8_lossy(&output.stderr)),
+        chapters: printed.chapters(),
+        height: printed.height,
+    })
+}
+
+/// A successful thumbnail fetch's result: the printed thumbnail's file in
+/// `staging_dir`, or unavailable when none was printed.
+fn fetched_thumbnail(stdout: &[u8], staging_dir: &Path) -> ThumbnailFetch {
+    let printed = printed_video(stdout).unwrap_or_default();
+    let filename = printed
+        .thumbnail_filepath
+        .as_deref()
+        .map(str::trim)
+        .filter(|filepath| !filepath.is_empty())
+        .and_then(|filepath| Path::new(filepath).file_name());
+    match filename {
+        Some(filename) => ThumbnailFetch::Fetched(FetchedThumbnail {
+            path: staging_dir.join(filename),
+            published_at: printed.published_at(),
+        }),
+        None => ThumbnailFetch::Unavailable { reason: None },
+    }
+}
+
+/// A successful caption probe's result: its info JSON, written to
+/// `staging_dir` for `fetch_subtitles` and parsed, plus its caption
+/// warnings.
+fn caption_probe(output: &Output, video_url: &str, staging_dir: &Path) -> Result<CaptionProbe> {
     let info_json = staging_dir.join(INFO_JSON_FILENAME);
     std::fs::write(&info_json, &output.stdout)
         .map_err(|e| anyhow!("Failed to write the info JSON to {info_json:?}: {e}"))?;
@@ -423,106 +640,85 @@ pub fn probe_captions(
     })
 }
 
-/// `--load-info-json --skip-download --write-subs|--write-auto-subs
-/// --sub-langs <key> --sub-format vtt --convert-subs srt`.
-pub fn fetch_subtitles(
-    ytdlp_path: &Path,
-    probe: &CaptionProbe,
-    track: &CaptionTrack,
-    staging_dir: &Path,
-) -> Result<FetchedSubtitles> {
-    let write_flag = match track.source {
-        CaptionSource::Manual => "--write-subs",
-        CaptionSource::Automatic => "--write-auto-subs",
-    };
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.arg("--load-info-json")
-        .arg(&probe.info_json)
-        .args([
-            "-o",
-            STAGED_OUTPUT_TEMPLATE,
-            "--skip-download",
-            write_flag,
-            "--sub-langs",
-            &track.key,
-            "--sub-format",
-            "vtt",
-            "--convert-subs",
-            "srt",
-            "--quiet",
-            "--no-warnings",
-        ])
-        .current_dir(staging_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    match run(
-        &mut cmd,
-        || not_found_message(ytdlp_path),
-        |e| {
-            format!(
-                "Failed to run yt-dlp subtitle download for {}: {e}",
-                track.key
-            )
-        },
-    )? {
-        RunOutcome::Success(_) => {}
-        RunOutcome::CleanFailure { stderr_raw } => {
-            let reason = failure_reason(&stderr_raw);
-            return Err(anyhow!(
-                "yt-dlp failed to download the {} subtitles: {reason}",
-                track.key
-            ));
-        }
-    }
-    let path = staged_srt(staging_dir, &track.key)?.ok_or_else(|| {
-        anyhow!(
-            "yt-dlp wrote no SubRip file for the {} subtitles",
-            track.key
-        )
-    })?;
+/// The staged `.srt` of the track requested by its `--sub-langs` key and
+/// its contents. `Err` when yt-dlp wrote none.
+fn staged_subtitles(staging_dir: &Path, key: &str) -> Result<FetchedSubtitles> {
+    let path = staged_srt(staging_dir, key)?
+        .ok_or_else(|| anyhow!("yt-dlp wrote no SubRip file for the {key} subtitles"))?;
     let srt = std::fs::read_to_string(&path)
         .map_err(|e| anyhow!("Failed to read the staged subtitles {path:?}: {e}"))?;
     Ok(FetchedSubtitles { path, srt })
 }
 
-/// Runs a simulate-only `yt-dlp` probe for `video_url`, forcing the
-/// alternate player clients, to reveal the *precise* reason a download
-/// failed — `yt-dlp`'s default clients collapse many distinct permanent
-/// blocks into a bare "Video unavailable". The probe never downloads (it only
-/// reveals the reason; a blocked video stays blocked), so it is safe and
-/// cheap.
-///
-/// Returns `Ok(Some(reason))` with the reason `yt-dlp` printed to stderr
-/// (its `ERROR: [<extractor>] <id>:` prefix stripped), `Ok(None)` when no
-/// precise reason can be determined (the probe exited cleanly with no error,
-/// or printed only a bare "Video unavailable" with no further detail).
-/// Returns `Err` only for a systemic problem: no binary at `ytdlp_path`, or a
-/// spawn failure — the caller swallows that and treats the reason as
-/// undetermined.
-pub fn diagnose(ytdlp_path: &Path, video_url: &str) -> Result<Option<String>> {
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.args([
-        "--simulate",
-        "--no-warnings",
-        "--extractor-args",
-        "youtube:player_client=android,tv,ios,web_safari",
-    ])
-    .arg(video_url)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
-    let output = match output_retrying_busy(&mut cmd) {
-        Ok(output) => output,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(anyhow!(not_found_message(ytdlp_path)));
-        }
-        Err(e) => {
-            return Err(anyhow!(
-                "Failed to run yt-dlp diagnostic probe for {video_url}: {e}"
-            ));
-        }
-    };
+/// The channel's watchable videos, from one JSON object per stdout line.
+fn channel_video_entries(stdout: &[u8]) -> Result<Vec<ChannelVideoEntry>> {
+    let stdout = String::from_utf8_lossy(stdout);
+    let entries = stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            serde_json::from_str::<FlatPlaylistEntry>(line)
+                .map_err(|e| anyhow!("failed to parse yt-dlp channel video listing line: {e}"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(entries
+        .into_iter()
+        .filter(FlatPlaylistEntry::is_watchable)
+        .map(|entry| ChannelVideoEntry {
+            video_id: entry.id,
+            title: entry.title,
+        })
+        .collect())
+}
 
-    Ok(extract_reason(&output.stderr))
+/// The object a `*_PRINT` template printed: the last non-empty stdout line,
+/// `None` when there is none or it isn't a JSON object.
+fn printed_video(stdout: &[u8]) -> Option<PrintedVideo> {
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .and_then(|line| serde_json::from_str(line).ok())
+}
+
+/// Reads a field as `T`, or as unknown (`None`) when its value doesn't fit.
+fn lenient<'de, D, T>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    Ok(serde_json::from_value(serde_json::Value::deserialize(deserializer)?).ok())
+}
+
+/// The error for a probe's clean failure: `yt-dlp failed to <action>
+/// <video_url>: <warning-free stderr>`.
+fn probe_failure(action: &str, video_url: &str, stderr: &str) -> anyhow::Error {
+    anyhow!(
+        "yt-dlp failed to {action} {video_url}: {}",
+        reason_excluding_warnings(stderr).unwrap_or_else(|| "no reason given".to_string())
+    )
+}
+
+/// Runs `cmd`, retrying briefly on a transient "text file busy" error. The
+/// `yt-dlp` binary can be mid-replacement by a concurrent `update-ytdlp` run
+/// (which swaps it in via an atomic rename, but the exec of the old inode
+/// can still transiently race the kernel's write-lock teardown), and the
+/// same race shows up in tests that write a fake binary and exec it right
+/// away.
+fn output_retrying_busy(cmd: &mut Command) -> io::Result<Output> {
+    const MAX_ATTEMPTS: u32 = 5;
+    const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
+
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        match cmd.output() {
+            Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy && attempt < MAX_ATTEMPTS => {
+                std::thread::sleep(RETRY_DELAY);
+            }
+            result => return result,
+        }
+    }
 }
 
 /// Extracts the human-readable failure reason from a diagnostic probe's
@@ -560,102 +756,6 @@ fn is_bare_video_unavailable(reason: &str) -> bool {
         .trim_end_matches('.')
         .trim()
         .eq_ignore_ascii_case("video unavailable")
-}
-
-/// One video discovered by `list_channel_videos`, in the order `yt-dlp`
-/// printed it (newest first).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChannelVideoEntry {
-    pub video_id: String,
-    pub title: String,
-}
-
-#[derive(serde::Deserialize)]
-struct FlatPlaylistEntry {
-    id: String,
-    title: String,
-    live_status: Option<String>,
-}
-
-impl FlatPlaylistEntry {
-    /// False for an upcoming premiere or stream, one that is live now, or one
-    /// that ended but isn't processed yet: none of them can be downloaded.
-    fn is_watchable(&self) -> bool {
-        !matches!(
-            self.live_status.as_deref(),
-            Some("is_upcoming" | "is_live" | "post_live")
-        )
-    }
-}
-
-/// Lists a channel's `limit` most recent uploads via
-/// `yt-dlp --flat-playlist --print-json -I 1:<limit>` against `channel_url`,
-/// parsing one JSON object per stdout line. Empty output means "no videos"
-/// (`Ok(vec![])`). Returns `Err` when `yt-dlp` exits non-zero (carrying its
-/// warning-free stderr as the reason, so a failed listing is never mistaken
-/// for an empty channel), when there's no binary at `ytdlp_path`, or for
-/// output that doesn't parse as one JSON object per line. stderr is
-/// captured, never inherited, so none of it reaches the daemon's own output.
-pub fn list_channel_videos(
-    ytdlp_path: &Path,
-    channel_url: &str,
-    limit: u32,
-) -> Result<Vec<ChannelVideoEntry>> {
-    let mut cmd = Command::new(ytdlp_path);
-    cmd.args([
-        "--flat-playlist",
-        "--print-json",
-        "-I",
-        &format!("1:{limit}"),
-        "--quiet",
-        "--no-warnings",
-    ])
-    .arg(channel_url)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
-    let output = match output_retrying_busy(&mut cmd) {
-        Ok(output) => output,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(anyhow!(not_found_message(ytdlp_path)));
-        }
-        Err(e) => return Err(anyhow!("Failed to run yt-dlp for {channel_url}: {e}")),
-    };
-
-    if !output.status.success() {
-        let reason = failure_reason(&String::from_utf8_lossy(&output.stderr));
-        return Err(anyhow!(
-            "yt-dlp failed to list channel videos for {channel_url}: {reason}"
-        ));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let entries = stdout
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            serde_json::from_str::<FlatPlaylistEntry>(line)
-                .map_err(|e| anyhow!("failed to parse yt-dlp channel video listing line: {e}"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(entries
-        .into_iter()
-        .filter(FlatPlaylistEntry::is_watchable)
-        .map(|entry| ChannelVideoEntry {
-            video_id: entry.id,
-            title: entry.title,
-        })
-        .collect())
-}
-
-/// The outcome of running a fully-configured `yt-dlp` invocation:
-/// `Success` carries the process's output for the caller to parse,
-/// `CleanFailure` a non-zero exit carrying `yt-dlp`'s full (lossy, untrimmed)
-/// stderr for the caller to interpret — the download caller both derives its
-/// recorded failure reason from it (warnings filtered out) and scans it for
-/// the SABR signal.
-enum RunOutcome {
-    Success(std::process::Output),
-    CleanFailure { stderr_raw: String },
 }
 
 /// The recorded failure reason for a clean `yt-dlp` failure: `stderr` with
@@ -716,29 +816,6 @@ fn sabr_reason(stderr: &str) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// Runs `cmd` (fully configured: args, stdio, working directory), retrying
-/// on a transient busy error. Returns `Err` only for a systemic problem
-/// (missing binary, spawn failure).
-fn run(
-    cmd: &mut Command,
-    not_found_msg: impl FnOnce() -> String,
-    other_err_msg: impl FnOnce(&io::Error) -> String,
-) -> Result<RunOutcome> {
-    let output = match output_retrying_busy(cmd) {
-        Ok(output) => output,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(anyhow!(not_found_msg())),
-        Err(e) => return Err(anyhow!(other_err_msg(&e))),
-    };
-
-    if !output.status.success() {
-        return Ok(RunOutcome::CleanFailure {
-            stderr_raw: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
-    }
-
-    Ok(RunOutcome::Success(output))
-}
-
 /// `WARNING:` lines of a caption probe's stderr, without their
 /// indentation and minus the harmless ones.
 fn caption_warning_lines(stderr: &str) -> Vec<String> {
@@ -785,47 +862,6 @@ fn staged_srt(staging_dir: &Path, key: &str) -> Result<Option<PathBuf>> {
         }))
 }
 
-/// One entry of `yt-dlp`'s `%(chapters)j`, times in (possibly fractional)
-/// seconds.
-#[derive(serde::Deserialize)]
-struct PrintedChapter {
-    start_time: f64,
-    end_time: f64,
-    title: String,
-}
-
-/// Parses `yt-dlp`'s `--print %(chapters)j` line, flooring times to whole
-/// seconds. `yt-dlp` prints `NA` (or `null`) for a video without chapters,
-/// read as none. `None` when the line can't be read as chapters, so the
-/// video's chapters stay unchecked rather than failing the download.
-fn parse_chapters(line: &str) -> Option<Vec<VideoChapter>> {
-    let trimmed = line.trim();
-    if trimmed.eq_ignore_ascii_case("na") || trimmed == "null" {
-        return Some(vec![]);
-    }
-    serde_json::from_str::<Vec<PrintedChapter>>(trimmed)
-        .ok()
-        .map(|chapters| {
-            chapters
-                .into_iter()
-                .map(|chapter| VideoChapter {
-                    start_seconds: chapter.start_time as i64,
-                    end_seconds: chapter.end_time as i64,
-                    title: chapter.title,
-                })
-                .collect()
-        })
-}
-
-/// The printed line `back` lines before the last one, when printed.
-fn line_before_last<'a>(lines: &[&'a str], back: usize) -> Option<&'a str> {
-    lines
-        .len()
-        .checked_sub(back + 1)
-        .and_then(|idx| lines.get(idx))
-        .copied()
-}
-
 /// The `-f`/`-S` format selection a quality tier downloads with: its
 /// resolution cap, preferring mp4/h264/aac.
 fn format_selection_args(quality: Quality) -> Vec<String> {
@@ -842,31 +878,8 @@ fn format_selection_args(quality: Quality) -> Vec<String> {
     ]
 }
 
-/// The publish time from the last two printed lines (timestamp, then
-/// upload date).
-fn published_at_from_tail(lines: &[&str]) -> Option<DateTime<Utc>> {
-    parse_published_at(line_before_last(lines, 1), lines.last().copied())
-}
-
-/// The publish time from `yt-dlp`'s printed timestamp, else from its
-/// printed upload date.
-fn parse_published_at(timestamp: Option<&str>, upload_date: Option<&str>) -> Option<DateTime<Utc>> {
-    timestamp
-        .and_then(parse_timestamp)
-        .or_else(|| upload_date.and_then(parse_upload_date))
-}
-
-/// Parses `yt-dlp`'s `--print %(timestamp)s` line (Unix seconds) into the
-/// publish time; `NA` or anything unparsable is unknown.
-fn parse_timestamp(line: &str) -> Option<DateTime<Utc>> {
-    line.trim()
-        .parse::<i64>()
-        .ok()
-        .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
-}
-
-/// Parses `yt-dlp`'s `--print %(upload_date)s` line (`YYYYMMDD`) into
-/// midnight UTC of that day, the publish time when no timestamp is known.
+/// Parses `yt-dlp`'s upload date (`YYYYMMDD`) into midnight UTC of that
+/// day, the publish time when no timestamp is known.
 fn parse_upload_date(line: &str) -> Option<DateTime<Utc>> {
     chrono::NaiveDate::parse_from_str(line.trim(), "%Y%m%d")
         .ok()
@@ -915,7 +928,7 @@ pub(crate) mod test_support {
     }
 
     /// The filename `with_exit_code` prints on stdout when it succeeds,
-    /// standing in for yt-dlp's `--print after_move:filename` output.
+    /// standing in for the `filename` of the object a download prints.
     pub(crate) const DEFAULT_PRINTED_FILENAME: &str = "fake-output.mp4";
 
     #[cfg(unix)]
@@ -934,7 +947,7 @@ pub(crate) mod test_support {
             let script_path = bin_dir.join("yt-dlp");
             let captured_args_path = bin_dir.join("captured-args");
             let print_stmt = if exit_code == 0 {
-                format!("printf '%s\\n' '{printed_filename}'\n")
+                format!("printf '%s\\n' '{}'\n", printed_download(printed_filename))
             } else {
                 String::new()
             };
@@ -972,8 +985,9 @@ pub(crate) mod test_support {
             fs::write(
                 &script_path,
                 format!(
-                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\n{touch_stmts}printf '%s\\n' '{printed_filename}'\nexit 0\n",
-                    captured_args_path.display()
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\n{touch_stmts}printf '%s\\n' '{}'\nexit 0\n",
+                    captured_args_path.display(),
+                    printed_download(printed_filename)
                 ),
             )
             .unwrap();
@@ -1055,6 +1069,11 @@ pub(crate) mod test_support {
                 .collect()
         }
     }
+
+    /// The object a download prints, carrying only `filename`.
+    fn printed_download(filename: &str) -> String {
+        serde_json::json!({ "filename": filename }).to_string()
+    }
 }
 
 #[cfg(test)]
@@ -1084,6 +1103,11 @@ mod tests {
             language: CaptionLanguage::new(language).unwrap(),
             source,
         }
+    }
+
+    /// The stdout line one of the `*_PRINT` templates prints for `object`.
+    fn printed(object: serde_json::Value) -> String {
+        format!("{object}\n")
     }
 
     fn unwrap_succeeded(attempt: DownloadAttempt) -> DownloadedVideo {
@@ -1122,7 +1146,7 @@ mod tests {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: None,
-                chapters: None,
+                chapters: Some(vec![]),
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -1262,8 +1286,10 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_parse_the_duration_line_into_whole_seconds() {
-        let fake = test_support::FakeYtDlp::with_stdout("223\nMy Video.mp4\n");
+    fn it_should_report_the_duration_in_whole_seconds() {
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(
+            serde_json::json!({ "duration": 223, "filename": "My Video.mp4" }),
+        ));
         let output_dir = test_support::unique_temp_dir("ytdlp-output-duration");
 
         let result = unwrap_succeeded(
@@ -1285,7 +1311,7 @@ mod tests {
                 duration_seconds: Some(223),
                 published_at: None,
                 sabr_notice: None,
-                chapters: None,
+                chapters: Some(vec![]),
             }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -1294,7 +1320,12 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_report_the_downloaded_height() {
-        let fake = test_support::FakeYtDlp::with_stdout("1080\n[]\nNA\nNA\n223\nyt1.mp4\n");
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "filename": "yt1.mp4",
+            "height": 1080,
+            "duration": 223,
+            "chapters": [],
+        })));
         let staging_dir = test_support::unique_temp_dir("ytdlp-output-height");
 
         let result = unwrap_succeeded(
@@ -1319,18 +1350,23 @@ mod tests {
                 chapters: Some(vec![]),
             }
         );
-        assert!(
-            fake.captured_args()
-                .windows(2)
-                .any(|pair| pair == ["--print", "%(height)s"])
-        );
+        assert!(fake.captured_args().windows(2).any(|pair| pair
+            == [
+                "--print",
+                "after_move:%(.{filename,height,duration,timestamp,upload_date,chapters})j"
+            ]));
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 
     #[test]
     #[cfg(unix)]
     fn it_should_report_the_publish_timestamp_printed_by_ytdlp() {
-        let fake = test_support::FakeYtDlp::with_stdout("1773568800\n20260315\n223\nyt1.mp4\n");
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "filename": "yt1.mp4",
+            "duration": 223,
+            "timestamp": 1773568800,
+            "upload_date": "20260315",
+        })));
         let staging_dir = test_support::unique_temp_dir("ytdlp-output-timestamp");
 
         let result = unwrap_succeeded(
@@ -1356,13 +1392,8 @@ mod tests {
                         .to_utc()
                 ),
                 sabr_notice: None,
-                chapters: None,
+                chapters: Some(vec![]),
             }
-        );
-        assert!(
-            fake.captured_args()
-                .windows(4)
-                .any(|args| args == ["--print", "%(timestamp)s", "--print", "%(upload_date)s"])
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
@@ -1370,9 +1401,16 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_parse_the_printed_chapters_of_a_download() {
-        let fake = test_support::FakeYtDlp::with_stdout(
-            "[{\"start_time\": 0, \"title\": \"Game 1\", \"end_time\": 1037}, {\"start_time\": 1037, \"title\": \"Game 2\", \"end_time\": 2201}]\n1773568800\n20260315\n223\nyt1.mp4\n",
-        );
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "filename": "yt1.mp4",
+            "duration": 223,
+            "timestamp": 1773568800,
+            "upload_date": "20260315",
+            "chapters": [
+                { "start_time": 0, "title": "Game 1", "end_time": 1037 },
+                { "start_time": 1037, "title": "Game 2", "end_time": 2201 },
+            ],
+        })));
         let staging_dir = test_support::unique_temp_dir("ytdlp-output-chapters");
 
         let result = unwrap_succeeded(
@@ -1412,18 +1450,19 @@ mod tests {
                 ]),
             }
         );
-        assert!(
-            fake.captured_args()
-                .windows(4)
-                .any(|args| args == ["--print", "%(chapters)j", "--print", "%(timestamp)s"])
-        );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 
     #[test]
     #[cfg(unix)]
-    fn it_should_report_no_chapters_when_yt_dlp_prints_na() {
-        let fake = test_support::FakeYtDlp::with_stdout("NA\n1773568800\n20260315\n223\nyt1.mp4\n");
+    fn it_should_report_no_chapters_when_yt_dlp_prints_none() {
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "filename": "yt1.mp4",
+            "duration": 223,
+            "timestamp": 1773568800,
+            "upload_date": "20260315",
+            "chapters": null,
+        })));
         let staging_dir = test_support::unique_temp_dir("ytdlp-output-no-chapters");
 
         let result = unwrap_succeeded(
@@ -1458,9 +1497,13 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_report_unreadable_chapters_as_unchecked() {
-        let fake = test_support::FakeYtDlp::with_stdout(
-            "not chapters\n1773568800\n20260315\n223\nyt1.mp4\n",
-        );
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "filename": "yt1.mp4",
+            "duration": 223,
+            "timestamp": 1773568800,
+            "upload_date": "20260315",
+            "chapters": "not chapters",
+        })));
         let staging_dir = test_support::unique_temp_dir("ytdlp-output-bad-chapters");
 
         let result = unwrap_succeeded(
@@ -1516,9 +1559,11 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_report_the_chapters_publish_time() {
-        let fake = test_support::FakeYtDlp::with_stdout(
-            "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}]\n1773568800\n20260315\n",
-        );
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "chapters": [{ "start_time": 0.0, "title": "Intro", "end_time": 61.5 }],
+            "timestamp": 1773568800,
+            "upload_date": "20260315",
+        })));
 
         let result = fetch_chapters(&fake.path, "https://example.com/video");
 
@@ -1542,7 +1587,11 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_probe_the_height_for_a_quality() {
-        let fake = test_support::FakeYtDlp::with_stdout("720\n1773568800\n20260315\n");
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "height": 720,
+            "timestamp": 1773568800,
+            "upload_date": "20260315",
+        })));
 
         let result = probe_quality(&fake.path, "https://example.com/video", Quality::Mid);
 
@@ -1568,11 +1617,7 @@ mod tests {
                 "--skip-download",
                 "--quiet",
                 "--print",
-                "%(height)s",
-                "--print",
-                "%(timestamp)s",
-                "--print",
-                "%(upload_date)s",
+                "%(.{height,timestamp,upload_date})j",
                 "https://example.com/video",
             ]
         );
@@ -1583,7 +1628,11 @@ mod tests {
     fn it_should_report_a_degraded_quality_probe() {
         let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
             "ytdlp-quality-sabr",
-            "360\n1773568800\n20260315\n",
+            &printed(serde_json::json!({
+                "height": 360,
+                "timestamp": 1773568800,
+                "upload_date": "20260315",
+            })),
             &format!("{SABR_WARNING}\n"),
         );
 
@@ -1622,9 +1671,12 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_fetch_the_chapters_without_downloading() {
-        let fake = test_support::FakeYtDlp::with_stdout(
-            "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}, {\"start_time\": 61.5, \"title\": \"Main\", \"end_time\": 600.9}]\nNA\nNA\n",
-        );
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "chapters": [
+                { "start_time": 0.0, "title": "Intro", "end_time": 61.5 },
+                { "start_time": 61.5, "title": "Main", "end_time": 600.9 },
+            ],
+        })));
 
         let chapters = fetch_chapters(&fake.path, "https://example.com/video")
             .unwrap()
@@ -1652,11 +1704,7 @@ mod tests {
                 "--quiet",
                 "--no-warnings",
                 "--print",
-                "%(chapters)j",
-                "--print",
-                "%(timestamp)s",
-                "--print",
-                "%(upload_date)s",
+                "%(.{chapters,timestamp,upload_date})j",
                 "https://example.com/video",
             ]
         );
@@ -1664,8 +1712,12 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na() {
-        let fake = test_support::FakeYtDlp::with_stdout("NA\n20260315\n223\nyt1.mp4\n");
+    fn it_should_fall_back_to_the_upload_date_when_no_timestamp_is_printed() {
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "filename": "yt1.mp4",
+            "duration": 223,
+            "upload_date": "20260315",
+        })));
         let staging_dir = test_support::unique_temp_dir("ytdlp-output-upload-date");
 
         let result = unwrap_succeeded(
@@ -1693,10 +1745,11 @@ mod tests {
     #[cfg(unix)]
     fn it_should_report_the_written_thumbnail_path() {
         let staging_dir = test_support::unique_temp_dir("ytdlp-thumbnail-staging");
-        let fake = test_support::FakeYtDlp::with_stdout(&format!(
-            "1773568800\n20260315\n{}\n",
-            staging_dir.join("yt1.jpg").display()
-        ));
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(serde_json::json!({
+            "timestamp": 1773568800,
+            "upload_date": "20260315",
+            "thumbnails.-1.filepath": staging_dir.join("yt1.jpg"),
+        })));
 
         let result = fetch_thumbnail(&fake.path, "https://example.com/video", &staging_dir);
 
@@ -2106,7 +2159,9 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_truncate_a_fractional_duration_to_whole_seconds() {
-        let fake = test_support::FakeYtDlp::with_stdout("223.9\nMy Video.mp4\n");
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(
+            serde_json::json!({ "duration": 223.9, "filename": "My Video.mp4" }),
+        ));
         let output_dir = test_support::unique_temp_dir("ytdlp-output-duration-fractional");
 
         let result = unwrap_succeeded(
@@ -2125,8 +2180,10 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_treat_an_na_duration_as_none_without_affecting_the_filename() {
-        let fake = test_support::FakeYtDlp::with_stdout("NA\nMy Video.mp4\n");
+    fn it_should_treat_an_unreadable_duration_as_none_without_affecting_the_filename() {
+        let fake = test_support::FakeYtDlp::with_stdout(&printed(
+            serde_json::json!({ "duration": "NA", "filename": "My Video.mp4" }),
+        ));
         let output_dir = test_support::unique_temp_dir("ytdlp-output-duration-na");
 
         let result = unwrap_succeeded(
@@ -2146,7 +2203,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_treat_a_missing_duration_line_as_none() {
+    fn it_should_treat_a_missing_duration_as_none() {
         use test_support::{DEFAULT_PRINTED_FILENAME, FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-output-duration-missing");
@@ -2348,7 +2405,7 @@ mod tests {
     fn it_should_report_a_sabr_notice_on_a_successful_but_degraded_download() {
         let script_path = fake_ytdlp_writing_stdout_and_stderr(
             "ytdlp-download-sabr-success",
-            "My Video.mp4\n",
+            &printed(serde_json::json!({ "filename": "My Video.mp4" })),
             &format!("{SABR_WARNING}\n"),
         );
         let output_dir = test_support::unique_temp_dir("ytdlp-download-sabr-success-out");
@@ -2370,7 +2427,7 @@ mod tests {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: Some(SABR_WARNING.to_string()),
-                chapters: None,
+                chapters: Some(vec![]),
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -2526,7 +2583,9 @@ mod tests {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-thumbnail-output");
-        let fake = FakeYtDlp::with_stdout("My Video.jpg\n");
+        let fake = FakeYtDlp::with_stdout(&printed(
+            serde_json::json!({ "thumbnails.-1.filepath": "My Video.jpg" }),
+        ));
 
         let result = fetch_thumbnail(&fake.path, "https://example.com/video", &output_dir).unwrap();
 
@@ -2546,7 +2605,9 @@ mod tests {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-thumbnail-flags");
-        let fake = FakeYtDlp::with_stdout("My Video.jpg\n");
+        let fake = FakeYtDlp::with_stdout(&printed(
+            serde_json::json!({ "thumbnails.-1.filepath": "My Video.jpg" }),
+        ));
 
         fetch_thumbnail(&fake.path, "https://example.com/video", &output_dir).unwrap();
 
@@ -2560,11 +2621,7 @@ mod tests {
             "--quiet".to_string(),
             "--no-warnings".to_string(),
             "--print".to_string(),
-            "%(timestamp)s".to_string(),
-            "--print".to_string(),
-            "%(upload_date)s".to_string(),
-            "--print".to_string(),
-            "after_video:thumbnails.-1.filepath".to_string(),
+            "after_video:%(.{timestamp,upload_date,thumbnails.-1.filepath})j".to_string(),
             "https://example.com/video".to_string(),
         ];
         assert_eq!(fake.captured_args(), expected);
@@ -2573,11 +2630,11 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_return_unavailable_without_a_reason_when_yt_dlp_prints_na() {
+    fn it_should_return_unavailable_without_a_reason_when_yt_dlp_prints_no_thumbnail() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-thumbnail-na");
-        let fake = FakeYtDlp::with_stdout("NA\n");
+        let fake = FakeYtDlp::with_stdout(&printed(serde_json::json!({ "timestamp": 1773568800 })));
 
         let result = fetch_thumbnail(&fake.path, "https://example.com/video", &output_dir).unwrap();
 
