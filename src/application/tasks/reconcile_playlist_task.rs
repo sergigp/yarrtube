@@ -746,7 +746,6 @@ mod tests {
                     1,
                     &Task::FetchSubtitles {
                         video_id: video.id.as_str().to_string(),
-                        output_dir: "/videos/my-playlist".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -2261,8 +2260,6 @@ mod tests {
             id,
             &Task::DownloadVideo {
                 video_id: video_id.as_str().to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/my-playlist".to_string(),
             },
             fixed_timestamp(),
         )
@@ -2273,7 +2270,6 @@ mod tests {
             id,
             &Task::FetchThumbnail {
                 video_id: video_id.as_str().to_string(),
-                output_dir: "/videos/my-playlist".to_string(),
             },
             fixed_timestamp(),
         )

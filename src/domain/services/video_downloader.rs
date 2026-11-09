@@ -1,9 +1,11 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::services::{MetadataGenerator, MetadataGeneratorApi};
+use crate::domain::services::{
+    MetadataGenerator, MetadataGeneratorApi, VideoOwnerFinder, VideoOwnerFinderApi,
+};
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     DownloadAttempt, DownloadFailure, DownloadedVideo, EpisodeNumber, EpisodePaths, Video,
-    VideoDownloaded, VideoId,
+    VideoDownloaded, VideoId, VideoTarget,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -34,12 +36,12 @@ fn log_sabr(video: &Video, sabr_notice: Option<&str>) {
 }
 
 /// Downloads one video via `yt-dlp`, transitioning it through in-progress to
-/// downloaded/errored. Container-agnostic: the caller (a task handler)
-/// already resolved the video's owning container's quality and output
-/// directory before invoking this.
+/// downloaded/errored, at its owner's quality and into its owner's show
+/// directory as they are when the download runs.
 #[derive(Clone)]
 pub struct VideoDownloader {
     video_repository: Arc<dyn VideoRepository>,
+    video_owner_finder: Arc<VideoOwnerFinder>,
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
@@ -54,6 +56,7 @@ impl VideoDownloader {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
+        video_owner_finder: Arc<VideoOwnerFinder>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
@@ -65,6 +68,7 @@ impl VideoDownloader {
     ) -> Self {
         Self {
             video_repository,
+            video_owner_finder,
             video_downloader_repository,
             video_file_repository,
             playlist_video_repository,
@@ -78,37 +82,22 @@ impl VideoDownloader {
 }
 
 pub trait VideoDownloaderApi: Send + Sync {
-    /// No-ops (without touching status) if the video no longer exists,
-    /// since that means the download no longer needs to happen. Downloads
-    /// into the video's staging dir, then places the files as an episode in
-    /// `output_dir`'s season folder. A video deleted while its download ran
+    /// No-ops (without touching status) if the video, or the playlist or
+    /// channel holding it, no longer exists, since that means the download no
+    /// longer needs to happen. Downloads at the owner's quality into the
+    /// video's staging dir, then places the files as an episode in the
+    /// owner's show directory's season folder. A video deleted while its download ran
     /// gets nothing recorded, and its staging dir is discarded. Returns
     /// `Err` on a failed download so the task queue retries/dead-letters it.
-    fn download(
-        &self,
-        video_id: VideoId,
-        quality: Quality,
-        output_dir: &Path,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()>;
+    fn download(&self, video_id: VideoId, is_last_attempt: bool) -> anyhow::Result<()>;
 }
 
 impl VideoDownloaderApi for VideoDownloader {
-    fn download(
-        &self,
-        video_id: VideoId,
-        quality: Quality,
-        output_dir: &Path,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
-        let Some(video) = self.video_repository.find(&video_id)? else {
-            debug!(video_id = %video_id, "video no longer exists, skipping download");
+    fn download(&self, video_id: VideoId, is_last_attempt: bool) -> anyhow::Result<()> {
+        let Some((video, target)) = self.find_downloadable(&video_id)? else {
             return Ok(());
         };
-        if video.is_download_settled() {
-            debug!(video_id = %video_id, status = video.status.as_str(), "video already settled, skipping download");
-            return Ok(());
-        }
+        let (quality, output_dir) = (target.quality, target.output_dir.as_path());
 
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;
@@ -139,6 +128,28 @@ impl VideoDownloaderApi for VideoDownloader {
 }
 
 impl VideoDownloader {
+    /// The video to download with its owner's target; `None` (logged) when
+    /// the video is gone, already settled, or no playlist or channel holds
+    /// it any more.
+    fn find_downloadable(
+        &self,
+        video_id: &VideoId,
+    ) -> anyhow::Result<Option<(Video, VideoTarget)>> {
+        let Some(video) = self.video_repository.find(video_id)? else {
+            debug!(video_id = %video_id, "video no longer exists, skipping download");
+            return Ok(None);
+        };
+        if video.is_download_settled() {
+            debug!(video_id = %video_id, status = video.status.as_str(), "video already settled, skipping download");
+            return Ok(None);
+        }
+        let Some(owner) = self.video_owner_finder.find(&video)? else {
+            info!(video_id = %video_id, "video has no playlist or channel any more, skipping download");
+            return Ok(None);
+        };
+        Ok(Some((video, owner.target)))
+    }
+
     fn run_download(
         &self,
         video: &Video,

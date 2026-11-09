@@ -2714,7 +2714,6 @@ mod tests {
                     1,
                     &Task::FetchThumbnail {
                         video_id: video_id.as_str().to_string(),
-                        output_dir: "/videos/creators/somechannel".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -2722,8 +2721,6 @@ mod tests {
                     2,
                     &Task::DownloadVideo {
                         video_id: video_id.as_str().to_string(),
-                        quality: "high".to_string(),
-                        output_dir: "/videos/creators/somechannel".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -3189,6 +3186,55 @@ mod tests {
             )
             .unwrap();
         task_repository.claim(1, fixed_timestamp()).unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(
+            show_mover,
+            "@somechannel",
+            move_request("science/somechannel"),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist or channel still has work in progress, try again once its downloads finish"
+            ))
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_a_channel_video_quality_upgrade_is_queued() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/creators/somechannel"));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = save_downloaded_channel_video(
+            &video_repository,
+            &channel_video_repository,
+            "@somechannel",
+            "vid_downloaded",
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::UpgradeQuality {
+                    video_id: video.id.as_str().to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
         let show_mover = show_mover(&db, video_file_repository.clone());
 
         let response = move_(

@@ -1,5 +1,6 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::video::{EpisodePaths, LateDataOutcome, Video, VideoSubtitlesFetched};
+use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::video::{EpisodePaths, LateDataOutcome, Video, VideoId, VideoSubtitlesFetched};
 use crate::domain::video_transcript::{
     CaptionProbe, CaptionTrack, TranscriptText, VideoTranscript,
 };
@@ -13,7 +14,7 @@ use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::path::Path;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 /// Best-effort fetch of a downloaded video's original-language subtitles —
 /// see the `video-subtitles` capability. The fetch itself runs from the
@@ -22,6 +23,7 @@ use tracing::warn;
 #[derive(Clone)]
 pub struct SubtitleFetcher {
     video_repository: Arc<dyn VideoRepository>,
+    video_owner_finder: Arc<VideoOwnerFinder>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     caption_repository: Arc<dyn CaptionRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
@@ -34,6 +36,7 @@ impl SubtitleFetcher {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
+        video_owner_finder: Arc<VideoOwnerFinder>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
         caption_repository: Arc<dyn CaptionRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
@@ -43,6 +46,7 @@ impl SubtitleFetcher {
     ) -> Self {
         Self {
             video_repository,
+            video_owner_finder,
             video_transcript_repository,
             caption_repository,
             video_file_repository,
@@ -54,27 +58,38 @@ impl SubtitleFetcher {
 }
 
 pub trait SubtitleFetcherApi: Send + Sync {
-    /// No-op unless `video` is subtitle-fetchable
+    /// No-op when the video, or the playlist or channel holding it (logged),
+    /// no longer exists, or the video isn't subtitle-fetchable
     /// (`Video::is_subtitle_fetchable`). Otherwise probes its caption tracks,
     /// downloads the original-language one as `<episode stem>.<lang>.srt` in
-    /// `output_dir`, stores its transcript and records it Fetched; otherwise
+    /// its owner's show directory, stores its transcript and records it Fetched; otherwise
     /// records the check under the `late-video-data` policy (no track =
     /// Incomplete, warning or any failure = Failed): Unavailable once
     /// settled, Missing otherwise. Best effort: failures are logged, counted
-    /// and swallowed. Publishes `VideoSubtitlesFetched` once Fetched.
-    fn fetch(&self, video: &Video, output_dir: &Path);
+    /// and swallowed. Publishes `VideoSubtitlesFetched` once Fetched. Fails
+    /// only when the video or its owner can't be read.
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()>;
 }
 
 impl SubtitleFetcherApi for SubtitleFetcher {
-    fn fetch(&self, video: &Video, output_dir: &Path) {
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()> {
+        let Some(video) = self.video_repository.find(video_id)? else {
+            debug!(video_id = %video_id, "video no longer exists, skipping subtitles fetch");
+            return Ok(());
+        };
         if !video.is_subtitle_fetchable() {
-            return;
+            return Ok(());
         }
+        let Some(owner) = self.video_owner_finder.find(&video)? else {
+            info!(video_id = %video_id, "video has no playlist or channel any more, skipping subtitles fetch");
+            return Ok(());
+        };
         let staged = self.staging_area.for_subtitles(&video.id);
-        if let Err(e) = self.fetch_and_place(video, staged.path(), output_dir) {
+        if let Err(e) = self.fetch_and_place(&video, staged.path(), &owner.target.output_dir) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video subtitles");
-            self.record_failed_fetch(video);
+            self.record_failed_fetch(&video);
         }
+        Ok(())
     }
 }
 

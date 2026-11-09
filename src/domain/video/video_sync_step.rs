@@ -1,4 +1,4 @@
-use super::{Video, VideoTarget};
+use super::Video;
 use crate::domain::task::Task;
 
 /// One step of a stored video's lifecycle, performed by its own task. Later
@@ -17,32 +17,19 @@ pub enum VideoSyncStep {
 }
 
 impl VideoSyncStep {
-    /// The task performing this step for `video`, run in that task's own lane.
-    pub fn task_for(&self, video: &Video, target: &VideoTarget) -> Task {
+    /// The task performing this step for `video`, run in that task's own
+    /// lane. It carries only the video's id: what it needs from the video's
+    /// owner (quality, show folder) is resolved when it runs.
+    pub fn task_for(&self, video: &Video) -> Task {
         let video_id = video.id.as_str().to_string();
-        let output_dir = target.output_dir.to_string_lossy().to_string();
         match self {
-            Self::Download => Task::DownloadVideo {
-                video_id,
-                quality: target.quality.as_str().to_string(),
-                output_dir,
-            },
-            Self::FetchThumbnail => Task::FetchThumbnail {
-                video_id,
-                output_dir,
-            },
-            Self::FetchSubtitles => Task::FetchSubtitles {
-                video_id,
-                output_dir,
-            },
+            Self::Download => Task::DownloadVideo { video_id },
+            Self::FetchThumbnail => Task::FetchThumbnail { video_id },
+            Self::FetchSubtitles => Task::FetchSubtitles { video_id },
             Self::FetchChapters => Task::FetchChapters { video_id },
             Self::Summarize => Task::SummarizeVideo { video_id },
             Self::Categorize => Task::CategorizeVideo { video_id },
-            Self::UpgradeQuality => Task::UpgradeQuality {
-                video_id,
-                quality: target.quality.as_str().to_string(),
-                output_dir,
-            },
+            Self::UpgradeQuality => Task::UpgradeQuality { video_id },
         }
     }
 }

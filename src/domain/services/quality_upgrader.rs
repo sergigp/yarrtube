@@ -1,6 +1,9 @@
 use crate::domain::event::DomainEvent;
+use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
 use crate::domain::shared::Quality;
-use crate::domain::video::{DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId};
+use crate::domain::video::{
+    DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId, VideoTarget,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
@@ -11,7 +14,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use std::path::Path;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 /// Upgrades a young downloaded video to the better quality YouTube finished
 /// processing after its download — see the `video-download` capability's
@@ -20,6 +23,7 @@ use tracing::warn;
 #[derive(Clone)]
 pub struct QualityUpgrader {
     video_repository: Arc<dyn VideoRepository>,
+    video_owner_finder: Arc<VideoOwnerFinder>,
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -30,6 +34,7 @@ pub struct QualityUpgrader {
 impl QualityUpgrader {
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
+        video_owner_finder: Arc<VideoOwnerFinder>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -38,6 +43,7 @@ impl QualityUpgrader {
     ) -> Self {
         Self {
             video_repository,
+            video_owner_finder,
             video_downloader_repository,
             video_file_repository,
             event_publisher,
@@ -50,35 +56,24 @@ impl QualityUpgrader {
 pub trait QualityUpgraderApi: Send + Sync {
     /// No-op unless the video is quality-checkable
     /// (`Video::is_quality_checkable`). Asks the downloader which height
-    /// `quality` would download now; when above the recorded one,
+    /// its owner's quality would download now; when above the recorded one,
     /// re-downloads into the video's staging dir and replaces its episode
-    /// file in `output_dir` in place, then records the new tier and height
+    /// file in the owner's show directory in place, then records the new tier and height
     /// and publishes `VideoDownloaded`. Every check is recorded under the
     /// `late-video-data` policy. Best effort: a failed probe or re-download
     /// is recorded as a failed check, never returned.
-    fn upgrade(
-        &self,
-        video_id: &VideoId,
-        quality: Quality,
-        output_dir: &Path,
-    ) -> anyhow::Result<()>;
+    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<()>;
 }
 
 impl QualityUpgraderApi for QualityUpgrader {
-    fn upgrade(
-        &self,
-        video_id: &VideoId,
-        quality: Quality,
-        output_dir: &Path,
-    ) -> anyhow::Result<()> {
-        let Some(video) = self.video_repository.find(video_id)? else {
+    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<()> {
+        let Some((video, target)) = self.find_checkable(video_id)? else {
             return Ok(());
         };
-        if !video.is_quality_checkable() {
-            return Ok(());
-        }
         let staged = self.staging_area.for_video(&video.id);
-        if let Err(e) = self.check_and_upgrade(&video, quality, staged.path(), output_dir) {
+        if let Err(e) =
+            self.check_and_upgrade(&video, target.quality, staged.path(), &target.output_dir)
+        {
             warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
             self.record_failed_check(&video);
         }
@@ -87,6 +82,24 @@ impl QualityUpgraderApi for QualityUpgrader {
 }
 
 impl QualityUpgrader {
+    /// The video to check with its owner's target; `None` when the video
+    /// is gone or not quality-checkable, or (logged) when no playlist or
+    /// channel holds it any more.
+    fn find_checkable(&self, video_id: &VideoId) -> anyhow::Result<Option<(Video, VideoTarget)>> {
+        let Some(video) = self.video_repository.find(video_id)? else {
+            debug!(video_id = %video_id, "video no longer exists, skipping quality check");
+            return Ok(None);
+        };
+        if !video.is_quality_checkable() {
+            return Ok(None);
+        }
+        let Some(owner) = self.video_owner_finder.find(&video)? else {
+            info!(video_id = %video_id, "video has no playlist or channel any more, skipping quality check");
+            return Ok(None);
+        };
+        Ok(Some((video, owner.target)))
+    }
+
     /// Probes the height `quality` would download now: re-downloads when
     /// it is above the recorded one, else records the check — a failed one
     /// when the probe was degraded (SABR), since its height proves nothing.

@@ -1372,15 +1372,12 @@ mod tests {
     fn download(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 
     fn fetch_thumbnail(video_id: &str) -> Task {
         Task::FetchThumbnail {
             video_id: video_id.to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 

@@ -118,12 +118,7 @@ mod tests {
         ));
         let video = my_video();
         video_repository.save(&video).unwrap();
-        channel_repository
-            .insert(&Channel {
-                quality: Quality::Low,
-                ..my_channel()
-            })
-            .unwrap();
+        channel_repository.insert(&my_channel()).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -171,15 +166,12 @@ mod tests {
                     1,
                     &Task::FetchThumbnail {
                         video_id: video.id.as_str().to_string(),
-                        output_dir: "/videos/creators/somechannel".to_string(),
                     },
                 ),
                 pending_task(
                     2,
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
-                        quality: "low".to_string(),
-                        output_dir: "/videos/creators/somechannel".to_string(),
                     },
                 ),
             ]
@@ -187,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_schedule_the_download_of_a_new_playlist_video_in_its_playlist_folder() {
+    fn it_should_schedule_the_download_and_thumbnail_of_a_new_playlist_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -246,15 +238,12 @@ mod tests {
                     1,
                     &Task::FetchThumbnail {
                         video_id: video.id.as_str().to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                 ),
                 pending_task(
                     2,
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
-                        quality: "mid".to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                 ),
             ]
@@ -318,7 +307,6 @@ mod tests {
                 1,
                 &Task::FetchSubtitles {
                     video_id: video.id.as_str().to_string(),
-                    output_dir: "/videos/creators/somechannel".to_string(),
                 },
             )]
         );
@@ -387,7 +375,6 @@ mod tests {
                 1,
                 &Task::FetchSubtitles {
                     video_id: video.id.as_str().to_string(),
-                    output_dir: "/videos/creators/somechannel".to_string(),
                 },
             )]
         );
@@ -653,8 +640,6 @@ mod tests {
                 1,
                 &Task::UpgradeQuality {
                     video_id: video.id.as_str().to_string(),
-                    quality: "high".to_string(),
-                    output_dir: "/videos/creators/somechannel".to_string(),
                 },
             )]
         );
@@ -1988,7 +1973,6 @@ mod tests {
                 1,
                 &Task::FetchSubtitles {
                     video_id: video.id.as_str().to_string(),
-                    output_dir: playlist_dir.to_string_lossy().to_string(),
                 },
             )]
         );
@@ -2077,7 +2061,6 @@ mod tests {
                 1,
                 &Task::FetchSubtitles {
                     video_id: video.id.as_str().to_string(),
-                    output_dir: channel_dir.to_string_lossy().to_string(),
                 },
             )]
         );
@@ -3300,22 +3283,18 @@ mod tests {
     fn download_video(video: &Video) -> Task {
         Task::DownloadVideo {
             video_id: video.id.as_str().to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/creators/somechannel".to_string(),
         }
     }
 
     fn fetch_thumbnail(video: &Video) -> Task {
         Task::FetchThumbnail {
             video_id: video.id.as_str().to_string(),
-            output_dir: "/videos/creators/somechannel".to_string(),
         }
     }
 
     fn fetch_subtitles(video: &Video) -> Task {
         Task::FetchSubtitles {
             video_id: video.id.as_str().to_string(),
-            output_dir: "/videos/creators/somechannel".to_string(),
         }
     }
 

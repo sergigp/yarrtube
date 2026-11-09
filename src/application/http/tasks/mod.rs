@@ -352,7 +352,6 @@ mod tests {
             .schedule(
                 &Task::FetchThumbnail {
                     video_id: "rec1".to_string(),
-                    output_dir: "/videos/my-playlist".to_string(),
                 },
                 fixed_timestamp(),
             )
@@ -406,7 +405,6 @@ mod tests {
             .schedule(
                 &Task::FetchSubtitles {
                     video_id: "rec1".to_string(),
-                    output_dir: "/videos/my-playlist".to_string(),
                 },
                 fixed_timestamp(),
             )
@@ -701,8 +699,6 @@ mod tests {
             .schedule(
                 &Task::UpgradeQuality {
                     video_id: "rec1".to_string(),
-                    quality: "high".to_string(),
-                    output_dir: "/videos/My Playlist".to_string(),
                 },
                 fixed_timestamp(),
             )
@@ -1036,8 +1032,6 @@ mod tests {
     fn download_video_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 

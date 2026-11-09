@@ -1,9 +1,8 @@
 use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
-use crate::domain::shared::Quality;
 use crate::domain::task::Task;
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
-use std::path::Path;
+use tracing::warn;
 
 /// Downloads one video via `yt-dlp`, scheduled by
 /// the video sync (`SyncVideoTask` via `VideoReconciler`) whenever a video
@@ -20,22 +19,16 @@ impl DownloadVideoTask {
 
 impl TaskHandler for DownloadVideoTask {
     fn handle(&self, task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
-        let Task::DownloadVideo {
-            video_id,
-            quality,
-            output_dir,
-        } = task
-        else {
+        let Task::DownloadVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
-        let Ok(video_id) = VideoId::new(video_id.clone()) else {
-            return Ok(());
-        };
-        let Ok(quality) = Quality::new(quality.clone()) else {
-            return Ok(());
-        };
-        self.video_downloader
-            .download(video_id, quality, Path::new(output_dir), is_last_attempt)
+        match VideoId::new(video_id.clone()) {
+            Ok(video_id) => self.video_downloader.download(video_id, is_last_attempt),
+            Err(e) => {
+                warn!(video_id = %video_id, error = %e, "invalid video id, skipping download");
+                Ok(())
+            }
+        }
     }
 }
 
@@ -43,10 +36,14 @@ impl TaskHandler for DownloadVideoTask {
 mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
-    use crate::domain::channel::ChannelHandle;
+    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::MetadataGenerator;
+    use crate::domain::services::VideoOwnerFinder;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::DownloadedVideo;
     use crate::domain::video::EpisodeNumber;
     use crate::domain::video::LateDataChecks;
@@ -60,10 +57,18 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
     };
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, SqliteChannelRepository,
+    };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::{
+        PlaylistRepository, SqlitePlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
@@ -88,7 +93,7 @@ mod tests {
     use crate::infrastructure::shared::ytdlp::test_support::{FakeYtDlp, unique_temp_dir};
     use chrono::{DateTime, Duration, Utc};
     use rusqlite::Connection;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
     #[test]
@@ -97,9 +102,13 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -110,6 +119,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -121,7 +131,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -147,13 +157,13 @@ mod tests {
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                     output_dir
-                        .path()
+                        .as_path()
                         .join("Season 2026/S2026E031501 - My Video.mp4"),
                 ),
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                     output_dir
-                        .path()
+                        .as_path()
                         .join("Season 2026/S2026E031501 - My Video.jpg"),
                 ),
             ]
@@ -161,7 +171,7 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(
                 output_dir
-                    .path()
+                    .as_path()
                     .join("Season 2026/S2026E031501 - My Video.nfo")
             )
             .unwrap(),
@@ -183,7 +193,7 @@ mod tests {
                 1,
                 DomainEvent::VideoDownloaded(VideoDownloaded {
                     video_id: video.id.as_str().to_string(),
-                    output_dir: output_dir.path().to_string_lossy().to_string(),
+                    output_dir: output_dir.as_path().to_string_lossy().to_string(),
                     folder: "Season 2026".to_string(),
                 })
             )]
@@ -194,9 +204,12 @@ mod tests {
     fn it_should_record_the_downloaded_height() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -207,6 +220,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -221,7 +235,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -251,9 +265,12 @@ mod tests {
     fn it_should_settle_high_quality_at_1080() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -264,6 +281,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -278,7 +296,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -309,9 +327,12 @@ mod tests {
     fn it_should_settle_quality_of_an_old_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -322,6 +343,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -337,7 +359,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -371,9 +393,12 @@ mod tests {
     fn it_should_count_a_degraded_download_as_a_failed_quality_check() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -384,6 +409,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -402,7 +428,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -435,9 +461,12 @@ mod tests {
     fn it_should_leave_quality_unsettled_for_a_young_video_below_its_cap() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel().with_quality(Quality::Mid))
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -448,6 +477,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -462,11 +492,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(
-            &task,
-            &output_dir_task_with_quality(&video, output_dir.path(), "mid"),
-            false,
-        );
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -496,9 +522,12 @@ mod tests {
     fn it_should_settle_quality_at_the_tier_cap() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel().with_quality(Quality::Mid))
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -509,6 +538,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -523,11 +553,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(
-            &task,
-            &output_dir_task_with_quality(&video, output_dir.path(), "mid"),
-            false,
-        );
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -558,9 +584,12 @@ mod tests {
     fn it_should_record_the_chapters_of_a_downloaded_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -571,6 +600,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -585,7 +615,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -617,9 +647,12 @@ mod tests {
     fn it_should_leave_empty_chapters_unsettled_for_a_young_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -630,6 +663,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -644,7 +678,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -675,9 +709,12 @@ mod tests {
     fn it_should_leave_chapters_unchecked_if_unreadable_on_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -688,6 +725,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -702,7 +740,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -729,9 +767,10 @@ mod tests {
     fn it_should_write_the_episode_nfo_before_moving_the_media_into_place() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let nfo_path = output_dir
-            .path()
+            .as_path()
             .join("Season 2026/S2026E031501 - My Video.nfo");
         let nfo_when_media_moved = Arc::new(std::sync::Mutex::new(None));
         let observed = nfo_when_media_moved.clone();
@@ -745,6 +784,9 @@ mod tests {
         ));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -755,6 +797,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -766,7 +809,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -783,7 +826,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let first = Video::create(
             YoutubeVideoId::new("yt0").unwrap(),
             "First Video",
@@ -801,6 +844,9 @@ mod tests {
         video_repository.save(&first).unwrap();
         video_repository.update(&first).unwrap();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -819,6 +865,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -828,7 +875,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -858,15 +905,28 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let prefetched_number = EpisodeNumber::from_columns(2026, 31503).unwrap();
         let video = my_video()
             .with_thumbnail("Season 2026/S2026E031503 - My Video.jpg", fixed_timestamp())
             .with_episode_number(prefetched_number, fixed_timestamp());
         video_repository.save(&video).unwrap();
         video_repository.update(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -876,7 +936,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -901,13 +961,13 @@ mod tests {
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                     output_dir
-                        .path()
+                        .as_path()
                         .join("Season 2026/S2026E031503 - My Video.mp4"),
                 ),
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                     output_dir
-                        .path()
+                        .as_path()
                         .join("Season 2026/S2026E031503 - My Video.jpg"),
                 ),
             ]
@@ -919,14 +979,27 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("music/chill");
         let video = my_video().with_episode_number(
             PlaylistEpisodeNumber::new(7).unwrap().into(),
             fixed_timestamp(),
         );
         video_repository.save(&video).unwrap();
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        SqlitePlaylistVideoRepository::new(db.database())
+            .save(&PlaylistVideo::create(
+                my_playlist_id(),
+                video.id.clone(),
+                6,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -943,7 +1016,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -968,11 +1041,11 @@ mod tests {
             vec![
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
-                    output_dir.path().join("Season 1/S01E007 - My Video.mp4"),
+                    output_dir.as_path().join("Season 1/S01E007 - My Video.mp4"),
                 ),
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
-                    output_dir.path().join("Season 1/S01E007 - My Video.jpg"),
+                    output_dir.as_path().join("Season 1/S01E007 - My Video.jpg"),
                 ),
             ]
         );
@@ -982,9 +1055,12 @@ mod tests {
     fn it_should_number_from_the_upload_date_when_no_timestamp_is_reported() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -995,6 +1071,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -1011,7 +1088,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1041,9 +1118,13 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -1054,6 +1135,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -1063,7 +1145,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1089,19 +1171,19 @@ mod tests {
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                     output_dir
-                        .path()
+                        .as_path()
                         .join("Season 2026/S2026E031501 - My Video.mp4"),
                 ),
                 (
                     PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                     output_dir
-                        .path()
+                        .as_path()
                         .join("Season 2026/S2026E031501 - My Video.jpg"),
                 ),
             ]
         );
         assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
-        assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
+        assert_eq!(folder_entries(videos_dir.path()), Vec::<String>::new());
     }
 
     #[test]
@@ -1110,11 +1192,23 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(false)),
             video_file_repository.clone(),
@@ -1124,7 +1218,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(
             result,
@@ -1139,7 +1233,7 @@ mod tests {
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
-        assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
+        assert_eq!(folder_entries(videos_dir.path()), Vec::<String>::new());
     }
 
     #[test]
@@ -1147,13 +1241,16 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         let staged_media =
             PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_failing_move(staged_media.clone()));
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -1164,6 +1261,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -1173,7 +1271,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), true);
+        let result = run(&task, &task_for(video.id.as_str()), true);
 
         assert_eq!(
             result,
@@ -1206,8 +1304,20 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.database());
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(false)),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1238,8 +1348,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "HTTP Error 403: Forbidden",
@@ -1266,9 +1388,12 @@ mod tests {
     fn it_should_still_record_a_degraded_sabr_download_as_downloaded() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -1279,6 +1404,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -1292,7 +1418,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1322,8 +1448,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::with_failed_reason_and_sabr(
                 "HTTP Error 403: Forbidden",
@@ -1353,8 +1491,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with_sabr(
                 "SABR-only streaming experiment",
@@ -1381,8 +1531,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::with_failed_reason_and_sabr(
                 "HTTP Error 403: Forbidden",
@@ -1410,8 +1572,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1436,8 +1610,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(false)),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1468,8 +1654,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "It was blocked due to the claimed content by Mediatoon. | Video unavailable",
@@ -1498,8 +1696,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "It was blocked due to the claimed content by Mediatoon. | Video unavailable",
@@ -1528,8 +1738,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "Join this channel to get access to members-only content like this video, and other exclusive perks.",
@@ -1558,8 +1780,20 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
                 "Video unavailable",
@@ -1589,6 +1823,7 @@ mod tests {
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1604,6 +1839,116 @@ mod tests {
     }
 
     #[test]
+    fn it_should_download_at_the_current_quality_into_the_current_show_folder_of_its_owner() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let downloader = Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+            staged_download(),
+        ));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(
+                &my_channel()
+                    .with_quality(Quality::Low)
+                    .with_path(PlaylistPath::new("creators/renamed").unwrap()),
+            )
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            downloader.clone(),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::Low,
+                        "Season 2026/S2026E031501 - My Video.mp4",
+                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .quality_checked_at(fixed_timestamp())
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            ]
+        );
+        assert_eq!(
+            *downloader.calls.lock().unwrap(),
+            vec![(
+                "https://www.youtube.com/watch?v=yt1".to_string(),
+                Quality::Low,
+                PathBuf::from(format!("/videos/.downloads/{}", video.id.as_str())),
+            )]
+        );
+        let show_dir = videos_dir.path().join("creators/renamed");
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![
+                (
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
+                    show_dir.join("Season 2026/S2026E031501 - My Video.mp4"),
+                ),
+                (
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
+                    show_dir.join("Season 2026/S2026E031501 - My Video.jpg"),
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_skip_if_no_playlist_or_channel_holds_the_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            downloader.clone(),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_skip_the_download_of_an_already_downloaded_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1616,8 +1961,20 @@ mod tests {
         );
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1639,8 +1996,20 @@ mod tests {
         let video = my_video().mark_excluded(fixed_timestamp());
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1662,8 +2031,20 @@ mod tests {
         let video = my_video().mark_errored(fixed_timestamp());
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
@@ -1684,13 +2065,25 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
         let deleting_repository = video_repository.clone();
         let deleted_id = video.id.clone();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(
                 FakeVideoDownloaderRepository::succeeding_with(staged_download()).with_on_download(
@@ -1706,7 +2099,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1719,14 +2112,14 @@ mod tests {
             ))]
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
-        assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
+        assert_eq!(folder_entries(videos_dir.path()), Vec::<String>::new());
     }
 
     #[test]
     fn it_should_keep_the_watch_state_recorded_while_downloading() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
         SqliteChannelVideoRepository::new(db.database())
@@ -1739,8 +2132,12 @@ mod tests {
             .unwrap();
         let watching_repository = video_repository.clone();
         let watched_id = video.id.clone();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(
                 FakeVideoDownloaderRepository::succeeding_with(staged_download()).with_on_download(
@@ -1752,7 +2149,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1781,8 +2178,20 @@ mod tests {
         video_repository.save(&video).unwrap();
         let watching_repository = video_repository.clone();
         let watched_id = video.id.clone();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(
                 FakeVideoDownloaderRepository::new(false).with_on_download(move || {
@@ -1818,8 +2227,20 @@ mod tests {
         video_repository.save(&video).unwrap();
         let watching_repository = video_repository.clone();
         let watched_id = video.id.clone();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            Path::new("/videos"),
             video_repository.clone(),
             Arc::new(
                 FakeVideoDownloaderRepository::with_failed_reason(
@@ -1851,7 +2272,7 @@ mod tests {
     fn it_should_keep_the_watch_state_recorded_while_downloading_if_placing_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         let staged_media =
             PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
@@ -1866,8 +2287,12 @@ mod tests {
             .unwrap();
         let watching_repository = video_repository.clone();
         let watched_id = video.id.clone();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(
                 FakeVideoDownloaderRepository::succeeding_with(staged_download()).with_on_download(
@@ -1879,7 +2304,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), true);
+        let result = run(&task, &task_for(video.id.as_str()), true);
 
         assert_eq!(
             result,
@@ -1900,13 +2325,16 @@ mod tests {
     fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = Video::create(
             YoutubeVideoId::new("yt1").unwrap(),
             "My: Messy / Title?",
             fixed_timestamp(),
         );
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -1917,6 +2345,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -1926,7 +2355,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1949,14 +2378,21 @@ mod tests {
 
     #[test]
     fn it_should_skip_if_invalid_video_id_provided() {
-        let result = run(&any_task(), &task_for(""), false);
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+
+        let result = run(&any_task(downloader.clone()), &task_for(""), false);
 
         assert_eq!(result, Ok(()));
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
 
     #[test]
     fn it_should_fail_if_handed_another_task() {
-        let result = run(&any_task(), &Task::UpdateYtdlp, false);
+        let result = run(
+            &any_task(Arc::new(FakeVideoDownloaderRepository::new(true))),
+            &Task::UpdateYtdlp,
+            false,
+        );
 
         assert_eq!(
             result,
@@ -1969,9 +2405,13 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -1982,6 +2422,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -1994,7 +2435,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2019,7 +2460,7 @@ mod tests {
             vec![(
                 PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                 output_dir
-                    .path()
+                    .as_path()
                     .join("Season 2026/S2026E031501 - My Video.mp4"),
             )]
         );
@@ -2029,9 +2470,12 @@ mod tests {
     fn it_should_record_the_duration() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2042,6 +2486,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -2054,7 +2499,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2080,9 +2525,13 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2110,12 +2559,13 @@ mod tests {
                 ),
                 &published_episode(),
                 &output_dir
-                    .path()
+                    .as_path()
                     .join("Season 2026/S2026E031501 - My Video.nfo"),
             )
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -2127,7 +2577,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2144,9 +2594,12 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2157,6 +2610,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -2168,7 +2622,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2181,9 +2635,13 @@ mod tests {
     fn it_should_drop_the_thumbnail_from_the_episode_nfo_if_none_downloaded() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2194,6 +2652,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
@@ -2208,13 +2667,13 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
             std::fs::read_to_string(
                 output_dir
-                    .path()
+                    .as_path()
                     .join("Season 2026/S2026E031501 - My Video.nfo")
             )
             .unwrap(),
@@ -2227,9 +2686,13 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2240,6 +2703,7 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
+            videos_dir.path(),
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 staged_download(),
@@ -2249,7 +2713,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2259,7 +2723,7 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(
                 output_dir
-                    .path()
+                    .as_path()
                     .join("Season 2026/S2026E031501 - My Video.nfo")
             )
             .unwrap(),
@@ -2276,10 +2740,12 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_root = unique_temp_dir("download-video-task-thumbnail-e2e");
-        let output_dir = videos_root.join("playlists/my-playlist");
         let fake_yt_dlp = FakeYtDlp::with_downloaded_files("yt1.mp4", &["yt1.mp4", "yt1.jpg"]);
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2290,6 +2756,13 @@ mod tests {
             .unwrap();
         let task = DownloadVideoTask::new(VideoDownloader::new(
             video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                videos_root.to_string_lossy(),
+            )),
             Arc::new(YtDlpVideoDownloaderRepository::new(
                 fake_yt_dlp.path.clone(),
             )),
@@ -2311,7 +2784,7 @@ mod tests {
             )),
         ));
 
-        let result = run(&task, &output_dir_task(&video, &output_dir), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2338,10 +2811,13 @@ mod tests {
     }
 
     /// Builds a downloader around the ports a test seeds, configures or
-    /// asserts; the playlist membership lookup (only used to pick a metadata
-    /// sorttitle) and the clock are ones no test here varies.
+    /// asserts; the owner lookup (over the channels and playlists a test
+    /// seeds in `db`, resolving show folders under `videos_path`), the
+    /// playlist membership lookup (only used to pick a metadata sorttitle)
+    /// and the clock are ones no test here varies.
     fn video_downloader(
         db: &TestDatabase,
+        videos_path: &Path,
         video_repository: Arc<SqliteVideoRepository>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
@@ -2350,6 +2826,13 @@ mod tests {
     ) -> VideoDownloader {
         VideoDownloader::new(
             video_repository,
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                videos_path.to_string_lossy(),
+            )),
             video_downloader_repository,
             video_file_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
@@ -2368,13 +2851,23 @@ mod tests {
     }
 
     /// A task for tests whose payload is rejected before reaching the
-    /// downloader. Its repositories sit on an unmigrated in-memory database,
-    /// so a payload that wrongly got through would fail loudly instead of
-    /// passing.
-    fn any_task() -> DownloadVideoTask {
+    /// downloader, around `video_downloader_repository` so a test can assert
+    /// it was never called. Its repositories sit on an unmigrated in-memory
+    /// database, so a payload that wrongly got through would fail loudly
+    /// instead of passing.
+    fn any_task(
+        video_downloader_repository: Arc<FakeVideoDownloaderRepository>,
+    ) -> DownloadVideoTask {
         DownloadVideoTask::new(VideoDownloader::new(
             Arc::new(SqliteVideoRepository::new(unused_connection())),
-            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+                Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+                Arc::new(SqliteChannelRepository::new(unused_connection())),
+                Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+                "/videos",
+            )),
+            video_downloader_repository,
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             Arc::new(MetadataGenerator::new(
@@ -2420,6 +2913,40 @@ mod tests {
 
     fn my_channel_id() -> ChannelHandle {
         ChannelHandle::new("@somechannel").unwrap()
+    }
+
+    fn my_playlist_id() -> PlaylistId {
+        PlaylistId::new("PL1").unwrap()
+    }
+
+    /// A playlist whose show folder is `music/chill` under the videos path.
+    fn my_playlist() -> Playlist {
+        Playlist::create(
+            my_playlist_id(),
+            PlaylistName::new("Chill").unwrap(),
+            PlaylistPath::new("music/chill").unwrap(),
+            Quality::High,
+            PlaylistKind::YoutubeLinked,
+            false,
+            ReconcileInterval::default_interval(),
+            fixed_timestamp(),
+        )
+    }
+
+    /// The channel holding the videos a test downloads, its show folder
+    /// `creators/somechannel` under the videos path.
+    fn my_channel() -> Channel {
+        Channel::create(
+            my_channel_id(),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
+            fixed_timestamp(),
+        )
     }
 
     fn my_video() -> Video {
@@ -2502,22 +3029,6 @@ mod tests {
         )
     }
 
-    fn output_dir_task(video: &Video, output_dir: &std::path::Path) -> Task {
-        output_dir_task_with_quality(video, output_dir, "high")
-    }
-
-    fn output_dir_task_with_quality(
-        video: &Video,
-        output_dir: &std::path::Path,
-        quality: &str,
-    ) -> Task {
-        Task::DownloadVideo {
-            video_id: video.id.as_str().to_string(),
-            quality: quality.to_string(),
-            output_dir: output_dir.to_string_lossy().to_string(),
-        }
-    }
-
     fn folder_entries(dir: &std::path::Path) -> Vec<String> {
         std::fs::read_dir(dir)
             .unwrap()
@@ -2540,8 +3051,6 @@ mod tests {
     fn task_for(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 
