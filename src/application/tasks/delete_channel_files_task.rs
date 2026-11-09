@@ -1,7 +1,7 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Recursively deletes a deleted channel's output directory, scheduled by
 /// `subscribers::delete_channel_files_on_channel_deleted` whenever a channel
@@ -17,13 +17,15 @@ impl DeleteChannelFilesTask {
 }
 
 impl TaskHandler for DeleteChannelFilesTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (channel_id, path) = Task::decode_delete_channel_files_payload(payload)?;
-        let Ok(channel_id) = ChannelHandle::new(channel_id) else {
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::DeleteChannelFiles { channel_id, path } = task else {
+            return Err(unexpected_task(task));
+        };
+        let Ok(channel_id) = ChannelHandle::new(channel_id.clone()) else {
             return Ok(());
         };
         self.video_file_deleter
-            .delete_channel_video_files(channel_id, path)
+            .delete_channel_video_files(channel_id, path.clone())
     }
 }
 
@@ -42,7 +44,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for("@somechannel", "creators/somechannel"));
+        let result = run(&task, &task_for("@somechannel", "creators/somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -59,7 +61,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for("", "creators/somechannel"));
+        let result = run(&task, &task_for("", "creators/somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -69,21 +71,18 @@ mod tests {
     }
 
     #[test]
-    fn it_should_reject_a_malformed_payload() {
+    fn it_should_fail_if_handed_another_task() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = DeleteChannelFilesTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
             "/videos",
         ));
 
-        let result = run(&task, "not json");
+        let result = run(&task, &Task::UpdateYtdlp);
 
         assert_eq!(
             result,
-            Err(
-                "invalid delete_channel_files payload: expected ident at line 1 column 2"
-                    .to_string()
-            )
+            Err("unexpected update_ytdlp task for this handler".to_string())
         );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
@@ -91,16 +90,14 @@ mod tests {
         );
     }
 
-    fn payload_for(channel_id: &str, path: &str) -> String {
+    fn task_for(channel_id: &str, path: &str) -> Task {
         Task::DeleteChannelFiles {
             channel_id: channel_id.to_string(),
             path: path.to_string(),
         }
-        .payload()
-        .to_string()
     }
 
-    fn run(task: &DeleteChannelFilesTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &DeleteChannelFilesTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

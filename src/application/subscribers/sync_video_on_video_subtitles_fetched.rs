@@ -63,20 +63,18 @@ mod tests {
         let result = subscriber.handle(r#"{"video_id": "rec1", "output_dir": "/videos/creators/somechannel", "folder": "Season 2026"}"#);
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
-        let scheduled: Vec<(String, String, DateTime<Utc>)> = task_repository
+        let scheduled: Vec<(Task, DateTime<Utc>)> = task_repository
             .list_non_completed()
             .unwrap()
             .into_iter()
-            .map(|task| (task.task_type, task.payload, task.run_at))
+            .map(|task| (task.task, task.run_at))
             .collect();
-        let expected = Task::SyncVideo {
-            video_id: "rec1".to_string(),
-        };
         assert_eq!(
             scheduled,
             vec![(
-                expected.task_type().to_string(),
-                expected.payload().to_string(),
+                Task::SyncVideo {
+                    video_id: "rec1".to_string(),
+                },
                 fixed_timestamp()
             )]
         );

@@ -1248,7 +1248,7 @@ mod tests {
                 .list_non_completed()
                 .unwrap()
                 .into_iter()
-                .map(|task| task.task_type)
+                .map(|task| task.task.task_type().to_string())
                 .collect()
         })
         .collect();

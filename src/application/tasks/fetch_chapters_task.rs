@@ -2,7 +2,7 @@ use crate::domain::services::{ChapterFetcher, ChapterFetcherApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
 
 /// Fetches one downloaded video's chapters, scheduled by the video sync
@@ -27,8 +27,11 @@ impl FetchChaptersTask {
 }
 
 impl TaskHandler for FetchChaptersTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let video_id = VideoRecordId::new(Task::decode_fetch_chapters_payload(payload)?)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::FetchChapters { video_id } = task else {
+            return Err(unexpected_task(task));
+        };
+        let video_id = VideoRecordId::new(video_id.clone())?;
         if let Some(video) = self.video_repository.find(&video_id)? {
             self.chapter_fetcher.fetch(&video);
         }
@@ -67,7 +70,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -113,7 +116,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -152,7 +155,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -190,7 +193,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -227,7 +230,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -273,7 +276,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -316,7 +319,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -342,7 +345,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&downloaded_video()));
+        let result = run(&task, &task_for(&downloaded_video()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -380,7 +383,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -428,12 +431,10 @@ mod tests {
         ]
     }
 
-    fn payload_for(video: &Video) -> String {
+    fn task_for(video: &Video) -> Task {
         Task::FetchChapters {
             video_id: video.id.as_str().to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     fn fixed_timestamp() -> DateTime<Utc> {
@@ -444,7 +445,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap()
     }
 
-    fn run(task: &FetchChaptersTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &FetchChaptersTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }
