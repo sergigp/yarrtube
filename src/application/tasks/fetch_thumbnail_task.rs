@@ -2,7 +2,7 @@ use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::debug;
@@ -30,14 +30,20 @@ impl FetchThumbnailTask {
 }
 
 impl TaskHandler for FetchThumbnailTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (video_id, output_dir) = Task::decode_fetch_thumbnail_payload(payload)?;
-        let video_id = VideoRecordId::new(video_id)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::FetchThumbnail {
+            video_id,
+            output_dir,
+        } = task
+        else {
+            return Err(unexpected_task(task));
+        };
+        let video_id = VideoRecordId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             debug!(video_id = %video_id, "video no longer exists, skipping thumbnail fetch");
             return Ok(());
         };
-        self.thumbnail_fetcher.fetch(&video, Path::new(&output_dir));
+        self.thumbnail_fetcher.fetch(&video, Path::new(output_dir));
         Ok(())
     }
 }
@@ -96,7 +102,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -149,7 +155,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -187,7 +193,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -225,7 +231,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -254,7 +260,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for("missing"));
+        let result = run(&task, &task_for("missing"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -284,7 +290,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -319,13 +325,11 @@ mod tests {
         )
     }
 
-    fn payload_for(video_id: &str) -> String {
+    fn task_for(video_id: &str) -> Task {
         Task::FetchThumbnail {
             video_id: video_id.to_string(),
             output_dir: "/videos/my-playlist".to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     /// The publish time `yt-dlp` reports with the thumbnail.
@@ -343,7 +347,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap()
     }
 
-    fn run(task: &FetchThumbnailTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &FetchThumbnailTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

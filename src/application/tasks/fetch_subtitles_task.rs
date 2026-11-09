@@ -2,7 +2,7 @@ use crate::domain::services::{SubtitleFetcher, SubtitleFetcherApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -28,13 +28,19 @@ impl FetchSubtitlesTask {
 }
 
 impl TaskHandler for FetchSubtitlesTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (video_id, output_dir) = Task::decode_fetch_subtitles_payload(payload)?;
-        let video_id = VideoRecordId::new(video_id)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::FetchSubtitles {
+            video_id,
+            output_dir,
+        } = task
+        else {
+            return Err(unexpected_task(task));
+        };
+        let video_id = VideoRecordId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             return Ok(());
         };
-        self.subtitle_fetcher.fetch(&video, Path::new(&output_dir));
+        self.subtitle_fetcher.fetch(&video, Path::new(output_dir));
         Ok(())
     }
 }
@@ -102,7 +108,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -169,7 +175,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -223,7 +229,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -287,7 +293,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -352,7 +358,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -408,7 +414,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -455,7 +461,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -511,7 +517,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -560,7 +566,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -607,7 +613,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -655,7 +661,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -708,7 +714,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -762,7 +768,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -804,7 +810,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for("missing"));
+        let result = run(&task, &task_for("missing"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -850,7 +856,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -900,7 +906,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![reset]);
@@ -947,8 +953,8 @@ mod tests {
         );
 
         let results = [
-            run(&task, &payload_for(fetched.id.as_str())),
-            run(&task, &payload_for(unavailable.id.as_str())),
+            run(&task, &task_for(fetched.id.as_str())),
+            run(&task, &task_for(unavailable.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
@@ -998,8 +1004,8 @@ mod tests {
         );
 
         let results = [
-            run(&task, &payload_for(pending.id.as_str())),
-            run(&task, &payload_for(legacy.id.as_str())),
+            run(&task, &task_for(pending.id.as_str())),
+            run(&task, &task_for(legacy.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
@@ -1053,8 +1059,8 @@ mod tests {
         );
 
         let results = [
-            run(&task, &payload_for(in_folder.id.as_str())),
-            run(&task, &payload_for(flat.id.as_str())),
+            run(&task, &task_for(in_folder.id.as_str())),
+            run(&task, &task_for(flat.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
@@ -1107,7 +1113,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1153,8 +1159,8 @@ mod tests {
 
         // The fake's probe is used up by the first fetch: the second one fails.
         let results = [
-            run(&task, &payload_for(fetched.id.as_str())),
-            run(&task, &payload_for(failed.id.as_str())),
+            run(&task, &task_for(fetched.id.as_str())),
+            run(&task, &task_for(failed.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
@@ -1195,7 +1201,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1247,7 +1253,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1302,7 +1308,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
@@ -1339,7 +1345,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
@@ -1419,13 +1425,11 @@ mod tests {
         }
     }
 
-    fn payload_for(video_id: &str) -> String {
+    fn task_for(video_id: &str) -> Task {
         Task::FetchSubtitles {
             video_id: video_id.to_string(),
             output_dir: "/videos/my-channel".to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     fn fixed_timestamp() -> DateTime<Utc> {
@@ -1441,7 +1445,7 @@ mod tests {
             .to_utc()
     }
 
-    fn run(task: &FetchSubtitlesTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &FetchSubtitlesTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

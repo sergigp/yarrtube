@@ -1,7 +1,7 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs every subsequent reconcile for a playlist (the first one is
 /// triggered by `subscribers::reconcile_on_playlist_created` instead).
@@ -18,9 +18,11 @@ impl ReconcilePlaylistTask {
 }
 
 impl TaskHandler for ReconcilePlaylistTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let playlist_id = Task::decode_reconcile_playlist_payload(payload)?;
-        let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::ReconcilePlaylist { playlist_id } = task else {
+            return Err(unexpected_task(task));
+        };
+        let Ok(playlist_id) = PlaylistId::new(playlist_id.clone()) else {
             return Ok(());
         };
         self.playlist_video_reconciler.reconcile(playlist_id)
@@ -135,7 +137,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL404"));
+        let result = run(&task, &task_for("PL404"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -145,20 +147,18 @@ mod tests {
 
     #[test]
     fn it_should_skip_if_invalid_playlist_id_provided() {
-        let result = run(&any_task(), &payload_for(""));
+        let result = run(&any_task(), &task_for(""));
 
         assert_eq!(result, Ok(()));
     }
 
     #[test]
-    fn it_should_reject_a_malformed_payload() {
-        let result = run(&any_task(), "not json");
+    fn it_should_fail_if_handed_another_task() {
+        let result = run(&any_task(), &Task::UpdateYtdlp);
 
         assert_eq!(
             result,
-            Err(
-                "invalid reconcile_playlist payload: expected ident at line 1 column 2".to_string()
-            )
+            Err("unexpected update_ytdlp task for this handler".to_string())
         );
     }
 
@@ -185,7 +185,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -252,7 +252,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -324,7 +324,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -439,7 +439,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -499,7 +499,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -548,7 +548,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -596,7 +596,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -666,7 +666,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![one, two]);
@@ -723,7 +723,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -831,7 +831,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -936,7 +936,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1032,7 +1032,7 @@ mod tests {
             verdict_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1073,7 +1073,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1178,7 +1178,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1243,7 +1243,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1299,7 +1299,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1329,7 +1329,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1372,7 +1372,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1455,7 +1455,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(playlist_repository.list().unwrap(), vec![]);
@@ -1537,7 +1537,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
@@ -1587,7 +1587,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1642,7 +1642,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1693,7 +1693,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1775,7 +1775,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -1839,7 +1839,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let added = video_repository.list().unwrap()[0].id.clone();
@@ -1923,7 +1923,7 @@ mod tests {
 
         let result = std::thread::scope(|scope| {
             let moving = show_locks.lock(ShowKey::Playlist(playlist_id()));
-            let reconciling = scope.spawn(|| run(&task, &payload_for("PL1")));
+            let reconciling = scope.spawn(|| run(&task, &task_for("PL1")));
             // Gives a reconcile that doesn't wait every chance to run first.
             std::thread::sleep(std::time::Duration::from_millis(100));
             playlist_repository
@@ -2261,8 +2261,7 @@ mod tests {
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -2299,16 +2298,14 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn payload_for(playlist_id: &str) -> String {
+    fn task_for(playlist_id: &str) -> Task {
         Task::ReconcilePlaylist {
             playlist_id: playlist_id.to_string(),
         }
-        .payload()
-        .to_string()
     }
 
-    fn run(task: &ReconcilePlaylistTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &ReconcilePlaylistTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 
     fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
