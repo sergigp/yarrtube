@@ -2,7 +2,7 @@ use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::debug;
@@ -30,14 +30,20 @@ impl FetchThumbnailTask {
 }
 
 impl TaskHandler for FetchThumbnailTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (video_id, output_dir) = Task::decode_fetch_thumbnail_payload(payload)?;
-        let video_id = VideoRecordId::new(video_id)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::FetchThumbnail {
+            video_id,
+            output_dir,
+        } = task
+        else {
+            return Err(unexpected_task(task));
+        };
+        let video_id = VideoRecordId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             debug!(video_id = %video_id, "video no longer exists, skipping thumbnail fetch");
             return Ok(());
         };
-        self.thumbnail_fetcher.fetch(&video, Path::new(&output_dir));
+        self.thumbnail_fetcher.fetch(&video, Path::new(output_dir));
         Ok(())
     }
 }
@@ -47,15 +53,13 @@ mod tests {
     use super::*;
     use crate::domain::channel::ChannelHandle;
     use crate::domain::channel_video::ChannelVideo;
-    use crate::domain::video::{EpisodeNumber, Video, VideoId};
+    use crate::domain::video::{EpisodeNumber, FetchedThumbnail, Video, VideoId};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-        FakeVideoDownloaderRepository, FetchedThumbnail,
-    };
+    use crate::infrastructure::repositories::youtube_thumbnail_repository::FakeThumbnailRepository;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::staging_area::StagingArea;
     use crate::infrastructure::shared::system_clock::FixedClock;
@@ -67,14 +71,12 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
-                FetchedThumbnail {
-                    path: PathBuf::from("yt1.jpg"),
-                    published_at: Some(published_at()),
-                },
-            )),
-        );
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::with_result(Some(
+            FetchedThumbnail {
+                path: PathBuf::from("yt1.jpg"),
+                published_at: Some(published_at()),
+            },
+        )));
         let video = my_video();
         video_repository.save(&video).unwrap();
         SqliteChannelVideoRepository::new(db.database())
@@ -89,14 +91,14 @@ mod tests {
             video_repository.clone(),
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                thumbnail_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(FixedClock(later())),
                 Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -123,7 +125,7 @@ mod tests {
             ))]
         );
         assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
+            *thumbnail_repository.calls.lock().unwrap(),
             vec![thumbnail_call(&video)]
         );
     }
@@ -132,14 +134,14 @@ mod tests {
     fn it_should_skip_if_video_already_has_a_thumbnail() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::default());
         let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
         video_repository.save(&video).unwrap();
         let task = FetchThumbnailTask::new(
             video_repository.clone(),
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                thumbnail_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
                 Arc::new(StagingArea::new(
@@ -149,35 +151,30 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![]
-        );
+        assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
 
     #[test]
     fn it_should_not_fetch_a_thumbnail_for_an_excluded_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
-                FetchedThumbnail {
-                    path: std::path::PathBuf::from("My Video.jpg"),
-                    published_at: None,
-                },
-            )),
-        );
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::with_result(Some(
+            FetchedThumbnail {
+                path: std::path::PathBuf::from("My Video.jpg"),
+                published_at: None,
+            },
+        )));
         let video = my_video().mark_excluded(fixed_timestamp());
         video_repository.save(&video).unwrap();
         let task = FetchThumbnailTask::new(
             video_repository.clone(),
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                thumbnail_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
                 Arc::new(StagingArea::new(
@@ -187,35 +184,30 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![]
-        );
+        assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
 
     #[test]
     fn it_should_not_fetch_a_thumbnail_for_an_errored_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
-                FetchedThumbnail {
-                    path: std::path::PathBuf::from("My Video.jpg"),
-                    published_at: None,
-                },
-            )),
-        );
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::with_result(Some(
+            FetchedThumbnail {
+                path: std::path::PathBuf::from("My Video.jpg"),
+                published_at: None,
+            },
+        )));
         let video = my_video().mark_errored(fixed_timestamp());
         video_repository.save(&video).unwrap();
         let task = FetchThumbnailTask::new(
             video_repository.clone(),
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                thumbnail_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
                 Arc::new(StagingArea::new(
@@ -225,26 +217,23 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![]
-        );
+        assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
 
     #[test]
     fn it_should_skip_if_video_no_longer_exists() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::default());
         let task = FetchThumbnailTask::new(
             video_repository.clone(),
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                thumbnail_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(FixedClock(later())),
                 Arc::new(StagingArea::new(
@@ -254,14 +243,11 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for("missing"));
+        let result = run(&task, &task_for("missing"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![]
-        );
+        assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
 
     #[test]
@@ -269,22 +255,21 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository =
-            Arc::new(FakeVideoDownloaderRepository::default().with_thumbnail_error());
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::failing());
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = FetchThumbnailTask::new(
             video_repository.clone(),
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                thumbnail_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(FixedClock(later())),
                 Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -297,7 +282,7 @@ mod tests {
             ))]
         );
         assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
+            *thumbnail_repository.calls.lock().unwrap(),
             vec![thumbnail_call(&video)]
         );
     }
@@ -310,7 +295,7 @@ mod tests {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
 
-    /// One call as `FakeVideoDownloaderRepository` records it, for the `yt1`
+    /// One call as `FakeThumbnailRepository` records it, for the `yt1`
     /// video, staged under its record id.
     fn thumbnail_call(video: &Video) -> (String, PathBuf) {
         (
@@ -319,13 +304,11 @@ mod tests {
         )
     }
 
-    fn payload_for(video_id: &str) -> String {
+    fn task_for(video_id: &str) -> Task {
         Task::FetchThumbnail {
             video_id: video_id.to_string(),
             output_dir: "/videos/my-playlist".to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     /// The publish time `yt-dlp` reports with the thumbnail.
@@ -343,7 +326,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap()
     }
 
-    fn run(task: &FetchThumbnailTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &FetchThumbnailTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

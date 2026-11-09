@@ -1,7 +1,7 @@
 use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
@@ -47,8 +47,10 @@ impl UpdateYtdlpTask {
 }
 
 impl TaskHandler for UpdateYtdlpTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        Task::decode_update_ytdlp_payload(payload)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::UpdateYtdlp = task else {
+            return Err(unexpected_task(task));
+        };
 
         if self.self_update_enabled {
             match self.updater.update(&self.ytdlp_path) {
@@ -79,7 +81,7 @@ pub fn schedule_update_ytdlp_if_absent(
     let existing = task_repository
         .list_non_completed()?
         .into_iter()
-        .find(|task| task.task_type == Task::UpdateYtdlp.task_type());
+        .find(|task| task.task == Task::UpdateYtdlp);
 
     match existing {
         Some(task) => info!(
@@ -118,7 +120,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let result = run(&task, "{}");
+        let result = run(&task, &Task::UpdateYtdlp);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -147,7 +149,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let result = run(&task, "{}");
+        let result = run(&task, &Task::UpdateYtdlp);
 
         assert_eq!(result, Ok(()));
         assert_eq!(*updater.updated.lock().unwrap(), Vec::<PathBuf>::new());
@@ -176,7 +178,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let result = run(&task, "{}");
+        let result = run(&task, &Task::UpdateYtdlp);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -275,8 +277,7 @@ mod tests {
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -294,7 +295,7 @@ mod tests {
         fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS)
     }
 
-    fn run(task: &UpdateYtdlpTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &UpdateYtdlpTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

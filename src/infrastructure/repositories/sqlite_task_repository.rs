@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 #[cfg(test)]
 use rusqlite::Connection;
 use rusqlite::{OptionalExtension, Row, params};
+use serde_json::{Map, Value};
 use std::sync::Arc;
 use tracing::info;
 
@@ -40,76 +41,8 @@ pub trait TaskRepository: Send + Sync {
     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()>;
 }
 
-fn row_to_scheduled_task(row: &Row) -> rusqlite::Result<ScheduledTask> {
-    let status: String = row.get(3)?;
-    let run_at: String = row.get(5)?;
-    let created_at: String = row.get(6)?;
-    let updated_at: String = row.get(7)?;
-    Ok(ScheduledTask {
-        id: row.get(0)?,
-        task_type: row.get(1)?,
-        payload: row.get(2)?,
-        status: TaskStatus::parse(&status).map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                3,
-                rusqlite::types::Type::Text,
-                e.to_string().into(),
-            )
-        })?,
-        retries: row.get(4)?,
-        run_at: DateTime::parse_from_rfc3339(&run_at)
-            .map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    5,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })?
-            .with_timezone(&Utc),
-        created_at: DateTime::parse_from_rfc3339(&created_at)
-            .map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    6,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })?
-            .with_timezone(&Utc),
-        updated_at: DateTime::parse_from_rfc3339(&updated_at)
-            .map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    7,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })?
-            .with_timezone(&Utc),
-        last_error: row.get(8)?,
-    })
-}
-
 const SELECT_COLUMNS: &str =
     "id, task_type, payload, status, retries, run_at, created_at, updated_at, last_error";
-
-/// The `WHERE` clause guarding `schedule`'s insert: a task with an
-/// exclusivity key is only added if no task of its type for the same video
-/// is pending, or also running when `Task::dedupes_running`; any other task
-/// is always added.
-fn dedupe_predicate(task: &Task, payload: &str) -> &'static str {
-    match Task::exclusivity_key(task.task_type(), payload) {
-        Some(_) if Task::dedupes_running(task.task_type()) => {
-            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
-               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
-               AND status IN ('pending', 'running'))"
-        }
-        Some(_) => {
-            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
-               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
-               AND status = 'pending')"
-        }
-        None => "1",
-    }
-}
 
 pub struct SqliteTaskRepository {
     db: Database,
@@ -165,8 +98,7 @@ impl SqliteTaskRepository {
                 let failed_at: String = row.get(6)?;
                 Ok(DeadLetteredTask {
                     original_task_id: row.get(0)?,
-                    task_type: row.get(1)?,
-                    payload: row.get(2)?,
+                    task: decode_task(row.get(1)?, row.get(2)?),
                     retries: row.get(3)?,
                     last_error: row.get(4)?,
                     created_at: DateTime::parse_from_rfc3339(&created_at)
@@ -186,7 +118,7 @@ impl SqliteTaskRepository {
 impl TaskRepository for SqliteTaskRepository {
     fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()> {
         let conn = self.db.write()?;
-        let payload = task.payload().to_string();
+        let payload = encode_payload(task)?;
         let now = self.clock.now().to_rfc3339();
         let inserted = conn
             .execute(
@@ -194,7 +126,7 @@ impl TaskRepository for SqliteTaskRepository {
                     "INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error)
                      SELECT ?1, ?2, 'pending', 0, ?3, ?4, ?4, NULL
                      WHERE {}",
-                    dedupe_predicate(task, &payload)
+                    dedupe_predicate(task)
                 ),
                 params![task.task_type(), payload, run_at.to_rfc3339(), now],
             )
@@ -266,7 +198,7 @@ impl TaskRepository for SqliteTaskRepository {
         let conn = self.db.read()?;
         conn.query_row(
             &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 AND payload = ?2 AND status = 'pending' ORDER BY id LIMIT 1"),
-            params![task.task_type(), task.payload().to_string()],
+            params![task.task_type(), encode_payload(task)?],
             row_to_scheduled_task,
         )
         .optional()
@@ -333,8 +265,8 @@ impl TaskRepository for SqliteTaskRepository {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 task.original_task_id,
-                task.task_type,
-                task.payload,
+                task.task.task_type(),
+                encode_payload(&task.task)?,
                 task.retries,
                 task.last_error,
                 task.created_at.to_rfc3339(),
@@ -374,6 +306,105 @@ impl TaskRepository for SqliteTaskRepository {
     }
 }
 
+fn row_to_scheduled_task(row: &Row) -> rusqlite::Result<ScheduledTask> {
+    let status: String = row.get(3)?;
+    let run_at: String = row.get(5)?;
+    let created_at: String = row.get(6)?;
+    let updated_at: String = row.get(7)?;
+    Ok(ScheduledTask {
+        id: row.get(0)?,
+        task: decode_task(row.get(1)?, row.get(2)?),
+        status: TaskStatus::parse(&status).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(
+                3,
+                rusqlite::types::Type::Text,
+                e.to_string().into(),
+            )
+        })?,
+        retries: row.get(4)?,
+        run_at: DateTime::parse_from_rfc3339(&run_at)
+            .map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    5,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?
+            .with_timezone(&Utc),
+        created_at: DateTime::parse_from_rfc3339(&created_at)
+            .map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    6,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?
+            .with_timezone(&Utc),
+        updated_at: DateTime::parse_from_rfc3339(&updated_at)
+            .map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    7,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?
+            .with_timezone(&Utc),
+        last_error: row.get(8)?,
+    })
+}
+
+/// The `WHERE` clause guarding `schedule`'s insert: a task with an
+/// exclusivity key is only added if no task of its type for the same video
+/// is pending, or also running when `Task::dedupes_running`; any other task
+/// is always added.
+fn dedupe_predicate(task: &Task) -> &'static str {
+    match task.exclusivity_key() {
+        Some(_) if task.dedupes_running() => {
+            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
+               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
+               AND status IN ('pending', 'running'))"
+        }
+        Some(_) => {
+            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
+               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
+               AND status = 'pending')"
+        }
+        None => "1",
+    }
+}
+
+/// Decodes a stored row's `task_type` and `payload` columns into its task:
+/// the payload's fields plus `task_type` as the serde tag. A row this
+/// version can't decode becomes `Task::Unreadable`, holding the columns
+/// verbatim, rather than failing the whole read.
+fn decode_task(task_type: String, payload: String) -> Task {
+    serde_json::from_str::<Map<String, Value>>(&payload)
+        .and_then(|mut fields| {
+            fields.insert("task_type".to_string(), Value::String(task_type.clone()));
+            serde_json::from_value(Value::Object(fields))
+        })
+        .unwrap_or_else(|e| Task::Unreadable {
+            task_type,
+            payload,
+            error: e.to_string(),
+        })
+}
+
+/// The `payload` column of `task`: its fields as a JSON object with keys in
+/// alphabetical order, without the `task_type` tag. An unreadable task
+/// keeps the payload it was read with.
+fn encode_payload(task: &Task) -> anyhow::Result<String> {
+    if let Task::Unreadable { payload, .. } = task {
+        return Ok(payload.clone());
+    }
+    let mut fields = match serde_json::to_value(task).context("failed to encode task")? {
+        Value::Object(fields) => fields,
+        other => anyhow::bail!("task encoded as a non-object: {other}"),
+    };
+    fields.remove("task_type");
+    Ok(Value::Object(fields).to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,8 +435,7 @@ mod tests {
     ) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -436,7 +466,7 @@ mod tests {
 
         let eligible = repo.list_eligible().unwrap();
         assert_eq!(eligible.len(), 1);
-        assert_eq!(eligible[0].task_type, "reconcile_playlist");
+        assert_eq!(eligible[0].task, task());
     }
 
     #[test]
@@ -560,7 +590,7 @@ mod tests {
             .unwrap();
         assert_eq!(original_task_id, id);
         assert_eq!(task_type, "reconcile_playlist");
-        assert_eq!(payload, task().payload().to_string());
+        assert_eq!(payload, r#"{"playlist_id":"PL1"}"#);
         assert_eq!(retries, 5);
         assert_eq!(last_error, "boom");
     }
@@ -919,6 +949,266 @@ mod tests {
             repo.list_non_completed().unwrap(),
             vec![pending_task(1, &task, now, now)]
         );
+    }
+
+    #[test]
+    fn it_should_store_every_task_in_its_existing_format() {
+        let repo = repo();
+        let now = repo.clock.now();
+
+        every_task()
+            .iter()
+            .try_for_each(|task| repo.schedule(task, now))
+            .unwrap();
+
+        assert_eq!(
+            stored_rows(&repo),
+            every_stored_row()
+                .iter()
+                .map(|(task_type, payload)| (task_type.to_string(), payload.to_string()))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn it_should_read_back_every_task_stored_in_the_existing_format() {
+        let repo = repo();
+        let now = repo.clock.now();
+        every_stored_row()
+            .iter()
+            .for_each(|(task_type, payload)| insert_row(&repo, task_type, payload));
+
+        let tasks: Vec<Task> = repo
+            .list_non_completed()
+            .unwrap()
+            .into_iter()
+            .map(|scheduled| scheduled.task)
+            .collect();
+
+        assert_eq!(tasks, every_task());
+        assert_eq!(
+            repo.list_eligible().unwrap(),
+            every_task()
+                .iter()
+                .enumerate()
+                .map(|(index, task)| pending_task(index as i64 + 1, task, now, now))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn it_should_read_a_video_file_deletion_queued_without_a_subtitle_filename() {
+        let repo = repo();
+        insert_row(
+            &repo,
+            "delete_video_file",
+            r#"{"filename":"My Video.mp4","output_dir":"/videos/music","thumbnail_filename":null}"#,
+        );
+
+        let tasks: Vec<Task> = repo
+            .list_non_completed()
+            .unwrap()
+            .into_iter()
+            .map(|scheduled| scheduled.task)
+            .collect();
+
+        assert_eq!(
+            tasks,
+            vec![Task::DeleteVideoFile {
+                filename: Some("My Video.mp4".to_string()),
+                thumbnail_filename: None,
+                subtitle_filename: None,
+                output_dir: "/videos/music".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_read_a_row_it_cannot_decode_as_unreadable() {
+        let repo = repo();
+        insert_row(&repo, "reconcile_plex_collections", "{}");
+        insert_row(&repo, "download_video", r#"{"video_id":"rec1"}"#);
+        insert_row(&repo, "sync_video", "not json");
+
+        let tasks: Vec<Task> = repo
+            .list_non_completed()
+            .unwrap()
+            .into_iter()
+            .map(|scheduled| scheduled.task)
+            .collect();
+
+        assert_eq!(
+            tasks,
+            vec![
+                Task::Unreadable {
+                    task_type: "reconcile_plex_collections".to_string(),
+                    payload: "{}".to_string(),
+                    error: "unknown variant `reconcile_plex_collections`, expected one of \
+                            `reconcile_playlist`, `reconcile_channel`, `download_video`, \
+                            `delete_video_file`, `delete_playlist_files`, `delete_channel_files`, \
+                            `update_ytdlp`, `fetch_thumbnail`, `fetch_subtitles`, `sync_video`, \
+                            `sync_plex_labels`, `fetch_chapters`, `upgrade_quality`, \
+                            `summarize_video`, `categorize_video`"
+                        .to_string(),
+                },
+                Task::Unreadable {
+                    task_type: "download_video".to_string(),
+                    payload: r#"{"video_id":"rec1"}"#.to_string(),
+                    error: "missing field `quality`".to_string(),
+                },
+                Task::Unreadable {
+                    task_type: "sync_video".to_string(),
+                    payload: "not json".to_string(),
+                    error: "expected ident at line 1 column 2".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_dead_letter_an_unreadable_task_verbatim() {
+        let repo = repo();
+        insert_row(&repo, "reconcile_plex_collections", r#"{"b":1,"a":2}"#);
+
+        for _ in 0..5 {
+            apply_failure(&repo, 1, "boom");
+        }
+
+        let conn = repo.db.read().unwrap();
+        let row: (String, String) = conn
+            .query_row(
+                "SELECT task_type, payload FROM tasks_dead_letter",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            row,
+            (
+                "reconcile_plex_collections".to_string(),
+                r#"{"b":1,"a":2}"#.to_string()
+            )
+        );
+    }
+
+    /// Inserts a pending row as an earlier version stored it.
+    fn insert_row(repo: &SqliteTaskRepository, task_type: &str, payload: &str) {
+        let now = repo.clock.now().to_rfc3339();
+        repo.db
+            .write()
+            .unwrap()
+            .execute(
+                "INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error)
+                 VALUES (?1, ?2, 'pending', 0, ?3, ?3, ?3, NULL)",
+                params![task_type, payload, now],
+            )
+            .unwrap();
+    }
+
+    fn stored_rows(repo: &SqliteTaskRepository) -> Vec<(String, String)> {
+        let conn = repo.db.read().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT task_type, payload FROM tasks ORDER BY id")
+            .unwrap();
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    /// One task of every type, matching `every_stored_row`.
+    fn every_task() -> Vec<Task> {
+        vec![
+            Task::ReconcilePlaylist {
+                playlist_id: "PL1".to_string(),
+            },
+            Task::ReconcileChannel {
+                channel_id: "@somechannel".to_string(),
+            },
+            download_task("rec1"),
+            Task::DeleteVideoFile {
+                filename: Some("My Video.mp4".to_string()),
+                thumbnail_filename: None,
+                subtitle_filename: Some("My Video.en.srt".to_string()),
+                output_dir: "/videos/my-playlist".to_string(),
+            },
+            Task::DeletePlaylistFiles {
+                playlist_id: "PL1".to_string(),
+                path: "music/chill".to_string(),
+            },
+            Task::DeleteChannelFiles {
+                channel_id: "@somechannel".to_string(),
+                path: "creators/somechannel".to_string(),
+            },
+            Task::UpdateYtdlp,
+            Task::FetchThumbnail {
+                video_id: "rec1".to_string(),
+                output_dir: "/videos/my-playlist".to_string(),
+            },
+            Task::FetchSubtitles {
+                video_id: "rec1".to_string(),
+                output_dir: "/videos/my-playlist".to_string(),
+            },
+            sync_video_task("rec1"),
+            Task::SyncPlexLabels,
+            Task::FetchChapters {
+                video_id: "rec1".to_string(),
+            },
+            Task::UpgradeQuality {
+                video_id: "rec1".to_string(),
+                quality: "mid".to_string(),
+                output_dir: "/videos/my-playlist".to_string(),
+            },
+            Task::SummarizeVideo {
+                video_id: "rec1".to_string(),
+            },
+            Task::CategorizeVideo {
+                video_id: "rec1".to_string(),
+            },
+        ]
+    }
+
+    /// The exact `task_type` and `payload` columns earlier versions stored
+    /// for `every_task`, which existing databases hold.
+    fn every_stored_row() -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("reconcile_playlist", r#"{"playlist_id":"PL1"}"#),
+            ("reconcile_channel", r#"{"channel_id":"@somechannel"}"#),
+            (
+                "download_video",
+                r#"{"output_dir":"/videos/my-playlist","quality":"high","video_id":"rec1"}"#,
+            ),
+            (
+                "delete_video_file",
+                r#"{"filename":"My Video.mp4","output_dir":"/videos/my-playlist","subtitle_filename":"My Video.en.srt","thumbnail_filename":null}"#,
+            ),
+            (
+                "delete_playlist_files",
+                r#"{"path":"music/chill","playlist_id":"PL1"}"#,
+            ),
+            (
+                "delete_channel_files",
+                r#"{"channel_id":"@somechannel","path":"creators/somechannel"}"#,
+            ),
+            ("update_ytdlp", "{}"),
+            (
+                "fetch_thumbnail",
+                r#"{"output_dir":"/videos/my-playlist","video_id":"rec1"}"#,
+            ),
+            (
+                "fetch_subtitles",
+                r#"{"output_dir":"/videos/my-playlist","video_id":"rec1"}"#,
+            ),
+            ("sync_video", r#"{"video_id":"rec1"}"#),
+            ("sync_plex_labels", "{}"),
+            ("fetch_chapters", r#"{"video_id":"rec1"}"#),
+            (
+                "upgrade_quality",
+                r#"{"output_dir":"/videos/my-playlist","quality":"mid","video_id":"rec1"}"#,
+            ),
+            ("summarize_video", r#"{"video_id":"rec1"}"#),
+            ("categorize_video", r#"{"video_id":"rec1"}"#),
+        ]
     }
 
     fn download_task(video_id: &str) -> Task {

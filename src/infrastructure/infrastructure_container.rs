@@ -59,11 +59,17 @@ use crate::infrastructure::repositories::sqlite_video_summary_repository::{
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
     SqliteVideoTranscriptRepository, VideoTranscriptRepository,
 };
+use crate::infrastructure::repositories::youtube_caption_repository::{
+    CaptionRepository, YtDlpCaptionRepository,
+};
 use crate::infrastructure::repositories::youtube_channel_repository::{
     YoutubeApiChannelRepository, YoutubeChannelRepository,
 };
 use crate::infrastructure::repositories::youtube_channel_videos_repository::{
     ChannelVideosRepository, YtDlpChannelVideosRepository,
+};
+use crate::infrastructure::repositories::youtube_chapter_repository::{
+    ChapterRepository, YtDlpChapterRepository,
 };
 use crate::infrastructure::repositories::youtube_metadata_repository::{
     YoutubeApiMetadataRepository, YoutubeMetadataRepository,
@@ -73,6 +79,9 @@ use crate::infrastructure::repositories::youtube_playlist_items_repository::{
 };
 use crate::infrastructure::repositories::youtube_playlist_repository::{
     YoutubeApiPlaylistRepository, YoutubePlaylistRepository,
+};
+use crate::infrastructure::repositories::youtube_thumbnail_repository::{
+    ThumbnailRepository, YtDlpThumbnailRepository,
 };
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     VideoDownloaderRepository, YtDlpVideoDownloaderRepository,
@@ -134,6 +143,9 @@ pub struct InfrastructureContainer {
     pub youtube_channel_repository: Arc<dyn YoutubeChannelRepository>,
     pub channel_videos_repository: Arc<dyn ChannelVideosRepository>,
     pub video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    pub thumbnail_repository: Arc<dyn ThumbnailRepository>,
+    pub caption_repository: Arc<dyn CaptionRepository>,
+    pub chapter_repository: Arc<dyn ChapterRepository>,
     pub video_file_repository: Arc<dyn VideoFileRepository>,
     pub show_file_repository: Arc<dyn ShowFileRepository>,
     pub channel_avatar_repository: Arc<dyn ChannelAvatarRepository>,
@@ -210,8 +222,13 @@ impl InfrastructureContainer {
                 settings.ytdlp_path.clone(),
             )),
             video_downloader_repository: Arc::new(YtDlpVideoDownloaderRepository::new(
-                settings.ytdlp_path,
+                settings.ytdlp_path.clone(),
             )),
+            thumbnail_repository: Arc::new(YtDlpThumbnailRepository::new(
+                settings.ytdlp_path.clone(),
+            )),
+            caption_repository: Arc::new(YtDlpCaptionRepository::new(settings.ytdlp_path.clone())),
+            chapter_repository: Arc::new(YtDlpChapterRepository::new(settings.ytdlp_path)),
             video_file_repository,
             show_file_repository: Arc::new(FilesystemShowFileRepository),
             channel_avatar_repository: Arc::new(FilesystemChannelAvatarRepository::new(
