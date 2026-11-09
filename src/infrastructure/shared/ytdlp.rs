@@ -1,7 +1,7 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    ChaptersProbe, DownloadAttempt, DownloadedVideo, FetchedThumbnail, QualityProbe,
-    ThumbnailFetch, VideoChapter,
+    ChaptersProbe, DownloadAttempt, DownloadFailure, DownloadedVideo, FetchedThumbnail,
+    QualityProbe, ThumbnailFetch, VideoChapter,
 };
 use crate::domain::video_transcript::{
     CaptionProbe, CaptionSource, CaptionTrack, CaptionTracks, FetchedSubtitles,
@@ -93,7 +93,7 @@ pub fn args_for_quality(quality: Quality) -> Vec<String> {
 /// reaches the captured stderr, where `sabr_reason` detects it.
 ///
 /// Returns `Ok(DownloadAttempt::Succeeded(..))` on a successful download,
-/// `Ok(DownloadAttempt::Failed { stderr })` for a clean `yt-dlp` failure
+/// `Ok(DownloadAttempt::Failed { failure })` for a clean `yt-dlp` failure
 /// (non-zero exit), carrying whatever `yt-dlp` wrote to its stderr. Returns
 /// `Err` only for a systemic problem: no binary at `ytdlp_path`, a failure
 /// creating the staging dir, or a successful exit that didn't print a
@@ -130,7 +130,9 @@ pub fn download_video(
             downloaded_video(&output, video_url, staging_dir).map(DownloadAttempt::Succeeded)
         }
         RunOutcome::CleanFailure { stderr_raw } => Ok(DownloadAttempt::Failed {
-            stderr: reason_excluding_warnings(&stderr_raw),
+            failure: DownloadFailure::new(
+                reason_excluding_warnings(&stderr_raw).unwrap_or_default(),
+            ),
             sabr_notice: sabr_reason(&stderr_raw),
         }),
     }
@@ -1113,10 +1115,8 @@ mod tests {
     fn unwrap_succeeded(attempt: DownloadAttempt) -> DownloadedVideo {
         match attempt {
             DownloadAttempt::Succeeded(video) => video,
-            DownloadAttempt::Failed { stderr, .. } => {
-                panic!(
-                    "expected a successful download attempt, got Failed {{ stderr: {stderr:?} }}"
-                )
+            DownloadAttempt::Failed { failure, .. } => {
+                panic!("expected a successful download attempt, got Failed {{ {failure:?} }}")
             }
         }
     }
@@ -1207,7 +1207,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: Some("HTTP Error 403: Forbidden".to_string()),
+                failure: DownloadFailure::new("HTTP Error 403: Forbidden"),
                 sabr_notice: None,
             }
         );
@@ -1234,7 +1234,7 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: None,
+                failure: DownloadFailure::new(""),
                 sabr_notice: None,
             }
         );
@@ -2454,7 +2454,9 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: Some("ERROR: [youtube] abc123: This video is not available".to_string()),
+                failure: DownloadFailure::new(
+                    "ERROR: [youtube] abc123: This video is not available"
+                ),
                 sabr_notice: Some(SABR_WARNING.to_string()),
             }
         );

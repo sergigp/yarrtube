@@ -1,9 +1,10 @@
 use crate::domain::shared::Quality;
 #[cfg(test)]
 use crate::domain::video::DownloadedVideo;
-use crate::domain::video::{DownloadAttempt, QualityProbe};
+use crate::domain::video::{DownloadAttempt, DownloadFailure, QualityProbe};
 use crate::infrastructure::shared::ytdlp;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 /// Downloads a single video via `yt-dlp`, injected into
 /// `VideoDownloader`/`QualityUpgrader` for the event-driven download path.
@@ -11,25 +12,18 @@ pub trait VideoDownloaderRepository: Send + Sync {
     /// Downloads the video into `staging_dir` (created first). Returns
     /// `Ok(DownloadAttempt::Succeeded(..))` with the staged media path (and
     /// thumbnail, duration and publish time, when known) on a successful
-    /// download, `Ok(DownloadAttempt::Failed { stderr })` for a clean
-    /// `yt-dlp` failure (non-zero exit), carrying `yt-dlp`'s reported error
-    /// text when it reported one. Returns `Err` only for a systemic problem
-    /// (e.g. `yt-dlp` missing, or an unparseable `--print` output).
+    /// download, `Ok(DownloadAttempt::Failed { failure })` for a clean
+    /// `yt-dlp` failure (non-zero exit), carrying its most precise reason:
+    /// the diagnosed one joined with `yt-dlp`'s reported error text,
+    /// whichever are known (empty when neither is). Returns `Err` only for a
+    /// systemic problem (e.g. `yt-dlp` missing, or an unparseable `--print`
+    /// output).
     fn download(
         &self,
         video_url: &str,
         quality: Quality,
         staging_dir: &Path,
     ) -> anyhow::Result<DownloadAttempt>;
-
-    /// Runs a simulate-only probe (forcing the alternate player clients) to
-    /// reveal the *precise* reason a download failed, since `yt-dlp`'s default
-    /// clients collapse many permanent blocks into a bare "Video unavailable".
-    /// Returns `Ok(Some(reason))` with the reason `yt-dlp` printed,
-    /// `Ok(None)` when none can be determined (clean exit, or only a bare
-    /// "Video unavailable"), and `Err` only for a systemic problem. The probe
-    /// never downloads — it only diagnoses.
-    fn diagnose(&self, video_url: &str) -> anyhow::Result<Option<String>>;
 
     /// The height `quality` would download now, and the video's publish
     /// time, downloading nothing. `Err` on any failure, clean or systemic.
@@ -55,11 +49,16 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         quality: Quality,
         staging_dir: &Path,
     ) -> anyhow::Result<DownloadAttempt> {
-        ytdlp::download_video(&self.ytdlp_path, video_url, quality, staging_dir)
-    }
-
-    fn diagnose(&self, video_url: &str) -> anyhow::Result<Option<String>> {
-        ytdlp::diagnose(&self.ytdlp_path, video_url)
+        match ytdlp::download_video(&self.ytdlp_path, video_url, quality, staging_dir)? {
+            DownloadAttempt::Failed {
+                failure,
+                sabr_notice,
+            } => Ok(DownloadAttempt::Failed {
+                failure: self.diagnose(video_url, &failure),
+                sabr_notice,
+            }),
+            succeeded => Ok(succeeded),
+        }
     }
 
     fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe> {
@@ -67,20 +66,33 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
     }
 }
 
-/// What a `FakeVideoDownloaderRepository`'s `diagnose` yields: a determined
-/// reason (`Some`), nothing determinable (`None`), or a systemic probe error
-/// the downloader must swallow.
-#[cfg(test)]
-#[derive(Clone)]
-pub(crate) enum DiagnoseOutcome {
-    Reason(Option<String>),
-    Error,
+impl YtDlpVideoDownloaderRepository {
+    /// Runs a simulate-only probe (forcing the alternate player clients) to
+    /// reveal the *precise* reason a download failed, since `yt-dlp`'s default
+    /// clients collapse many permanent blocks into a bare "Video unavailable",
+    /// and joins it (the richer signal) with the download's own reported text
+    /// (the fallback), skipping whichever is empty. A probe that fails
+    /// systemically is logged and treated as undetermined, so it never fails
+    /// the download's handling.
+    fn diagnose(&self, video_url: &str, failure: &DownloadFailure) -> DownloadFailure {
+        let diagnosed = ytdlp::diagnose(&self.ytdlp_path, video_url).unwrap_or_else(|e| {
+            warn!(error = %e, "diagnostic probe failed; treating the failure reason as undetermined");
+            None
+        });
+        let reason = [diagnosed.as_deref(), Some(failure.reason())]
+            .into_iter()
+            .flatten()
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" | ");
+        DownloadFailure::new(reason)
+    }
 }
 
 #[cfg(test)]
 pub struct FakeVideoDownloaderRepository {
     pub(crate) result: std::sync::Mutex<DownloadAttempt>,
-    pub(crate) diagnose_result: std::sync::Mutex<DiagnoseOutcome>,
     #[allow(clippy::type_complexity)]
     pub(crate) calls: std::sync::Mutex<Vec<(String, Quality, std::path::PathBuf)>>,
     /// Runs while `download` is in flight, e.g. to delete the video
@@ -97,7 +109,7 @@ pub struct FakeVideoDownloaderRepository {
 impl Default for FakeVideoDownloaderRepository {
     fn default() -> Self {
         Self::with_result(DownloadAttempt::Failed {
-            stderr: None,
+            failure: DownloadFailure::new(""),
             sabr_notice: None,
         })
     }
@@ -118,7 +130,7 @@ impl FakeVideoDownloaderRepository {
             }))
         } else {
             Self::with_result(DownloadAttempt::Failed {
-                stderr: None,
+                failure: DownloadFailure::new(""),
                 sabr_notice: None,
             })
         }
@@ -129,11 +141,11 @@ impl FakeVideoDownloaderRepository {
         Self::with_result(DownloadAttempt::Succeeded(downloaded))
     }
 
-    /// Fails the download, carrying `stderr` as the reported `yt-dlp`
-    /// error text.
-    pub fn with_failed_stderr(stderr: &str) -> Self {
+    /// Fails the download for `reason`, as the downloader reports it (already
+    /// diagnosed).
+    pub fn with_failed_reason(reason: &str) -> Self {
         Self::with_result(DownloadAttempt::Failed {
-            stderr: Some(stderr.to_string()),
+            failure: DownloadFailure::new(reason),
             sabr_notice: None,
         })
     }
@@ -153,12 +165,12 @@ impl FakeVideoDownloaderRepository {
         }))
     }
 
-    /// Fails the download, carrying both `stderr` and a SABR-only notice, so
+    /// Fails the download for `reason`, carrying a SABR-only `notice` too, so
     /// tests can drive the download path's SABR-on-failure behavior.
-    pub fn with_failed_stderr_and_sabr(stderr: &str, reason: &str) -> Self {
+    pub fn with_failed_reason_and_sabr(reason: &str, notice: &str) -> Self {
         Self::with_result(DownloadAttempt::Failed {
-            stderr: Some(stderr.to_string()),
-            sabr_notice: Some(reason.to_string()),
+            failure: DownloadFailure::new(reason),
+            sabr_notice: Some(notice.to_string()),
         })
     }
 
@@ -177,30 +189,9 @@ impl FakeVideoDownloaderRepository {
         }
     }
 
-    /// Makes the diagnostic probe report `reason` as the precise failure
-    /// reason.
-    pub fn with_diagnosed_reason(self, reason: &str) -> Self {
-        Self {
-            diagnose_result: std::sync::Mutex::new(DiagnoseOutcome::Reason(Some(
-                reason.to_string(),
-            ))),
-            ..self
-        }
-    }
-
-    /// Makes the diagnostic probe itself fail, so tests can prove the
-    /// downloader swallows it and treats the reason as undetermined.
-    pub fn with_diagnose_error(self) -> Self {
-        Self {
-            diagnose_result: std::sync::Mutex::new(DiagnoseOutcome::Error),
-            ..self
-        }
-    }
-
     fn with_result(result: DownloadAttempt) -> Self {
         Self {
             result: std::sync::Mutex::new(result),
-            diagnose_result: std::sync::Mutex::new(DiagnoseOutcome::Reason(None)),
             calls: Default::default(),
             on_download: None,
             quality_probe: Default::default(),
@@ -235,13 +226,6 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
             }),
             failed => failed,
         })
-    }
-
-    fn diagnose(&self, _video_url: &str) -> anyhow::Result<Option<String>> {
-        match self.diagnose_result.lock().unwrap().clone() {
-            DiagnoseOutcome::Reason(reason) => Ok(reason),
-            DiagnoseOutcome::Error => Err(anyhow::anyhow!("fake diagnose error")),
-        }
     }
 
     fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe> {
@@ -309,12 +293,154 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: Some("HTTP Error 403: Forbidden".to_string()),
+                failure: DownloadFailure::new("HTTP Error 403: Forbidden"),
                 sabr_notice: None,
             }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
         std::fs::remove_dir_all(&bin_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_join_the_diagnosed_reason_with_the_reported_one_on_a_failed_download() {
+        let fake = FailingYtDlp::new(
+            "ERROR: [youtube] abc123: This video has been removed by the uploader.\n",
+            "ERROR: [youtube] abc123: Video unavailable\n",
+        );
+        let output_dir = test_support::unique_temp_dir("video-downloader-repository");
+
+        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
+            .download("https://example.com/video", Quality::High, &output_dir)
+            .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                failure: DownloadFailure::new(
+                    "This video has been removed by the uploader. | ERROR: [youtube] abc123: Video unavailable"
+                ),
+                sabr_notice: None,
+            }
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_fail_with_the_diagnosed_reason_if_the_download_reported_none() {
+        let fake = FailingYtDlp::new(
+            "ERROR: [youtube] abc123: Private video. Sign in if you've been granted access to this video.\n",
+            "",
+        );
+        let output_dir = test_support::unique_temp_dir("video-downloader-repository");
+
+        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
+            .download("https://example.com/video", Quality::High, &output_dir)
+            .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                failure: DownloadFailure::new(
+                    "Private video. Sign in if you've been granted access to this video."
+                ),
+                sabr_notice: None,
+            }
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_fail_with_no_reason_if_neither_the_download_nor_the_diagnosis_reported_one() {
+        let fake = test_support::FakeYtDlp::with_exit_code(1);
+        let output_dir = test_support::unique_temp_dir("video-downloader-repository");
+
+        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
+            .download("https://example.com/video", Quality::High, &output_dir)
+            .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                failure: DownloadFailure::new(""),
+                sabr_notice: None,
+            }
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_fail_with_the_reported_reason_if_the_diagnostic_probe_errors() {
+        // The script deletes itself while the download runs, so the probe
+        // that follows can't even start.
+        let fake = FailingYtDlp::removing_itself("HTTP Error 403: Forbidden\n");
+        let output_dir = test_support::unique_temp_dir("video-downloader-repository");
+
+        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
+            .download("https://example.com/video", Quality::High, &output_dir)
+            .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                failure: DownloadFailure::new("HTTP Error 403: Forbidden"),
+                sabr_notice: None,
+            }
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    /// A fake `yt-dlp` failing every run, writing one stderr for the
+    /// diagnostic probe (`--simulate`) and another for the download.
+    #[cfg(unix)]
+    struct FailingYtDlp {
+        bin_dir: PathBuf,
+        path: PathBuf,
+    }
+
+    #[cfg(unix)]
+    impl FailingYtDlp {
+        fn new(diagnosed_stderr: &str, download_stderr: &str) -> Self {
+            Self::with_script(download_stderr, |bin_dir| {
+                std::fs::write(bin_dir.join("diagnosed"), diagnosed_stderr).unwrap();
+                format!(
+                    "#!/bin/sh\nif [ \"$1\" = --simulate ]; then cat \"{0}/diagnosed\" >&2; else cat \"{0}/download\" >&2; fi\nexit 1\n",
+                    bin_dir.display()
+                )
+            })
+        }
+
+        /// Deletes itself on its first run, so the diagnostic probe after the
+        /// download fails to start.
+        fn removing_itself(download_stderr: &str) -> Self {
+            Self::with_script(download_stderr, |bin_dir| {
+                format!(
+                    "#!/bin/sh\nrm \"$0\"\ncat \"{}/download\" >&2\nexit 1\n",
+                    bin_dir.display()
+                )
+            })
+        }
+
+        fn with_script(download_stderr: &str, script: impl FnOnce(&Path) -> String) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let bin_dir = test_support::unique_temp_dir("video-downloader-repository-fake-bin");
+            let path = bin_dir.join("yt-dlp");
+            std::fs::write(bin_dir.join("download"), download_stderr).unwrap();
+            std::fs::write(&path, script(&bin_dir)).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            Self { bin_dir, path }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for FailingYtDlp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.bin_dir);
+        }
     }
 }
 
@@ -385,7 +511,7 @@ mod youtube_contract_tests {
 
         let downloaded_chapters = match &attempt {
             DownloadAttempt::Succeeded(video) => video.chapters.clone(),
-            DownloadAttempt::Failed { stderr, .. } => panic!("download failed: {stderr:?}"),
+            DownloadAttempt::Failed { failure, .. } => panic!("download failed: {failure:?}"),
         };
         assert_eq!(downloaded_chapters, Some(flamenco_chapters()));
         assert_eq!(
@@ -456,8 +582,8 @@ mod youtube_contract_tests {
         assert_eq!(
             attempt,
             DownloadAttempt::Failed {
-                stderr: Some(format!(
-                    "ERROR: [youtube] {MISSING_VIDEO_ID}: This video is unavailable"
+                failure: DownloadFailure::new(format!(
+                    "This video is unavailable | ERROR: [youtube] {MISSING_VIDEO_ID}: This video is unavailable"
                 )),
                 sabr_notice: None,
             }
@@ -468,21 +594,9 @@ mod youtube_contract_tests {
     #[test]
     #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_diagnose_no_failure_for_a_playable_video() {
-        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
-
-        let reason = repository.diagnose(&video_url(SHORT_VIDEO_ID)).unwrap();
+        let reason = ytdlp::diagnose(&ytdlp_path(), &video_url(SHORT_VIDEO_ID)).unwrap();
 
         assert_eq!(reason, None);
-    }
-
-    #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
-    fn it_should_diagnose_why_a_missing_video_failed() {
-        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
-
-        let reason = repository.diagnose(&video_url(MISSING_VIDEO_ID)).unwrap();
-
-        assert_eq!(reason, Some("This video is unavailable".to_string()));
     }
 
     /// Downloads the short fixture at `quality` and returns its video height.
