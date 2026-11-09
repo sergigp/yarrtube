@@ -509,7 +509,7 @@ mod tests {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: None,
-                chapters: None,
+                chapters: Some(vec![]),
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -548,7 +548,10 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_map_a_successful_thumbnail_fetch_to_the_printed_filename() {
-        let fake = test_support::FakeYtDlp::with_stdout("My Video.jpg\n");
+        let fake = test_support::FakeYtDlp::with_stdout(
+            r#"{"thumbnails.-1.filepath": "My Video.jpg"}
+"#,
+        );
         let output_dir = test_support::unique_temp_dir("video-downloader-repository-thumbnail");
 
         let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
@@ -569,9 +572,7 @@ mod tests {
     #[cfg(unix)]
     fn it_should_map_the_printed_chapters_of_a_yt_dlp_process() {
         let fake = test_support::FakeYtDlp::with_stdout(
-            r#"[{"start_time": 0.0, "title": "Intro", "end_time": 61.7}, {"start_time": 61.7, "title": "Main part", "end_time": 300.0}]
-NA
-NA
+            r#"{"chapters": [{"start_time": 0.0, "title": "Intro", "end_time": 61.7}, {"start_time": 61.7, "title": "Main part", "end_time": 300.0}]}
 "#,
         );
 
