@@ -2,13 +2,13 @@ use crate::domain::event::DomainEvent;
 use crate::domain::video::{
     EpisodePaths, LateDataOutcome, Video, VideoSubtitlesFetched, subtitle_staging_dir,
 };
-use crate::domain::video_transcript::{CaptionTrack, TranscriptText, VideoTranscript};
+use crate::domain::video_transcript::{
+    CaptionProbe, CaptionTrack, TranscriptText, VideoTranscript,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-    CaptionProbe, VideoDownloaderRepository,
-};
+use crate::infrastructure::repositories::youtube_caption_repository::CaptionRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
@@ -24,7 +24,7 @@ use tracing::warn;
 pub struct SubtitleFetcher {
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
-    video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    caption_repository: Arc<dyn CaptionRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
@@ -36,7 +36,7 @@ impl SubtitleFetcher {
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
-        video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        caption_repository: Arc<dyn CaptionRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
@@ -45,7 +45,7 @@ impl SubtitleFetcher {
         Self {
             video_repository,
             video_transcript_repository,
-            video_downloader_repository,
+            caption_repository,
             video_file_repository,
             event_publisher,
             clock,
@@ -87,7 +87,7 @@ impl SubtitleFetcher {
         let paths = EpisodePaths::from_media(filename);
         let staging = subtitle_staging_dir(&self.videos_path, &video.id);
         let probe = self
-            .video_downloader_repository
+            .caption_repository
             .probe_captions(&video.youtube_id.to_url(), &staging)?;
         match probe.tracks.original() {
             Some(track) => {
@@ -155,7 +155,7 @@ impl SubtitleFetcher {
         output_dir: &Path,
     ) -> anyhow::Result<()> {
         let fetched = self
-            .video_downloader_repository
+            .caption_repository
             .fetch_subtitles(probe, track, staging)?;
         if !self.is_still_downloaded_as(video)? {
             return Ok(());

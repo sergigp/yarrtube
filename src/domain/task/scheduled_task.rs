@@ -48,8 +48,7 @@ impl TaskStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScheduledTask {
     pub id: i64,
-    pub task_type: String,
-    pub payload: String,
+    pub task: Task,
     pub status: TaskStatus,
     pub retries: i64,
     pub run_at: DateTime<Utc>,
@@ -62,8 +61,7 @@ pub struct ScheduledTask {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeadLetteredTask {
     pub original_task_id: i64,
-    pub task_type: String,
-    pub payload: String,
+    pub task: Task,
     pub retries: i64,
     pub last_error: String,
     pub created_at: DateTime<Utc>,
@@ -93,26 +91,6 @@ impl ScheduledTask {
         self.retries + 1 >= MAX_ATTEMPTS
     }
 
-    /// The video a `sync_video` task targets; `None` for any other task
-    /// type.
-    pub fn sync_video_id(&self) -> Option<String> {
-        (self.task_type == "sync_video")
-            .then(|| Task::decode_sync_video_payload(&self.payload).ok())
-            .flatten()
-    }
-
-    /// The show directory this task writes to or deletes from, for a
-    /// per-video task; `None` for any other.
-    pub fn output_dir(&self) -> Option<String> {
-        Task::output_dir_of(&self.task_type, &self.payload)
-    }
-
-    /// The source path a `delete_playlist_files` / `delete_channel_files`
-    /// task removes; `None` for any other.
-    pub fn deleted_path(&self) -> Option<String> {
-        Task::deleted_path_of(&self.task_type, &self.payload)
-    }
-
     /// Runs no later than `run_at`; a task already due earlier keeps its time.
     pub fn bring_forward(self, run_at: DateTime<Utc>, now: DateTime<Utc>) -> Self {
         if self.run_at <= run_at {
@@ -137,8 +115,7 @@ impl ScheduledTask {
         if retries >= MAX_ATTEMPTS {
             TaskFailureOutcome::DeadLetter(DeadLetteredTask {
                 original_task_id: self.id,
-                task_type: self.task_type,
-                payload: self.payload,
+                task: self.task,
                 retries,
                 last_error: error,
                 created_at: self.created_at,
@@ -168,8 +145,9 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         ScheduledTask {
             id: 1,
-            task_type: "reconcile_playlist".to_string(),
-            payload: "{}".to_string(),
+            task: Task::ReconcilePlaylist {
+                playlist_id: "PL1".to_string(),
+            },
             status: TaskStatus::Pending,
             retries,
             run_at: now,
@@ -265,7 +243,12 @@ mod tests {
         match outcome {
             TaskFailureOutcome::DeadLetter(dead) => {
                 assert_eq!(dead.original_task_id, 1);
-                assert_eq!(dead.task_type, "reconcile_playlist");
+                assert_eq!(
+                    dead.task,
+                    Task::ReconcilePlaylist {
+                        playlist_id: "PL1".to_string()
+                    }
+                );
                 assert_eq!(dead.retries, 5);
                 assert_eq!(dead.last_error, "boom");
                 assert_eq!(dead.failed_at, now);

@@ -1,6 +1,11 @@
 use crate::domain::shared::Quality;
-use crate::domain::video::VideoChapter;
-use crate::domain::video_transcript::{CaptionSource, CaptionTrack, CaptionTracks};
+use crate::domain::video::{
+    ChaptersProbe, DownloadAttempt, DownloadedVideo, FetchedThumbnail, QualityProbe,
+    ThumbnailFetch, VideoChapter,
+};
+use crate::domain::video_transcript::{
+    CaptionProbe, CaptionSource, CaptionTrack, CaptionTracks, FetchedSubtitles,
+};
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
@@ -10,103 +15,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use tracing::info;
-
-/// A video's `yt-dlp`-reported download result, staged outside its show:
-/// the media file's path, the converted thumbnail's path when `yt-dlp` wrote
-/// one, its duration in whole seconds and its publish time, when known.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DownloadedVideo {
-    pub media_path: PathBuf,
-    pub thumbnail_path: Option<PathBuf>,
-    pub duration_seconds: Option<i64>,
-    pub published_at: Option<DateTime<Utc>>,
-    /// `Some(reason)` when `yt-dlp` reported YouTube's SABR-only streaming
-    /// experiment during this download — the better formats were skipped as
-    /// missing a URL, so this success may be a lower-quality fallback. `None`
-    /// when no SABR signal was reported. Carries the reason text for logging;
-    /// it never affects the recorded status.
-    pub sabr_notice: Option<String>,
-    /// The chapters `yt-dlp` reported (`Some(vec![])` for none); `None` when
-    /// the printed chapters could not be read.
-    pub chapters: Option<Vec<VideoChapter>>,
-    /// The downloaded file's height in pixels, when `yt-dlp` printed one.
-    pub height: Option<u32>,
-}
-
-/// A video's chapters (`vec![]` for none) and its publish time, when known.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChaptersProbe {
-    pub chapters: Vec<VideoChapter>,
-    pub published_at: Option<DateTime<Utc>>,
-}
-
-/// The height a quality tier would download now, and the video's publish
-/// time, when known.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct QualityProbe {
-    pub height: Option<u32>,
-    pub published_at: Option<DateTime<Utc>>,
-    /// Whether `yt-dlp` reported YouTube's SABR-only streaming experiment:
-    /// the formats it saw may be worse than what the video offers.
-    pub degraded: bool,
-}
-
-/// The outcome of a `download_video` attempt: either a `DownloadedVideo`, or
-/// a clean `yt-dlp` failure (non-zero exit) carrying whatever text `yt-dlp`
-/// wrote to its stderr, trimmed and `None` if it wrote nothing.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DownloadAttempt {
-    Succeeded(DownloadedVideo),
-    Failed {
-        stderr: Option<String>,
-        /// `Some(reason)` when `yt-dlp` reported the SABR-only streaming
-        /// experiment while failing; see `DownloadedVideo::sabr_notice`.
-        sabr_notice: Option<String>,
-    },
-}
-
-/// A thumbnail-only fetch's result: the staged thumbnail's path and the
-/// video's publish time, when `yt-dlp` reported one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FetchedThumbnail {
-    pub path: PathBuf,
-    pub published_at: Option<DateTime<Utc>>,
-}
-
-/// A thumbnail-only fetch's outcome: the thumbnail was written, or none could
-/// be obtained, carrying `yt-dlp`'s reported error text when it reported one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ThumbnailFetch {
-    Fetched(FetchedThumbnail),
-    /// Clean yt-dlp failure, or success that printed no thumbnail.
-    Unavailable {
-        reason: Option<String>,
-    },
-}
-
-/// A caption probe's result: the tracks yt-dlp's info JSON lists, the
-/// video's publish time when reported, and the info JSON itself, written to
-/// the staging dir.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CaptionProbe {
-    pub tracks: CaptionTracks,
-    pub published_at: Option<DateTime<Utc>>,
-    /// Reused by `fetch_subtitles` (`--load-info-json`): one extraction per
-    /// video, fewer YouTube requests.
-    pub info_json: PathBuf,
-    /// yt-dlp's stderr `WARNING:` lines that can affect caption tracks:
-    /// any of them makes a probe without a selectable track inconclusive
-    /// (yt-dlp withholds tracks silently, e.g. without a PO token). Cache
-    /// write failures and skipped-formats notices are dropped.
-    pub warnings: Vec<String>,
-}
-
-/// A caption-only download's result: the staged `.srt` and its contents.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FetchedSubtitles {
-    pub path: PathBuf,
-    pub srt: String,
-}
 
 /// One video discovered by `list_channel_videos`, in the order `yt-dlp`
 /// printed it (newest first).

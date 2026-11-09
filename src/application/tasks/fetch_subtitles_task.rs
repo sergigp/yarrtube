@@ -2,7 +2,7 @@ use crate::domain::services::{SubtitleFetcher, SubtitleFetcherApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -28,13 +28,19 @@ impl FetchSubtitlesTask {
 }
 
 impl TaskHandler for FetchSubtitlesTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (video_id, output_dir) = Task::decode_fetch_subtitles_payload(payload)?;
-        let video_id = VideoRecordId::new(video_id)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::FetchSubtitles {
+            video_id,
+            output_dir,
+        } = task
+        else {
+            return Err(unexpected_task(task));
+        };
+        let video_id = VideoRecordId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             return Ok(());
         };
-        self.subtitle_fetcher.fetch(&video, Path::new(&output_dir));
+        self.subtitle_fetcher.fetch(&video, Path::new(output_dir));
         Ok(())
     }
 }
@@ -48,16 +54,15 @@ mod tests {
         EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoId, VideoSubtitlesFetched,
     };
     use crate::domain::video_transcript::{
-        CaptionLanguage, CaptionSource, CaptionTracks, TranscriptText, VideoTranscript,
+        CaptionLanguage, CaptionProbe, CaptionSource, CaptionTracks, FetchedSubtitles,
+        TranscriptText, VideoTranscript,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
         SqliteVideoTranscriptRepository, VideoTranscriptRepository,
     };
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-        CaptionProbe, FakeVideoDownloaderRepository, FetchedSubtitles,
-    };
+    use crate::infrastructure::repositories::youtube_caption_repository::FakeCaptionRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
@@ -74,14 +79,13 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(CaptionTracks {
-                    original_language: Some("en".to_string()),
-                    manual: vec!["en".to_string(), "fr".to_string()],
-                    automatic: vec!["en-orig".to_string(), "en".to_string()],
-                })))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(CaptionTracks {
+                original_language: Some("en".to_string()),
+                manual: vec!["en".to_string(), "fr".to_string()],
+                automatic: vec!["en-orig".to_string(), "en".to_string()],
+            })))
+            .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
@@ -90,7 +94,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -101,7 +105,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -141,10 +145,9 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let video = Video {
             title: "New Title".to_string(),
@@ -157,7 +160,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -168,7 +171,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -195,14 +198,13 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(CaptionTracks {
-                    original_language: Some("es".to_string()),
-                    manual: vec!["en".to_string()],
-                    automatic: vec!["es-orig".to_string(), "en".to_string()],
-                })))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.es-orig.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(CaptionTracks {
+                original_language: Some("es".to_string()),
+                manual: vec!["en".to_string()],
+                automatic: vec!["es-orig".to_string(), "en".to_string()],
+            })))
+            .with_subtitles(Ok(fetched_subtitles("yt1.es-orig.srt"))),
         );
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
@@ -211,7 +213,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -222,7 +224,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -259,14 +261,13 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(CaptionTracks {
-                    original_language: Some("es-US".to_string()),
-                    manual: vec!["es-US".to_string()],
-                    automatic: vec!["es-orig".to_string()],
-                })))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.es-US.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(CaptionTracks {
+                original_language: Some("es-US".to_string()),
+                manual: vec!["es-US".to_string()],
+                automatic: vec!["es-orig".to_string()],
+            })))
+            .with_subtitles(Ok(fetched_subtitles("yt1.es-US.srt"))),
         );
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
@@ -275,7 +276,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -286,7 +287,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -323,10 +324,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(translations_only()))),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(caption_probe(
+            translations_only(),
+        ))));
         let video = Video {
             subtitle_checks: LateDataChecks {
                 last_checked_at: Some(now() - Duration::days(8)),
@@ -340,7 +340,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -351,7 +351,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -377,12 +377,10 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_caption_probe(Ok(CaptionProbe {
-                published_at: Some(now() - Duration::days(2)),
-                ..caption_probe(translations_only())
-            })),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(CaptionProbe {
+            published_at: Some(now() - Duration::days(2)),
+            ..caption_probe(translations_only())
+        })));
         let video = Video {
             subtitle_checks: LateDataChecks {
                 last_checked_at: Some(now() - Duration::days(1)),
@@ -396,7 +394,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -407,7 +405,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -432,10 +430,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(translations_only()))),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(caption_probe(
+            translations_only(),
+        ))));
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
         let task = FetchSubtitlesTask::new(
@@ -443,7 +440,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -454,7 +451,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -480,12 +477,10 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_caption_probe(Ok(CaptionProbe {
-                published_at: None,
-                ..caption_probe(translations_only())
-            })),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(CaptionProbe {
+            published_at: None,
+            ..caption_probe(translations_only())
+        })));
         let video = Video {
             subtitle_checks: LateDataChecks {
                 last_checked_at: Some(now() - Duration::days(8)),
@@ -499,7 +494,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -510,7 +505,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -535,12 +530,10 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_caption_probe(Ok(CaptionProbe {
-                warnings: vec!["WARNING: [youtube] yt1: Some subtitles may be missing".to_string()],
-                ..caption_probe(translations_only())
-            })),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(CaptionProbe {
+            warnings: vec!["WARNING: [youtube] yt1: Some subtitles may be missing".to_string()],
+            ..caption_probe(translations_only())
+        })));
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
         let task = FetchSubtitlesTask::new(
@@ -548,7 +541,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -559,7 +552,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -584,10 +577,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Err(anyhow::anyhow!(
+            "HTTP Error 429: Too Many Requests"
+        ))));
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
         let task = FetchSubtitlesTask::new(
@@ -595,7 +587,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -606,7 +598,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -631,10 +623,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
         );
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
@@ -643,7 +634,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -654,7 +645,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -679,10 +670,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Err(anyhow::anyhow!(
+            "HTTP Error 429: Too Many Requests"
+        ))));
         let video = Video {
             subtitle_checks: LateDataChecks {
                 last_checked_at: Some(now() - Duration::days(1)),
@@ -696,7 +686,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -707,7 +697,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -732,10 +722,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Err(anyhow::anyhow!(
+            "HTTP Error 429: Too Many Requests"
+        ))));
         let video = Video {
             created_at: now() - Duration::days(2),
             subtitle_checks: LateDataChecks {
@@ -750,7 +739,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -761,7 +750,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -785,14 +774,14 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
+        let caption_repository = Arc::new(FakeCaptionRepository::default());
 
         let task = FetchSubtitlesTask::new(
             video_repository.clone(),
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -803,14 +792,11 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for("missing"));
+        let result = run(&task, &task_for("missing"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
-        assert_eq!(
-            *video_downloader_repository.caption_calls.lock().unwrap(),
-            0
-        );
+        assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
     }
 
     #[test]
@@ -825,10 +811,9 @@ mod tests {
         video_repository.save(&video).unwrap();
         let deleting_repository = video_repository.clone();
         let deleted_id = video.id.clone();
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt")))
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt")))
                 .with_on_fetch_subtitles(move || {
                     deleting_repository.delete(&deleted_id).unwrap();
                 }),
@@ -838,7 +823,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository,
+                caption_repository,
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -849,7 +834,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -875,10 +860,9 @@ mod tests {
         let reset = video.clone().reset_for_redownload(now());
         let resetting_repository = video_repository.clone();
         let reset_video = reset.clone();
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt")))
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt")))
                 .with_on_fetch_subtitles(move || {
                     resetting_repository.save(&reset_video).unwrap();
                 }),
@@ -888,7 +872,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository,
+                caption_repository,
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -899,7 +883,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![reset]);
@@ -919,10 +903,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let fetched = downloaded_video()
             .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.en.srt", fixed_timestamp());
@@ -934,7 +917,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -946,17 +929,14 @@ mod tests {
         );
 
         let results = [
-            run(&task, &payload_for(fetched.id.as_str())),
-            run(&task, &payload_for(unavailable.id.as_str())),
+            run(&task, &task_for(fetched.id.as_str())),
+            run(&task, &task_for(unavailable.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
         assert_eq!(video_repository.list().unwrap(), vec![fetched, unavailable]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
-        assert_eq!(
-            *video_downloader_repository.caption_calls.lock().unwrap(),
-            0
-        );
+        assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
     }
 
     #[test]
@@ -966,10 +946,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let pending = Video::create(VideoId::new("yt1").unwrap(), "Title", fixed_timestamp())
             .with_episode_number(
@@ -985,7 +964,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -997,16 +976,13 @@ mod tests {
         );
 
         let results = [
-            run(&task, &payload_for(pending.id.as_str())),
-            run(&task, &payload_for(legacy.id.as_str())),
+            run(&task, &task_for(pending.id.as_str())),
+            run(&task, &task_for(legacy.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
         assert_eq!(video_repository.list().unwrap(), vec![pending, legacy]);
-        assert_eq!(
-            *video_downloader_repository.caption_calls.lock().unwrap(),
-            0
-        );
+        assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
     }
 
     #[test]
@@ -1016,10 +992,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let in_folder = Video::create(VideoId::new("yt1").unwrap(), "Old", fixed_timestamp())
             .with_episode_number(
@@ -1040,7 +1015,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -1052,17 +1027,14 @@ mod tests {
         );
 
         let results = [
-            run(&task, &payload_for(in_folder.id.as_str())),
-            run(&task, &payload_for(flat.id.as_str())),
+            run(&task, &task_for(in_folder.id.as_str())),
+            run(&task, &task_for(flat.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
         assert_eq!(video_repository.list().unwrap(), vec![in_folder, flat]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
-        assert_eq!(
-            *video_downloader_repository.caption_calls.lock().unwrap(),
-            0
-        );
+        assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
     }
 
     #[test]
@@ -1084,10 +1056,9 @@ mod tests {
             let redownloaded = redownloaded.clone();
             move |_, _| video_repository.update(&redownloaded).unwrap()
         }));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         video_repository.save(&video).unwrap();
         let task = FetchSubtitlesTask::new(
@@ -1095,7 +1066,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -1106,7 +1077,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1125,10 +1096,9 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let fetched = downloaded_video();
         let failed = downloaded_video();
@@ -1139,7 +1109,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -1152,8 +1122,8 @@ mod tests {
 
         // The fake's probe is used up by the first fetch: the second one fails.
         let results = [
-            run(&task, &payload_for(fetched.id.as_str())),
-            run(&task, &payload_for(failed.id.as_str())),
+            run(&task, &task_for(fetched.id.as_str())),
+            run(&task, &task_for(failed.id.as_str())),
         ];
 
         assert_eq!(results, [Ok(()), Ok(())]);
@@ -1168,10 +1138,9 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
@@ -1180,7 +1149,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
-                video_downloader_repository,
+                caption_repository,
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -1191,7 +1160,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1213,12 +1182,10 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_caption_probe(Ok(CaptionProbe {
-                published_at: Some(now() - Duration::days(7)),
-                ..caption_probe(translations_only())
-            })),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(CaptionProbe {
+            published_at: Some(now() - Duration::days(7)),
+            ..caption_probe(translations_only())
+        })));
         let video = Video {
             subtitle_checks: LateDataChecks {
                 last_checked_at: Some(now() - Duration::days(8)),
@@ -1232,7 +1199,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 video_transcript_repository.clone(),
-                video_downloader_repository.clone(),
+                caption_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -1243,7 +1210,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1267,10 +1234,9 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(translations_only()))),
-        );
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(caption_probe(
+            translations_only(),
+        ))));
         let video = Video {
             subtitle_checks: LateDataChecks {
                 last_checked_at: Some(now() - Duration::days(8)),
@@ -1284,7 +1250,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
-                video_downloader_repository,
+                caption_repository,
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -1295,7 +1261,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
@@ -1306,10 +1272,9 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_caption_probe(Ok(caption_probe(english_captions())))
-                .with_subtitles_result(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
         );
         let video = downloaded_video();
         video_repository.save(&video).unwrap();
@@ -1318,7 +1283,7 @@ mod tests {
             Arc::new(SubtitleFetcher::new(
                 video_repository.clone(),
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
-                video_downloader_repository,
+                caption_repository,
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
@@ -1329,7 +1294,7 @@ mod tests {
             )),
         );
 
-        let result = run(&task, &payload_for(video.id.as_str()));
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
@@ -1409,13 +1374,11 @@ mod tests {
         }
     }
 
-    fn payload_for(video_id: &str) -> String {
+    fn task_for(video_id: &str) -> Task {
         Task::FetchSubtitles {
             video_id: video_id.to_string(),
             output_dir: "/videos/my-channel".to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     fn fixed_timestamp() -> DateTime<Utc> {
@@ -1431,7 +1394,7 @@ mod tests {
             .to_utc()
     }
 
-    fn run(task: &FetchSubtitlesTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &FetchSubtitlesTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

@@ -3376,8 +3376,7 @@ mod tests {
         };
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at: fixed_timestamp(),
