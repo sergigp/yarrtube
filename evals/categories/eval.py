@@ -5,6 +5,7 @@
     python3 -I evals/categories/eval.py --summarize
     python3 -I evals/categories/eval.py --model qwen3:4b --limit 10     # time a few calls
     python3 -I evals/categories/eval.py --model qwen3:4b --think
+    python3 -I evals/categories/eval.py --model qwen3:4b --think --batch  # one call per video, all categories
     python3 -I evals/categories/eval.py --run <run-id>                  # resume / re-score
 
 Inputs: videos.json, labels.md (filled by hand), category-prompts.md and
@@ -26,6 +27,22 @@ SUMMARY_MODEL = "qwen3:4b"  # the summaries eval's model in use: matches the sum
 NUM_CTX = 4096
 TEMPERATURE = 0.0
 MAX_OUTPUT = 3072  # stops runaway thinking loops
+BATCH_PROMPT_VERSION = "v2-batch"  # --batch's system prompt: v2 asks about one category
+BATCH_NUM_CTX = 16384  # every category prompt plus thinking about all of them
+BATCH_MAX_OUTPUT = 12288
+BATCH_USER = """Title: {title}
+Channel: {channel}
+Duration: {minutes} minutes
+Chapters:
+{chapter_list}
+Summary: {summary}
+
+Categories:
+
+{category_list}
+
+Answer in JSON with one entry per category, keyed by its name: "reason", one sentence on what the video \
+covers and how it fits that category, then "belongs", true or false."""
 MAX_WRONG_PER_CATEGORY = 1  # the pass bar, see decisions.md
 
 
@@ -147,19 +164,48 @@ def user_message(template, video, name, category_prompt):
                 chapter_list=chapters or "(none)", summary=video["summary"], name=name, category_prompt=category_prompt)
 
 
-def parse_verdict(text):
-    """The model's verdict, or None when the answer isn't the agreed JSON."""
-    try:
-        answer = json.loads(text[text.index("{"):text.rindex("}") + 1])
-    except ValueError:
-        return None
+def batch_user_message(video, categories):
+    """--batch: the video once, then every category asked about, by name."""
+    chapters = "\n".join(f"{summaries_eval.clock(c['start_seconds'])} {c['title']}" for c in video["chapters"])
+    listed = "\n\n".join(f"### {name}\n{prompt}" for name, prompt in categories.items())
+    return fill(BATCH_USER, title=video["title"], channel=video["channel"], minutes=video["duration_seconds"] // 60,
+                chapter_list=chapters or "(none)", summary=video["summary"], category_list=listed)
+
+
+def batch_schema(names):
+    """--batch: one {reason, belongs} object per category, all required."""
+    one = {"type": "object", "properties": {"reason": {"type": "string"}, "belongs": {"type": "boolean"}},
+           "required": ["reason", "belongs"]}
+    return {"type": "object", "properties": {name: one for name in names}, "required": list(names)}
+
+
+def verdict_of(answer):
     if not isinstance(answer, dict) or not isinstance(answer.get("belongs"), bool):
         return None
     return {"belongs": answer["belongs"], "reason": str(answer.get("reason", ""))}
 
 
-def ask(meta, schema, system, user):
-    """One call. An answer the app couldn't use is a row with `error`; a server
+def json_object(text):
+    try:
+        return json.loads(text[text.index("{"):text.rindex("}") + 1])
+    except ValueError:
+        return None
+
+
+def parse_verdict(text):
+    """The model's verdict, or None when the answer isn't the agreed JSON."""
+    return verdict_of(json_object(text))
+
+
+def parse_batch(text, names):
+    """--batch: category -> verdict, or None when the answer isn't usable for it."""
+    answer = json_object(text)
+    answer = answer if isinstance(answer, dict) else {}
+    return {name: verdict_of(answer.get(name)) for name in names}
+
+
+def chat(meta, schema, system, user):
+    """One call: (stats, answer text) or (stats with `error`, None). A server
     that can't be reached stops the run, so resuming retries those calls."""
     body = {"model": meta["model"], "stream": False, "truncate": False, "shift": False, "think": meta["think"],
             "format": schema, "options": {"num_ctx": meta["num_ctx"], "temperature": meta["temperature"],
@@ -172,15 +218,36 @@ def ask(meta, schema, system, user):
     except urllib.error.HTTPError as e:
         if e.code != 400:
             raise
-        return {"error": e.read().decode(errors="replace")[:300], "s": round(time.time() - started, 1)}
+        return {"error": e.read().decode(errors="replace")[:300], "s": round(time.time() - started, 1)}, None
     except (TimeoutError, socket.timeout):
-        return {"error": "timed out", "s": round(time.time() - started, 1)}
+        return {"error": "timed out", "s": round(time.time() - started, 1)}, None
     except urllib.error.URLError as e:
         sys.exit(f"can't reach Ollama at {OLLAMA}: {e.reason}. Nothing lost: resume with --run.")
     row = {"s": round(time.time() - started, 1), "in": reply.get("prompt_eval_count"), "out": reply.get("eval_count")}
     text = reply["message"]["content"].split("</think>")[-1].strip()  # qwen3 thinks even when told not to
-    verdict = None if reply.get("done_reason") == "length" else parse_verdict(text)
+    if reply.get("done_reason") == "length":
+        return {**row, "error": f"hit the {meta['max_output']}-token output limit"}, None
+    return row, text
+
+
+def ask(meta, schema, system, user):
+    """One call about one category; an answer the app couldn't use is a row with `error`."""
+    row, text = chat(meta, schema, system, user)
+    if text is None:
+        return row
+    verdict = parse_verdict(text)
     return {**row, **verdict} if verdict else {**row, "error": f"unusable answer: {text[:300]}"}
+
+
+def ask_batch(meta, system, video, categories):
+    """--batch: one call about every category in `categories`; one row per
+    category, each carrying the whole call's stats."""
+    row, text = chat(meta, batch_schema(list(categories)), system, batch_user_message(video, categories))
+    if text is None:
+        return {name: row for name in categories}
+    verdicts = parse_batch(text, categories)
+    return {name: {**row, **verdict} if verdict else {**row, "error": f"unusable answer: {text[:300]}"}
+            for name, verdict in verdicts.items()}
 
 
 def reusable_rows(run_id, meta):
@@ -189,7 +256,8 @@ def reusable_rows(run_id, meta):
     if not os.path.exists(os.path.join(source, "run.json")):
         sys.exit(f"--reuse: no run {run_id}")
     settings = json.load(open(os.path.join(source, "run.json")))
-    if any(settings[k] != meta[k] for k in ("model", "think", "temperature", "num_ctx", "max_output", "system_sha")):
+    if any(settings.get(k) != meta.get(k) for k in ("model", "think", "temperature", "num_ctx", "max_output",
+                                                     "system_sha", "batch")):
         sys.exit(f"--reuse: {run_id} has other settings")
     return {(r["video"], r["category"], r["prompt_sha"]): r for r in jsonl(os.path.join(source, "verdicts.jsonl"))
             if "error" not in r}
@@ -203,6 +271,23 @@ def run_calls(out, meta, prompts, videos, limit, reuse):
     calls = 0
     for video in videos:
         if not video.get("summary"):
+            continue
+        if meta.get("batch"):
+            pending = {name: p for name, p in prompts["categories"].items() if (video["id"], name) not in done}
+            if not pending:
+                continue
+            if limit is not None and calls >= limit:
+                return
+            rows = ask_batch(meta, system, video, pending)
+            call = f"{video['id']}@{time.time():.3f}"
+            for name, row in rows.items():
+                append(path, {"video": video["id"], "category": name, "prompt_sha": sha(pending[name]), "call": call,
+                              **row})
+            calls += 1
+            answers = " ".join(f"{name}={'ERR' if 'error' in r else 'yes' if r['belongs'] else 'no'}"
+                               for name, r in rows.items())
+            row = next(iter(rows.values()))
+            print(f"{row['s']:6.1f}s {row.get('out') or 0:6} tok  {video['title'][:50]}\n         {answers}", flush=True)
             continue
         for name, category_prompt in prompts["categories"].items():
             if (video["id"], name) in done:
@@ -235,7 +320,8 @@ def render(run_id, meta, prompts, videos, labels, rows):
     categories = list(prompts["categories"])
     labeled = {i for i, l in labels.items() if l is not None}
     settings = (f"model `{meta['model']}`, thinking {'on' if meta['think'] else 'off'}, prompt {meta['prompt_version']}, "
-                f"temperature {meta['temperature']}, num_ctx {meta['num_ctx']}")
+                f"temperature {meta['temperature']}, num_ctx {meta['num_ctx']}, max output {meta['max_output']}, "
+                + ("one call per video (--batch)" if meta.get("batch") else "one call per video + category"))
     out = [f"# Categorization eval: {run_id}", "", settings, ""]
     total = len(videos) * len(categories)
     out += [f"{len(rows)} of {total} calls done."]
@@ -281,12 +367,34 @@ def render(run_id, meta, prompts, videos, labels, rows):
         out += ["", "## Missed: said no, labeled yes", ""] + [line(r) for r in missed]
     if errors:
         out += ["", "## Errors: no usable answer", ""] + [line(r) for r in errors]
-    seconds = sorted(r["s"] for r in rows)
-    if seconds:
-        average = sum(seconds) / len(seconds)
-        out += ["", "## Speed", "", f"Average {average:.1f}s per call, slowest {seconds[-1]:.1f}s. "
-                f"The full {total} calls take about {average * total / 3600:.1f} hours."]
+    out += speed(meta, rows, len(categories))
     return "\n".join(out) + "\n"
+
+
+def speed(meta, rows, categories):
+    """Time and output tokens per video, comparable between --batch and not.
+    Output tokens don't depend on the hardware: they are what to compare
+    across machines (time = tokens / the machine's tokens per second)."""
+    calls = {}  # (video, call) -> stats; a --batch call's rows share its stats
+    for r in rows:
+        key = (r["video"], r.get("call") or r["category"])
+        calls[key] = r
+    per_video = {}
+    for (video, _), r in calls.items():
+        seconds, tokens = per_video.get(video, (0.0, 0))
+        per_video[video] = (seconds + r["s"], tokens + (r.get("out") or 0))
+    complete = [v for v in per_video if sum(r["video"] == v for r in rows) == categories]
+    if not complete:
+        return []
+    seconds = sum(per_video[v][0] for v in complete) / len(complete)
+    tokens = sum(per_video[v][1] for v in complete) / len(complete)
+    out_tokens = sum(per_video[v][1] for v in complete)
+    out_seconds = sum(per_video[v][0] for v in complete)
+    rate = out_tokens / out_seconds if out_seconds else 0
+    return ["", "## Speed", "",
+            f"On the {len(complete)} videos asked about every category: {seconds:.1f}s and {tokens:.0f} output tokens "
+            f"per video on average ({rate:.1f} tokens/s here, input included), {len(calls)} calls in all.",
+            f"At 11 tokens/s (the MacBook Air with thinking) that is about {tokens / 11 / 60:.1f} min per video."]
 
 
 # --- run ---------------------------------------------------------------------
@@ -297,8 +405,13 @@ def main():
     ap.add_argument("--summarize", action="store_true", help="generate the missing summaries and exit (needs yt-dlp)")
     ap.add_argument("--model", help="model to evaluate, for a new run")
     ap.add_argument("--think", action="store_true", help="request thinking, for a new run")
-    ap.add_argument("--prompt", default=PROMPT_VERSION, help="prompts/categorization/<version>.md, for a new run")
-    ap.add_argument("--num-ctx", type=int, default=NUM_CTX, help="context length, for a new run")
+    ap.add_argument("--batch", action="store_true", help="one call per video about every category, for a new run")
+    ap.add_argument("--prompt", help=f"prompts/categorization/<version>.md, for a new run "
+                                     f"(default {PROMPT_VERSION}, {BATCH_PROMPT_VERSION} with --batch)")
+    ap.add_argument("--num-ctx", type=int, help=f"context length, for a new run (default {NUM_CTX}, "
+                                                f"{BATCH_NUM_CTX} with --batch)")
+    ap.add_argument("--max-output", type=int, help=f"output token cap, for a new run (default {MAX_OUTPUT}, "
+                                                   f"{BATCH_MAX_OUTPUT} with --batch)")
     ap.add_argument("--temperature", type=float, default=TEMPERATURE, help="for a new run")
     ap.add_argument("--run", help="existing run id to resume / re-score")
     ap.add_argument("--reuse", help="run id whose answers are copied when settings and category prompt match")
@@ -311,9 +424,14 @@ def main():
     if not a.run and not a.model:
         sys.exit("give --model for a new run, or --run to resume one")
 
+    a.prompt = a.prompt or (BATCH_PROMPT_VERSION if a.batch else PROMPT_VERSION)
+    a.num_ctx = a.num_ctx or (BATCH_NUM_CTX if a.batch else NUM_CTX)
+    a.max_output = a.max_output or (BATCH_MAX_OUTPUT if a.batch else MAX_OUTPUT)
+    if a.max_output > a.num_ctx:
+        sys.exit("--max-output can't be over --num-ctx")
     think = "think-on" if a.think else "think-off"
     run_id = a.run or (datetime.datetime.now().strftime("%Y-%m-%d_%H%M") +
-                       f"_prompt-{a.prompt}_{a.model.replace(':', '-')}_{think}")
+                       f"_prompt-{a.prompt}_{a.model.replace(':', '-')}_{think}" + ("_batch" if a.batch else ""))
     out = os.path.join(ROOT, "results", run_id)
     meta_path = os.path.join(out, "run.json")
     snapshot = os.path.join(out, "category-prompts.md")
@@ -326,7 +444,7 @@ def main():
         shutil.copy(CATEGORY_PROMPTS, snapshot)
         system = open(system_path(a.prompt), encoding="utf-8").read().strip()
         json.dump({"model": a.model, "think": a.think, "prompt_version": a.prompt, "system_sha": sha(system),
-                   "num_ctx": a.num_ctx, "temperature": a.temperature, "max_output": MAX_OUTPUT},
+                   "num_ctx": a.num_ctx, "temperature": a.temperature, "max_output": a.max_output, "batch": a.batch},
                   open(meta_path, "w"), indent=2)
     meta = json.load(open(meta_path))
     prompts = load_category_prompts(snapshot)

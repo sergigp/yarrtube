@@ -47,7 +47,19 @@ python3 -I evals/categories/eval.py --model qwen3:4b --think      # again with t
 - **Change one category**: edit `category-prompts.md` and start a new run with
   `--reuse <run-id>`. Answers are copied when the settings and that category's
   prompt match, so only the changed category is asked again.
-- **Other flags**: `--prompt`, `--num-ctx` and `--temperature` for a new run.
+- **Other flags**: `--prompt`, `--num-ctx`, `--max-output` and `--temperature`
+  for a new run.
+- **Batch**: `--batch` asks about every category in one call per video, with
+  prompt [`v2-batch`](../../prompts/categorization/v2-batch.md), a schema keyed
+  by category name, `num_ctx` 16384 and a 12288-token output cap. Its rows are
+  scored like the others. To compare with one call per category, run both on
+  the same machine and compare the report's output tokens per video: they don't
+  depend on the hardware, seconds do.
+
+```bash
+python3 -I evals/categories/eval.py --model qwen3:4b --think           # one call per category
+python3 -I evals/categories/eval.py --model qwen3:4b --think --batch   # one call per video
+```
 
 `--limit 10` run first: thinking with an enforced JSON format hasn't been tried
 yet, so check the report's errors before starting the full run.
