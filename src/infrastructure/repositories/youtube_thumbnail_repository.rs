@@ -110,7 +110,10 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_map_a_successful_thumbnail_fetch_to_the_printed_filename() {
-        let fake = test_support::FakeYtDlp::with_stdout("My Video.jpg\n");
+        let fake = test_support::FakeYtDlp::with_stdout(
+            r#"{"thumbnails.-1.filepath": "My Video.jpg"}
+"#,
+        );
         let output_dir = test_support::unique_temp_dir("video-downloader-repository-thumbnail");
 
         let result = YtDlpThumbnailRepository::new(fake.path.clone())

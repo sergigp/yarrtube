@@ -776,7 +776,7 @@ fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader
         infrastructure.video_metadata_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     )
 }
 
@@ -844,7 +844,7 @@ fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailF
         infrastructure.thumbnail_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     ))
 }
 
@@ -889,7 +889,7 @@ fn quality_upgrader(infrastructure: &InfrastructureContainer) -> Arc<QualityUpgr
         infrastructure.video_file_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     ))
 }
 
@@ -901,7 +901,7 @@ fn subtitle_fetcher(infrastructure: &InfrastructureContainer) -> Arc<SubtitleFet
         infrastructure.video_file_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     ))
 }
 

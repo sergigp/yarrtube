@@ -95,6 +95,7 @@ use crate::infrastructure::shared::domain_events::event_repository::{
 };
 use crate::infrastructure::shared::show_locks::ShowLocks;
 use crate::infrastructure::shared::sqlite_connection;
+use crate::infrastructure::shared::staging_area::StagingArea;
 use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use crate::infrastructure::shared::video_lock::VideoLock;
 use anyhow::Result;
@@ -156,6 +157,8 @@ pub struct InfrastructureContainer {
     pub category_lock: Arc<CategoryLock>,
     /// The one lock every video sync takes.
     pub video_lock: Arc<VideoLock>,
+    /// The one staging root every download and fetch stages into.
+    pub staging_area: Arc<StagingArea>,
 }
 
 impl InfrastructureContainer {
@@ -169,6 +172,12 @@ impl InfrastructureContainer {
         // itself) plus a read connection that, being distinct, reads
         // concurrently with an in-progress write under WAL.
         let db = sqlite_connection::Database::open(db_path)?;
+        let video_file_repository: Arc<dyn VideoFileRepository> =
+            Arc::new(FilesystemVideoFileRepository);
+        let staging_area = Arc::new(StagingArea::new(
+            video_file_repository.clone(),
+            settings.videos_path.to_string_lossy(),
+        ));
 
         Ok(Self {
             playlist_repository: Arc::new(SqlitePlaylistRepository::new(db.clone())),
@@ -220,7 +229,7 @@ impl InfrastructureContainer {
             )),
             caption_repository: Arc::new(YtDlpCaptionRepository::new(settings.ytdlp_path.clone())),
             chapter_repository: Arc::new(YtDlpChapterRepository::new(settings.ytdlp_path)),
-            video_file_repository: Arc::new(FilesystemVideoFileRepository),
+            video_file_repository,
             show_file_repository: Arc::new(FilesystemShowFileRepository),
             channel_avatar_repository: Arc::new(FilesystemChannelAvatarRepository::new(
                 settings.avatars_path,
@@ -232,6 +241,7 @@ impl InfrastructureContainer {
             show_locks: Arc::new(ShowLocks::default()),
             category_lock: Arc::new(CategoryLock::default()),
             video_lock: Arc::new(VideoLock::default()),
+            staging_area,
             clock,
         })
     }

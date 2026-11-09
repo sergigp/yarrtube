@@ -92,9 +92,7 @@ mod tests {
     #[cfg(unix)]
     fn it_should_map_the_printed_chapters_of_a_yt_dlp_process() {
         let fake = test_support::FakeYtDlp::with_stdout(
-            r#"[{"start_time": 0.0, "title": "Intro", "end_time": 61.7}, {"start_time": 61.7, "title": "Main part", "end_time": 300.0}]
-NA
-NA
+            r#"{"chapters": [{"start_time": 0.0, "title": "Intro", "end_time": 61.7}, {"start_time": 61.7, "title": "Main part", "end_time": 300.0}]}
 "#,
         );
 

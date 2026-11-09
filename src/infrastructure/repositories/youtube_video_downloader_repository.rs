@@ -265,7 +265,7 @@ mod tests {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: None,
-                chapters: None,
+                chapters: Some(vec![]),
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();

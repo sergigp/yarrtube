@@ -98,19 +98,24 @@ function diagnose() {
   failIfBroken(videoOf(url))
 }
 
-// `--skip-download --write-thumbnail …`: `<id>.jpg`, printing the publish time
-// and the thumbnail's path.
+// `--skip-download --write-thumbnail …`: `<id>.jpg`, printing one JSON object
+// with the publish time and the thumbnail's path.
 function fetchThumbnail() {
   const video = videoOf(url)
   failIfBroken(video)
   copySample('jpg', `${video.id}.jpg`)
-  console.log(timestamp(video))
-  console.log(uploadDate(video))
-  console.log(`${video.id}.jpg`)
+  console.log(
+    JSON.stringify({
+      timestamp: timestamp(video),
+      upload_date: uploadDate(video),
+      'thumbnails.-1.filepath': `${video.id}.jpg`,
+    }),
+  )
 }
 
-// The download: `<id>.mp4` and `<id>.jpg`, printing the publish time, the
-// duration and the media's filename.
+// The download: `<id>.mp4` and `<id>.jpg`, printing one JSON object with the
+// media's filename, the duration and the publish time. Like the real yt-dlp,
+// a video without chapters leaves `chapters` out.
 async function download() {
   const video = videoOf(url)
   const delay = { slow: SLOW_DOWNLOAD_MS, failing: FAILING_ATTEMPT_MS }[video.behaviour]
@@ -120,10 +125,14 @@ async function download() {
   failIfBroken(video)
   copySample('mp4', `${video.id}.mp4`)
   copySample('jpg', `${video.id}.jpg`)
-  console.log(timestamp(video))
-  console.log(uploadDate(video))
-  console.log(video.durationSeconds)
-  console.log(`${video.id}.mp4`)
+  console.log(
+    JSON.stringify({
+      filename: `${video.id}.mp4`,
+      duration: video.durationSeconds,
+      timestamp: timestamp(video),
+      upload_date: uploadDate(video),
+    }),
+  )
 }
 
 if (has('--flat-playlist')) {
