@@ -18,7 +18,7 @@ function renderDialog(routes: Routes) {
   });
   renderWithProviders(
     <VideoCategoriesDialog
-      recordId="rec1"
+      videoId="rec1"
       title="Najdorf in 10 minutes"
       sourceName="@GothamChess"
       open

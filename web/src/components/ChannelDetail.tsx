@@ -98,7 +98,6 @@ export function ChannelDetail() {
         <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
           <VideoPlayer
             basePath={channel.path}
-            source={{ kind: 'channel', id }}
             video={selectedVideo}
             autoplay={autoplay}
             onVideoElement={setVideoElement}

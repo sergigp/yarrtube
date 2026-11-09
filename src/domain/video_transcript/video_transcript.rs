@@ -2,7 +2,7 @@ use super::caption_language::CaptionLanguage;
 use super::caption_source::CaptionSource;
 use super::caption_track::CaptionTrack;
 use super::transcript_text::TranscriptText;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use chrono::{DateTime, Utc};
 
 /// What a video says, as text: the plain-text transcript of its
@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 /// most one per video.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoTranscript {
-    pub video_id: VideoRecordId,
+    pub video_id: VideoId,
     pub language: CaptionLanguage,
     pub source: CaptionSource,
     pub text: TranscriptText,
@@ -19,7 +19,7 @@ pub struct VideoTranscript {
 
 impl VideoTranscript {
     pub fn create(
-        video_id: VideoRecordId,
+        video_id: VideoId,
         track: &CaptionTrack,
         text: TranscriptText,
         now: DateTime<Utc>,

@@ -1,5 +1,5 @@
 use super::VideoMetadata;
-use crate::domain::video::VideoId;
+use crate::domain::video::YoutubeVideoId;
 use crate::infrastructure::repositories::youtube_metadata_repository::{
     YoutubeMetadata, map_category_to_genre,
 };
@@ -44,7 +44,7 @@ pub fn resolve_sorttitle(
 /// Assembles a `VideoMetadata` from a video's fetched `YoutubeMetadata`, its
 /// already-resolved `sorttitle`, and its saved thumbnail filename (if any).
 pub fn build_video_metadata(
-    youtube_id: &VideoId,
+    youtube_id: &YoutubeVideoId,
     metadata: &YoutubeMetadata,
     sorttitle: impl Into<String>,
     thumbnail_filename: Option<String>,
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn it_should_assemble_video_metadata_with_a_thumbnail() {
-        let youtube_id = VideoId::new("yt1").unwrap();
+        let youtube_id = YoutubeVideoId::new("yt1").unwrap();
         let metadata = youtube_metadata();
 
         let video_metadata = build_video_metadata(
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn it_should_assemble_video_metadata_without_a_thumbnail() {
-        let youtube_id = VideoId::new("yt1").unwrap();
+        let youtube_id = YoutubeVideoId::new("yt1").unwrap();
         let metadata = youtube_metadata();
 
         let video_metadata = build_video_metadata(

@@ -1,6 +1,6 @@
 use crate::domain::services::{VideoSummarizer, VideoSummarizerApi};
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
@@ -31,7 +31,7 @@ impl TaskHandler for SummarizeVideoTask {
         let Task::SummarizeVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
-        let video_id = VideoRecordId::new(video_id.clone())?;
+        let video_id = VideoId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             return Ok(());
         };
@@ -52,7 +52,7 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{SummaryState, Video, VideoChapter, VideoId};
+    use crate::domain::video::{SummaryState, Video, VideoChapter, YoutubeVideoId};
     use crate::domain::video_summary::{SummaryMessages, SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
@@ -1760,14 +1760,18 @@ mod tests {
 
     /// A downloaded, subtitled, 30-minute video.
     fn subtitled_video() -> Video {
-        let video = Video::create(VideoId::new("yt1").unwrap(), "Sicilian", fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                "Season 2026/S2026E010101 - Sicilian.mp4",
-                None,
-                Some(1800),
-                fixed_timestamp(),
-            );
+        let video = Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "Sicilian",
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            "Season 2026/S2026E010101 - Sicilian.mp4",
+            None,
+            Some(1800),
+            fixed_timestamp(),
+        );
         video.mark_subtitles_fetched(SUBTITLES, fixed_timestamp())
     }
 

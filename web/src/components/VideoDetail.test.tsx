@@ -57,7 +57,7 @@ describe('VideoDetail', () => {
   })
 
   it('links the video on YouTube from the title row, in a new tab', () => {
-    const video = aVideo({ id: 'abc' })
+    const video = aVideo({ id: 'rec-abc', youtube_id: 'abc' })
     renderWithProviders(
       <VideoDetail
         basePath="playlists/mix"

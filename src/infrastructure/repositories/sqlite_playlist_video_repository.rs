@@ -1,6 +1,6 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
-use crate::domain::video::{VideoId, VideoRecordId};
+use crate::domain::video::VideoId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -13,12 +13,13 @@ pub trait PlaylistVideoRepository: Send + Sync {
     fn save(&self, playlist_video: &PlaylistVideo) -> anyhow::Result<()>;
     /// Finds whichever playlist a video belongs to, keyed by the video's own
     /// surrogate ID rather than a `(playlist_id, youtube_video_id)` pair.
-    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>>;
+    fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<PlaylistVideo>>;
     /// Ordered by position (YouTube-defined order), then by insertion order.
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
     /// Every stored playlist video, across all playlists.
     fn list(&self) -> anyhow::Result<Vec<PlaylistVideo>>;
-    fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()>;
+    /// Deletes the row holding the stored video `video_id`.
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()>;
 }
 
@@ -55,7 +56,7 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
         Ok(())
     }
 
-    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>> {
+    fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<PlaylistVideo>> {
         let conn = self.db.read()?;
         conn.query_row(
             "SELECT id, playlist_id, video_id, position, created_at
@@ -125,17 +126,14 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
         .collect()
     }
 
-    fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()> {
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "DELETE FROM playlist_videos
-             WHERE playlist_id = ?1 AND video_id IN (
-                SELECT id FROM videos WHERE youtube_id = ?2
-             )",
-            params![playlist_id.as_str(), youtube_video_id.as_str()],
+            "DELETE FROM playlist_videos WHERE video_id = ?1",
+            params![video_id.as_str()],
         )
         .inspect_err(|e| {
-            tracing::error!(playlist_id = %playlist_id, error = %e, "failed to delete playlist video")
+            tracing::error!(video_id = %video_id, error = %e, "failed to delete playlist video")
         })
         .context("failed to delete playlist video")?;
         Ok(())
@@ -172,7 +170,7 @@ fn columns_to_playlist_video(columns: Columns) -> anyhow::Result<PlaylistVideo> 
     Ok(PlaylistVideo {
         id,
         playlist_id: PlaylistId::new(playlist_id)?,
-        video_id: VideoRecordId::new(video_id)?,
+        video_id: VideoId::new(video_id)?,
         position,
         created_at: DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
@@ -184,6 +182,7 @@ fn columns_to_playlist_video(columns: Columns) -> anyhow::Result<PlaylistVideo> 
 mod tests {
     use super::*;
     use crate::domain::video::Video;
+    use crate::domain::video::YoutubeVideoId;
 
     fn repo() -> SqlitePlaylistVideoRepository {
         let mut conn = Connection::open_in_memory().unwrap();
@@ -200,7 +199,7 @@ mod tests {
     /// represents, so `video_id`/`youtube_id` stay consistent.
     fn seed_video(repo: &SqlitePlaylistVideoRepository, youtube_id: &str, title: &str) -> Video {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let video = Video::create(VideoId::new(youtube_id).unwrap(), title, now);
+        let video = Video::create(YoutubeVideoId::new(youtube_id).unwrap(), title, now);
         let conn = repo.db.write().unwrap();
         conn.execute(
             "INSERT INTO videos (id, youtube_id, title, status, quality, filename, created_at, updated_at)
@@ -322,8 +321,7 @@ mod tests {
         ))
         .unwrap();
 
-        repo.delete(&playlist_id(), &VideoId::new("yt1").unwrap())
-            .unwrap();
+        repo.delete(&one.id).unwrap();
 
         assert_eq!(
             repo.list_for_playlist(&playlist_id())
@@ -364,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_find_a_playlist_video_by_its_video_record_id() {
+    fn it_should_find_a_playlist_video_by_its_video_id() {
         let repo = repo();
         let video = seed_video(&repo, "yt1", "First");
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
@@ -387,7 +385,7 @@ mod tests {
         let repo = repo();
 
         let found = repo
-            .find_by_video(&VideoRecordId::new("missing").unwrap())
+            .find_by_video(&VideoId::new("missing").unwrap())
             .unwrap();
 
         assert!(found.is_none());

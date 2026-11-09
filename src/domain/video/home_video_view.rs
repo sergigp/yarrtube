@@ -1,6 +1,6 @@
 use super::sourced_video::{SourcedVideo, VideoSource};
 use super::video_id::VideoId;
-use super::video_record_id::VideoRecordId;
+use super::youtube_video_id::YoutubeVideoId;
 use crate::domain::category::CategoryId;
 use chrono::{DateTime, Utc};
 
@@ -8,9 +8,8 @@ use chrono::{DateTime, Utc};
 /// source that tracks the video.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HomeVideoView {
-    pub youtube_id: VideoId,
-    /// The stored copy listed.
-    pub record_id: VideoRecordId,
+    pub id: VideoId,
+    pub youtube_id: YoutubeVideoId,
     pub title: String,
     pub thumbnail_filename: Option<String>,
     pub duration_seconds: Option<i64>,
@@ -29,8 +28,8 @@ impl From<SourcedVideo> for HomeVideoView {
         Self {
             watched: video.is_watched(),
             position_seconds: video.playback_position.seconds(),
+            id: video.id,
             youtube_id: video.youtube_id,
-            record_id: video.id,
             title: video.title,
             thumbnail_filename: video.thumbnail_filename,
             duration_seconds: video.duration_seconds,

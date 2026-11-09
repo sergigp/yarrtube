@@ -1,6 +1,6 @@
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
@@ -38,7 +38,7 @@ impl TaskHandler for FetchThumbnailTask {
         else {
             return Err(unexpected_task(task));
         };
-        let video_id = VideoRecordId::new(video_id.clone())?;
+        let video_id = VideoId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             debug!(video_id = %video_id, "video no longer exists, skipping thumbnail fetch");
             return Ok(());
@@ -53,7 +53,7 @@ mod tests {
     use super::*;
     use crate::domain::channel::ChannelHandle;
     use crate::domain::channel_video::ChannelVideo;
-    use crate::domain::video::{EpisodeNumber, FetchedThumbnail, Video, VideoId};
+    use crate::domain::video::{EpisodeNumber, FetchedThumbnail, Video, YoutubeVideoId};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
@@ -292,11 +292,15 @@ mod tests {
     }
 
     fn my_video() -> Video {
-        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+        Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
     }
 
     /// One call as `FakeThumbnailRepository` records it, for the `yt1`
-    /// video, staged under its record id.
+    /// video, staged under its id.
     fn thumbnail_call(video: &Video) -> (String, PathBuf) {
         (
             "https://www.youtube.com/watch?v=yt1".to_string(),

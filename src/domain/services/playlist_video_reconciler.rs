@@ -9,7 +9,7 @@ use crate::domain::services::{
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
+use crate::domain::video::{Video, VideoId, VideoStatus, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -211,12 +211,12 @@ impl PlaylistVideoReconciler {
             .collect();
         let mut numbering = playlist.clone();
         for current in Self::in_position_order(&current_videos) {
-            match known_videos.get(&current.video_id) {
+            match known_videos.get(&current.youtube_id) {
                 None => {
-                    let youtube_id = VideoId::new(&current.video_id)?;
+                    let youtube_id = YoutubeVideoId::new(&current.youtube_id)?;
                     let (numbered, added) = self.add_video(numbering, youtube_id, current, now)?;
                     numbering = numbered;
-                    known_videos.insert(current.video_id.clone(), added);
+                    known_videos.insert(current.youtube_id.clone(), added);
                 }
                 Some((existing, video)) => {
                     self.refresh_known_video(existing, video, current, now)?
@@ -226,7 +226,7 @@ impl PlaylistVideoReconciler {
 
         let current_youtube_ids: HashSet<&str> = current_videos
             .iter()
-            .map(|current| current.video_id.as_str())
+            .map(|current| current.youtube_id.as_str())
             .collect();
         self.remove_videos_not_in(playlist, &stored_videos, &current_youtube_ids)?;
 
@@ -269,11 +269,11 @@ impl PlaylistVideoReconciler {
         let playlist_videos = self
             .playlist_video_repository
             .list_for_playlist(&playlist.id)?;
-        let video_ids: Vec<VideoRecordId> = playlist_videos
+        let video_ids: Vec<VideoId> = playlist_videos
             .iter()
             .map(|pv| pv.video_id.clone())
             .collect();
-        let mut videos: HashMap<VideoRecordId, Video> = self
+        let mut videos: HashMap<VideoId, Video> = self
             .video_repository
             .find_many(&video_ids)?
             .into_iter()
@@ -293,7 +293,7 @@ impl PlaylistVideoReconciler {
     fn add_video(
         &self,
         playlist: Playlist,
-        youtube_id: VideoId,
+        youtube_id: YoutubeVideoId,
         current: &YoutubePlaylistItem,
         now: DateTime<Utc>,
     ) -> anyhow::Result<(Playlist, (PlaylistVideo, Video))> {
@@ -309,7 +309,7 @@ impl PlaylistVideoReconciler {
         let playlist = playlist.with_last_episode(number);
         info!(
             playlist_id = %playlist.id,
-            video_id = %video.youtube_id,
+            youtube_id = %video.youtube_id,
             title = %current.title,
             episode = number.episode(),
             "added video to playlist"
@@ -362,11 +362,10 @@ impl PlaylistVideoReconciler {
             .try_for_each(|video| {
                 info!(
                     playlist_id = %playlist.id,
-                    video_id = %video.youtube_id,
+                    youtube_id = %video.youtube_id,
                     "removing video from playlist (no longer on YouTube)"
                 );
-                self.playlist_video_repository
-                    .delete(&playlist.id, &video.youtube_id)?;
+                self.playlist_video_repository.delete(&video.id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
                 self.video_summary_repository.delete(&video.id)?;

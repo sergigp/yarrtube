@@ -6,12 +6,12 @@ Lets the user correct the categories of one video by hand, and ask the AI again 
 
 ## Requirements
 
-### Requirement: Video Copies Listed With Their Record Id
-Every video in the channel, playlist, category, home and search listings SHALL include `record_id`, the id of that stored copy, besides its YouTube `id`. Two copies of one YouTube video (e.g. in a channel and a playlist) SHALL have different `record_id`s. Every `/api/videos/{id}/categories…` and `/api/videos/{id}/ai-verdicts` route SHALL take the copy's `record_id` as `{id}`.
+### Requirement: Video Copies Listed With Their Own Id
+Every video in the channel, playlist, category, home and search listings SHALL include `id`, the id of that stored copy, besides its `youtube_id`. Two copies of one YouTube video (e.g. in a channel and a playlist) SHALL have different `id`s. Every `/api/videos/{id}…` route SHALL take the copy's `id` as `{id}`.
 
 #### Scenario: Same video in a channel and a playlist
 - **WHEN** a YouTube video is stored as a copy of "@GothamChess" and a copy of a playlist
-- **THEN** the channel's and the playlist's listings show the same `id` and different `record_id`s
+- **THEN** the channel's and the playlist's listings show the same `youtube_id` and different `id`s
 
 ### Requirement: Read A Video's Categories
 The daemon SHALL provide `GET /api/videos/{id}/categories` for a stored video copy, responding with HTTP status 200, `categorization_enabled` (whether the video's channel or playlist has categorization on) and every category in name order, each with `id`, `name`, `color`, `belongs` (whether the video belongs to it), `from` (`source`, `ai`, `user`, or `null` when it has no verdict and the source isn't a member) and `verdict` (`yes`, `no`, `unavailable` or `null`). `from` SHALL be `source` whenever the source is a member, whatever the verdict. An unknown video SHALL get HTTP status 404.

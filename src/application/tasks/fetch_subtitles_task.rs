@@ -1,6 +1,6 @@
 use crate::domain::services::{SubtitleFetcher, SubtitleFetcherApi};
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
@@ -36,7 +36,7 @@ impl TaskHandler for FetchSubtitlesTask {
         else {
             return Err(unexpected_task(task));
         };
-        let video_id = VideoRecordId::new(video_id.clone())?;
+        let video_id = VideoId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             return Ok(());
         };
@@ -51,7 +51,7 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::shared::Quality;
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoId, VideoSubtitlesFetched,
+        EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoSubtitlesFetched, YoutubeVideoId,
     };
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionProbe, CaptionSource, CaptionTracks, FetchedSubtitles,
@@ -951,13 +951,21 @@ mod tests {
             FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
                 .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
-        let pending = Video::create(VideoId::new("yt1").unwrap(), "Title", fixed_timestamp())
-            .with_episode_number(
-                EpisodeNumber::from_columns(2026, 31501).unwrap(),
-                fixed_timestamp(),
-            );
-        let legacy = Video::create(VideoId::new("yt2").unwrap(), "Old", fixed_timestamp())
-            .mark_downloaded(Quality::High, "Old/Old.mp4", None, None, fixed_timestamp());
+        let pending = Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "Title",
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            EpisodeNumber::from_columns(2026, 31501).unwrap(),
+            fixed_timestamp(),
+        );
+        let legacy = Video::create(
+            YoutubeVideoId::new("yt2").unwrap(),
+            "Old",
+            fixed_timestamp(),
+        )
+        .mark_downloaded(Quality::High, "Old/Old.mp4", None, None, fixed_timestamp());
         video_repository.save(&pending).unwrap();
         video_repository.save(&legacy).unwrap();
         let task = FetchSubtitlesTask::new(
@@ -997,18 +1005,26 @@ mod tests {
             FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
                 .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
-        let in_folder = Video::create(VideoId::new("yt1").unwrap(), "Old", fixed_timestamp())
-            .with_episode_number(
-                EpisodeNumber::from_columns(2026, 31501).unwrap(),
-                fixed_timestamp(),
-            )
-            .mark_downloaded(Quality::High, "Old/Old.mp4", None, None, fixed_timestamp());
-        let flat = Video::create(VideoId::new("yt2").unwrap(), "Flat", fixed_timestamp())
-            .with_episode_number(
-                EpisodeNumber::from_columns(2026, 31502).unwrap(),
-                fixed_timestamp(),
-            )
-            .mark_downloaded(Quality::High, "Flat.mp4", None, None, fixed_timestamp());
+        let in_folder = Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "Old",
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            EpisodeNumber::from_columns(2026, 31501).unwrap(),
+            fixed_timestamp(),
+        )
+        .mark_downloaded(Quality::High, "Old/Old.mp4", None, None, fixed_timestamp());
+        let flat = Video::create(
+            YoutubeVideoId::new("yt2").unwrap(),
+            "Flat",
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            EpisodeNumber::from_columns(2026, 31502).unwrap(),
+            fixed_timestamp(),
+        )
+        .mark_downloaded(Quality::High, "Flat.mp4", None, None, fixed_timestamp());
         video_repository.save(&in_folder).unwrap();
         video_repository.save(&flat).unwrap();
         let task = FetchSubtitlesTask::new(
@@ -1313,18 +1329,22 @@ mod tests {
     /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
     /// still missing, created 30 days before `now`.
     fn downloaded_video() -> Video {
-        Video::create(VideoId::new("yt1").unwrap(), "Title", fixed_timestamp())
-            .with_episode_number(
-                EpisodeNumber::from_columns(2026, 31501).unwrap(),
-                fixed_timestamp(),
-            )
-            .mark_downloaded(
-                Quality::High,
-                "Season 2026/S2026E031501 - Title.mp4",
-                None,
-                None,
-                fixed_timestamp(),
-            )
+        Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "Title",
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            EpisodeNumber::from_columns(2026, 31501).unwrap(),
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            "Season 2026/S2026E031501 - Title.mp4",
+            None,
+            None,
+            fixed_timestamp(),
+        )
     }
 
     /// An English video with uploaded English captions.

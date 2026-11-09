@@ -3,7 +3,7 @@ use crate::domain::services::{MetadataGenerator, MetadataGeneratorApi};
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     DownloadAttempt, DownloadFailure, DownloadedVideo, EpisodeNumber, EpisodePaths, Video,
-    VideoDownloaded, VideoRecordId,
+    VideoDownloaded, VideoId,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -86,7 +86,7 @@ pub trait VideoDownloaderApi: Send + Sync {
     /// `Err` on a failed download so the task queue retries/dead-letters it.
     fn download(
         &self,
-        video_id: VideoRecordId,
+        video_id: VideoId,
         quality: Quality,
         output_dir: &Path,
         is_last_attempt: bool,
@@ -96,7 +96,7 @@ pub trait VideoDownloaderApi: Send + Sync {
 impl VideoDownloaderApi for VideoDownloader {
     fn download(
         &self,
-        video_id: VideoRecordId,
+        video_id: VideoId,
         quality: Quality,
         output_dir: &Path,
         is_last_attempt: bool,

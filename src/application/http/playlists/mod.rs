@@ -237,7 +237,7 @@ mod tests {
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
     use crate::domain::video::VideoDownloaded;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::YoutubeVideoId;
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -4435,11 +4435,15 @@ mod tests {
 
     /// A newly stored playlist video numbered `episode`.
     fn playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
-        Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
-            .with_episode_number(
-                PlaylistEpisodeNumber::new(episode).unwrap().into(),
-                fixed_timestamp(),
-            )
+        Video::create(
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            title,
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            PlaylistEpisodeNumber::new(episode).unwrap().into(),
+            fixed_timestamp(),
+        )
     }
 
     /// Preferences with AI, categories and categorization on.
@@ -4522,7 +4526,7 @@ mod tests {
         position: i64,
     ) -> (Video, PlaylistVideo) {
         let video = Video::create(
-            VideoId::new(youtube_id).unwrap(),
+            YoutubeVideoId::new(youtube_id).unwrap(),
             format!("Video {youtube_id}"),
             fixed_timestamp(),
         );
@@ -4566,7 +4570,7 @@ mod tests {
 
     fn downloaded_video(youtube_id: &str) -> Video {
         Video::create(
-            VideoId::new(youtube_id).unwrap(),
+            YoutubeVideoId::new(youtube_id).unwrap(),
             format!("Video {youtube_id}"),
             fixed_timestamp(),
         )
@@ -4579,9 +4583,9 @@ mod tests {
         )
     }
 
-    fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
+    fn playlist_item(youtube_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
         YoutubePlaylistItem {
-            video_id: video_id.to_string(),
+            youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             position,
         }

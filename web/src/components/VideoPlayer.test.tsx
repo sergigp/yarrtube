@@ -6,13 +6,11 @@ import { aVideo } from '@/test/helpers'
 import { useDesktopViewport } from '@/test/viewport'
 import { VideoPlayer } from './VideoPlayer'
 
-const PLAYLIST = { kind: 'playlist', id: 'PL1' } as const
 
 function renderPlayer(subtitleLanguage: string | null) {
   return render(
     <VideoPlayer
       basePath="music"
-      source={PLAYLIST}
       video={aVideo({ id: 'vid1', subtitle_language: subtitleLanguage })}
       autoplay={false}
       onVideoElement={() => {}}
@@ -38,7 +36,7 @@ describe('VideoPlayer', () => {
     expect(tracks(container)).toEqual([
       {
         kind: 'subtitles',
-        src: '/api/playlists/PL1/videos/vid1/subtitles.vtt',
+        src: '/api/videos/vid1/subtitles.vtt',
         srclang: 'en',
         label: 'English',
         default: false,
@@ -50,7 +48,6 @@ describe('VideoPlayer', () => {
     const player = (id: string) => (
       <VideoPlayer
         basePath="music"
-        source={PLAYLIST}
         video={aVideo({ id, subtitle_language: 'en' })}
         autoplay={false}
         onVideoElement={() => {}}
@@ -127,7 +124,6 @@ describe('VideoPlayer', () => {
           <input aria-label="Search" />
           <VideoPlayer
             basePath="music"
-            source={PLAYLIST}
             video={aVideo()}
             autoplay={false}
             onVideoElement={() => {}}
@@ -156,7 +152,6 @@ describe('VideoPlayer', () => {
       return render(
         <VideoPlayer
           basePath="music"
-          source={PLAYLIST}
           video={aVideo({ id: 'vid1', ...video })}
           autoplay={false}
           onVideoElement={() => {}}

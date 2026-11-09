@@ -1,6 +1,6 @@
 use crate::domain::services::{ChapterFetcher, ChapterFetcherApi};
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
@@ -31,7 +31,7 @@ impl TaskHandler for FetchChaptersTask {
         let Task::FetchChapters { video_id } = task else {
             return Err(unexpected_task(task));
         };
-        let video_id = VideoRecordId::new(video_id.clone())?;
+        let video_id = VideoId::new(video_id.clone())?;
         if let Some(video) = self.video_repository.find(&video_id)? {
             self.chapter_fetcher.fetch(&video);
         }
@@ -44,7 +44,7 @@ mod tests {
     use super::*;
     use crate::domain::shared::Quality;
     use crate::domain::video::{
-        ChaptersProbe, LateDataChecks, PlaybackPosition, Video, VideoChapter, VideoId,
+        ChaptersProbe, LateDataChecks, PlaybackPosition, Video, VideoChapter, YoutubeVideoId,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_chapter_repository::FakeChapterRepository;
@@ -395,15 +395,19 @@ mod tests {
 
     /// `yt1`, downloaded with its chapters never checked.
     fn downloaded_video() -> Video {
-        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
-            .start_download(fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                "Season 2026/S2026E031501 - My Video.mp4",
-                None,
-                Some(600),
-                fixed_timestamp(),
-            )
+        Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(
+            Quality::High,
+            "Season 2026/S2026E031501 - My Video.mp4",
+            None,
+            Some(600),
+            fixed_timestamp(),
+        )
     }
 
     fn intro_chapters() -> Vec<VideoChapter> {

@@ -1,5 +1,5 @@
 use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
@@ -32,7 +32,7 @@ pub trait TaskRepository: Send + Sync {
     fn find_non_completed_for_video(
         &self,
         task_type: &str,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
     ) -> anyhow::Result<Option<ScheduledTask>>;
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
@@ -209,7 +209,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn find_non_completed_for_video(
         &self,
         task_type: &str,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
     ) -> anyhow::Result<Option<ScheduledTask>> {
         let conn = self.db.read()?;
         conn.query_row(
@@ -910,7 +910,7 @@ mod tests {
         repo.claim(2, now).unwrap();
 
         let found = repo
-            .find_non_completed_for_video("download_video", &VideoRecordId::new("v1").unwrap())
+            .find_non_completed_for_video("download_video", &VideoId::new("v1").unwrap())
             .unwrap();
 
         assert_eq!(
@@ -928,7 +928,7 @@ mod tests {
         repo.schedule(&download_task("v2"), now).unwrap();
 
         let found = repo
-            .find_non_completed_for_video("download_video", &VideoRecordId::new("v1").unwrap())
+            .find_non_completed_for_video("download_video", &VideoId::new("v1").unwrap())
             .unwrap();
 
         assert_eq!(found, None);

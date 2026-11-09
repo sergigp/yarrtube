@@ -1,8 +1,6 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::shared::Quality;
-use crate::domain::video::{
-    DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoRecordId,
-};
+use crate::domain::video::{DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
@@ -60,7 +58,7 @@ pub trait QualityUpgraderApi: Send + Sync {
     /// is recorded as a failed check, never returned.
     fn upgrade(
         &self,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
         quality: Quality,
         output_dir: &Path,
     ) -> anyhow::Result<()>;
@@ -69,7 +67,7 @@ pub trait QualityUpgraderApi: Send + Sync {
 impl QualityUpgraderApi for QualityUpgrader {
     fn upgrade(
         &self,
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
         quality: Quality,
         output_dir: &Path,
     ) -> anyhow::Result<()> {

@@ -1,4 +1,4 @@
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::domain::video_summary::{SummaryText, VideoSummary};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -9,8 +9,8 @@ use rusqlite::{OptionalExtension, Row, params};
 pub trait VideoSummaryRepository: Send + Sync {
     /// Inserts the summary, replacing the video's previous one.
     fn save(&self, summary: &VideoSummary) -> anyhow::Result<()>;
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoSummary>>;
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
+    fn find(&self, video_id: &VideoId) -> anyhow::Result<Option<VideoSummary>>;
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()>;
 }
 
 /// A `video_summaries` row as read, before its values are parsed into a
@@ -56,7 +56,7 @@ impl VideoSummaryRepository for SqliteVideoSummaryRepository {
         Ok(())
     }
 
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoSummary>> {
+    fn find(&self, video_id: &VideoId) -> anyhow::Result<Option<VideoSummary>> {
         let conn = self.db.read()?;
         conn.query_row(
             "SELECT video_id, text, model, created_at FROM video_summaries WHERE video_id = ?1",
@@ -72,7 +72,7 @@ impl VideoSummaryRepository for SqliteVideoSummaryRepository {
         .transpose()
     }
 
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
             "DELETE FROM video_summaries WHERE video_id = ?1",
@@ -98,7 +98,7 @@ impl SqliteVideoSummaryRepository {
 
     fn row_to_video_summary(row: VideoSummaryRow) -> anyhow::Result<VideoSummary> {
         Ok(VideoSummary {
-            video_id: VideoRecordId::new(row.video_id)?,
+            video_id: VideoId::new(row.video_id)?,
             text: SummaryText::new(row.text),
             model: row.model,
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
@@ -159,7 +159,7 @@ mod tests {
 
     fn summary(video_id: &str, text: &str) -> VideoSummary {
         VideoSummary {
-            video_id: VideoRecordId::new(video_id).unwrap(),
+            video_id: VideoId::new(video_id).unwrap(),
             text: SummaryText::new(text),
             model: "qwen3:4b".to_string(),
             created_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap(),

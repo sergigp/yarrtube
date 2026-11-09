@@ -53,7 +53,7 @@ mod tests {
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{
-        EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId, VideoRecordId,
+        EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId, YoutubeVideoId,
     };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
@@ -307,8 +307,12 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let existing = Video::create(VideoId::new("vid1").unwrap(), "Original", fixed_timestamp())
-            .start_download(fixed_timestamp());
+        let existing = Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "Original",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -355,7 +359,11 @@ mod tests {
             &existing,
             0,
         );
-        let other = Video::create(VideoId::new("vid2").unwrap(), "Other", fixed_timestamp());
+        let other = Video::create(
+            YoutubeVideoId::new("vid2").unwrap(),
+            "Other",
+            fixed_timestamp(),
+        );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -483,7 +491,11 @@ mod tests {
         ));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let existing = Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp());
+        let existing = Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "One",
+            fixed_timestamp(),
+        );
         let existing_playlist_video = save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -1057,7 +1069,11 @@ mod tests {
         ));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let _stale = Video::create(VideoId::new("vid1").unwrap(), "Stale", fixed_timestamp());
+        let _stale = Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "Stale",
+            fixed_timestamp(),
+        );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -1205,7 +1221,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let downloaded = Video::create(
-            VideoId::new("vid1").unwrap(),
+            YoutubeVideoId::new("vid1").unwrap(),
             "Downloaded Video",
             fixed_timestamp(),
         )
@@ -1224,7 +1240,7 @@ mod tests {
             0,
         );
         let pending = Video::create(
-            VideoId::new("vid2").unwrap(),
+            YoutubeVideoId::new("vid2").unwrap(),
             "Pending Video",
             fixed_timestamp(),
         );
@@ -2135,7 +2151,11 @@ mod tests {
     }
 
     fn my_video() -> Video {
-        Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
     }
 
     /// Its chapters and quality settled, so a sync schedules no chapters fetch or
@@ -2172,11 +2192,15 @@ mod tests {
 
     /// A newly stored playlist video numbered `episode`.
     fn playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
-        Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
-            .with_episode_number(
-                PlaylistEpisodeNumber::new(episode).unwrap().into(),
-                fixed_timestamp(),
-            )
+        Video::create(
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            title,
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            PlaylistEpisodeNumber::new(episode).unwrap().into(),
+            fixed_timestamp(),
+        )
     }
 
     /// A playlist video numbered `episode`, downloaded in the TV-show layout,
@@ -2200,9 +2224,9 @@ mod tests {
         }
     }
 
-    fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
+    fn playlist_item(youtube_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
         YoutubePlaylistItem {
-            video_id: video_id.to_string(),
+            youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             position,
         }
@@ -2232,7 +2256,7 @@ mod tests {
         )
     }
 
-    fn download_video_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+    fn download_video_task(id: i64, video_id: &VideoId) -> ScheduledTask {
         pending_task(
             id,
             &Task::DownloadVideo {
@@ -2244,7 +2268,7 @@ mod tests {
         )
     }
 
-    fn fetch_thumbnail_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+    fn fetch_thumbnail_task(id: i64, video_id: &VideoId) -> ScheduledTask {
         pending_task(
             id,
             &Task::FetchThumbnail {

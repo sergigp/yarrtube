@@ -5,7 +5,7 @@ use crate::domain::services::{
     VideoRelocator, VideoRelocatorApi,
 };
 use crate::domain::video::{
-    Video, VideoOwner, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
+    Video, VideoId, VideoOwner, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -78,11 +78,11 @@ pub trait VideoReconcilerApi: Send + Sync {
     /// categories, broken-file reset, errored recovery, metadata repair,
     /// stranded warning, then schedules every step still needed. No-op if
     /// the video or its owner is gone. Idempotent.
-    fn reconcile(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
+    fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<()>;
 }
 
 impl VideoReconcilerApi for VideoReconciler {
-    fn reconcile(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let _guard = self.video_lock.lock(video_id);
         let Some(video) = self.video_repository.find(video_id)? else {
             return Ok(());
@@ -117,7 +117,7 @@ impl VideoReconciler {
             return Ok(video);
         }
         warn!(
-            video_id = %video.youtube_id,
+            youtube_id = %video.youtube_id,
             filename = video.filename.as_deref().unwrap_or(""),
             "downloaded video's file is missing or not mp4, resetting for redownload"
         );
@@ -150,7 +150,7 @@ impl VideoReconciler {
             return Ok(video);
         }
         warn!(
-            video_id = %video.youtube_id,
+            youtube_id = %video.youtube_id,
             "permanently errored video is due for recovery, resetting for redownload"
         );
         self.reset_for_redownload(video)
@@ -237,7 +237,7 @@ impl VideoReconciler {
             return Ok(());
         }
         warn!(
-            video_id = %video.youtube_id,
+            youtube_id = %video.youtube_id,
             status = video.status.as_str(),
             "stranded video found, scheduling its download"
         );

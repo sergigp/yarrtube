@@ -26,7 +26,7 @@ The system SHALL record, for each video, whether it has been watched and its sav
 - **THEN** the video keeps the watch state recorded during the download
 
 ### Requirement: Record Playback Progress
-The system SHALL provide an HTTP endpoint that, given a YouTube video ID and a playback position in whole seconds (plus, optionally, the duration reported by the player), records playback progress for every stored copy of that video. Each report SHALL state whether the client believed the video watched when its playback began (`was_watched`). A report SHALL be stale when it states the video was unwatched but the video is now watched. The video was marked watched after that playback began, so the reported position predates the mark. A stale report SHALL change nothing. The recorded duration SHALL be used. The reported duration SHALL be used only when no duration is recorded. When included, the reported duration SHALL be a positive number of whole seconds. The endpoint SHALL respond with HTTP status 200 on success, including stale reports, with a body stating whether the video is watched once the report is applied (`{ "watched": true }` or `{ "watched": false }`). It SHALL accept requests sent as a browser beacon on page unload.
+The system SHALL provide an HTTP endpoint that, given a stored video's `id` and a playback position in whole seconds (plus, optionally, the duration reported by the player), records playback progress for that video and every other stored copy of its YouTube video. Each report SHALL state whether the client believed the video watched when its playback began (`was_watched`). A report SHALL be stale when it states the video was unwatched but the video is now watched. The video was marked watched after that playback began, so the reported position predates the mark. A stale report SHALL change nothing. The recorded duration SHALL be used. The reported duration SHALL be used only when no duration is recorded. When included, the reported duration SHALL be a positive number of whole seconds. The endpoint SHALL respond with HTTP status 200 on success, including stale reports, with a body stating whether the video is watched once the report is applied (`{ "watched": true }` or `{ "watched": false }`). It SHALL accept requests sent as a browser beacon on page unload.
 
 #### Scenario: Progress on an unwatched video
 - **WHEN** a client records a position below 90% of the video's duration for an unwatched video
@@ -65,7 +65,7 @@ The system SHALL provide an HTTP endpoint that, given a YouTube video ID and a p
 - **THEN** the report is applied by the unwatched-video rules
 
 #### Scenario: Unknown video
-- **WHEN** a client records progress for a YouTube video ID that no playlist or channel tracks
+- **WHEN** a client records progress for a video `id` that is not stored
 - **THEN** the daemon responds with HTTP status 400 and records nothing
 
 #### Scenario: Invalid reported duration
@@ -100,7 +100,7 @@ The system SHALL provide an HTTP endpoint that, given a tracked channel's handle
 - **THEN** the daemon responds with HTTP status 400 and changes nothing
 
 ### Requirement: Mark A Video Watched
-The system SHALL provide an HTTP endpoint that, given a YouTube video ID, marks every stored copy of that video as watched, with its saved position reset to 0. A video SHALL be marked only when at least one of its stored copies has finished downloading. A video that is already watched SHALL be left unchanged. On success the endpoint SHALL respond with HTTP status 204.
+The system SHALL provide an HTTP endpoint that, given a stored video's `id`, marks that video and every other stored copy of its YouTube video as watched, with its saved position reset to 0. A video SHALL be marked only when at least one of its stored copies has finished downloading. A video that is already watched SHALL be left unchanged. On success the endpoint SHALL respond with HTTP status 204.
 
 #### Scenario: Marking a video watched
 - **WHEN** a client marks a downloaded, unwatched video as watched
@@ -119,7 +119,7 @@ The system SHALL provide an HTTP endpoint that, given a YouTube video ID, marks 
 - **THEN** the daemon responds with HTTP status 204 and the video's watched time is unchanged
 
 #### Scenario: Unknown video
-- **WHEN** a client marks as watched a YouTube video ID that no playlist or channel tracks
+- **WHEN** a client marks as watched a video `id` that is not stored
 - **THEN** the daemon responds with HTTP status 400 and changes nothing
 
 #### Scenario: Video not downloaded

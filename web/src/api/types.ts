@@ -61,9 +61,10 @@ export interface LibraryItem {
 
 /** An entry of `GET /api/playlists/:id/videos` and `/api/channels/:handle/videos`. */
 export interface Video {
+  /** This stored video's own id, one per channel or playlist holding it. */
   id: string
-  /** This stored copy's id; `id` is the YouTube video's. */
-  record_id: string
+  /** The YouTube video's id, shared by every stored copy of it. */
+  youtube_id: string
   title: string
   status: VideoStatus
   quality: string | null
@@ -101,9 +102,10 @@ export interface HomeVideoSource {
 }
 
 export interface HomeVideo {
+  /** This stored video's own id, one per channel or playlist holding it. */
   id: string
-  /** This stored copy's id; `id` is the YouTube video's. */
-  record_id: string
+  /** The YouTube video's id, shared by every stored copy of it. */
+  youtube_id: string
   title: string
   thumbnail_filename: string | null
   duration_seconds: number | null
@@ -350,7 +352,7 @@ export interface VideoCategoryChoice {
   verdict: Verdict | null
 }
 
-/** Response of `GET /api/videos/:record_id/categories`, in name order. */
+/** Response of `GET /api/videos/:id/categories`, in name order. */
 export interface VideoCategories {
   /** Whether the video's channel or playlist has AI categorization on. */
   categorization_enabled: boolean

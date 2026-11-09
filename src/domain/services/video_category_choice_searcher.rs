@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
-use crate::domain::video::{VideoOwner, VideoRecordId};
+use crate::domain::video::{VideoId, VideoOwner};
 use crate::domain::video_category::{
     EditVideoCategoriesError, VideoCategoryChoice, VideoCategoryChoices,
 };
@@ -36,17 +36,11 @@ impl VideoCategoryChoiceSearcher {
 pub trait VideoCategoryChoiceSearcherApi: Send + Sync {
     /// Every category, name order, as offered for `video_id`, and whether
     /// its source has categorization on.
-    fn search(
-        &self,
-        video_id: &VideoRecordId,
-    ) -> Result<VideoCategoryChoices, EditVideoCategoriesError>;
+    fn search(&self, video_id: &VideoId) -> Result<VideoCategoryChoices, EditVideoCategoriesError>;
 }
 
 impl VideoCategoryChoiceSearcherApi for VideoCategoryChoiceSearcher {
-    fn search(
-        &self,
-        video_id: &VideoRecordId,
-    ) -> Result<VideoCategoryChoices, EditVideoCategoriesError> {
+    fn search(&self, video_id: &VideoId) -> Result<VideoCategoryChoices, EditVideoCategoriesError> {
         let owner = self.find_owner(video_id)?;
         let categories = self
             .category_repository
@@ -65,7 +59,7 @@ impl VideoCategoryChoiceSearcherApi for VideoCategoryChoiceSearcher {
 
 impl VideoCategoryChoiceSearcher {
     /// The channel or playlist holding the stored `video_id`.
-    fn find_owner(&self, video_id: &VideoRecordId) -> Result<VideoOwner, EditVideoCategoriesError> {
+    fn find_owner(&self, video_id: &VideoId) -> Result<VideoOwner, EditVideoCategoriesError> {
         let video = self
             .video_repository
             .find(video_id)

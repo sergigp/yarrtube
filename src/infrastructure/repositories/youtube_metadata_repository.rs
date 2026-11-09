@@ -1,4 +1,4 @@
-use crate::domain::video::VideoId;
+use crate::domain::video::YoutubeVideoId;
 use crate::infrastructure::shared::youtube_api_key::YOUTUBE_API_KEY_HEADER;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -16,7 +16,7 @@ pub struct YoutubeMetadata {
 }
 
 pub trait YoutubeMetadataRepository: Send + Sync {
-    fn find(&self, id: &VideoId) -> anyhow::Result<Option<YoutubeMetadata>>;
+    fn find(&self, youtube_id: &YoutubeVideoId) -> anyhow::Result<Option<YoutubeMetadata>>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,27 +56,29 @@ impl YoutubeApiMetadataRepository {
 }
 
 impl YoutubeMetadataRepository for YoutubeApiMetadataRepository {
-    fn find(&self, id: &VideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
+    fn find(&self, youtube_id: &YoutubeVideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
         let client = reqwest::blocking::Client::new();
         let response = client
             .get(format!("{}/videos", self.api_url))
-            .query(&[("part", "snippet"), ("id", id.as_str())])
+            .query(&[("part", "snippet"), ("id", youtube_id.as_str())])
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
-            .inspect_err(|_| tracing::error!(video_id = %id, "YouTube API request failed"))
+            .inspect_err(
+                |_| tracing::error!(youtube_id = %youtube_id, "YouTube API request failed"),
+            )
             .context("YouTube API request failed")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().unwrap_or_default();
-            tracing::error!(video_id = %id, status = %status, "YouTube API request failed");
+            tracing::error!(youtube_id = %youtube_id, status = %status, "YouTube API request failed");
             anyhow::bail!("YouTube API request failed with status {status}: {body}");
         }
 
         let parsed: VideosResponse = response
             .json()
             .inspect_err(|e| {
-                tracing::error!(video_id = %id, error = %e, "failed to parse YouTube API response")
+                tracing::error!(youtube_id = %youtube_id, error = %e, "failed to parse YouTube API response")
             })
             .context("failed to parse YouTube API response")?;
 
@@ -99,7 +101,7 @@ pub struct FakeYoutubeMetadataRepository {
 
 #[cfg(test)]
 impl YoutubeMetadataRepository for FakeYoutubeMetadataRepository {
-    fn find(&self, _id: &VideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
+    fn find(&self, _youtube_id: &YoutubeVideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
         Ok(self.metadata.clone())
     }
 }
@@ -124,7 +126,7 @@ impl FailingOnceYoutubeMetadataRepository {
 
 #[cfg(test)]
 impl YoutubeMetadataRepository for FailingOnceYoutubeMetadataRepository {
-    fn find(&self, _id: &VideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
+    fn find(&self, _youtube_id: &YoutubeVideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
         if self.failed.swap(true, std::sync::atomic::Ordering::SeqCst) {
             Ok(Some(self.metadata.clone()))
         } else {
@@ -194,7 +196,7 @@ mod tests {
             .create();
 
         let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
-        let id = VideoId::new("vid1").unwrap();
+        let id = YoutubeVideoId::new("vid1").unwrap();
 
         let found = repository.find(&id).unwrap().unwrap();
         assert_eq!(found.title, "My Video");
@@ -223,7 +225,7 @@ mod tests {
             .create();
 
         let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
-        let id = VideoId::new("vid1").unwrap();
+        let id = YoutubeVideoId::new("vid1").unwrap();
 
         let found = repository.find(&id).unwrap().unwrap();
         assert!(found.tags.is_empty());
@@ -244,7 +246,7 @@ mod tests {
             .create();
 
         let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
-        let id = VideoId::new("missing").unwrap();
+        let id = YoutubeVideoId::new("missing").unwrap();
 
         assert!(repository.find(&id).unwrap().is_none());
     }
@@ -260,7 +262,7 @@ mod tests {
             .create();
 
         let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
-        let id = VideoId::new("vid1").unwrap();
+        let id = YoutubeVideoId::new("vid1").unwrap();
 
         assert!(repository.find(&id).is_err());
     }
@@ -272,7 +274,9 @@ mod tests {
             UNREACHABLE_URL.to_string(),
         );
 
-        let error = repository.find(&VideoId::new("vid1").unwrap()).unwrap_err();
+        let error = repository
+            .find(&YoutubeVideoId::new("vid1").unwrap())
+            .unwrap_err();
 
         assert!(
             !format!("{error:?}").contains("secret-api-key"),
@@ -311,7 +315,7 @@ mod youtube_contract_tests {
         let repository = YoutubeApiMetadataRepository::new(api_key(), api_url());
 
         let metadata = repository
-            .find(&VideoId::new(CAPTIONED_VIDEO_ID).unwrap())
+            .find(&YoutubeVideoId::new(CAPTIONED_VIDEO_ID).unwrap())
             .unwrap()
             .unwrap();
 
@@ -349,7 +353,7 @@ mod youtube_contract_tests {
         let repository = YoutubeApiMetadataRepository::new(api_key(), api_url());
 
         let metadata = repository
-            .find(&VideoId::new(MISSING_VIDEO_ID).unwrap())
+            .find(&YoutubeVideoId::new(MISSING_VIDEO_ID).unwrap())
             .unwrap();
 
         assert_eq!(metadata, None);

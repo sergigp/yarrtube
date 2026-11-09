@@ -1,6 +1,6 @@
 use crate::domain::services::{VideoCategorizer, VideoCategorizerApi};
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
@@ -31,7 +31,7 @@ impl TaskHandler for CategorizeVideoTask {
         let Task::CategorizeVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
-        let video_id = VideoRecordId::new(video_id.clone())?;
+        let video_id = VideoId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             return Ok(());
         };
@@ -56,7 +56,7 @@ mod tests {
     };
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoChapter, VideoId};
+    use crate::domain::video::{Video, VideoChapter, YoutubeVideoId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -919,7 +919,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     /// A downloaded, subtitled, summarized 30-minute video.
     fn summarized_video() -> Video {
         Video::create(
-            VideoId::new("yt1").unwrap(),
+            YoutubeVideoId::new("yt1").unwrap(),
             "Crushing the Sicilian",
             fixed_timestamp(),
         )
@@ -1072,7 +1072,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     struct RemovingVideoOnPublish {
         publisher: SqliteEventPublisher,
         video_repository: SqliteVideoRepository,
-        video_id: VideoRecordId,
+        video_id: VideoId,
     }
 
     impl EventPublisher for RemovingVideoOnPublish {
