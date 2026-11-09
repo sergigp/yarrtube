@@ -1,19 +1,13 @@
 use crate::domain::shared::Quality;
-use crate::domain::video::DownloadFailure;
 #[cfg(test)]
-use crate::domain::video::VideoChapter;
-use crate::domain::video_transcript::CaptionTrack;
+use crate::domain::video::DownloadedVideo;
+use crate::domain::video::{DownloadAttempt, DownloadFailure, QualityProbe};
 use crate::infrastructure::shared::ytdlp;
-pub use crate::infrastructure::shared::ytdlp::{
-    CaptionProbe, ChaptersProbe, DownloadAttempt, DownloadedVideo, FetchedSubtitles,
-    FetchedThumbnail, QualityProbe, ThumbnailFetch,
-};
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
-/// Downloads a single video (or just its thumbnail) via `yt-dlp`, injected
-/// into `VideoDownloader`/`ThumbnailFetcher` for the event-driven download
-/// path.
+/// Downloads a single video via `yt-dlp`, injected into
+/// `VideoDownloader`/`QualityUpgrader` for the event-driven download path.
 pub trait VideoDownloaderRepository: Send + Sync {
     /// Downloads the video into `staging_dir` (created first). Returns
     /// `Ok(DownloadAttempt::Succeeded(..))` with the staged media path (and
@@ -31,34 +25,6 @@ pub trait VideoDownloaderRepository: Send + Sync {
         staging_dir: &Path,
     ) -> anyhow::Result<DownloadAttempt>;
 
-    /// Fetches only the video's thumbnail into `staging_dir`. Returns
-    /// `Ok(ThumbnailFetch::Fetched(..))` when a thumbnail was fetched,
-    /// `Ok(ThumbnailFetch::Unavailable { reason })` when none could be
-    /// obtained, carrying `yt-dlp`'s reported error text when it reported one
-    /// (not an error — see `video-thumbnails`). Returns `Err` only for a
-    /// systemic problem.
-    fn fetch_thumbnail(
-        &self,
-        video_url: &str,
-        staging_dir: &Path,
-    ) -> anyhow::Result<ThumbnailFetch>;
-
-    /// Reads the video's caption tracks, original language and publish time
-    /// into `staging_dir`, downloading nothing. `Err` on any failure, clean
-    /// or systemic.
-    fn probe_captions(&self, video_url: &str, staging_dir: &Path) -> anyhow::Result<CaptionProbe>;
-
-    /// Downloads only `track` of the probed video into `staging_dir`, as
-    /// SubRip. `Err` on any failure, including no `.srt` written.
-    fn fetch_subtitles(
-        &self,
-        probe: &CaptionProbe,
-        track: &CaptionTrack,
-        staging_dir: &Path,
-    ) -> anyhow::Result<FetchedSubtitles>;
-    /// The video's chapters (`vec![]` when it has none) and publish time,
-    /// downloading nothing. `Err` on any failure, clean or systemic.
-    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<ChaptersProbe>;
     /// The height `quality` would download now, and the video's publish
     /// time, downloading nothing. `Err` on any failure, clean or systemic.
     fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe>;
@@ -95,31 +61,6 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         }
     }
 
-    fn fetch_thumbnail(
-        &self,
-        video_url: &str,
-        staging_dir: &Path,
-    ) -> anyhow::Result<ThumbnailFetch> {
-        ytdlp::fetch_thumbnail(&self.ytdlp_path, video_url, staging_dir)
-    }
-
-    fn probe_captions(&self, video_url: &str, staging_dir: &Path) -> anyhow::Result<CaptionProbe> {
-        ytdlp::probe_captions(&self.ytdlp_path, video_url, staging_dir)
-    }
-
-    fn fetch_subtitles(
-        &self,
-        probe: &CaptionProbe,
-        track: &CaptionTrack,
-        staging_dir: &Path,
-    ) -> anyhow::Result<FetchedSubtitles> {
-        ytdlp::fetch_subtitles(&self.ytdlp_path, probe, track, staging_dir)
-    }
-
-    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<ChaptersProbe> {
-        ytdlp::fetch_chapters(&self.ytdlp_path, video_url)
-    }
-
     fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe> {
         ytdlp::probe_quality(&self.ytdlp_path, video_url, quality)
     }
@@ -154,31 +95,10 @@ pub struct FakeVideoDownloaderRepository {
     pub(crate) result: std::sync::Mutex<DownloadAttempt>,
     #[allow(clippy::type_complexity)]
     pub(crate) calls: std::sync::Mutex<Vec<(String, Quality, std::path::PathBuf)>>,
-    #[allow(clippy::type_complexity)]
-    pub(crate) thumbnail_result: std::sync::Mutex<Option<anyhow::Result<ThumbnailFetch>>>,
-    #[allow(clippy::type_complexity)]
-    pub(crate) thumbnail_calls: std::sync::Mutex<Vec<(String, std::path::PathBuf)>>,
     /// Runs while `download` is in flight, e.g. to delete the video
     /// mid-download.
     #[allow(clippy::type_complexity)]
     pub(crate) on_download: Option<Box<dyn Fn() + Send + Sync>>,
-    /// Runs while `fetch_subtitles` is in flight, e.g. to delete the video
-    /// mid-fetch.
-    #[allow(clippy::type_complexity)]
-    pub(crate) on_fetch_subtitles: Option<Box<dyn Fn() + Send + Sync>>,
-    pub(crate) caption_probe: std::sync::Mutex<Option<anyhow::Result<CaptionProbe>>>,
-    pub(crate) subtitles_result: std::sync::Mutex<Option<anyhow::Result<FetchedSubtitles>>>,
-    /// How many times the downloader was contacted for captions, probe or
-    /// download.
-    pub(crate) caption_calls: std::sync::Mutex<usize>,
-    #[allow(clippy::type_complexity)]
-    pub(crate) chapters_result: std::sync::Mutex<Option<anyhow::Result<ChaptersProbe>>>,
-    /// The video URLs `fetch_chapters` was called with.
-    pub(crate) chapters_calls: std::sync::Mutex<Vec<String>>,
-    /// Runs while `fetch_chapters` is in flight, e.g. to record watch
-    /// progress mid-fetch.
-    #[allow(clippy::type_complexity)]
-    pub(crate) on_fetch_chapters: Option<Box<dyn Fn() + Send + Sync>>,
     /// What `probe_quality` returns; unconfigured, it fails.
     pub(crate) quality_probe: std::sync::Mutex<Option<anyhow::Result<QualityProbe>>>,
     /// The (url, quality) pairs `probe_quality` was called with.
@@ -254,71 +174,9 @@ impl FakeVideoDownloaderRepository {
         })
     }
 
-    /// Configures the result `fetch_thumbnail` returns; `None` (the
-    /// default) mirrors a clean "no thumbnail available" outcome.
-    pub fn with_thumbnail_result(self, result: Option<FetchedThumbnail>) -> Self {
-        Self {
-            thumbnail_result: std::sync::Mutex::new(Some(Ok(match result {
-                Some(fetched) => ThumbnailFetch::Fetched(fetched),
-                None => ThumbnailFetch::Unavailable { reason: None },
-            }))),
-            ..self
-        }
-    }
-
-    /// Makes `fetch_thumbnail` return `Err` instead of a configured result.
-    pub fn with_thumbnail_error(self) -> Self {
-        Self {
-            thumbnail_result: std::sync::Mutex::new(Some(Err(anyhow::anyhow!(
-                "fake thumbnail fetch error"
-            )))),
-            ..self
-        }
-    }
-
-    /// Configures what `probe_captions` returns.
-    pub fn with_caption_probe(self, probe: anyhow::Result<CaptionProbe>) -> Self {
-        Self {
-            caption_probe: std::sync::Mutex::new(Some(probe)),
-            ..self
-        }
-    }
-
-    /// Configures what `fetch_subtitles` returns, its path relative to the
-    /// staging dir.
-    pub fn with_subtitles_result(self, result: anyhow::Result<FetchedSubtitles>) -> Self {
-        Self {
-            subtitles_result: std::sync::Mutex::new(Some(result)),
-            ..self
-        }
-    }
-
-    /// Configures what `fetch_chapters` returns; unconfigured, it fails.
-    pub fn with_chapters_result(self, result: anyhow::Result<Vec<VideoChapter>>) -> Self {
-        self.with_chapters_probe(result.map(|chapters| ChaptersProbe {
-            chapters,
-            published_at: None,
-        }))
-    }
-
-    pub fn with_chapters_probe(self, result: anyhow::Result<ChaptersProbe>) -> Self {
-        Self {
-            chapters_result: std::sync::Mutex::new(Some(result)),
-            ..self
-        }
-    }
-
     pub fn with_quality_probe(self, result: anyhow::Result<QualityProbe>) -> Self {
         Self {
             quality_probe: std::sync::Mutex::new(Some(result)),
-            ..self
-        }
-    }
-
-    /// Runs `hook` while `fetch_chapters` is in flight.
-    pub fn with_on_fetch_chapters(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
-        Self {
-            on_fetch_chapters: Some(Box::new(hook)),
             ..self
         }
     }
@@ -331,28 +189,11 @@ impl FakeVideoDownloaderRepository {
         }
     }
 
-    /// Runs `hook` while `fetch_subtitles` is in flight.
-    pub fn with_on_fetch_subtitles(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
-        Self {
-            on_fetch_subtitles: Some(Box::new(hook)),
-            ..self
-        }
-    }
-
     fn with_result(result: DownloadAttempt) -> Self {
         Self {
             result: std::sync::Mutex::new(result),
             calls: Default::default(),
-            thumbnail_result: Default::default(),
-            thumbnail_calls: Default::default(),
             on_download: None,
-            on_fetch_subtitles: None,
-            caption_probe: Default::default(),
-            subtitles_result: Default::default(),
-            caption_calls: Default::default(),
-            chapters_result: Default::default(),
-            chapters_calls: Default::default(),
-            on_fetch_chapters: None,
             quality_probe: Default::default(),
             quality_calls: Default::default(),
         }
@@ -385,76 +226,6 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
             }),
             failed => failed,
         })
-    }
-
-    fn fetch_thumbnail(
-        &self,
-        video_url: &str,
-        staging_dir: &Path,
-    ) -> anyhow::Result<ThumbnailFetch> {
-        self.thumbnail_calls
-            .lock()
-            .unwrap()
-            .push((video_url.to_string(), staging_dir.to_path_buf()));
-        match self.thumbnail_result.lock().unwrap().take() {
-            Some(Ok(ThumbnailFetch::Fetched(fetched))) => {
-                Ok(ThumbnailFetch::Fetched(FetchedThumbnail {
-                    path: staging_dir.join(&fetched.path),
-                    ..fetched
-                }))
-            }
-            Some(result) => result,
-            None => Ok(ThumbnailFetch::Unavailable { reason: None }),
-        }
-    }
-
-    fn probe_captions(
-        &self,
-        _video_url: &str,
-        _staging_dir: &Path,
-    ) -> anyhow::Result<CaptionProbe> {
-        *self.caption_calls.lock().unwrap() += 1;
-        self.caption_probe
-            .lock()
-            .unwrap()
-            .take()
-            .unwrap_or_else(|| Err(anyhow::anyhow!("no fake caption probe configured")))
-    }
-
-    fn fetch_subtitles(
-        &self,
-        _probe: &CaptionProbe,
-        _track: &CaptionTrack,
-        staging_dir: &Path,
-    ) -> anyhow::Result<FetchedSubtitles> {
-        *self.caption_calls.lock().unwrap() += 1;
-        if let Some(hook) = &self.on_fetch_subtitles {
-            hook();
-        }
-        self.subtitles_result
-            .lock()
-            .unwrap()
-            .take()
-            .unwrap_or_else(|| Err(anyhow::anyhow!("no fake subtitles configured")))
-            .map(|fetched| FetchedSubtitles {
-                path: staging_dir.join(&fetched.path),
-                ..fetched
-            })
-    }
-
-    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<ChaptersProbe> {
-        self.chapters_calls
-            .lock()
-            .unwrap()
-            .push(video_url.to_string());
-        if let Some(hook) = &self.on_fetch_chapters {
-            hook();
-        }
-        self.chapters_result
-            .lock()
-            .unwrap()
-            .take()
-            .unwrap_or_else(|| Err(anyhow::anyhow!("no fake chapters configured")))
     }
 
     fn probe_quality(&self, video_url: &str, quality: Quality) -> anyhow::Result<QualityProbe> {
@@ -622,58 +393,6 @@ mod tests {
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
-    #[test]
-    #[cfg(unix)]
-    fn it_should_map_a_successful_thumbnail_fetch_to_the_printed_filename() {
-        let fake = test_support::FakeYtDlp::with_stdout("My Video.jpg\n");
-        let output_dir = test_support::unique_temp_dir("video-downloader-repository-thumbnail");
-
-        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
-            .fetch_thumbnail("https://example.com/video", &output_dir)
-            .unwrap();
-
-        assert_eq!(
-            result,
-            ThumbnailFetch::Fetched(FetchedThumbnail {
-                path: output_dir.join("My Video.jpg"),
-                published_at: None,
-            })
-        );
-        std::fs::remove_dir_all(&output_dir).unwrap();
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn it_should_map_the_printed_chapters_of_a_yt_dlp_process() {
-        let fake = test_support::FakeYtDlp::with_stdout(
-            r#"[{"start_time": 0.0, "title": "Intro", "end_time": 61.7}, {"start_time": 61.7, "title": "Main part", "end_time": 300.0}]
-NA
-NA
-"#,
-        );
-
-        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
-            .fetch_chapters("https://example.com/video")
-            .unwrap()
-            .chapters;
-
-        assert_eq!(
-            result,
-            vec![
-                VideoChapter {
-                    start_seconds: 0,
-                    end_seconds: 61,
-                    title: "Intro".to_string(),
-                },
-                VideoChapter {
-                    start_seconds: 61,
-                    end_seconds: 300,
-                    title: "Main part".to_string(),
-                },
-            ]
-        );
-    }
-
     /// A fake `yt-dlp` failing every run, writing one stderr for the
     /// diagnostic probe (`--simulate`) and another for the download.
     #[cfg(unix)]
@@ -730,15 +449,11 @@ NA
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
-    use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
     use crate::infrastructure::shared::youtube_contract::{
-        CAPTIONED_VIDEO_ID, CHAPTERED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID,
-        embedded_chapters, stream_codecs, video_height, video_url, ytdlp_path,
+        CHAPTERED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, embedded_chapters, flamenco_chapters,
+        stream_codecs, video_height, video_url, ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
-    use crate::infrastructure::shared::ytdlp::{
-        DownloadedVideo, FetchedSubtitles, FetchedThumbnail,
-    };
     use chrono::DateTime;
 
     #[test]
@@ -782,19 +497,6 @@ mod youtube_contract_tests {
             ]
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
-    }
-
-    #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
-    fn it_should_fetch_the_chapters_of_a_real_video() {
-        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
-
-        let chapters = repository
-            .fetch_chapters(&video_url(CHAPTERED_VIDEO_ID))
-            .unwrap()
-            .chapters;
-
-        assert_eq!(chapters, flamenco_chapters());
     }
 
     #[test]
@@ -891,126 +593,10 @@ mod youtube_contract_tests {
 
     #[test]
     #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
-    fn it_should_fetch_only_the_thumbnail() {
-        let staging_dir = unique_temp_dir("contract-thumbnail");
-        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
-
-        let fetch = repository
-            .fetch_thumbnail(&video_url(SHORT_VIDEO_ID), &staging_dir)
-            .unwrap();
-
-        let thumbnail = staging_dir.join(format!("{SHORT_VIDEO_ID}.jpg"));
-        assert_eq!(
-            fetch,
-            ThumbnailFetch::Fetched(FetchedThumbnail {
-                path: thumbnail.clone(),
-                published_at: DateTime::from_timestamp(1_550_518_860, 0),
-            })
-        );
-        assert_eq!(staged_files(&staging_dir), vec![thumbnail]);
-        std::fs::remove_dir_all(&staging_dir).unwrap();
-    }
-
-    #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_diagnose_no_failure_for_a_playable_video() {
         let reason = ytdlp::diagnose(&ytdlp_path(), &video_url(SHORT_VIDEO_ID)).unwrap();
 
         assert_eq!(reason, None);
-    }
-
-    #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
-    fn it_should_probe_the_caption_tracks() {
-        let staging_dir = unique_temp_dir("contract-captions");
-        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
-
-        let probe = repository
-            .probe_captions(&video_url(CAPTIONED_VIDEO_ID), &staging_dir)
-            .unwrap();
-
-        // YouTube's auto-translated captions (over a hundred languages) and
-        // the warnings it prints alongside vary run to run, so they're taken
-        // as reported; the English auto-captions must be among them.
-        assert!(probe.tracks.automatic.contains(&"en".to_string()));
-        assert_eq!(
-            probe,
-            CaptionProbe {
-                tracks: CaptionTracks {
-                    original_language: Some("en".to_string()),
-                    manual: vec!["en".to_string(), "fr".to_string()],
-                    automatic: probe.tracks.automatic.clone(),
-                },
-                published_at: DateTime::from_timestamp(1_212_060_266, 0),
-                info_json: staging_dir.join("info.json"),
-                warnings: probe.warnings.clone(),
-            }
-        );
-        assert!(probe.info_json.is_file());
-        std::fs::remove_dir_all(&staging_dir).unwrap();
-    }
-
-    #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
-    fn it_should_fetch_the_uploaded_subtitles_as_srt() {
-        let staging_dir = unique_temp_dir("contract-subtitles");
-        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
-        let probe = repository
-            .probe_captions(&video_url(CAPTIONED_VIDEO_ID), &staging_dir)
-            .unwrap();
-        let english = CaptionTrack {
-            key: "en".to_string(),
-            language: CaptionLanguage::new("en").unwrap(),
-            source: CaptionSource::Manual,
-        };
-
-        let subtitles = repository
-            .fetch_subtitles(&probe, &english, &staging_dir)
-            .unwrap();
-
-        assert_eq!(
-            subtitles,
-            FetchedSubtitles {
-                path: staging_dir.join(format!("{CAPTIONED_VIDEO_ID}.en.srt")),
-                srt: subtitles.srt.clone(),
-            }
-        );
-        // SubRip: numbered cues, each with a `start --> end` timing line.
-        let mut lines = subtitles.srt.lines();
-        assert_eq!(lines.next(), Some("1"));
-        assert!(lines.next().is_some_and(|timing| timing.contains(" --> ")));
-        std::fs::remove_dir_all(&staging_dir).unwrap();
-    }
-
-    fn staged_files(staging_dir: &Path) -> Vec<PathBuf> {
-        let mut files: Vec<PathBuf> = std::fs::read_dir(staging_dir)
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .collect();
-        files.sort();
-        files
-    }
-
-    /// The chapters YouTube reports for `CHAPTERED_VIDEO_ID`.
-    fn flamenco_chapters() -> Vec<VideoChapter> {
-        [
-            (0, 33, "Flamenco overview"),
-            (33, 68, "Setting up shared storage"),
-            (68, 104, "Installing the manager"),
-            (104, 133, "Configuring the manager"),
-            (133, 156, "Installing the Blender add-on"),
-            (156, 215, "Submitting a render job"),
-            (215, 244, "Setting up the worker"),
-            (244, 271, "Monitoring rendering progress"),
-            (271, 299, "Reviewing final output"),
-        ]
-        .into_iter()
-        .map(|(start_seconds, end_seconds, title)| VideoChapter {
-            start_seconds,
-            end_seconds,
-            title: title.to_string(),
-        })
-        .collect()
     }
 
     /// Downloads the short fixture at `quality` and returns its video height.

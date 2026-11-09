@@ -1,6 +1,6 @@
 use crate::domain::services::{PlexLabelSyncer, PlexLabelSyncerApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs one Plex label sync (`PlexLabelSyncer::sync`), which requests the
 /// next one itself. Registered only when the Plex integration is configured.
@@ -15,8 +15,10 @@ impl SyncPlexLabelsTask {
 }
 
 impl TaskHandler for SyncPlexLabelsTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        Task::decode_sync_plex_labels_payload(payload)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::SyncPlexLabels = task else {
+            return Err(unexpected_task(task));
+        };
         self.plex_label_syncer.sync()
     }
 }
@@ -1101,8 +1103,7 @@ mod tests {
     fn pending_sync(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: "sync_plex_labels".to_string(),
-            payload: "{}".to_string(),
+            task: Task::SyncPlexLabels,
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -1244,6 +1245,7 @@ mod tests {
     }
 
     fn run(task: &SyncPlexLabelsTask) -> Result<(), String> {
-        task.handle("{}", false).map_err(|e| e.to_string())
+        task.handle(&Task::SyncPlexLabels, false)
+            .map_err(|e| e.to_string())
     }
 }

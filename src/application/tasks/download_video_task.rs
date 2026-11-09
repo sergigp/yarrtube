@@ -2,7 +2,7 @@ use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
 use crate::domain::shared::Quality;
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 
 /// Downloads one video via `yt-dlp`, scheduled by
@@ -19,16 +19,23 @@ impl DownloadVideoTask {
 }
 
 impl TaskHandler for DownloadVideoTask {
-    fn handle(&self, payload: &str, is_last_attempt: bool) -> anyhow::Result<()> {
-        let (video_id, quality, output_dir) = Task::decode_download_video_payload(payload)?;
-        let Ok(video_id) = VideoRecordId::new(video_id) else {
+    fn handle(&self, task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::DownloadVideo {
+            video_id,
+            quality,
+            output_dir,
+        } = task
+        else {
+            return Err(unexpected_task(task));
+        };
+        let Ok(video_id) = VideoRecordId::new(video_id.clone()) else {
             return Ok(());
         };
-        let Ok(quality) = Quality::new(quality) else {
+        let Ok(quality) = Quality::new(quality.clone()) else {
             return Ok(());
         };
         self.video_downloader
-            .download(video_id, quality, Path::new(&output_dir), is_last_attempt)
+            .download(video_id, quality, Path::new(output_dir), is_last_attempt)
     }
 }
 
@@ -40,6 +47,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::services::MetadataGenerator;
+    use crate::domain::video::DownloadedVideo;
     use crate::domain::video::EpisodeNumber;
     use crate::domain::video::LateDataChecks;
     use crate::domain::video::PlaybackPosition;
@@ -67,8 +75,7 @@ mod tests {
         YoutubeMetadataRepository,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-        DownloadedVideo, FakeVideoDownloaderRepository, VideoDownloaderRepository,
-        YtDlpVideoDownloaderRepository,
+        FakeVideoDownloaderRepository, VideoDownloaderRepository, YtDlpVideoDownloaderRepository,
     };
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
@@ -113,7 +120,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -213,7 +220,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -270,7 +277,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -329,7 +336,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -394,7 +401,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -456,7 +463,7 @@ mod tests {
 
         let result = run(
             &task,
-            &output_dir_payload_with_quality(&video, output_dir.path(), "mid"),
+            &output_dir_task_with_quality(&video, output_dir.path(), "mid"),
             false,
         );
 
@@ -517,7 +524,7 @@ mod tests {
 
         let result = run(
             &task,
-            &output_dir_payload_with_quality(&video, output_dir.path(), "mid"),
+            &output_dir_task_with_quality(&video, output_dir.path(), "mid"),
             false,
         );
 
@@ -577,7 +584,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -636,7 +643,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -694,7 +701,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -758,7 +765,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -820,7 +827,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -868,7 +875,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -935,7 +942,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1003,7 +1010,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1055,7 +1062,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1116,7 +1123,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(
             result,
@@ -1165,7 +1172,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), true);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), true);
 
         assert_eq!(
             result,
@@ -1207,7 +1214,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(
             result,
@@ -1241,7 +1248,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
         assert_eq!(
@@ -1284,7 +1291,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1326,7 +1333,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
         assert_eq!(
@@ -1357,7 +1364,7 @@ mod tests {
         ));
 
         let logs = captured_log_messages(|| {
-            let _ = run(&task, &payload_for(video.id.as_str()), false);
+            let _ = run(&task, &task_for(video.id.as_str()), false);
         });
 
         assert!(
@@ -1386,7 +1393,7 @@ mod tests {
         ));
 
         let logs = captured_log_messages(|| {
-            let _ = run(&task, &payload_for(video.id.as_str()), false);
+            let _ = run(&task, &task_for(video.id.as_str()), false);
         });
 
         assert!(
@@ -1412,7 +1419,7 @@ mod tests {
         ));
 
         let logs = captured_log_messages(|| {
-            let _ = run(&task, &payload_for(video.id.as_str()), false);
+            let _ = run(&task, &task_for(video.id.as_str()), false);
         });
 
         assert!(
@@ -1437,7 +1444,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), true);
+        let result = run(&task, &task_for(video.id.as_str()), true);
 
         assert_eq!(
             result,
@@ -1471,7 +1478,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), true);
+        let result = run(&task, &task_for(video.id.as_str()), true);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1501,7 +1508,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1531,7 +1538,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1561,7 +1568,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Err("Video unavailable".to_string()));
         assert_eq!(
@@ -1588,7 +1595,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(my_video().id.as_str()), false);
+        let result = run(&task, &task_for(my_video().id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1617,7 +1624,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1640,7 +1647,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1663,7 +1670,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1698,7 +1705,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1744,7 +1751,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1786,7 +1793,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(
             result,
@@ -1826,7 +1833,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1871,7 +1878,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), true);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), true);
 
         assert_eq!(
             result,
@@ -1918,7 +1925,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1941,18 +1948,18 @@ mod tests {
 
     #[test]
     fn it_should_skip_if_invalid_video_id_provided() {
-        let result = run(&any_task(), &payload_for(""), false);
+        let result = run(&any_task(), &task_for(""), false);
 
         assert_eq!(result, Ok(()));
     }
 
     #[test]
-    fn it_should_reject_a_malformed_payload() {
-        let result = run(&any_task(), "not json", false);
+    fn it_should_fail_if_handed_another_task() {
+        let result = run(&any_task(), &Task::UpdateYtdlp, false);
 
         assert_eq!(
             result,
-            Err("invalid download_video payload: expected ident at line 1 column 2".to_string())
+            Err("unexpected update_ytdlp task for this handler".to_string())
         );
     }
 
@@ -1986,7 +1993,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2046,7 +2053,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2119,7 +2126,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2160,7 +2167,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2200,7 +2207,7 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2241,7 +2248,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+        let result = run(&task, &output_dir_task(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2300,7 +2307,7 @@ mod tests {
             videos_root.to_string_lossy(),
         ));
 
-        let result = run(&task, &output_dir_payload(&video, &output_dir), false);
+        let result = run(&task, &output_dir_task(&video, &output_dir), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2483,22 +2490,20 @@ mod tests {
         )
     }
 
-    fn output_dir_payload(video: &Video, output_dir: &std::path::Path) -> String {
-        output_dir_payload_with_quality(video, output_dir, "high")
+    fn output_dir_task(video: &Video, output_dir: &std::path::Path) -> Task {
+        output_dir_task_with_quality(video, output_dir, "high")
     }
 
-    fn output_dir_payload_with_quality(
+    fn output_dir_task_with_quality(
         video: &Video,
         output_dir: &std::path::Path,
         quality: &str,
-    ) -> String {
+    ) -> Task {
         Task::DownloadVideo {
             video_id: video.id.as_str().to_string(),
             quality: quality.to_string(),
             output_dir: output_dir.to_string_lossy().to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     fn folder_entries(dir: &std::path::Path) -> Vec<String> {
@@ -2520,14 +2525,12 @@ mod tests {
         }
     }
 
-    fn payload_for(video_id: &str) -> String {
+    fn task_for(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
             quality: "high".to_string(),
             output_dir: "/videos/my-playlist".to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     /// Stores the video as played and watched, the way marking another copy
@@ -2556,8 +2559,8 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn run(task: &DownloadVideoTask, payload: &str, is_last_attempt: bool) -> Result<(), String> {
-        task.handle(payload, is_last_attempt)
+    fn run(task: &DownloadVideoTask, queued: &Task, is_last_attempt: bool) -> Result<(), String> {
+        task.handle(queued, is_last_attempt)
             .map_err(|e| e.to_string())
     }
 }

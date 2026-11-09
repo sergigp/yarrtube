@@ -3595,8 +3595,7 @@ mod tests {
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at,

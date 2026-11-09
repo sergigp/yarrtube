@@ -841,7 +841,7 @@ fn video_owner_finder(infrastructure: &InfrastructureContainer) -> Arc<VideoOwne
 fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {
     Arc::new(ThumbnailFetcher::new(
         infrastructure.video_repository.clone(),
-        infrastructure.video_downloader_repository.clone(),
+        infrastructure.thumbnail_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.clock.clone(),
         videos_path(),
@@ -851,7 +851,7 @@ fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailF
 fn chapter_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ChapterFetcher> {
     Arc::new(ChapterFetcher::new(
         infrastructure.video_repository.clone(),
-        infrastructure.video_downloader_repository.clone(),
+        infrastructure.chapter_repository.clone(),
         infrastructure.clock.clone(),
     ))
 }
@@ -897,7 +897,7 @@ fn subtitle_fetcher(infrastructure: &InfrastructureContainer) -> Arc<SubtitleFet
     Arc::new(SubtitleFetcher::new(
         infrastructure.video_repository.clone(),
         infrastructure.video_transcript_repository.clone(),
-        infrastructure.video_downloader_repository.clone(),
+        infrastructure.caption_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
@@ -1248,7 +1248,7 @@ mod tests {
                 .list_non_completed()
                 .unwrap()
                 .into_iter()
-                .map(|task| task.task_type)
+                .map(|task| task.task.task_type().to_string())
                 .collect()
         })
         .collect();

@@ -1,11 +1,10 @@
 use crate::domain::video::EpisodePaths;
 use crate::domain::video::Video;
 use crate::domain::video::staging_dir;
+use crate::domain::video::{FetchedThumbnail, ThumbnailFetch};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-    FetchedThumbnail, ThumbnailFetch, VideoDownloaderRepository,
-};
+use crate::infrastructure::repositories::youtube_thumbnail_repository::ThumbnailRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::Path;
 use std::sync::Arc;
@@ -18,7 +17,7 @@ use tracing::warn;
 #[derive(Clone)]
 pub struct ThumbnailFetcher {
     video_repository: Arc<dyn VideoRepository>,
-    video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    thumbnail_repository: Arc<dyn ThumbnailRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     clock: Arc<dyn Clock>,
     videos_path: String,
@@ -27,14 +26,14 @@ pub struct ThumbnailFetcher {
 impl ThumbnailFetcher {
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
-        video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        thumbnail_repository: Arc<dyn ThumbnailRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
         clock: Arc<dyn Clock>,
         videos_path: impl Into<String>,
     ) -> Self {
         Self {
             video_repository,
-            video_downloader_repository,
+            thumbnail_repository,
             video_file_repository,
             clock,
             videos_path: videos_path.into(),
@@ -83,7 +82,7 @@ impl ThumbnailFetcher {
     }
 
     fn fetch_thumbnail(&self, video: &Video, _output_dir: &Path) -> anyhow::Result<ThumbnailFetch> {
-        self.video_downloader_repository.fetch_thumbnail(
+        self.thumbnail_repository.fetch_thumbnail(
             &video.youtube_id.to_url(),
             &staging_dir(&self.videos_path, &video.id),
         )
