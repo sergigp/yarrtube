@@ -1,0 +1,10 @@
+{
+  "model": "qwen3:4b",
+  "think": true,
+  "prompt_version": "v2-batch",
+  "system_sha": "b242d553ae",
+  "num_ctx": 16384,
+  "temperature": 0.0,
+  "max_output": 12288,
+  "batch": true
+}
