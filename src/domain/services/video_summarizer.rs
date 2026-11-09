@@ -199,7 +199,8 @@ impl VideoSummarizer {
             "generating video summary"
         );
         let text = self.write_summary(video, &input, job)?;
-        if self.video_repository.find(&video.id)?.is_none() {
+        if !self.still_wanted(video)? {
+            info!(video_id = %video.id, "video no longer wants a summary, dropping the generated one");
             return Ok(());
         }
         let now = self.clock.now();
@@ -220,6 +221,33 @@ impl VideoSummarizer {
             "video summary generated"
         );
         Ok(())
+    }
+
+    /// Whether the generated summary should still be stored now the
+    /// minutes-long generation is done: the video still exists and is
+    /// summarizable (not deleted, reset for redownload or already
+    /// summarized), AI summaries are still on, and its source still has them
+    /// enabled. Settings or the source's toggle may have changed while it
+    /// generated — mirrors `VideoCategorizer`'s re-check before storing.
+    fn still_wanted(&self, video: &Video) -> anyhow::Result<bool> {
+        let Some(stored) = self.video_repository.find(&video.id)? else {
+            return Ok(false);
+        };
+        if !stored.is_summarizable() {
+            return Ok(false);
+        }
+        if !self
+            .preferences_repository
+            .find()?
+            .unwrap_or_default()
+            .summaries_available()
+        {
+            return Ok(false);
+        }
+        Ok(self
+            .video_owner_finder
+            .find(&stored)?
+            .is_some_and(|owner| owner.summaries_enabled))
     }
 
     /// One call for a whole transcript; for one in parts, a call per part

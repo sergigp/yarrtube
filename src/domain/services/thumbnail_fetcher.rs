@@ -92,21 +92,39 @@ impl ThumbnailFetcher {
     /// Assigns the episode number, moves the staged jpg to the episode's
     /// image path and writes only the thumbnail: a download of the same
     /// video may have changed its status since `video` was read.
+    ///
+    /// The fetch can take a while, and the video (or its whole
+    /// playlist/channel) may have been deleted, excluded, errored or already
+    /// given a thumbnail meanwhile: then nothing is placed, so a stale
+    /// thumbnail isn't dropped into a show folder being torn down. Mirrors
+    /// `SubtitleFetcher`/`QualityUpgrader`'s re-read before placing.
     fn place_thumbnail(
         &self,
         video: &Video,
         fetched: FetchedThumbnail,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
+        let Some(stored) = self.still_placeable(video)? else {
+            return Ok(());
+        };
         let published_at = fetched.published_at.unwrap_or_else(|| self.clock.now());
         let number = self
             .video_repository
-            .assign_episode_number(&video.id, published_at)?;
-        let thumbnail_filename = EpisodePaths::new(&number, &video.title).thumbnail();
+            .assign_episode_number(&stored.id, published_at)?;
+        let thumbnail_filename = EpisodePaths::new(&number, &stored.title).thumbnail();
         self.video_file_repository
             .move_file(&fetched.path, &output_dir.join(&thumbnail_filename))?;
         self.video_repository
-            .update_thumbnail(&video.id, &thumbnail_filename, self.clock.now())
+            .update_thumbnail(&stored.id, &thumbnail_filename, self.clock.now())
+    }
+
+    /// The stored video when a fetched thumbnail can still be placed for it:
+    /// it still exists, is still thumbnail-fetchable (not excluded or
+    /// errored), and hasn't been given a thumbnail by a download meanwhile.
+    fn still_placeable(&self, video: &Video) -> anyhow::Result<Option<Video>> {
+        Ok(self.video_repository.find(&video.id)?.filter(|stored| {
+            stored.is_thumbnail_fetchable() && stored.thumbnail_filename.is_none()
+        }))
     }
 
     /// Best-effort: a leftover staging dir is harmless, Plex and Kodi ignore

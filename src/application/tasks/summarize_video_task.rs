@@ -1385,6 +1385,93 @@ mod tests {
     }
 
     #[test]
+    fn it_should_drop_the_summary_when_summaries_are_turned_off_while_generating() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let video = subtitled_video();
+        let llm = {
+            let preferences_repository = preferences_repository.clone();
+            Arc::new(
+                FakeLlmServerRepository::new(server_with(thinking_model()))
+                    .with_replies(vec![reply("Three games.")])
+                    .with_on_chat(move || {
+                        preferences_repository
+                            .save(&with_summaries(|settings| SummarySettings {
+                                enabled: false,
+                                ..settings
+                            }))
+                            .unwrap()
+                    }),
+            )
+        };
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(llm.chats(), vec![one_call_chat()]);
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
+    }
+
+    #[test]
+    fn it_should_drop_the_summary_when_the_source_turns_summaries_off_while_generating() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let video = subtitled_video();
+        let llm = {
+            let channel_repository = SqliteChannelRepository::new(db.database());
+            Arc::new(
+                FakeLlmServerRepository::new(server_with(thinking_model()))
+                    .with_replies(vec![reply("Three games.")])
+                    .with_on_chat(move || {
+                        channel_repository
+                            .update(&my_channel().with_summaries_enabled(false))
+                            .unwrap();
+                    }),
+            )
+        };
+        video_repository.save(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(llm.chats(), vec![one_call_chat()]);
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
+    }
+
+    #[test]
     fn it_should_fail_the_task_when_the_subtitle_file_is_empty() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

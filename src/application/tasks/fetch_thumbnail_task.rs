@@ -252,6 +252,54 @@ mod tests {
     }
 
     #[test]
+    fn it_should_discard_the_thumbnail_if_the_video_was_deleted_meanwhile() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let deleting_repository = video_repository.clone();
+        let deleted_id = video.id.clone();
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_thumbnail_result(Some(FetchedThumbnail {
+                    path: PathBuf::from("yt1.jpg"),
+                    published_at: Some(published_at()),
+                }))
+                .with_on_fetch_thumbnail(move || {
+                    deleting_repository.delete(&deleted_id).unwrap();
+                }),
+        );
+        let task = FetchThumbnailTask::new(
+            video_repository.clone(),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(FixedClock(later())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
+        );
+        assert_eq!(
+            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
+            vec![thumbnail_call(&video)]
+        );
+    }
+
+    #[test]
     fn it_should_leave_the_video_untouched_when_the_thumbnail_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
