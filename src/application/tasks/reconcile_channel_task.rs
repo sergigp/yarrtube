@@ -1,7 +1,7 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::services::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs every subsequent reconcile for a channel (the first one is
 /// triggered by `subscribers::reconcile_on_channel_created` instead).
@@ -18,9 +18,11 @@ impl ReconcileChannelTask {
 }
 
 impl TaskHandler for ReconcileChannelTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let channel_id = Task::decode_reconcile_channel_payload(payload)?;
-        let Ok(channel_id) = ChannelHandle::new(channel_id) else {
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::ReconcileChannel { channel_id } = task else {
+            return Err(unexpected_task(task));
+        };
+        let Ok(channel_id) = ChannelHandle::new(channel_id.clone()) else {
             return Ok(());
         };
         self.channel_video_reconciler.reconcile(channel_id)
@@ -145,7 +147,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -184,7 +186,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -261,7 +263,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -390,7 +392,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -534,7 +536,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -643,7 +645,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -689,7 +691,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -808,7 +810,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -916,7 +918,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1015,7 +1017,7 @@ mod tests {
             verdict_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1082,7 +1084,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1164,7 +1166,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -1252,7 +1254,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
@@ -1295,7 +1297,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1328,7 +1330,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1371,7 +1373,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1405,7 +1407,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(channel_repository.list().unwrap(), vec![]);
@@ -1489,7 +1491,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1588,7 +1590,7 @@ mod tests {
 
         let result = std::thread::scope(|scope| {
             let moving = show_locks.lock(ShowKey::Channel(handle("@somechannel")));
-            let reconciling = scope.spawn(|| run(&task, &payload_for("@somechannel")));
+            let reconciling = scope.spawn(|| run(&task, &task_for("@somechannel")));
             // Gives a reconcile that doesn't wait every chance to run first.
             std::thread::sleep(std::time::Duration::from_millis(100));
             channel_repository
@@ -1695,7 +1697,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1797,7 +1799,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1892,7 +1894,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1998,7 +2000,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2104,7 +2106,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(avatar_repository.avatars(), vec![]);
@@ -2232,7 +2234,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -2281,18 +2283,18 @@ mod tests {
 
     #[test]
     fn it_should_skip_if_invalid_channel_id_provided() {
-        let result = run(&any_task(), &payload_for(""));
+        let result = run(&any_task(), &task_for(""));
 
         assert_eq!(result, Ok(()));
     }
 
     #[test]
-    fn it_should_reject_a_malformed_payload() {
-        let result = run(&any_task(), "not json");
+    fn it_should_fail_if_handed_another_task() {
+        let result = run(&any_task(), &Task::UpdateYtdlp);
 
         assert_eq!(
             result,
-            Err("invalid reconcile_channel payload: expected ident at line 1 column 2".to_string())
+            Err("unexpected update_ytdlp task for this handler".to_string())
         );
     }
 
@@ -2330,7 +2332,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2389,7 +2391,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -2444,24 +2446,20 @@ mod tests {
             Arc::new(FakeVideoFileRepository::with_listing(episode_files())),
         ));
 
-        run(&task, &payload_for("@somechannel")).unwrap();
+        run(&task, &task_for("@somechannel")).unwrap();
 
-        let summarized: Vec<String> = task_repository
+        let summarized: Vec<Task> = task_repository
             .list_non_completed()
             .unwrap()
             .into_iter()
-            .filter(|task| task.task_type == "summarize_video")
-            .map(|task| task.payload)
+            .map(|task| task.task)
+            .filter(|task| matches!(task, Task::SummarizeVideo { .. }))
             .collect();
         assert_eq!(
             summarized,
-            vec![
-                Task::SummarizeVideo {
-                    video_id: subtitled.id.as_str().to_string()
-                }
-                .payload()
-                .to_string()
-            ]
+            vec![Task::SummarizeVideo {
+                video_id: subtitled.id.as_str().to_string()
+            }]
         );
     }
 
@@ -2511,7 +2509,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2556,7 +2554,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
@@ -2609,7 +2607,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2658,7 +2656,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2709,7 +2707,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -2757,7 +2755,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
@@ -2802,7 +2800,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
@@ -2887,7 +2885,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -2959,7 +2957,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -3015,7 +3013,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -3055,7 +3053,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("@somechannel"));
+        let result = run(&task, &task_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
         let added = video_repository.list().unwrap()[0].id.clone();
@@ -3420,8 +3418,7 @@ mod tests {
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -3462,16 +3459,14 @@ mod tests {
         ChannelHandle::new(value).unwrap()
     }
 
-    fn payload_for(channel_id: &str) -> String {
+    fn task_for(channel_id: &str) -> Task {
         Task::ReconcileChannel {
             channel_id: channel_id.to_string(),
         }
-        .payload()
-        .to_string()
     }
 
-    fn run(task: &ReconcileChannelTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &ReconcileChannelTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 
     fn video_category_assigner(database: Database) -> VideoCategoryAssigner {

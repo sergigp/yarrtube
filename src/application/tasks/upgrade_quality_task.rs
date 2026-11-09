@@ -2,7 +2,7 @@ use crate::domain::services::{QualityUpgrader, QualityUpgraderApi};
 use crate::domain::shared::Quality;
 use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -21,12 +21,19 @@ impl UpgradeQualityTask {
 }
 
 impl TaskHandler for UpgradeQualityTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (video_id, quality, output_dir) = Task::decode_upgrade_quality_payload(payload)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::UpgradeQuality {
+            video_id,
+            quality,
+            output_dir,
+        } = task
+        else {
+            return Err(unexpected_task(task));
+        };
         self.quality_upgrader.upgrade(
-            &VideoRecordId::new(video_id)?,
-            Quality::new(quality)?,
-            Path::new(&output_dir),
+            &VideoRecordId::new(video_id.clone())?,
+            Quality::new(quality.clone())?,
+            Path::new(output_dir),
         )
     }
 }
@@ -84,7 +91,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -169,7 +176,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -246,7 +253,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -289,7 +296,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -336,7 +343,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -389,7 +396,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -442,7 +449,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -491,7 +498,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -538,7 +545,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -592,7 +599,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![reset]);
@@ -641,7 +648,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![redownloaded]);
@@ -678,7 +685,7 @@ mod tests {
             "/videos",
         )));
 
-        let result = run(&task, &payload_for(&video));
+        let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -745,14 +752,12 @@ mod tests {
         PathBuf::from(format!("/videos/.downloads/{}", video.id.as_str()))
     }
 
-    fn payload_for(video: &Video) -> String {
+    fn task_for(video: &Video) -> Task {
         Task::UpgradeQuality {
             video_id: video.id.as_str().to_string(),
             quality: "high".to_string(),
             output_dir: OUTPUT_DIR.to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     fn published_yesterday() -> DateTime<Utc> {
@@ -765,7 +770,7 @@ mod tests {
             .to_utc()
     }
 
-    fn run(task: &UpgradeQualityTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &UpgradeQualityTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }
