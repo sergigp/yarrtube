@@ -13,7 +13,6 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct VideoRetrier {
     video_updater: VideoUpdater,
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
@@ -45,6 +44,7 @@ impl VideoRetrierApi for VideoRetrier {
     fn retry(&self, video_id: &VideoId) -> Result<(), RetryVideoError> {
         let now = self.clock.now();
         self.retry_steps(video_id, now)?;
+        self.delete_failed_verdicts(video_id)?;
         self.schedule_sync(video_id, now)
     }
 }
@@ -60,6 +60,13 @@ impl VideoRetrier {
             .update(video_id, |video| Some(video.retry(now)))
             .map_err(RetryVideoError::Repository)?
             .ok_or_else(|| RetryVideoError::VideoNotFound(video_id.clone()))
+    }
+
+    /// The video's `failed` verdicts, so their categories are pending again.
+    fn delete_failed_verdicts(&self, video_id: &VideoId) -> Result<(), RetryVideoError> {
+        self.video_category_verdict_repository
+            .delete_failed_for_video(video_id)
+            .map_err(RetryVideoError::Repository)
     }
 
     fn schedule_sync(&self, video_id: &VideoId, now: DateTime<Utc>) -> Result<(), RetryVideoError> {

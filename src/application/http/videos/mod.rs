@@ -279,7 +279,8 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::{
-        EpisodeNumber, RetryAttempts, Video, VideoChapter, VideoId, VideoStatus, YoutubeVideoId,
+        EpisodeNumber, LateDataChecks, RetryAttempts, StepState, Video, VideoChapter, VideoId,
+        VideoStatus, YoutubeVideoId,
     };
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -6820,6 +6821,55 @@ mod tests {
                     video_id: video.id.as_str().to_string()
                 }
             )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_retry_the_failed_steps_of_a_downloaded_video() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let a_day_ago = fixed_timestamp() - Duration::days(1);
+        let video = Video {
+            subtitles: LateDataChecks::unavailable_at(Some(a_day_ago)),
+            ..new_video(
+                YoutubeVideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .mark_downloaded(Quality::High, "My Video.mp4", None, None, a_day_ago)
+            .mark_summary_failed(a_day_ago)
+        };
+        video_repository.insert(&video).unwrap();
+        let [politics, tech] = ["Politics", "Tech"].map(|name| named_category(name, &[]));
+        [
+            ai_verdict(&video, &politics, Verdict::Yes),
+            ai_verdict(&video, &tech, Verdict::Failed),
+        ]
+        .iter()
+        .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                summary: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(&video, &politics, Verdict::Yes)]
         );
     }
 

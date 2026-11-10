@@ -20,7 +20,6 @@ pub trait VideoCategoryVerdictRepository: Send + Sync {
     /// `category_id`'s `failed` verdicts.
     fn delete_failed_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
     /// `video_id`'s `failed` verdicts.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     fn delete_failed_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     /// Deletes the AI verdicts of `video_ids`; returns the videos that had
     /// one.
@@ -123,8 +122,11 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         )
     }
 
-    fn delete_failed_for_video(&self, _video_id: &VideoId) -> anyhow::Result<()> {
-        Ok(())
+    fn delete_failed_for_video(&self, video_id: &VideoId) -> anyhow::Result<()> {
+        self.delete_where(
+            "verdict = ?1 AND video_id = ?2",
+            &[Verdict::Failed.as_str(), video_id.as_str()],
+        )
     }
 
     fn delete_ai_for_videos(&self, video_ids: &[VideoId]) -> anyhow::Result<Vec<VideoId>> {
