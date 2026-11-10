@@ -1161,7 +1161,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_log_each_verdict() {
+    fn it_should_log_each_call_and_each_verdict() {
         let db = TestDatabase::new();
         let video = summarized_video();
         seed(
@@ -1181,20 +1181,29 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             run(&task, &video).unwrap_err();
         });
 
-        let verdict = lines
-            .iter()
-            .find(|line| line.contains("category=Sicilian"))
-            .unwrap();
-        let rejected = lines
-            .iter()
-            .find(|line| line.contains("category=Tech"))
-            .unwrap();
+        let line = |needle: &str| {
+            lines
+                .iter()
+                .find(|line| line.contains(needle))
+                .cloned()
+                .unwrap_or_default()
+        };
+        let first_call = line("categories=Sicilian, Tech");
+        let fallback_call = line("categories=Tech ");
+        let verdict = line("category=Sicilian");
+        let rejected = line("category=Tech");
+        assert!(first_call.starts_with("INFO asked the model"));
+        assert!(first_call.contains(&format!("video_id={}", video.id)));
+        assert!(first_call.contains("fallback=false"));
+        assert!(first_call.contains("input_tokens=100"));
+        assert!(first_call.contains("output_tokens=200"));
+        assert!(first_call.contains("duration_seconds="));
+        assert!(fallback_call.starts_with("INFO asked the model"));
+        assert!(fallback_call.contains("fallback=true"));
         assert!(verdict.starts_with("INFO "));
         assert!(verdict.contains(&format!("video_id={}", video.id)));
         assert!(verdict.contains("verdict=YES"));
         assert!(verdict.contains("reason=A Sicilian game."));
-        assert!(verdict.contains("input_tokens=100"));
-        assert!(verdict.contains("duration_seconds="));
         assert!(rejected.starts_with("ERROR "));
         assert!(rejected.contains("reason=its answer isn't usable"));
     }
@@ -1476,7 +1485,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         Ok(LlmReply {
             content: content.to_string(),
             input_tokens: 100,
-            output_tokens: 0,
+            output_tokens: 200,
             stopped_at_limit: false,
             refusal: None,
         })

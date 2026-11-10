@@ -1,5 +1,5 @@
 use crate::domain::category::Category;
-use crate::domain::llm_server::OllamaUrl;
+use crate::domain::llm_server::{LlmReply, OllamaUrl};
 use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
@@ -246,7 +246,7 @@ impl VideoCategorizer {
         video: &Video,
         job: &CategorizationJob,
         categories: &'a [Category],
-        _call: Call,
+        call: Call,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
         let started = Instant::now();
         let question =
@@ -258,6 +258,7 @@ impl VideoCategorizer {
                 &question.chat(&job.settings, job.context_length, job.thinking),
             )
             .map_err(Stop::Server)?;
+        Self::log_call(video, categories, call, &reply, started);
         let rejection = match (&reply.refusal, reply.stopped_at_limit) {
             (Some(refusal), _) => Some(format!("Ollama refused the call: {refusal}")),
             (None, true) => Some(format!(
@@ -274,7 +275,7 @@ impl VideoCategorizer {
             .zip(question.answers(&reply.content))
             .filter_map(|(category, (_, answer))| match answer {
                 Some(answer) => self
-                    .store(video, job, category, answer, reply.input_tokens, started)
+                    .store(video, job, category, answer)
                     .err()
                     .map(|error| Err(Stop::Failed(error))),
                 None => {
@@ -312,8 +313,6 @@ impl VideoCategorizer {
         job: &CategorizationJob,
         category: &Category,
         answer: CategorizationAnswer,
-        input_tokens: u32,
-        started: Instant,
     ) -> anyhow::Result<()> {
         let verdict = VideoCategoryVerdict::answered(
             video.id.clone(),
@@ -340,8 +339,6 @@ impl VideoCategorizer {
             category = %category.name.as_str(),
             verdict = %verdict.verdict.as_str(),
             reason = %verdict.reason.as_deref().unwrap_or_default(),
-            input_tokens,
-            duration_seconds = started.elapsed().as_secs_f64(),
             "video categorized"
         );
         Ok(())
@@ -360,6 +357,29 @@ impl VideoCategorizer {
                 (category, reason.to_string())
             })
             .collect()
+    }
+
+    fn log_call(
+        video: &Video,
+        categories: &[Category],
+        call: Call,
+        reply: &LlmReply,
+        started: Instant,
+    ) {
+        let names = categories
+            .iter()
+            .map(|category| category.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        info!(
+            video_id = %video.id,
+            categories = %names,
+            fallback = matches!(call, Call::Fallback),
+            input_tokens = reply.input_tokens,
+            output_tokens = reply.output_tokens,
+            duration_seconds = started.elapsed().as_secs_f64(),
+            "asked the model"
+        );
     }
 
     fn log_rejected(video: &Video, category: &Category, reason: &str) {
