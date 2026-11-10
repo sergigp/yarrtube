@@ -54,7 +54,7 @@
 - [x] 2.35 `it_should_retry_the_failed_steps_of_a_downloaded_video` (http)
 - [x] 2.36 `it_should_bring_forward_a_queued_retry` (http)
 - [x] 2.37 `it_should_fail_to_retry_an_unknown_video` (http)
-- [ ] 2.38 `it_should_list_a_retrying_video_with_its_steps` (http)
+- [x] 2.38 `it_should_list_a_retrying_video_with_its_steps` (http)
 - [ ] 2.39 `it_should_list_a_downloaded_video_with_a_failed_summary` (http)
 - [ ] 2.40 `it_should_move_a_source_whose_only_unfinished_video_waits_for_a_retry` (http)
 - [ ] 2.41 `it_should_reset_failed_summaries_when_the_summary_settings_change` (renamed, regression)
