@@ -84,10 +84,11 @@ impl ChapterFetcher {
         if !stored.is_chapters_fetchable() {
             return Ok(());
         }
+        let published_at = published_at.unwrap_or(stored.created_at);
         self.video_repository
-            .update_chapters(&stored.clone().record_chapters_check(
+            .update_chapters(&stored.record_chapters_check(
                 chapters,
-                published_at.unwrap_or(stored.created_at),
+                published_at,
                 self.clock.now(),
             ))
     }

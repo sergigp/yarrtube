@@ -396,6 +396,73 @@ mod tests {
     }
 
     #[test]
+    fn it_should_discard_the_thumbnail_if_the_video_was_given_one_meanwhile() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let thumbnail_repository = Arc::new({
+            let video_repository = video_repository.clone();
+            let video_id = video.id.clone();
+            FakeThumbnailRepository::with_result(Some(FetchedThumbnail {
+                path: PathBuf::from("yt1.jpg"),
+                published_at: Some(published_at()),
+            }))
+            .with_on_fetch(move || {
+                video_repository
+                    .update_thumbnail(&video_id, DOWNLOADED_THUMBNAIL, later())
+                    .unwrap()
+            })
+        });
+        let task = FetchThumbnailTask::new(Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            thumbnail_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(FixedClock(later())),
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+        )));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().with_thumbnail(DOWNLOADED_THUMBNAIL, later())]
+        );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
+        );
+        assert_eq!(
+            *thumbnail_repository.calls.lock().unwrap(),
+            vec![thumbnail_call(&video)]
+        );
+    }
+
+    #[test]
     fn it_should_leave_the_video_untouched_when_the_thumbnail_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -446,6 +513,9 @@ mod tests {
             vec![thumbnail_call(&video)]
         );
     }
+
+    /// A thumbnail a download placed while the fetch was in flight.
+    const DOWNLOADED_THUMBNAIL: &str = "Season 2026/S2026E031501 - My Video.jpg";
 
     fn my_channel_id() -> ChannelHandle {
         ChannelHandle::new("@somechannel").unwrap()

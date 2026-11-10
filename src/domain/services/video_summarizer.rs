@@ -199,10 +199,10 @@ impl VideoSummarizer {
             "generating video summary"
         );
         let text = self.write_summary(video, &input, job)?;
-        if !self.still_wanted(video)? {
+        let Some(stored) = self.still_wanted(video)? else {
             info!(video_id = %video.id, "video no longer wants a summary, dropping the generated one");
             return Ok(());
-        }
+        };
         let now = self.clock.now();
         self.video_summary_repository.save(&VideoSummary::create(
             video.id.clone(),
@@ -211,7 +211,7 @@ impl VideoSummarizer {
             now,
         ))?;
         self.video_repository
-            .update_summary(&video.clone().mark_summary_generated(now))?;
+            .update_summary(&stored.mark_summary_generated(now))?;
         info!(
             video_id = %video.id,
             summary = %text.as_str(),
@@ -223,31 +223,33 @@ impl VideoSummarizer {
         Ok(())
     }
 
-    /// Whether the generated summary should still be stored now the
-    /// minutes-long generation is done: the video still exists and is
-    /// summarizable (not deleted, reset for redownload or already
+    /// The stored video when the generated summary should still be stored
+    /// now the minutes-long generation is done: the video still exists and
+    /// is summarizable (not deleted, reset for redownload or already
     /// summarized), AI summaries are still on, and its source still has them
     /// enabled. Settings or the source's toggle may have changed while it
     /// generated — mirrors `VideoCategorizer`'s re-check before storing.
-    fn still_wanted(&self, video: &Video) -> anyhow::Result<bool> {
-        let Some(stored) = self.video_repository.find(&video.id)? else {
-            return Ok(false);
+    fn still_wanted(&self, video: &Video) -> anyhow::Result<Option<Video>> {
+        let Some(stored) = self
+            .video_repository
+            .find(&video.id)?
+            .filter(Video::is_summarizable)
+        else {
+            return Ok(None);
         };
-        if !stored.is_summarizable() {
-            return Ok(false);
-        }
         if !self
             .preferences_repository
             .find()?
             .unwrap_or_default()
             .summaries_available()
         {
-            return Ok(false);
+            return Ok(None);
         }
-        Ok(self
+        let enabled = self
             .video_owner_finder
             .find(&stored)?
-            .is_some_and(|owner| owner.summaries_enabled))
+            .is_some_and(|owner| owner.summaries_enabled);
+        Ok(enabled.then_some(stored))
     }
 
     /// One call for a whole transcript; for one in parts, a call per part
