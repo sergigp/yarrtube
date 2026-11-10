@@ -37,7 +37,7 @@
 - [x] 2.18 `it_should_mark_old_subtitles_unavailable_without_captions`
 - [x] 2.19 `it_should_schedule_the_next_check_if_the_chapters_fetch_fails`
 - [x] 2.20 `it_should_fail_the_chapters_after_the_eleventh_failed_fetch`
-- [ ] 2.21 `it_should_schedule_the_next_check_if_the_quality_check_fails`
+- [x] 2.21 `it_should_schedule_the_next_check_if_the_quality_check_fails`
 - [ ] 2.22 `it_should_fail_the_quality_after_the_eleventh_failed_check`
 - [ ] 2.23 `it_should_schedule_the_next_attempt_if_the_summary_is_rejected`
 - [ ] 2.24 `it_should_count_ollama_down_as_a_failed_summary_attempt`

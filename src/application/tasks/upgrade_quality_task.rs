@@ -216,7 +216,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "YouTube's SABR-only streaming degraded the quality check".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -325,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_if_the_probe_fails() {
+    fn it_should_schedule_the_next_check_if_the_quality_check_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
@@ -368,7 +374,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -431,7 +443,14 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "yt-dlp failed to download a higher quality: HTTP Error 403: Forbidden"
+                    .to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -500,7 +519,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "yt-dlp downloaded no higher quality (Some(240)) than the recorded one (Some(360))".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -569,7 +594,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "yt-dlp downloaded no higher quality (Some(360)) than the recorded one (Some(360))".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -696,7 +727,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "YouTube's SABR-only streaming degraded the quality check".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {

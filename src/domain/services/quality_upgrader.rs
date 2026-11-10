@@ -19,6 +19,9 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+/// Why a check the SABR-only streaming experiment degraded runs again.
+const DEGRADED_REASON: &str = "YouTube's SABR-only streaming degraded the quality check";
+
 /// Upgrades a young downloaded video to the better quality YouTube finished
 /// processing after its download — see the `video-download` capability's
 /// "Young Video Quality Upgrade". Runs from the `upgrade_quality` task;
@@ -64,8 +67,9 @@ pub trait QualityUpgraderApi: Send + Sync {
     /// re-downloads into the video's staging dir and replaces its episode
     /// file in the owner's show directory in place, then records the new tier and height
     /// and publishes `VideoDownloaded`. Every check is recorded under the
-    /// `late-video-data` policy. Best effort: a failed probe or re-download
-    /// is recorded as a failed check, never returned.
+    /// `late-video-data` policy: a failed, degraded or no-better probe or
+    /// re-download is a failed attempt, re-queued under the `video-retries`
+    /// policy. Fails only when the video can't be read or stored.
     fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
@@ -75,13 +79,13 @@ impl QualityUpgraderApi for QualityUpgrader {
             return Ok(VideoStepOutcome::Settled);
         };
         let staged = self.staging_area.for_video(&video.id);
-        if let Err(e) =
-            self.check_and_upgrade(&video, target.quality, staged.path(), &target.output_dir)
-        {
-            warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
-            self.record_failed_check(&video);
+        match self.check_and_upgrade(&video, target.quality, staged.path(), &target.output_dir) {
+            Ok(()) => self.retry_if_degraded(&video),
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
+                self.record_failed_check(&video, e.to_string())
+            }
         }
-        Ok(VideoStepOutcome::Settled)
     }
 }
 
@@ -215,20 +219,52 @@ impl QualityUpgrader {
         probed_height: Option<u32>,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<()> {
-        let now = self.clock.now();
-        self.video_updater
-            .update(&video.id, |video| {
-                Some(video.record_quality_check(probed_height, published_at, now))
-            })
+        self.record_check_on(video, probed_height, published_at)
             .map(|_| ())
     }
 
-    /// Best effort, like the check itself: a failure to record the failed
-    /// check is only logged.
-    fn record_failed_check(&self, video: &Video) {
-        if let Err(e) = self.record_check(video, None, video.created_at) {
-            warn!(video_id = %video.id, error = %e, "failed to record a failed quality check");
+    /// The video as stored once the check is recorded on it.
+    fn record_check_on(
+        &self,
+        video: &Video,
+        probed_height: Option<u32>,
+        published_at: DateTime<Utc>,
+    ) -> anyhow::Result<Option<Video>> {
+        let now = self.clock.now();
+        self.video_updater.update(&video.id, |video| {
+            Some(video.record_quality_check(probed_height, published_at, now))
+        })
+    }
+
+    /// A check that completed but was degraded by SABR left the quality
+    /// Retrying: it runs again when its next attempt is due.
+    fn retry_if_degraded(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
+        let stored = self.video_repository.find(&video.id)?;
+        Ok(Self::next_check(stored, DEGRADED_REASON.to_string()))
+    }
+
+    /// When a Retrying quality check runs again; settled otherwise.
+    fn next_check(stored: Option<Video>, reason: String) -> VideoStepOutcome {
+        match stored.and_then(|video| video.quality_checks.state.next_attempt_at()) {
+            Some(at) => VideoStepOutcome::RetryAt { at, reason },
+            None => VideoStepOutcome::Settled,
         }
+    }
+
+    /// Records a failed check, failed for `reason`: Retrying, run again when
+    /// its next attempt is due, or Failed.
+    fn record_failed_check(
+        &self,
+        video: &Video,
+        reason: String,
+    ) -> anyhow::Result<VideoStepOutcome> {
+        let recorded = self.record_check_on(video, None, video.created_at)?;
+        Ok(
+            match recorded.and_then(|video| video.quality_checks.state.next_attempt_at()) {
+                Some(at) => VideoStepOutcome::RetryAt { at, reason },
+                None => VideoStepOutcome::Settled,
+            },
+        )
     }
 
     /// Best effort, like `VideoDownloader`'s: the upgrade is already
