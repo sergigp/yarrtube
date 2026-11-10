@@ -82,7 +82,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
         Ok(LlmReply {
             content: response.message.content,
             input_tokens: response.prompt_eval_count,
-            output_tokens: 0,
+            output_tokens: response.eval_count,
             stopped_at_limit: response.done_reason.as_deref() == Some("length"),
             refusal: None,
         })
@@ -196,6 +196,8 @@ struct ChatResponse {
     message: ChatMessage,
     #[serde(default)]
     prompt_eval_count: u32,
+    #[serde(default)]
+    eval_count: u32,
     done_reason: Option<String>,
 }
 
@@ -341,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_read_the_answer_and_input_tokens() {
+    fn it_should_read_the_answer_and_tokens() {
         let mut server = mockito::Server::new();
         let _chat = server.mock("POST", "/api/chat").with_body(ANSWER).create();
 
@@ -354,7 +356,7 @@ mod tests {
             LlmReply {
                 content: "Three games.".to_string(),
                 input_tokens: 120,
-                output_tokens: 0,
+                output_tokens: 250,
                 stopped_at_limit: false,
                 refusal: None,
             }
@@ -586,7 +588,7 @@ mod tests {
         OllamaUrl::new(server.url()).unwrap()
     }
 
-    const ANSWER: &str = r#"{"message": {"role": "assistant", "content": "Three games."}, "done_reason": "stop", "prompt_eval_count": 120}"#;
+    const ANSWER: &str = r#"{"message": {"role": "assistant", "content": "Three games."}, "done_reason": "stop", "prompt_eval_count": 120, "eval_count": 250}"#;
 
     fn chat() -> LlmChat {
         LlmChat {
