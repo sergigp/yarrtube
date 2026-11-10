@@ -465,7 +465,6 @@ impl Video {
     }
 
     /// Records a failed summary attempt: Retrying, or Failed on the last.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn record_summary_failure(self, now: DateTime<Utc>) -> Self {
         Self {
             summary: self.summary.fail(now),

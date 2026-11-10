@@ -56,7 +56,9 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{PlaybackPosition, StepState, Video, VideoChapter, YoutubeVideoId};
+    use crate::domain::video::{
+        PlaybackPosition, RetryAttempts, StepState, StepStatus, Video, VideoChapter, YoutubeVideoId,
+    };
     use crate::domain::video_summary::{SummaryMessages, SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
@@ -83,7 +85,7 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, Duration, Utc};
     use std::ops::Range;
 
     const OUTPUT_DIR: &str = "/videos/creators/somechannel";
@@ -1122,7 +1124,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_fail_the_task_and_stay_missing_on_a_server_fault() {
+    fn it_should_count_a_server_fault_as_a_failed_summary_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1144,16 +1146,25 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Err("model crashed".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "model crashed".to_string(),
+            })
+        );
         assert_eq!(summary_repository.find(&video.id).unwrap(), None);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone())
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
         );
     }
 
     #[test]
-    fn it_should_fail_the_task_when_the_answer_stopped_at_the_limit() {
+    fn it_should_schedule_the_next_attempt_if_the_summary_is_rejected() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1180,20 +1191,32 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(
-                "the model ran out of context (12288 tokens: 100 of input, 12188 left to think and answer)"
-                    .to_string()
-            )
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "the model ran out of context (12288 tokens: 100 of input, 12188 left to think and answer)"
+                    .to_string(),
+            })
         );
         assert_eq!(summary_repository.find(&video.id).unwrap(), None);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone())
+            Some(Video {
+                version: 1,
+                summary: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 1,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video.clone()
+            })
         );
     }
 
     #[test]
-    fn it_should_fail_the_task_when_ollama_refuses_the_prompt() {
+    fn it_should_count_a_refused_prompt_as_a_failed_summary_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1217,17 +1240,23 @@ mod tests {
 
         assert_eq!(
             result,
-            Err("Ollama refused the call: request too long".to_string())
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "Ollama refused the call: request too long".to_string(),
+            })
         );
         assert_eq!(summary_repository.find(&video.id).unwrap(), None);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone())
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
         );
     }
 
     #[test]
-    fn it_should_fail_the_task_when_the_answer_is_only_reasoning() {
+    fn it_should_count_an_answer_of_only_reasoning_as_a_failed_summary_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1249,11 +1278,20 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Err("The model's answer is empty".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "The model's answer is empty".to_string(),
+            })
+        );
         assert_eq!(summary_repository.find(&video.id).unwrap(), None);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone())
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
         );
     }
 
@@ -1284,7 +1322,13 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Err("model crashed".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "model crashed".to_string(),
+            })
+        );
         assert_eq!(
             sent_messages(&llm),
             vec![
@@ -1296,7 +1340,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_fail_the_task_when_the_subtitle_file_is_gone() {
+    fn it_should_count_a_missing_subtitle_file_as_a_failed_summary_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1318,9 +1362,21 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Err("video's subtitle file is gone".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "video's subtitle file is gone".to_string(),
+            })
+        );
         assert_eq!(llm.chats(), vec![]);
-        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
+        );
     }
 
     #[test]
@@ -1492,7 +1548,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_fail_the_task_when_the_subtitle_file_is_empty() {
+    fn it_should_count_an_empty_subtitle_file_as_a_failed_summary_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1514,11 +1570,20 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Err("video's subtitle file has no text".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "video's subtitle file has no text".to_string(),
+            })
+        );
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone())
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
         );
     }
 
@@ -1651,7 +1716,7 @@ mod tests {
             run(&opted_out, &video).unwrap();
         });
         let failed = captured_log_lines(|| {
-            run(&failing, &video).unwrap_err();
+            run(&failing, &video).unwrap();
         });
 
         assert!(

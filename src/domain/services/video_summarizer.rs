@@ -159,15 +159,31 @@ impl VideoSummarizer {
     }
 
     fn generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<VideoStepOutcome> {
-        self.try_generate(video, job)
-            .map(|_| VideoStepOutcome::Settled)
-            .map_err(|failure| {
-                let cause = match failure {
-                    Failure::Server(cause) | Failure::Rejected(cause) => cause,
-                };
+        match self.try_generate(video, job) {
+            Ok(()) => Ok(VideoStepOutcome::Settled),
+            Err(Failure::Server(cause) | Failure::Rejected(cause)) => {
                 error!(video_id = %video.id, error = format!("{cause:#}"), "failed to summarize video");
-                cause
-            })
+                self.record_failure(video, cause.to_string())
+            }
+        }
+    }
+
+    /// Records a failed attempt, failed for `reason`, on the video as
+    /// stored (unless it no longer wants a summary): Retrying, run again
+    /// when its next attempt is due, or Failed.
+    fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
+        let now = self.clock.now();
+        let recorded = self.video_updater.update(&video.id, |video| {
+            video
+                .is_summarizable()
+                .then(|| video.record_summary_failure(now))
+        })?;
+        Ok(
+            match recorded.and_then(|video| video.summary.next_attempt_at()) {
+                Some(at) => VideoStepOutcome::RetryAt { at, reason },
+                None => VideoStepOutcome::Settled,
+            },
+        )
     }
 
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> Result<(), Failure> {
