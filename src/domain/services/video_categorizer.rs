@@ -16,6 +16,7 @@ use crate::infrastructure::repositories::sqlite_preferences_repository::Preferen
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
 use std::sync::Arc;
@@ -237,7 +238,9 @@ impl VideoCategorizer {
         };
         match Self::fail_if_rejected(&rejected) {
             Ok(()) => self.mark_categorized(video),
-            Err(cause) => self.fail_attempt(video, job, &rejected, cause.to_string()),
+            Err(cause) => {
+                self.fail_attempt(video, job, &rejected, error_report::cause_chain(&cause))
+            }
         }
     }
 
@@ -448,7 +451,7 @@ impl VideoCategorizer {
         reason: anyhow::Error,
     ) -> anyhow::Result<VideoStepOutcome> {
         warn!(video_id = %video.id, %reason, "couldn't categorize video");
-        let reason = reason.to_string();
+        let reason = error_report::cause_chain(&reason);
         let rejected = Self::rejected_all(&job.pending, &reason);
         self.fail_attempt(video, job, &rejected, reason)
     }

@@ -17,6 +17,7 @@ use crate::infrastructure::repositories::sqlite_video_metadata_repository::Video
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::staging_area::StagingArea;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::{Path, PathBuf};
@@ -467,8 +468,8 @@ impl VideoDownloader {
         started: Video,
         error: anyhow::Error,
     ) -> anyhow::Result<VideoStepOutcome> {
-        error!(video_id = %started.id, error = %error, "video download errored");
-        let reason = error.to_string();
+        let reason = error_report::cause_chain(&error);
+        error!(video_id = %started.id, error = %reason, "video download errored");
         let errored = self.mark_errored(started, &reason)?;
         Ok(Self::next_attempt(errored, reason))
     }

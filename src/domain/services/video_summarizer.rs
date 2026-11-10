@@ -14,6 +14,7 @@ use crate::infrastructure::repositories::sqlite_preferences_repository::Preferen
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
 use std::sync::Arc;
@@ -123,7 +124,7 @@ impl VideoSummarizerApi for VideoSummarizer {
             }
             Err(Skip::Unreachable(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't summarize video");
-                self.record_failure(video, reason.to_string())
+                self.record_failure(video, error_report::cause_chain(&reason))
             }
         }
     }
@@ -175,7 +176,7 @@ impl VideoSummarizer {
             Ok(()) => Ok(VideoStepOutcome::Settled),
             Err(Failure::Server(cause) | Failure::Rejected(cause)) => {
                 error!(video_id = %video.id, error = format!("{cause:#}"), "failed to summarize video");
-                self.record_failure(video, cause.to_string())
+                self.record_failure(video, error_report::cause_chain(&cause))
             }
         }
     }

@@ -1271,6 +1271,48 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_the_whole_cause_if_the_summary_call_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![Err(anyhow::anyhow!("Connection refused")
+            .context("error sending request for url (http://ollama:11434/api/chat)"))]);
+        let video = subtitled_video();
+        video_repository.insert(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm,
+            files_with(SHORT_SRT),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "error sending request for url (http://ollama:11434/api/chat): Connection refused"
+                    .to_string(),
+            })
+        );
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
+        );
+    }
+
+    #[test]
     fn it_should_schedule_the_next_attempt_if_the_summary_is_rejected() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
