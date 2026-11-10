@@ -1191,7 +1191,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         let first_call = line("categories=Sicilian, Tech");
         let fallback_call = line("categories=Tech ");
         let verdict = line("category=Sicilian");
-        let rejected = line("category=Tech");
+        let rejected = line("ERROR ");
         assert!(first_call.starts_with("INFO asked the model"));
         assert!(first_call.contains(&format!("video_id={}", video.id)));
         assert!(first_call.contains("fallback=false"));
@@ -1205,7 +1205,48 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         assert!(verdict.contains("verdict=YES"));
         assert!(verdict.contains("reason=A Sicilian game."));
         assert!(rejected.starts_with("ERROR "));
+        assert!(rejected.contains("category=Tech"));
         assert!(rejected.contains("reason=its answer isn't usable"));
+    }
+
+    #[test]
+    fn it_should_log_the_fallback() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[&prompted_category("Sicilian"), &prompted_category("Tech")],
+        );
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![
+                Ok(LlmReply {
+                    stopped_at_limit: true,
+                    ..reply("").unwrap()
+                }),
+                reply(&answers(&[("Sicilian", YES)])),
+                reply(&answers(&[("Tech", NO)])),
+            ]),
+        );
+
+        let lines = captured_log_lines(|| {
+            run(&task, &video).unwrap();
+        });
+
+        let fallbacks = lines
+            .iter()
+            .filter(|line| line.starts_with("WARN ") || line.starts_with("ERROR "))
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            fallbacks,
+            ["Sicilian", "Tech"].map(|name| format!(
+                "WARN the model couldn't answer for a category, asking it alone \
+                 video_id={} category={name} reason=it hit the 3072-token output limit",
+                video.id
+            ))
+        );
     }
 
     /// The task over `db`, asking `llm`.

@@ -268,7 +268,7 @@ impl VideoCategorizer {
             (None, false) => None,
         };
         if let Some(reason) = rejection {
-            return Ok(Self::rejected_all(video, categories, &reason));
+            return Ok(Self::rejected_all(categories, &reason));
         }
         categories
             .iter()
@@ -278,10 +278,7 @@ impl VideoCategorizer {
                     .store(video, job, category, answer)
                     .err()
                     .map(|error| Err(Stop::Failed(error))),
-                None => {
-                    Self::log_rejected(video, category, "its answer isn't usable");
-                    Some(Ok((category, "its answer isn't usable".to_string())))
-                }
+                None => Some(Ok((category, "its answer isn't usable".to_string()))),
             })
             .collect()
     }
@@ -294,16 +291,23 @@ impl VideoCategorizer {
         job: &CategorizationJob,
         rejected: Vec<(&'a Category, String)>,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
-        if job.pending.len() < 2 {
-            return Ok(rejected);
-        }
+        let rejected = match job.pending.len() {
+            0 | 1 => rejected,
+            _ => rejected
+                .into_iter()
+                .map(|(category, reason)| {
+                    Self::log_falling_back(video, category, &reason);
+                    self.ask(video, job, std::slice::from_ref(category), Call::Fallback)
+                })
+                .collect::<Result<Vec<_>, Stop>>()?
+                .into_iter()
+                .flatten()
+                .collect(),
+        };
         rejected
-            .into_iter()
-            .map(|(category, _)| {
-                self.ask(video, job, std::slice::from_ref(category), Call::Fallback)
-            })
-            .collect::<Result<Vec<_>, Stop>>()
-            .map(|rejected| rejected.into_iter().flatten().collect())
+            .iter()
+            .for_each(|(category, reason)| Self::log_rejected(video, category, reason));
+        Ok(rejected)
     }
 
     /// Applies `category`'s verdict, unless the pair changed during the call.
@@ -344,18 +348,11 @@ impl VideoCategorizer {
         Ok(())
     }
 
-    /// Every one of `categories`, rejected for `reason`, logged.
-    fn rejected_all<'a>(
-        video: &Video,
-        categories: &'a [Category],
-        reason: &str,
-    ) -> Vec<(&'a Category, String)> {
+    /// Every one of `categories`, rejected for `reason`.
+    fn rejected_all<'a>(categories: &'a [Category], reason: &str) -> Vec<(&'a Category, String)> {
         categories
             .iter()
-            .map(|category| {
-                Self::log_rejected(video, category, reason);
-                (category, reason.to_string())
-            })
+            .map(|category| (category, reason.to_string()))
             .collect()
     }
 
@@ -379,6 +376,15 @@ impl VideoCategorizer {
             output_tokens = reply.output_tokens,
             duration_seconds = started.elapsed().as_secs_f64(),
             "asked the model"
+        );
+    }
+
+    fn log_falling_back(video: &Video, category: &Category, reason: &str) {
+        warn!(
+            video_id = %video.id,
+            category = %category.name.as_str(),
+            %reason,
+            "the model couldn't answer for a category, asking it alone"
         );
     }
 
