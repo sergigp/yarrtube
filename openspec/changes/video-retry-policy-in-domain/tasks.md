@@ -35,7 +35,7 @@
 - [x] 2.16 `it_should_fail_the_subtitles_after_the_eleventh_failed_check`
 - [x] 2.17 `it_should_keep_young_subtitles_pending_after_a_conclusive_check`
 - [x] 2.18 `it_should_mark_old_subtitles_unavailable_without_captions`
-- [ ] 2.19 `it_should_schedule_the_next_check_if_the_chapters_fetch_fails`
+- [x] 2.19 `it_should_schedule_the_next_check_if_the_chapters_fetch_fails`
 - [ ] 2.20 `it_should_fail_the_chapters_after_the_eleventh_failed_fetch`
 - [ ] 2.21 `it_should_schedule_the_next_check_if_the_quality_check_fails`
 - [ ] 2.22 `it_should_fail_the_quality_after_the_eleventh_failed_check`

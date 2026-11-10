@@ -193,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_chapters_attempt() {
+    fn it_should_schedule_the_next_check_if_the_chapters_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Err(
@@ -212,7 +212,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "Video unavailable".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
