@@ -1039,6 +1039,39 @@ mod tests {
     }
 
     #[test]
+    fn it_should_schedule_the_download_of_a_retrying_video_once_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = Video {
+            thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+            ..my_video()
+                .mark_errored("HTTP Error 503", fixed_timestamp() - Duration::days(2))
+                .mark_errored("HTTP Error 503", fixed_timestamp() - Duration::days(2))
+        };
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &download_video(&video))]
+        );
+    }
+
+    #[test]
     fn it_should_schedule_nothing_for_a_settled_errored_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -3184,6 +3217,55 @@ mod tests {
         Task::SummarizeVideo {
             video_id: video.id.as_str().to_string(),
         }
+    }
+
+    /// Stores `video` as the only video of `my_channel()`.
+    fn seed_channel_video(
+        db: &TestDatabase,
+        video_repository: &SqliteVideoRepository,
+        video: &Video,
+    ) {
+        save_channel_video(
+            video_repository,
+            &SqliteChannelRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            video,
+        );
+    }
+
+    /// A sync whose file, metadata and AI ports no test of it observes.
+    fn sync_task(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        task_repository: Arc<SqliteTaskRepository>,
+    ) -> SyncVideoTask {
+        SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            task_repository,
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            video_category_assigner(db.database()),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            video_categorizer(db.database()),
+        ))
     }
 
     fn pending_task(id: i64, task: &Task) -> ScheduledTask {
