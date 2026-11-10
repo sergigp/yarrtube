@@ -1243,6 +1243,62 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_map_summary_states_and_verdicts_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 27);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, summary_state) VALUES
+             ('missing', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'MISSING'),
+             ('generated', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'GENERATED'),
+             ('gave_up', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'UNAVAILABLE');
+             INSERT INTO video_category_verdicts (video_id, category_id, verdict, decided_by, decided_at) VALUES
+             ('generated', 'tech', 'YES', 'AI', '2026-01-01T00:00:00+00:00'),
+             ('generated', 'chess', 'UNAVAILABLE', 'AI', '2026-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let verdicts = conn
+            .prepare("SELECT category_id, verdict FROM video_category_verdicts ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let step =
+            |id: &str, status: &str, attempts: u32| (id.to_string(), status.to_string(), attempts);
+        assert_eq!(
+            (
+                step_columns(&conn, "summary_status", "summary_failed_attempts"),
+                step_columns(
+                    &conn,
+                    "categorization_status",
+                    "categorization_failed_attempts"
+                ),
+                verdicts,
+            ),
+            (
+                Ok(vec![
+                    step("missing", "PENDING", 0),
+                    step("generated", "DONE", 0),
+                    step("gave_up", "FAILED", 11),
+                ]),
+                Ok(vec![
+                    step("missing", "PENDING", 0),
+                    step("generated", "PENDING", 0),
+                    step("gave_up", "PENDING", 0),
+                ]),
+                Ok(vec![
+                    ("tech".to_string(), "YES".to_string()),
+                    ("chess".to_string(), "FAILED".to_string()),
+                ]),
+            )
+        );
+    }
+
     /// Each video's id with a step's status and failed attempts, in
     /// insertion order.
     fn step_columns(
