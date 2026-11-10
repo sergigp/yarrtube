@@ -5,7 +5,7 @@ use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
     VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
+use crate::domain::video::{StepStatus, Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -231,7 +231,16 @@ impl VideoCategorizer {
         };
         match Self::fail_if_rejected(&rejected) {
             Ok(()) => Ok(VideoStepOutcome::Settled),
-            Err(cause) => self.record_failure(video, cause.to_string()),
+            Err(cause) => {
+                let recorded = self.record_attempt_failure(video)?;
+                if recorded
+                    .as_ref()
+                    .is_some_and(|video| video.categorization.status == StepStatus::Failed)
+                {
+                    self.give_up(video, job, &rejected)?;
+                }
+                Ok(Self::next_attempt(recorded, cause.to_string()))
+            }
         }
     }
 
@@ -437,16 +446,48 @@ impl VideoCategorizer {
     /// Records a failed attempt, failed for `reason`: Retrying, run again
     /// when its next attempt is due, or Failed.
     fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
+        let recorded = self.record_attempt_failure(video)?;
+        Ok(Self::next_attempt(recorded, reason))
+    }
+
+    /// The video as stored once one more failed attempt is recorded on it.
+    fn record_attempt_failure(&self, video: &Video) -> anyhow::Result<Option<Video>> {
         let now = self.clock.now();
-        let recorded = self.video_updater.update(&video.id, |video| {
+        self.video_updater.update(&video.id, |video| {
             Some(video.record_categorization_failure(now))
-        })?;
-        Ok(
-            match recorded.and_then(|video| video.categorization.next_attempt_at()) {
-                Some(at) => VideoStepOutcome::RetryAt { at, reason },
-                None => VideoStepOutcome::Settled,
-            },
-        )
+        })
+    }
+
+    /// When a Retrying categorization runs again; settled otherwise.
+    fn next_attempt(recorded: Option<Video>, reason: String) -> VideoStepOutcome {
+        match recorded.and_then(|video| video.categorization.next_attempt_at()) {
+            Some(at) => VideoStepOutcome::RetryAt { at, reason },
+            None => VideoStepOutcome::Settled,
+        }
+    }
+
+    /// Gives each of `rejected` a `failed` verdict once the categorization
+    /// gave up, unless it is no longer pending as the job started (see
+    /// `still_pending`).
+    fn give_up(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        rejected: &[(&Category, String)],
+    ) -> anyhow::Result<()> {
+        rejected.iter().try_for_each(|(category, _)| {
+            let verdict = VideoCategoryVerdict::failed(
+                video.id.clone(),
+                category.id.clone(),
+                job.settings.model.as_str(),
+                self.clock.now(),
+            );
+            self.video_category_assigner
+                .apply_verdict_if(&verdict, &job.owner.source, &|| {
+                    self.still_pending(video, job, category)
+                })
+                .map(|_| ())
+        })
     }
 
     fn fail_if_rejected(rejected: &[(&Category, String)]) -> anyhow::Result<()> {

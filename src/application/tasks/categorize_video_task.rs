@@ -1035,6 +1035,60 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
+    fn it_should_fail_pending_categories_after_the_eleventh_failed_attempt() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let (chess, food) = (prompted_category("Chess"), prompted_category("Food"));
+        seed(&db, &video, &[&chess, &food]);
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![
+                reply(&answers(&[("Chess", NO)])),
+                Ok(LlmReply::refused("model is too large")),
+            ]),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &chess, Verdict::No, "A chess game."),
+                failed_verdict(&video, &food),
+            ])
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState {
+                    status: StepStatus::Failed,
+                    attempts: RetryAttempts {
+                        failed: 11,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video
+            })
+        );
+    }
+
+    #[test]
     fn it_should_retry_only_the_categories_still_pending() {
         let db = TestDatabase::new();
         let video = summarized_video();
@@ -1464,6 +1518,13 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     ) -> Vec<VideoCategoryVerdict> {
         verdicts.sort_by(|a, b| a.category_id.cmp(&b.category_id));
         verdicts.to_vec()
+    }
+
+    fn failed_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
+        VideoCategoryVerdict {
+            reason: None,
+            ..ai_verdict(video, category, Verdict::Failed, "")
+        }
     }
 
     fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {

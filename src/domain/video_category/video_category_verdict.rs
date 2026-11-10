@@ -96,7 +96,6 @@ impl VideoCategoryVerdict {
     }
 
     /// The AI gave up on this pair under the current settings.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn failed(
         video_id: VideoId,
         category_id: CategoryId,

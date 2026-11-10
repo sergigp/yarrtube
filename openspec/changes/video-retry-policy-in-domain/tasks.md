@@ -45,7 +45,7 @@
 - [x] 2.26 `it_should_mark_the_summary_done_once_generated`
 - [x] 2.27 `it_should_schedule_the_next_attempt_if_a_category_is_rejected`
 - [x] 2.28 `it_should_count_ollama_down_as_a_failed_categorization_attempt`
-- [ ] 2.29 `it_should_fail_pending_categories_after_the_eleventh_failed_attempt`
+- [x] 2.29 `it_should_fail_pending_categories_after_the_eleventh_failed_attempt`
 - [ ] 2.30 `it_should_mark_the_categorization_done_when_nothing_is_rejected`
 - [ ] 2.31 `it_should_schedule_the_download_of_a_retrying_video_once_due` (sync); remove `recover_if_due` and its tests
 - [ ] 2.32 `it_should_not_schedule_steps_that_are_not_due` (sync)
