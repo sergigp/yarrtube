@@ -1072,6 +1072,35 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_schedule_steps_that_are_not_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let three_minutes_ago = fixed_timestamp() - Duration::minutes(3);
+        let video = my_video()
+            .mark_errored("HTTP Error 503", three_minutes_ago)
+            .record_thumbnail_failure(three_minutes_ago)
+            .record_summary_failure(three_minutes_ago);
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_schedule_nothing_for_a_settled_errored_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
