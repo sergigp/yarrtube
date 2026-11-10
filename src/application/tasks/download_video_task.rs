@@ -1398,6 +1398,33 @@ mod tests {
     }
 
     #[test]
+    fn it_should_give_up_after_the_eleventh_failed_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = retrying_video(10);
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = failing_download_task(&db, video_repository.clone(), "HTTP Error 503");
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                status: VideoStatus::Failed,
+                download_attempts: RetryAttempts {
+                    failed: 11,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_record_the_download_error() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
