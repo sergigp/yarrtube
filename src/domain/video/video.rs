@@ -474,7 +474,6 @@ impl Video {
     }
 
     /// Records a categorization run that left nothing rejected: Done.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn mark_categorized(self, now: DateTime<Utc>) -> Self {
         Self {
             categorization: self.categorization.succeed(),

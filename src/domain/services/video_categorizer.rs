@@ -230,7 +230,7 @@ impl VideoCategorizer {
             Err(Stop::Failed(error)) => return Err(error),
         };
         match Self::fail_if_rejected(&rejected) {
-            Ok(()) => Ok(VideoStepOutcome::Settled),
+            Ok(()) => self.mark_categorized(video),
             Err(cause) => {
                 let recorded = self.record_attempt_failure(video)?;
                 if recorded
@@ -448,6 +448,14 @@ impl VideoCategorizer {
     fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_attempt_failure(video)?;
         Ok(Self::next_attempt(recorded, reason))
+    }
+
+    /// Records a run that left nothing rejected: Done.
+    fn mark_categorized(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
+        let now = self.clock.now();
+        self.video_updater
+            .update(&video.id, |video| Some(video.mark_categorized(now)))?;
+        Ok(VideoStepOutcome::Settled)
     }
 
     /// The video as stored once one more failed attempt is recorded on it.

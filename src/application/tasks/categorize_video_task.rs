@@ -1089,6 +1089,42 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
+    fn it_should_mark_the_categorization_done_when_nothing_is_rejected() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 2,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let chess = prompted_category("Chess");
+        seed(&db, &video, &[&chess]);
+        let task =
+            categorize_video_task(&db, llm_replying(vec![reply(&answers(&[("Chess", NO)]))]));
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState {
+                    status: StepStatus::Done,
+                    attempts: RetryAttempts::default(),
+                },
+                updated_at: later(),
+                ..video
+            })
+        );
+    }
+
+    #[test]
     fn it_should_retry_only_the_categories_still_pending() {
         let db = TestDatabase::new();
         let video = summarized_video();
