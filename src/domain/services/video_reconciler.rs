@@ -74,7 +74,7 @@ impl VideoReconciler {
 pub trait VideoReconcilerApi: Send + Sync {
     /// Brings the stored video to its desired state (run by the `sync_video`
     /// task, so never alongside another task for the same video):
-    /// categories, broken-file reset, errored recovery, metadata repair,
+    /// categories, broken-file reset, metadata repair,
     /// stranded warning, then schedules every step still needed. No-op if
     /// the video or its owner is gone. Idempotent.
     fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<()>;
@@ -91,7 +91,6 @@ impl VideoReconcilerApi for VideoReconciler {
         self.video_category_assigner
             .assign_video(&video.id, &owner.source)?;
         let video = self.reset_if_broken(video, &owner.target)?;
-        let video = self.recover_if_due(video)?;
         self.repair_metadata(&video, &owner);
         self.warn_if_stranded(&video)?;
         let summaries_wanted = video.is_summarizable() && self.summaries_wanted(&owner)?;
@@ -136,21 +135,6 @@ impl VideoReconciler {
         Ok(reset.unwrap_or(video))
     }
 
-    /// Gives an `Errored` video (one that exhausted its download retries)
-    /// another chance once its recovery cooldown is over
-    /// (`Video::is_due_for_recovery`), with no limit on how many times a
-    /// video may be recovered.
-    fn recover_if_due(&self, video: Video) -> anyhow::Result<Video> {
-        if !video.is_due_for_recovery(self.clock.now()) {
-            return Ok(video);
-        }
-        warn!(
-            youtube_id = %video.youtube_id,
-            "permanently errored video is due for recovery, resetting for redownload"
-        );
-        self.reset_for_redownload(video)
-    }
-
     /// Regenerates the metadata of a `Downloaded` video that has none, the
     /// same way `VideoDownloader` does at download time, referencing the
     /// thumbnail already on disk. Best effort: a failure is logged, the video
@@ -172,7 +156,7 @@ impl VideoReconciler {
         else {
             return;
         };
-        let metadata = metadata.with_thumb(thumbnail_basename(&video));
+        let metadata = metadata.with_thumb(video.thumbnail_basename());
         let nfo_path = owner.target.output_dir.join(nfo_path_for(filename));
         if let Err(e) = self
             .video_metadata_repository
@@ -216,18 +200,16 @@ impl VideoReconciler {
             .map_or(true, |metadata| metadata.is_some())
     }
 
-    /// Logs a video whose download started (In Progress or Errored Retrying)
-    /// with no download pending or running: a step lost on a crash, which
+    /// Logs a video whose download started (In Progress) with no download
+    /// pending or running: a step lost on a crash, which
     /// `schedule_steps` then schedules. A Pending video with no download is
     /// not stranded: a new or just reset video is scheduled by this sync.
     fn warn_if_stranded(&self, video: &Video) -> anyhow::Result<()> {
-        if !matches!(
-            video.status,
-            VideoStatus::InProgress | VideoStatus::ErroredRetrying
-        ) || self
-            .task_repository
-            .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
-            .is_some()
+        if video.status != VideoStatus::InProgress
+            || self
+                .task_repository
+                .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
+                .is_some()
         {
             return Ok(());
         }
@@ -276,14 +258,4 @@ impl VideoReconciler {
                 .schedule(&step.task_for(video), self.clock.now())
         })
     }
-}
-
-/// The thumbnail's file name as an NFO references it, next to the episode.
-fn thumbnail_basename(video: &Video) -> Option<String> {
-    video
-        .thumbnail_filename
-        .as_deref()
-        .and_then(|f| Path::new(f).file_name())
-        .and_then(|f| f.to_str())
-        .map(str::to_string)
 }

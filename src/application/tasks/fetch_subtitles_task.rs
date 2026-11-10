@@ -1,5 +1,5 @@
 use crate::domain::services::{SubtitleFetcher, SubtitleFetcherApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
@@ -19,12 +19,13 @@ impl FetchSubtitlesTask {
 }
 
 impl TaskHandler for FetchSubtitlesTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::FetchSubtitles { video_id } = task else {
             return Err(unexpected_task(task));
         };
         self.subtitle_fetcher
             .fetch(&VideoId::new(video_id.clone())?)
+            .map(TaskOutcome::from)
     }
 }
 
@@ -38,8 +39,8 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, PlaybackPosition, SubtitleState, Video,
-        VideoSubtitlesFetched, YoutubeVideoId,
+        EpisodeNumber, LateDataChecks, PlaybackPosition, RetryAttempts, StepState, StepStatus,
+        Video, VideoSubtitlesFetched, YoutubeVideoId,
     };
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionProbe, CaptionSource, CaptionTracks, FetchedSubtitles,
@@ -121,17 +122,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_state: SubtitleState::Fetched,
                 subtitle_filename: Some("Season 2026/S2026E031501 - Title.en.srt".to_string()),
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
+                subtitles: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -203,7 +200,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -272,7 +269,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -351,7 +348,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -381,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_mark_an_old_video_without_captions_unavailable() {
+    fn it_should_mark_old_subtitles_unavailable_without_captions() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
@@ -391,10 +388,7 @@ mod tests {
             translations_only(),
         ))));
         let video = Video {
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(now() - Duration::days(8)),
-                failed_attempts: 0,
-            },
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -431,16 +425,12 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_state: SubtitleState::Unavailable,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
+                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -450,7 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_keep_subtitles_missing_for_a_young_video_without_captions() {
+    fn it_should_keep_young_subtitles_pending_after_a_conclusive_check() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
@@ -461,10 +451,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = Video {
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(now() - Duration::days(1)),
-                failed_attempts: 0,
-            },
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 4),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -501,15 +488,12 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
+                subtitles: LateDataChecks::checked(Some(now()), 0),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -563,16 +547,12 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_state: SubtitleState::Unavailable,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
+                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -593,10 +573,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = Video {
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(now() - Duration::days(8)),
-                failed_attempts: 0,
-            },
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -633,16 +610,12 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_state: SubtitleState::Unavailable,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
+                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -696,15 +669,18 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "WARNING: [youtube] yt1: Some subtitles may be missing".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                subtitles: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -714,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_if_the_probe_fails() {
+    fn it_should_schedule_the_next_check_if_the_subtitle_check_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
@@ -758,15 +734,18 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                subtitles: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -821,88 +800,23 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                subtitles: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
-        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
-    }
-
-    #[test]
-    fn it_should_mark_subtitles_unavailable_after_three_failed_checks_of_an_old_video() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_transcript_repository =
-            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Err(anyhow::anyhow!(
-            "HTTP Error 429: Too Many Requests"
-        ))));
-        let video = Video {
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(now() - Duration::days(1)),
-                failed_attempts: 2,
-            },
-            ..downloaded_video()
-        };
-        video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let task = FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
-            video_repository.clone(),
-            Arc::new(VideoOwnerFinder::new(
-                Arc::new(SqliteChannelVideoRepository::new(db.database())),
-                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                Arc::new(SqliteChannelRepository::new(db.database())),
-                Arc::new(SqlitePlaylistRepository::new(db.database())),
-                "/videos",
-            )),
-            video_transcript_repository.clone(),
-            caption_repository.clone(),
-            video_file_repository.clone(),
-            Arc::new(SqliteEventPublisher::new(
-                db.database(),
-                Arc::new(FixedClock(now())),
-            )),
-            Arc::new(FixedClock(now())),
-            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
-        )));
-
-        let result = run(&task, &task_for(video.id.as_str()));
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![Video {
-                version: 1,
-                subtitle_state: SubtitleState::Unavailable,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 3,
-                },
-                updated_at: now(),
-                ..video.clone()
-            }]
-        );
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
     }
 
@@ -918,10 +832,7 @@ mod tests {
         ))));
         let video = Video {
             created_at: now() - Duration::days(2),
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(now() - Duration::days(1)),
-                failed_attempts: 5,
-            },
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 5),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -958,20 +869,62 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::hours(24),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 6,
-                },
+                subtitles: LateDataChecks::checked(Some(now()), 6),
                 updated_at: now(),
                 ..video.clone()
             }]
         );
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[test]
+    fn it_should_fail_the_subtitles_after_the_eleventh_failed_check() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Err(anyhow::anyhow!(
+            "HTTP Error 429: Too Many Requests"
+        ))));
+        let video = Video {
+            created_at: now() - Duration::days(2),
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 10),
+            ..downloaded_video()
+        };
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = subtitles_task(&db, video_repository.clone(), caption_repository);
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                subtitles: LateDataChecks {
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(now()),
+                        },
+                    },
+                    last_checked_at: Some(now()),
+                },
+                updated_at: now(),
+                ..video
+            }]
+        );
     }
 
     #[test]
@@ -1005,7 +958,7 @@ mod tests {
 
         let result = run(&task, &task_for("missing"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
     }
@@ -1046,7 +999,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
@@ -1106,7 +1059,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
@@ -1170,7 +1123,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1247,7 +1200,7 @@ mod tests {
             run(&task, &task_for(unavailable.id.as_str())),
         ];
 
-        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(results, [Ok(TaskOutcome::Done), Ok(TaskOutcome::Done)]);
         assert_eq!(video_repository.list().unwrap(), vec![fetched, unavailable]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
@@ -1325,7 +1278,7 @@ mod tests {
             run(&task, &task_for(legacy.id.as_str())),
         ];
 
-        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(results, [Ok(TaskOutcome::Done), Ok(TaskOutcome::Done)]);
         assert_eq!(video_repository.list().unwrap(), vec![pending, legacy]);
         assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
     }
@@ -1407,7 +1360,7 @@ mod tests {
             run(&task, &task_for(flat.id.as_str())),
         ];
 
-        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(results, [Ok(TaskOutcome::Done), Ok(TaskOutcome::Done)]);
         assert_eq!(video_repository.list().unwrap(), vec![in_folder, flat]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(*caption_repository.calls.lock().unwrap(), 0);
@@ -1469,7 +1422,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1537,7 +1490,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1608,7 +1561,16 @@ mod tests {
             run(&task, &task_for(failed.id.as_str())),
         ];
 
-        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(
+            results,
+            [
+                Ok(TaskOutcome::Done),
+                Ok(TaskOutcome::RunAgainAt {
+                    run_at: now() + Duration::minutes(10),
+                    reason: "no fake caption probe configured".to_string(),
+                }),
+            ]
+        );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![staging_dir(&fetched), staging_dir(&failed)]
@@ -1662,7 +1624,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
@@ -1687,10 +1649,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = Video {
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(now() - Duration::days(8)),
-                failed_attempts: 0,
-            },
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -1727,16 +1686,12 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_state: SubtitleState::Unavailable,
-                subtitle_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
+                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -1754,10 +1709,7 @@ mod tests {
             translations_only(),
         ))));
         let video = Video {
-            subtitle_checks: LateDataChecks {
-                last_checked_at: Some(now() - Duration::days(8)),
-                failed_attempts: 0,
-            },
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -1797,7 +1749,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
@@ -1848,12 +1800,60 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
     /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
     /// still missing, created 30 days before `now`.
+    /// Stores `my_channel()` holding `video`.
+    fn seed_channel_video(db: &TestDatabase, video: &Video) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn subtitles_task(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        caption_repository: Arc<FakeCaptionRepository>,
+    ) -> FetchSubtitlesTask {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
+            video_repository,
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            caption_repository,
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            Arc::new(StagingArea::new(video_file_repository, "/videos")),
+        )))
+    }
+
     fn my_channel_id() -> ChannelHandle {
         ChannelHandle::new("@mychannel").unwrap()
     }
@@ -1969,7 +1969,7 @@ mod tests {
             .to_utc()
     }
 
-    fn run(task: &FetchSubtitlesTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &FetchSubtitlesTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

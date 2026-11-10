@@ -41,7 +41,7 @@ The system SHALL poll for eligible tasks in the background and dispatch each one
 - **THEN** the system starts the next eligible task of that lane that is not held back, and starts the held-back task once the conflicting task finishes
 
 ### Requirement: Retry With Fixed Delay Then Give Up
-The system SHALL track a retry counter per task. On failure, the counter SHALL increment and the task SHALL become eligible again after a delay that grows with the number of prior attempts, starting from a configurable base delay, rather than a fixed delay. After 5 failed attempts, the system SHALL log the failure, move the task to the dead-letter table, and remove it from the tasks table so it is not attempted again.
+The system SHALL track a retry counter per task. When a task's handler raises an error (or panics), the counter SHALL increment and the task SHALL become eligible again after a delay that grows with the number of prior attempts, starting from a configurable base delay, rather than a fixed delay. After 5 failed attempts, the system SHALL log the failure, move the task to the dead-letter table, and remove it from the tasks table so it is not attempted again. A handler SHALL raise an error only for failures its domain does not handle itself (such as the database being unavailable); handlers are not told how many attempts remain.
 
 #### Scenario: A task attempt fails
 - **WHEN** a task's handler raises an error
@@ -218,3 +218,14 @@ The system SHALL NOT add a video download task, a thumbnail fetch task, or a sub
 #### Scenario: Video sync requested while one is running
 - **WHEN** a video sync is scheduled for a video whose only video sync is currently running
 - **THEN** a new video sync is added, so a change made while the running one reads the video is not missed
+
+### Requirement: Handler Re-queues Its Task
+A task handler SHALL be able to complete a task by asking for it to run again at a later time, with a reason. The system SHALL then keep the task pending with that run time, that reason as its last error and its retry counter back at 0, instead of deleting it. Re-queueing SHALL NOT count as a failed attempt and SHALL never dead-letter the task.
+
+#### Scenario: Download re-queued after a failed attempt
+- **WHEN** a download handler completes asking to run again at 10:10 because "HTTP Error 503"
+- **THEN** the task stays pending with run time 10:10, last error "HTTP Error 503" and 0 retries
+
+#### Scenario: Re-queued task that had failed before
+- **WHEN** a task that failed twice through handler errors is then re-queued by its handler
+- **THEN** its retry counter is 0, so a later handler error starts its backoff from the first delay

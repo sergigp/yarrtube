@@ -1,3 +1,4 @@
+pub mod categorization_resetter;
 pub mod category_creator;
 pub mod category_deleter;
 pub mod category_member_remover;
@@ -43,11 +44,13 @@ pub mod video_file_deleter;
 pub mod video_owner_finder;
 pub mod video_reconciler;
 pub mod video_relocator;
+pub mod video_retrier;
 pub mod video_searcher;
 pub mod video_summarizer;
 pub mod video_updater;
 pub mod video_watch_state_updater;
 
+pub use categorization_resetter::{CategorizationResetter, CategorizationResetterApi};
 pub use category_creator::{CategoryCreator, CategoryCreatorApi, NewCategory};
 pub use category_deleter::{CategoryDeleter, CategoryDeleterApi};
 pub use category_member_remover::{CategoryMemberRemover, CategoryMemberRemoverApi};
@@ -97,6 +100,7 @@ pub use video_file_deleter::{VideoFileDeleter, VideoFileDeleterApi};
 pub use video_owner_finder::{VideoOwnerFinder, VideoOwnerFinderApi};
 pub use video_reconciler::{VideoReconciler, VideoReconcilerApi};
 pub use video_relocator::{Relocation, SkipReason, VideoRelocator, VideoRelocatorApi};
+pub use video_retrier::{VideoRetrier, VideoRetrierApi};
 pub use video_searcher::{VideoSearcher, VideoSearcherApi};
 pub use video_summarizer::{VideoSummarizer, VideoSummarizerApi};
 pub use video_updater::{VideoUpdater, VideoUpdaterApi};

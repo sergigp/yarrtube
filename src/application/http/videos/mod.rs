@@ -9,12 +9,12 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     SubtitleReader, SubtitleReaderApi, VideoCategoryChoiceSearcher, VideoCategoryChoiceSearcherApi,
-    VideoCategoryEditor, VideoCategoryEditorApi, VideoSearcher, VideoSearcherApi,
-    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    VideoCategoryEditor, VideoCategoryEditorApi, VideoRetrier, VideoRetrierApi, VideoSearcher,
+    VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
-    HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, UpdateWatchStateError,
-    VideoDuration, VideoId, VideoSearchText, WebVtt,
+    HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, RetryVideoError,
+    UpdateWatchStateError, VideoDuration, VideoId, VideoSearchText, WebVtt,
 };
 use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
@@ -203,6 +203,22 @@ pub async fn delete_video_ai_verdicts(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn retry_video(
+    State(video_retrier): State<VideoRetrier>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = VideoId::new(id)?;
+
+    run_blocking(move || video_retrier.retry(&id))
+        .await?
+        .map_err(|error| match error {
+            e @ RetryVideoError::VideoNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+            e @ RetryVideoError::Repository(_) => ApiError::internal(e),
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Maps a failed read or edit of a video's categories, the same for every
 /// route touching them.
 pub fn edit_video_categories_error(error: EditVideoCategoriesError) -> ApiError {
@@ -250,7 +266,9 @@ fn vtt_response(vtt: WebVtt) -> VttResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::http::test_support::{ai_verdict, user_verdict};
+    use crate::application::http::test_support::{
+        ai_verdict, categorization_resetter, user_verdict,
+    };
     use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
@@ -262,7 +280,10 @@ mod tests {
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoId, YoutubeVideoId};
+    use crate::domain::video::{
+        EpisodeNumber, LateDataChecks, RetryAttempts, StepState, Video, VideoChapter, VideoId,
+        VideoStatus, YoutubeVideoId,
+    };
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
     use crate::domain::video_metadata::VideoMetadata;
@@ -316,6 +337,7 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use dto::{
         ChapterResponse, HomeCategorySectionResponse, HomeVideoResponse, HomeVideoSourceResponse,
+        StepResponse, VideoStepsResponse,
     };
     use rusqlite::Connection;
     use std::ops::Range;
@@ -793,6 +815,115 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_retrying_video_with_its_steps() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_errored("HTTP Error 503", fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                status: "RETRYING".to_string(),
+                steps: VideoStepsResponse {
+                    download: StepResponse {
+                        status: "RETRYING".to_string(),
+                        failed_attempts: 1,
+                        next_attempt_at: Some(fixed_timestamp() + Duration::minutes(10)),
+                        failure: Some("HTTP Error 503".to_string()),
+                    },
+                    ..steps_with_download("PENDING")
+                },
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_downloaded_video_with_a_failed_summary() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp())
+        .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp())
+        .mark_summary_failed(fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                steps: VideoStepsResponse {
+                    subtitles: step("DONE"),
+                    summary: StepResponse {
+                        failed_attempts: 11,
+                        ..step("FAILED")
+                    },
+                    ..steps_with_download("DONE")
+                },
+                subtitle_language: Some("en".to_string()),
+                ..downloaded_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_download_details_of_downloaded_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -841,6 +972,10 @@ mod tests {
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 thumbnail_filename: Some("My Video.jpg".to_string()),
+                steps: VideoStepsResponse {
+                    thumbnail: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 duration_seconds: Some(223),
                 synced_at: Some(fixed_timestamp()),
                 ..pending_video_response("vid1", "My Video")
@@ -889,6 +1024,7 @@ mod tests {
             response,
             Ok(vec![VideoResponse {
                 status: "DOWNLOADED".to_string(),
+                steps: steps_with_download("DONE"),
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 updated_at: synced_at,
@@ -948,6 +1084,7 @@ mod tests {
             response,
             Ok(vec![VideoResponse {
                 status: "DOWNLOADED".to_string(),
+                steps: steps_with_download("DONE"),
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 synced_at: Some(fixed_timestamp()),
@@ -1214,7 +1351,7 @@ mod tests {
             fixed_timestamp(),
         )
         .start_download(fixed_timestamp())
-        .mark_excluded(fixed_timestamp());
+        .mark_unavailable(fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -1448,6 +1585,7 @@ mod tests {
             response,
             Ok(vec![VideoResponse {
                 status: "DOWNLOADED".to_string(),
+                steps: steps_with_download("DONE"),
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 synced_at: Some(fixed_timestamp()),
@@ -1571,7 +1709,7 @@ mod tests {
             fixed_timestamp(),
         )
         .start_download(fixed_timestamp())
-        .mark_excluded(fixed_timestamp());
+        .mark_unavailable(fixed_timestamp());
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -2666,7 +2804,7 @@ mod tests {
                 fixed_timestamp(),
             )
             .start_download(fixed_timestamp())
-            .mark_excluded(fixed_timestamp()),
+            .mark_unavailable(fixed_timestamp()),
         );
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -4651,6 +4789,10 @@ mod tests {
             Ok(vec![
                 VideoResponse {
                     subtitle_language: Some("en".to_string()),
+                    steps: VideoStepsResponse {
+                        subtitles: step("DONE"),
+                        ..steps_with_download("DONE")
+                    },
                     ..downloaded_video_response("vid1", "My Video")
                 },
                 downloaded_video_response("vid2", "Other Video"),
@@ -5434,6 +5576,10 @@ mod tests {
             Ok(vec![
                 CategoryVideoResponse {
                     thumbnail_filename: Some("vid3.jpg".to_string()),
+                    steps: VideoStepsResponse {
+                        thumbnail: step("DONE"),
+                        ..steps_with_download("DONE")
+                    },
                     ..category_video_in(
                         category_video_response(
                             "vid3",
@@ -5781,8 +5927,8 @@ mod tests {
             downloaded_video("vid1", "Downloaded", None, 10),
             pending("pending"),
             pending("downloading").start_download(fixed_timestamp()),
-            pending("failed").mark_errored(fixed_timestamp()),
-            pending("excluded").mark_excluded(fixed_timestamp()),
+            pending("failed").mark_download_failed("HTTP Error 503", fixed_timestamp()),
+            pending("excluded").mark_unavailable(fixed_timestamp()),
         ]
         .iter()
         .for_each(|video| {
@@ -6112,6 +6258,10 @@ mod tests {
             response,
             Ok(vec![CategoryVideoResponse {
                 subtitle_language: Some("en".to_string()),
+                steps: VideoStepsResponse {
+                    subtitles: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 ..category_video_in(
                     category_video_response(
                         "vid1",
@@ -6165,6 +6315,10 @@ mod tests {
             response,
             Ok(vec![CategoryVideoResponse {
                 subtitle_language: Some("en".to_string()),
+                steps: VideoStepsResponse {
+                    subtitles: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 chapters: game_chapter_responses(),
                 ..category_video_in(
                     category_video_response(
@@ -6279,6 +6433,10 @@ mod tests {
             response,
             Ok(vec![CategoryVideoResponse {
                 thumbnail_filename: Some("vid1.jpg".to_string()),
+                steps: VideoStepsResponse {
+                    thumbnail: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 published_at: None,
                 channel_name: None,
                 ..category_video_in(
@@ -6735,6 +6893,209 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_retry_a_failed_video() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_download_failed("HTTP Error 503", fixed_timestamp() - Duration::days(1));
+        video_repository.insert(&video).unwrap();
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                status: VideoStatus::Pending,
+                download_attempts: RetryAttempts::default(),
+                download_failure: None,
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::SyncVideo {
+                    video_id: video.id.as_str().to_string()
+                }
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_retry_the_failed_steps_of_a_downloaded_video() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let a_day_ago = fixed_timestamp() - Duration::days(1);
+        let video = Video {
+            subtitles: LateDataChecks::unavailable_at(Some(a_day_ago)),
+            ..new_video(
+                YoutubeVideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .mark_downloaded(
+                Quality::High,
+                "My Video.mp4",
+                Some("My Video.jpg".to_string()),
+                None,
+                a_day_ago,
+            )
+            .mark_summary_failed(a_day_ago)
+        };
+        video_repository.insert(&video).unwrap();
+        let [politics, tech] = ["Politics", "Tech"].map(|name| named_category(name, &[]));
+        [
+            ai_verdict(&video, &politics, Verdict::Yes),
+            ai_verdict(&video, &tech, Verdict::Failed),
+        ]
+        .iter()
+        .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                summary: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(&video, &politics, Verdict::Yes)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_retry_every_retrying_or_failed_step() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let a_day_ago = fixed_timestamp() - Duration::days(1);
+        let video = Video {
+            subtitles: LateDataChecks::checked(Some(a_day_ago), 11),
+            chapters_checks: LateDataChecks::checked(Some(a_day_ago), 2),
+            quality_checks: LateDataChecks::checked(Some(a_day_ago), 11),
+            ..new_video(
+                YoutubeVideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .mark_downloaded(Quality::High, "My Video.mp4", None, None, a_day_ago)
+            .record_thumbnail_failure(a_day_ago)
+            .record_summary_failure(a_day_ago)
+            .mark_categorization_failed(a_day_ago)
+        };
+        video_repository.insert(&video).unwrap();
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                thumbnail: StepState::pending(),
+                subtitles: LateDataChecks::default(),
+                chapters_checks: LateDataChecks::default(),
+                quality_checks: LateDataChecks::default(),
+                summary: StepState::pending(),
+                categorization: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_bring_forward_a_queued_retry() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+        .mark_errored("HTTP Error 503", fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        let download = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+        };
+        task_repository
+            .schedule(&download, fixed_timestamp() + Duration::hours(6))
+            .unwrap();
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &download),
+                pending_task(
+                    2,
+                    &Task::SyncVideo {
+                        video_id: video.id.as_str().to_string()
+                    }
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_retry_an_unknown_video() {
+        let db = TestDatabase::new();
+
+        let response = retry_video(State(video_retrier(&db)), Path("rec1".to_string())).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found"))
+        );
+        assert_eq!(
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+                .list_non_completed()
+                .unwrap(),
+            vec![]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_rerun_a_videos_ai_categorization() {
         let db = TestDatabase::new();
         SqliteChannelRepository::new(db.database())
@@ -6744,7 +7105,8 @@ mod tests {
             YoutubeVideoId::new("vid1").unwrap(),
             "My Video",
             fixed_timestamp(),
-        );
+        )
+        .mark_categorization_failed(fixed_timestamp() - Duration::days(1));
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6761,7 +7123,7 @@ mod tests {
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         [
             ai_verdict(&video, &politics, Verdict::Yes),
-            ai_verdict(&video, &tech, Verdict::Unavailable),
+            ai_verdict(&video, &tech, Verdict::Failed),
             user_verdict(&video, &funny, Verdict::Yes),
         ]
         .iter()
@@ -6781,6 +7143,17 @@ mod tests {
         .await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
+        );
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -6896,6 +7269,20 @@ mod tests {
         .map(|Json(body)| body)
     }
 
+    /// A video retrier over every SQLite repository `db` opens, at
+    /// `fixed_timestamp()`.
+    fn video_retrier(db: &TestDatabase) -> VideoRetrier {
+        VideoRetrier::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
     /// A video category editor over every SQLite repository `database`
     /// opens, at `fixed_timestamp()`.
     fn video_category_editor(database: &dyn Fn() -> Database) -> VideoCategoryEditor {
@@ -6921,6 +7308,7 @@ mod tests {
             ),
             Arc::new(SqliteTaskRepository::new(database(), clock.clone())),
             clock,
+            categorization_resetter(database()),
         )
     }
 
@@ -7242,6 +7630,7 @@ mod tests {
             youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             status: "PENDING".to_string(),
+            steps: steps_with_download("PENDING"),
             quality: None,
             filename: None,
             thumbnail_filename: None,
@@ -7262,10 +7651,33 @@ mod tests {
     fn downloaded_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         VideoResponse {
             status: "DOWNLOADED".to_string(),
+            steps: steps_with_download("DONE"),
             quality: Some("high".to_string()),
             filename: Some(format!("{title}.mp4")),
             synced_at: Some(fixed_timestamp()),
             ..pending_video_response(youtube_id, title)
+        }
+    }
+
+    /// Every step Pending but the download, `download_status`.
+    fn steps_with_download(download_status: &str) -> VideoStepsResponse {
+        VideoStepsResponse {
+            download: step(download_status),
+            thumbnail: step("PENDING"),
+            subtitles: step("PENDING"),
+            chapters: step("PENDING"),
+            quality: step("PENDING"),
+            summary: step("PENDING"),
+            categorization: step("PENDING"),
+        }
+    }
+
+    fn step(status: &str) -> StepResponse {
+        StepResponse {
+            status: status.to_string(),
+            failed_attempts: 0,
+            next_attempt_at: None,
+            failure: None,
         }
     }
 
@@ -7300,6 +7712,7 @@ mod tests {
             youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             status: "DOWNLOADED".to_string(),
+            steps: steps_with_download("DONE"),
             quality: Some("high".to_string()),
             filename: Some(format!("{title}.mp4")),
             thumbnail_filename: None,

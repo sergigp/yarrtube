@@ -34,6 +34,22 @@ describe('VideoListPane', () => {
     expect(row).toHaveTextContent(/Fresh Video3d ago/)
   })
 
+  it('says why a video that is not downloaded has no file', () => {
+    renderPane([
+      aVideo({ title: 'Pending', status: 'PENDING', filename: null }),
+      aVideo({ title: 'Retrying', status: 'RETRYING', filename: null }),
+      aVideo({ title: 'Failed', status: 'FAILED', filename: null }),
+      aVideo({ title: 'Unavailable', status: 'UNAVAILABLE', filename: null }),
+    ])
+
+    expect(screen.getAllByRole('img').map((icon) => icon.getAttribute('aria-label'))).toEqual([
+      'This video is pending.',
+      'This video failed to download and will be retried.',
+      'This video failed to download.',
+      'This video is unavailable on YouTube.',
+    ])
+  })
+
   it('shows no date for a video without a publish date', () => {
     renderPane([aVideo({ title: 'Undated', published_at: null })])
 

@@ -2,7 +2,7 @@ use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::EpisodePaths;
-use crate::domain::video::{FetchedThumbnail, ThumbnailFetch};
+use crate::domain::video::{FetchedThumbnail, ThumbnailFetch, VideoStepOutcome};
 use crate::domain::video::{Video, VideoId};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -54,48 +54,75 @@ pub trait ThumbnailFetcherApi: Send + Sync {
     /// no longer thumbnail-fetchable (`Video::is_thumbnail_fetchable`).
     /// Otherwise fetches one into the video's staging dir, assigns its
     /// episode number and moves it into its owner's show directory's season
-    /// folder as the episode image, recording only the thumbnail; any fetch
-    /// failure (a clean "no thumbnail available" outcome, or a systemic
-    /// error) is logged and swallowed, the staging dir discarded, leaving the
-    /// video untouched. Fails only when the video or its owner can't be read.
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()>;
+    /// folder as the episode image, recording only the thumbnail; a fetch
+    /// that obtains none (a clean "no thumbnail available" outcome, or a
+    /// systemic error) is logged and counted as a failed attempt under the
+    /// `video-retries` policy, the staging dir discarded. Fails only when
+    /// the video or its owner can't be read or stored.
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl ThumbnailFetcherApi for ThumbnailFetcher {
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()> {
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome> {
         let Some(video) = self.video_repository.find(video_id)? else {
             debug!(video_id = %video_id, "video no longer exists, skipping thumbnail fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         if video.thumbnail_filename.is_some() || !video.is_thumbnail_fetchable() {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         }
         let Some(owner) = self.video_owner_finder.find(&video)? else {
             info!(video_id = %video_id, "video has no playlist or channel any more, skipping thumbnail fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
-        let staged = self.staging_area.for_video(&video.id);
-        self.fetch_and_place(&video, staged.path(), &owner.target.output_dir);
-        Ok(())
+        let staged = self.staging_area.for_thumbnail(&video.id);
+        match self.fetch_and_place(&video, staged.path(), &owner.target.output_dir) {
+            Ok(()) => Ok(VideoStepOutcome::Settled),
+            Err(reason) => self.record_failure(&video, reason),
+        }
     }
 }
 
 impl ThumbnailFetcher {
-    /// Fetches and places the thumbnail; every failure is logged.
-    fn fetch_and_place(&self, video: &Video, staging: &Path, output_dir: &Path) {
+    /// Fetches and places the thumbnail; every failure is logged and
+    /// returned as its reason.
+    fn fetch_and_place(
+        &self,
+        video: &Video,
+        staging: &Path,
+        output_dir: &Path,
+    ) -> Result<(), String> {
         match self.fetch_thumbnail(video, staging) {
-            Ok(ThumbnailFetch::Fetched(fetched)) => {
-                if let Err(e) = self.place_thumbnail(video, fetched, output_dir) {
+            Ok(ThumbnailFetch::Fetched(fetched)) => self
+                .place_thumbnail(video, fetched, output_dir)
+                .map_err(|e| {
                     warn!(video_id = %video.id, error = %e, "failed to place fetched thumbnail");
-                }
-            }
+                    e.to_string()
+                }),
             Ok(ThumbnailFetch::Unavailable { reason }) => {
                 warn!(video_id = %video.id, reason = reason.as_deref(), "no thumbnail available for video");
+                Err(reason.unwrap_or_else(|| "no thumbnail available".to_string()))
             }
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
+                Err(e.to_string())
             }
         }
+    }
+
+    /// Records a fetch that obtained no thumbnail on the video as stored
+    /// (unless it got one or stopped wanting one meanwhile): Retrying, run
+    /// again when its next attempt is due, or Failed.
+    fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
+        let now = self.clock.now();
+        let recorded = self.video_updater.update(&video.id, |video| {
+            (video.thumbnail_filename.is_none() && video.is_thumbnail_fetchable())
+                .then(|| video.record_thumbnail_failure(now))
+        })?;
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.thumbnail.next_attempt_at()),
+            reason,
+        ))
     }
 
     fn fetch_thumbnail(&self, video: &Video, staging: &Path) -> anyhow::Result<ThumbnailFetch> {

@@ -85,10 +85,18 @@ impl ScheduledTask {
         }
     }
 
-    /// Whether a failure of this attempt would exhaust the retry budget
-    /// (`fail` would dead-letter rather than retry).
-    pub fn is_last_attempt(&self) -> bool {
-        self.retries + 1 >= MAX_ATTEMPTS
+    /// Pending again to run at `run_at`, as its handler asked, with `reason`
+    /// as its last error and its retry counter back at 0: re-queueing is not
+    /// a failed attempt.
+    pub fn run_again_at(self, run_at: DateTime<Utc>, reason: String, now: DateTime<Utc>) -> Self {
+        Self {
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            updated_at: now,
+            last_error: Some(reason),
+            ..self
+        }
     }
 
     /// Runs no later than `run_at`; a task already due earlier keeps its time.
@@ -258,13 +266,27 @@ mod tests {
     }
 
     #[test]
-    fn it_should_not_report_the_last_attempt_when_retries_are_left() {
-        assert!(!task_with_retries(3).is_last_attempt());
-    }
+    fn it_should_run_again_at_the_time_its_handler_asks_for() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_100, 0).unwrap();
+        let running = task_with_retries(3).start(now - Duration::minutes(1));
 
-    #[test]
-    fn it_should_report_the_last_attempt_when_the_next_failure_would_dead_letter() {
-        assert!(task_with_retries(4).is_last_attempt());
+        let requeued = running.run_again_at(
+            now + Duration::minutes(10),
+            "HTTP Error 503".to_string(),
+            now,
+        );
+
+        assert_eq!(
+            requeued,
+            ScheduledTask {
+                status: TaskStatus::Pending,
+                retries: 0,
+                run_at: now + Duration::minutes(10),
+                updated_at: now,
+                last_error: Some("HTTP Error 503".to_string()),
+                ..task_with_retries(3)
+            }
+        );
     }
 
     #[test]

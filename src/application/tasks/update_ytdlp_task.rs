@@ -1,4 +1,4 @@
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
@@ -47,7 +47,7 @@ impl UpdateYtdlpTask {
 }
 
 impl TaskHandler for UpdateYtdlpTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::UpdateYtdlp = task else {
             return Err(unexpected_task(task));
         };
@@ -66,7 +66,7 @@ impl TaskHandler for UpdateYtdlpTask {
             .schedule(&Task::UpdateYtdlp, next_run_at)?;
         info!(next_run_at = %next_run_at, "scheduled next yt-dlp self-update");
 
-        Ok(())
+        Ok(TaskOutcome::Done)
     }
 }
 
@@ -122,7 +122,7 @@ mod tests {
 
         let result = run(&task, &Task::UpdateYtdlp);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -151,7 +151,7 @@ mod tests {
 
         let result = run(&task, &Task::UpdateYtdlp);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(*updater.updated.lock().unwrap(), Vec::<PathBuf>::new());
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -180,7 +180,7 @@ mod tests {
 
         let result = run(&task, &Task::UpdateYtdlp);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -295,7 +295,7 @@ mod tests {
         fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS)
     }
 
-    fn run(task: &UpdateYtdlpTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &UpdateYtdlpTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

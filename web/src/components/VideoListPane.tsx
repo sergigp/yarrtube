@@ -9,10 +9,11 @@ import { VideoRowsSkeleton } from './VideoSkeletons'
 import { formatAge } from '@/lib/relativeAge'
 import { cn } from '@/lib/utils'
 
-const STATUS_MESSAGES: Record<string, string> = {
+const STATUS_MESSAGES: Record<Exclude<VideoStatus, 'DOWNLOADED' | 'IN_PROGRESS'>, string> = {
   PENDING: 'This video is pending.',
-  ERRORED_RETRYING: 'This video failed to download and will be retried.',
-  ERRORED: 'This video failed to download.',
+  RETRYING: 'This video failed to download and will be retried.',
+  FAILED: 'This video failed to download.',
+  UNAVAILABLE: 'This video is unavailable on YouTube.',
 }
 
 function VideoStatusIndicator({ status }: { status: VideoStatus }) {
@@ -24,7 +25,7 @@ function VideoStatusIndicator({ status }: { status: VideoStatus }) {
     return <Beacon variant="live" label="Downloading" className="shrink-0" />
   }
 
-  const message = STATUS_MESSAGES[status] ?? 'This video is pending.'
+  const message = STATUS_MESSAGES[status]
   return (
     <TriangleAlert className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" role="img" aria-label={message}>
       <title>{message}</title>

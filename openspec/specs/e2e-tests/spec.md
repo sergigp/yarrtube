@@ -255,11 +255,11 @@ The suite SHALL run the daemon against a fake YouTube: a fake YouTube Data API a
 - **THEN** its video downloads within seconds, with its thumbnail and subtitles, and plays
 
 ### Requirement: Errored Download Coverage
-The suite SHALL verify that a video whose download keeps failing has its download listed with the reason the downloader reported while it is retried, and is shown as errored once its retries run out.
+The suite SHALL verify that a video whose download fails is shown as Retrying with the reason the downloader reported and its next attempt, that its download is listed pending for that attempt with the reason, and that "Retry now" runs it again at once, after which the next attempt is further away.
 
 #### Scenario: Download fails
 - **WHEN** a user adds the fixture playlist holding a video whose download always fails
-- **THEN** the Downloads tab lists its download with the failure reason while it is retried, and once the retries run out the video is shown as Errored
+- **THEN** the video is shown as Retrying with the failure reason and "next attempt in 10 minutes", the Downloads tab lists its download pending with the reason, and after "Retry now" and another failure the video shows "next attempt in 1 hour"
 
 ### Requirement: Search Coverage
 The suite SHALL verify the sidebar's search and the Tasks view's search, which only appear once there are more than 15 sources or tasks, including that the sidebar's search sits above the Categories section and filters categories too.

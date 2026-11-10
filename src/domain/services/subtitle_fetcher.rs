@@ -2,7 +2,9 @@ use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{EpisodePaths, LateDataOutcome, Video, VideoId, VideoSubtitlesFetched};
+use crate::domain::video::{
+    EpisodePaths, LateDataOutcome, Video, VideoId, VideoStepOutcome, VideoSubtitlesFetched,
+};
 use crate::domain::video_transcript::{
     CaptionProbe, CaptionTrack, TranscriptText, VideoTranscript,
 };
@@ -66,34 +68,36 @@ pub trait SubtitleFetcherApi: Send + Sync {
     /// no longer exists, or the video isn't subtitle-fetchable
     /// (`Video::is_subtitle_fetchable`). Otherwise probes its caption tracks,
     /// downloads the original-language one as `<episode stem>.<lang>.srt` in
-    /// its owner's show directory, stores its transcript and records it Fetched; otherwise
-    /// records the check under the `late-video-data` policy (no track =
-    /// Incomplete, warning or any failure = Failed): Unavailable once
-    /// settled, Missing otherwise. Best effort: failures are logged, counted
-    /// and swallowed. Publishes `VideoSubtitlesFetched` once Fetched. Fails
-    /// only when the video or its owner can't be read.
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()>;
+    /// its owner's show directory, stores its transcript and records it Done;
+    /// otherwise records the check under the `late-video-data` policy (no
+    /// track = Incomplete: Unavailable on an old video, Pending on a young
+    /// one; a warning or any failure = a failed attempt, re-queued under the
+    /// `video-retries` policy). Publishes `VideoSubtitlesFetched` once Done.
+    /// Fails only when the video or its owner can't be read or stored.
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl SubtitleFetcherApi for SubtitleFetcher {
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()> {
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome> {
         let Some(video) = self.video_repository.find(video_id)? else {
             debug!(video_id = %video_id, "video no longer exists, skipping subtitles fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         if !video.is_subtitle_fetchable() {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         }
         let Some(owner) = self.video_owner_finder.find(&video)? else {
             info!(video_id = %video_id, "video has no playlist or channel any more, skipping subtitles fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         let staged = self.staging_area.for_subtitles(&video.id);
-        if let Err(e) = self.fetch_and_place(&video, staged.path(), &owner.target.output_dir) {
-            warn!(video_id = %video.id, error = %e, "failed to fetch video subtitles");
-            self.record_failed_fetch(&video);
+        match self.fetch_and_place(&video, staged.path(), &owner.target.output_dir) {
+            Ok(()) => Ok(VideoStepOutcome::Settled),
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to fetch video subtitles");
+                self.record_failed_fetch(&video, e.to_string())
+            }
         }
-        Ok(())
     }
 }
 
@@ -115,15 +119,17 @@ impl SubtitleFetcher {
             Some(track) => self.place_subtitles(video, &paths, &probe, &track, staging, output_dir),
             None if !probe.warnings.is_empty() => {
                 Self::log_inconclusive(video, &probe);
-                self.record_check(video, LateDataOutcome::Failed, probe.published_at)
+                Err(anyhow::anyhow!(probe.warnings.join("; ")))
             }
-            None => self.record_check(video, LateDataOutcome::Incomplete, probe.published_at),
+            None => self
+                .record_check_on(video, LateDataOutcome::Incomplete, probe.published_at)
+                .map(|_| ()),
         }
     }
 
     /// yt-dlp can withhold caption tracks silently (e.g. without a PO
     /// token) and only says so in a warning: a probe without a selectable
-    /// track that warned proves nothing, so the video stays Missing. The
+    /// track that warned proves nothing: it counts as a failed check. The
     /// probe already dropped warnings that can't affect captions.
     fn log_inconclusive(video: &Video, probe: &CaptionProbe) {
         warn!(
@@ -133,31 +139,32 @@ impl SubtitleFetcher {
         );
     }
 
-    /// Records a check that found no selectable track (`Incomplete`) or was
-    /// inconclusive (`Failed`), dated by the video's publish time (its
-    /// video's creation time when none is known): Unavailable once the
-    /// `late-video-data` policy settles it, Missing otherwise.
-    fn record_check(
+    /// The video as stored once the check is recorded on it.
+    fn record_check_on(
         &self,
         video: &Video,
         outcome: LateDataOutcome,
         published_at: Option<DateTime<Utc>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<Video>> {
         let now = self.clock.now();
-        self.video_updater
-            .update(&video.id, |video| {
-                let published_at = published_at.unwrap_or(video.created_at);
-                Some(video.record_subtitles_check(outcome, published_at, now))
-            })
-            .map(|_| ())
+        self.video_updater.update(&video.id, |video| {
+            let published_at = published_at.unwrap_or(video.created_at);
+            Some(video.record_subtitles_check(outcome, published_at, now))
+        })
     }
 
-    /// Best effort, like the fetch itself: a failure to record the failed
-    /// fetch is only logged.
-    fn record_failed_fetch(&self, video: &Video) {
-        if let Err(e) = self.record_check(video, LateDataOutcome::Failed, None) {
-            warn!(video_id = %video.id, error = %e, "failed to record a failed subtitle fetch");
-        }
+    /// Records a failed fetch, failed for `reason`: Retrying, run again when
+    /// its next attempt is due, or Failed.
+    fn record_failed_fetch(
+        &self,
+        video: &Video,
+        reason: String,
+    ) -> anyhow::Result<VideoStepOutcome> {
+        let recorded = self.record_check_on(video, LateDataOutcome::Failed, None)?;
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.subtitles.state.next_attempt_at()),
+            reason,
+        ))
     }
 
     /// Downloads `track`, moves it next to the episode, stores its

@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 
@@ -18,7 +18,7 @@ impl DeleteVideoFileTask {
 }
 
 impl TaskHandler for DeleteVideoFileTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::DeleteVideoFile {
             filename,
             thumbnail_filename,
@@ -28,12 +28,14 @@ impl TaskHandler for DeleteVideoFileTask {
         else {
             return Err(unexpected_task(task));
         };
-        self.video_file_deleter.delete_video_file(
-            filename.clone(),
-            thumbnail_filename.clone(),
-            subtitle_filename.clone(),
-            Path::new(output_dir),
-        )
+        self.video_file_deleter
+            .delete_video_file(
+                filename.clone(),
+                thumbnail_filename.clone(),
+                subtitle_filename.clone(),
+                Path::new(output_dir),
+            )
+            .map(|()| TaskOutcome::Done)
     }
 }
 
@@ -54,7 +56,7 @@ mod tests {
 
         let result = run(&task, &task_for(Some("My Video.mp4"), None));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("My Video.mp4")]
@@ -71,7 +73,7 @@ mod tests {
 
         let result = run(&task, &task_for(None, None));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
     }
 
@@ -102,7 +104,7 @@ mod tests {
 
         let result = run(&task, &task_for(Some("My Video.mp4"), None));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("My Video.mp4")]
@@ -119,7 +121,7 @@ mod tests {
 
         let result = run(&task, &task_for(Some("My Video.mp4"), Some("My Video.jpg")));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("My Video.mp4"), deleted("My Video.jpg")]
@@ -136,7 +138,7 @@ mod tests {
 
         let result = run(&task, &task_for(Some("My Video.mp4"), None));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("My Video.mp4")]
@@ -153,7 +155,7 @@ mod tests {
 
         let result = run(&task, &task_for(None, Some("My Video.jpg")));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("My Video.jpg")]
@@ -176,7 +178,7 @@ mod tests {
             ),
         );
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![
@@ -205,7 +207,7 @@ mod tests {
             },
         );
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![
@@ -229,7 +231,7 @@ mod tests {
             &task_for(Some("My Video/My Video.mp4"), Some("My Video/My Video.jpg")),
         );
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("My Video"), deleted("My Video")]
@@ -250,7 +252,7 @@ mod tests {
         (PathBuf::from("/videos/my-playlist"), entry.to_string())
     }
 
-    fn run(task: &DeleteVideoFileTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &DeleteVideoFileTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

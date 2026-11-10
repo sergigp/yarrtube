@@ -366,6 +366,14 @@ export function setVideoCategory(
   )
 }
 
+/** Retries a video's retrying and failed steps at once. */
+export async function retryVideo(videoId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(videoId)}/retry`, {
+    method: 'POST',
+    label: `retry video ${videoId}`,
+  })
+}
+
 /** Deletes a video copy's AI verdicts so the AI is asked again. */
 export async function deleteVideoAiVerdicts(videoId: string): Promise<void> {
   await send(`/videos/${encodeURIComponent(videoId)}/ai-verdicts`, {

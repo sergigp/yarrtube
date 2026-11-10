@@ -8,6 +8,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::domain_events::event_repository::EventRepository;
+use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ pub struct PlaylistViewSearcher {
     task_repository: Arc<dyn TaskRepository>,
     event_repository: Arc<dyn EventRepository>,
     videos_root: PathBuf,
+    clock: Arc<dyn Clock>,
 }
 
 impl PlaylistViewSearcher {
@@ -31,6 +33,7 @@ impl PlaylistViewSearcher {
         task_repository: Arc<dyn TaskRepository>,
         event_repository: Arc<dyn EventRepository>,
         videos_root: impl Into<PathBuf>,
+        clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             repository,
@@ -39,6 +42,7 @@ impl PlaylistViewSearcher {
             task_repository,
             event_repository,
             videos_root: videos_root.into(),
+            clock,
         }
     }
 }
@@ -103,7 +107,13 @@ impl PlaylistViewSearcher {
                 .iter()
                 .filter(|video| video.is_downloaded_and_unwatched())
                 .count(),
-            work_in_progress: has_work_in_progress(videos, tasks, events, &show_dir),
+            work_in_progress: has_work_in_progress(
+                videos,
+                tasks,
+                events,
+                &show_dir,
+                self.clock.now(),
+            ),
             id: playlist.id,
             name: playlist.name,
             path: playlist.path,

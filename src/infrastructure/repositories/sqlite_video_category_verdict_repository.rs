@@ -15,10 +15,13 @@ pub trait VideoCategoryVerdictRepository: Send + Sync {
     fn save(&self, verdict: &VideoCategoryVerdict) -> anyhow::Result<()>;
     fn delete_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
-    /// Every `unavailable` verdict.
-    fn delete_unavailable(&self) -> anyhow::Result<()>;
-    /// `category_id`'s `unavailable` verdicts.
-    fn delete_unavailable_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
+    /// Deletes every `failed` verdict; returns the videos that had one.
+    fn delete_failed(&self) -> anyhow::Result<Vec<VideoId>>;
+    /// Deletes `category_id`'s `failed` verdicts; returns the videos that
+    /// had one.
+    fn delete_failed_for_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoId>>;
+    /// `video_id`'s `failed` verdicts.
+    fn delete_failed_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     /// Deletes the AI verdicts of `video_ids`; returns the videos that had
     /// one.
     fn delete_ai_for_videos(&self, video_ids: &[VideoId]) -> anyhow::Result<Vec<VideoId>>;
@@ -109,14 +112,21 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         self.delete_where("category_id = ?1", &[category_id.as_str()])
     }
 
-    fn delete_unavailable(&self) -> anyhow::Result<()> {
-        self.delete_where("verdict = ?1", &[Verdict::Unavailable.as_str()])
+    fn delete_failed(&self) -> anyhow::Result<Vec<VideoId>> {
+        self.delete_returning_videos("verdict = ?1", &[Verdict::Failed.as_str()])
     }
 
-    fn delete_unavailable_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()> {
-        self.delete_where(
+    fn delete_failed_for_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoId>> {
+        self.delete_returning_videos(
             "verdict = ?1 AND category_id = ?2",
-            &[Verdict::Unavailable.as_str(), category_id.as_str()],
+            &[Verdict::Failed.as_str(), category_id.as_str()],
+        )
+    }
+
+    fn delete_failed_for_video(&self, video_id: &VideoId) -> anyhow::Result<()> {
+        self.delete_where(
+            "verdict = ?1 AND video_id = ?2",
+            &[Verdict::Failed.as_str(), video_id.as_str()],
         )
     }
 
@@ -239,7 +249,7 @@ mod tests {
         let (chess, funny, other) = (
             ai_verdict("rec1", "chess", Verdict::Yes),
             user_verdict("rec1", "funny", Verdict::No),
-            ai_verdict("rec2", "chess", Verdict::Unavailable),
+            ai_verdict("rec2", "chess", Verdict::Failed),
         );
         let not_asked = ai_verdict("rec3", "chess", Verdict::Yes);
         [&chess, &funny, &other, &not_asked]
@@ -321,22 +331,20 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_only_unavailable_verdicts() {
+    fn it_should_delete_only_the_failed_verdicts_of_a_video() {
         let db = TestDatabase::new();
         let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let kept = [
             ai_verdict("rec1", "chess", Verdict::Yes),
             ai_verdict("rec1", "funny", Verdict::No),
+            ai_verdict("rec2", "chess", Verdict::Failed),
         ];
-        [
-            ai_verdict("rec1", "tech", Verdict::Unavailable),
-            ai_verdict("rec2", "chess", Verdict::Unavailable),
-        ]
-        .iter()
-        .chain(&kept)
-        .for_each(|verdict| repository.save(verdict).unwrap());
+        [ai_verdict("rec1", "tech", Verdict::Failed)]
+            .iter()
+            .chain(&kept)
+            .for_each(|verdict| repository.save(verdict).unwrap());
 
-        let result = repository.delete_unavailable();
+        let result = repository.delete_failed_for_video(&video_id("rec1"));
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         assert_eq!(
@@ -348,21 +356,54 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_the_unavailable_verdicts_of_one_category() {
+    fn it_should_delete_only_failed_verdicts() {
         let db = TestDatabase::new();
         let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let kept = [
-            ai_verdict("rec1", "tech", Verdict::Unavailable),
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            ai_verdict("rec1", "funny", Verdict::No),
+        ];
+        [
+            ai_verdict("rec1", "tech", Verdict::Failed),
+            ai_verdict("rec2", "chess", Verdict::Failed),
+        ]
+        .iter()
+        .chain(&kept)
+        .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let result = repository.delete_failed();
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(vec![video_id("rec1"), video_id("rec2")])
+        );
+        assert_eq!(
+            repository
+                .find_many(&[video_id("rec1"), video_id("rec2")])
+                .unwrap(),
+            kept.to_vec()
+        );
+    }
+
+    #[test]
+    fn it_should_delete_the_failed_verdicts_of_one_category() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = [
+            ai_verdict("rec1", "tech", Verdict::Failed),
             ai_verdict("rec2", "chess", Verdict::Yes),
         ];
-        [ai_verdict("rec1", "chess", Verdict::Unavailable)]
+        [ai_verdict("rec1", "chess", Verdict::Failed)]
             .iter()
             .chain(&kept)
             .for_each(|verdict| repository.save(verdict).unwrap());
 
-        let result = repository.delete_unavailable_for_category(&CategoryId::new("chess").unwrap());
+        let result = repository.delete_failed_for_category(&CategoryId::new("chess").unwrap());
 
-        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(vec![video_id("rec1")])
+        );
         assert_eq!(
             repository
                 .find_many(&[video_id("rec1"), video_id("rec2")])
@@ -383,7 +424,7 @@ mod tests {
         [
             ai_verdict("rec1", "chess", Verdict::Yes),
             ai_verdict("rec1", "tech", Verdict::No),
-            ai_verdict("rec2", "chess", Verdict::Unavailable),
+            ai_verdict("rec2", "chess", Verdict::Failed),
         ]
         .iter()
         .chain(&kept)
@@ -417,7 +458,7 @@ mod tests {
         ];
         [
             ai_verdict("rec2", "chess", Verdict::No),
-            ai_verdict("rec1", "chess", Verdict::Unavailable),
+            ai_verdict("rec1", "chess", Verdict::Failed),
         ]
         .iter()
         .chain(&kept)
@@ -444,7 +485,7 @@ mod tests {
         [
             ai_verdict("rec1", "chess", Verdict::Yes),
             ai_verdict("rec2", "chess", Verdict::No),
-            ai_verdict("rec3", "chess", Verdict::Unavailable),
+            ai_verdict("rec3", "chess", Verdict::Failed),
             user_verdict("rec4", "chess", Verdict::Yes),
             ai_verdict("rec1", "funny", Verdict::No),
             user_verdict("rec1", "tech", Verdict::Yes),

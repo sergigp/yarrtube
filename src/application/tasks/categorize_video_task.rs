@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoCategorizer, VideoCategorizerApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
@@ -27,15 +27,17 @@ impl CategorizeVideoTask {
 }
 
 impl TaskHandler for CategorizeVideoTask {
-    fn handle(&self, task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::CategorizeVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
         let video_id = VideoId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
-            return Ok(());
+            return Ok(TaskOutcome::Done);
         };
-        self.video_categorizer.categorize(&video, is_last_attempt)
+        self.video_categorizer
+            .categorize(&video)
+            .map(TaskOutcome::from)
     }
 }
 
@@ -58,7 +60,9 @@ mod tests {
     };
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoChapter, YoutubeVideoId};
+    use crate::domain::video::{
+        RetryAttempts, StepState, StepStatus, Video, VideoChapter, YoutubeVideoId,
+    };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -125,7 +129,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             asked_categories(&llm),
             vec![vec!["AI news", "Sicilian", "Tech"]]
@@ -158,7 +162,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -204,7 +208,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -447,7 +451,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             asked_categories(&llm),
             vec![vec!["Sicilian", "Tech"], vec!["Tech"]]
@@ -487,7 +491,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             asked_categories(&llm),
             vec![
@@ -526,7 +530,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             asked_categories(&llm),
             vec![vec!["Sicilian", "Tech"], vec!["Sicilian"], vec!["Tech"]]
@@ -557,16 +561,18 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(
-                "the model couldn't answer for Sicilian (it hit the 3072-token output limit)"
-                    .to_string()
-            )
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason:
+                    "the model couldn't answer for Sicilian (it hit the 3072-token output limit)"
+                        .to_string(),
+            })
         );
         assert_eq!(asked_categories(&llm), vec![vec!["Sicilian"]]);
     }
 
     #[test]
-    fn it_should_stop_quietly_if_ollama_is_unreachable_during_the_fallback() {
+    fn it_should_stop_if_ollama_is_unreachable_during_the_fallback() {
         let db = TestDatabase::new();
         let video = summarized_video();
         seed(
@@ -580,9 +586,15 @@ mod tests {
         ]);
         let task = categorize_video_task(&db, llm.clone());
 
-        let result = run_last_attempt(&task, &video);
+        let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason: "connection reset".to_string(),
+            })
+        );
         assert_eq!(
             asked_categories(&llm),
             vec![vec!["Sicilian", "Tech"], vec!["Sicilian"]]
@@ -623,7 +635,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -650,7 +662,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -681,7 +693,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(asked_categories(&llm), vec![vec!["Tech"]]);
         assert_eq!(
             verdict_repository
@@ -711,7 +723,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(asked_categories(&llm), vec![vec!["Sicilian"]]);
         assert_eq!(
             verdict_repository
@@ -753,7 +765,13 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             (result, asked_categories(&llm))
         });
 
-        assert_eq!(asked, [(Ok(()), vec![]), (Ok(()), vec![])]);
+        assert_eq!(
+            asked,
+            [
+                (Ok(TaskOutcome::Done), vec![]),
+                (Ok(TaskOutcome::Done), vec![])
+            ]
+        );
     }
 
     #[test]
@@ -779,7 +797,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -816,7 +834,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -854,7 +872,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -897,7 +915,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -946,12 +964,13 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                     Arc::new(CategoryLock::default()),
                 ),
                 Arc::new(FixedClock(later())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
             )),
         );
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -967,9 +986,10 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_fail_after_trying_every_category_when_a_call_is_rejected() {
+    fn it_should_schedule_the_next_attempt_if_a_category_is_rejected() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_repository = SqliteVideoRepository::new(db.database());
         let video = summarized_video();
         let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
         seed(&db, &video, &[&sicilian, &tech]);
@@ -985,13 +1005,122 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         assert_eq!(
             result,
-            Err("the model couldn't answer for Sicilian (its answer isn't usable)".to_string())
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason: "the model couldn't answer for Sicilian (its answer isn't usable)"
+                    .to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 1,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video.clone()
+            })
         );
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![ai_verdict(&video, &tech, Verdict::No, "A chess game.")]
+        );
+    }
+
+    #[test]
+    fn it_should_fail_pending_categories_after_the_eleventh_failed_attempt() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let (chess, food) = (prompted_category("Chess"), prompted_category("Food"));
+        seed(&db, &video, &[&chess, &food]);
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![
+                reply(&answers(&[("Chess", NO)])),
+                Ok(LlmReply::refused("model is too large")),
+            ]),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &chess, Verdict::No, "A chess game."),
+                failed_verdict(&video, &food),
+            ])
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState {
+                    status: StepStatus::Failed,
+                    attempts: RetryAttempts {
+                        failed: 11,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_mark_the_categorization_done_when_nothing_is_rejected() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 2,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let chess = prompted_category("Chess");
+        seed(&db, &video, &[&chess]);
+        let task =
+            categorize_video_task(&db, llm_replying(vec![reply(&answers(&[("Chess", NO)]))]));
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState {
+                    status: StepStatus::Done,
+                    attempts: RetryAttempts::default(),
+                },
+                updated_at: later(),
+                ..video
+            })
         );
     }
 
@@ -1011,76 +1140,18 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                 reply("It might belong."),
             ]),
         );
-        run(&first, &video).unwrap_err();
+        run(&first, &video).unwrap();
         let llm = llm_replying(vec![reply(&answers(&[("Tech", NO)]))]);
         let retry = categorize_video_task(&db, llm.clone());
 
         let result = run(&retry, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(asked_categories(&llm), vec![vec!["Tech"]]);
     }
 
     #[test]
-    fn it_should_mark_unavailable_only_what_its_own_call_rejected_on_the_last_attempt() {
-        let db = TestDatabase::new();
-        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
-        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
-        let video = summarized_video();
-        let (chess, food, sicilian, tech) = (
-            prompted_category("Chess"),
-            prompted_category("Food"),
-            prompted_category("Sicilian"),
-            prompted_category("Tech"),
-        );
-        seed(&db, &video, &[&chess, &food, &sicilian, &tech]);
-        let stopped_at_limit = Ok(LlmReply {
-            stopped_at_limit: true,
-            ..reply("").unwrap()
-        });
-        let task = categorize_video_task(
-            &db,
-            llm_replying(vec![
-                Ok(LlmReply::refused("model is too large")),
-                reply(&answers(&[("Chess", NO)])),
-                stopped_at_limit,
-                Ok(LlmReply::refused("model is too large")),
-                reply("It might belong."),
-            ]),
-        );
-
-        let result = run_last_attempt(&task, &video);
-
-        assert_eq!(
-            result,
-            Err(
-                "the model couldn't answer for Food (it hit the 3072-token output limit), \
-                 Sicilian (Ollama refused the call: model is too large), \
-                 Tech (its answer isn't usable)"
-                    .to_string()
-            )
-        );
-        assert_eq!(
-            verdict_repository
-                .find_many(std::slice::from_ref(&video.id))
-                .unwrap(),
-            by_category([
-                ai_verdict(&video, &chess, Verdict::No, "A chess game."),
-                unavailable_verdict(&video, &food),
-                unavailable_verdict(&video, &sicilian),
-                unavailable_verdict(&video, &tech),
-            ])
-        );
-        assert_eq!(
-            video_categories_repository
-                .find_many(std::slice::from_ref(&video.id))
-                .unwrap(),
-            vec![VideoCategories::none(video.id.clone())]
-        );
-    }
-
-    #[test]
-    fn it_should_not_mark_a_category_unavailable_when_the_settings_changed_during_its_attempt() {
+    fn it_should_not_mark_a_category_failed_when_the_settings_changed_during_its_attempt() {
         let changes: [fn(&TestDatabase, &Category); 2] = [
             |db, _| {
                 SqlitePreferencesRepository::new(db.database())
@@ -1120,7 +1191,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             );
             let task = categorize_video_task(&db, llm);
 
-            run_last_attempt(&task, &video).unwrap_err();
+            run(&task, &video).unwrap();
 
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -1131,7 +1202,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_complete_without_verdicts_when_ollama_is_unreachable() {
+    fn it_should_count_ollama_down_as_a_failed_categorization_attempt() {
         let unreachable = FakeLlmServerRepository::failing();
         let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
             name: "llama3:8b".to_string(),
@@ -1146,17 +1217,120 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             seed(&db, &video, &[&prompted_category("Sicilian")]);
             let task = categorize_video_task(&db, Arc::new(llm));
 
-            let result = run_last_attempt(&task, &video);
+            let result = run(&task, &video);
 
             let verdicts = SqliteVideoCategoryVerdictRepository::new(db.database())
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap();
-            (result, verdicts)
+            let categorization = SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap()
+                .map(|video| video.categorization);
+            (result, verdicts, categorization)
         });
 
+        let retrying = Some(StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 1,
+                last_failed_at: Some(later()),
+            },
+        });
+        let run_again = |reason: &str| {
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason: reason.to_string(),
+            })
+        };
         assert_eq!(
             outcomes,
-            [(Ok(()), vec![]), (Ok(()), vec![]), (Ok(()), vec![])]
+            [
+                (run_again("connection refused"), vec![], retrying),
+                (
+                    run_again("qwen3:4b isn't installed on Ollama"),
+                    vec![],
+                    retrying
+                ),
+                (run_again("connection reset"), vec![], retrying),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_fail_pending_categories_if_ollama_is_down_on_the_eleventh_attempt() {
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        let unreachable = FakeLlmServerRepository::failing();
+        let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
+            name: "llama3:8b".to_string(),
+            ..thinking_model()
+        }));
+        let down_during_call = FakeLlmServerRepository::new(server_with(thinking_model()))
+            .with_replies(vec![Err(anyhow::anyhow!("connection reset"))]);
+        let down_during_fallback = FakeLlmServerRepository::new(server_with(thinking_model()))
+            .with_replies(vec![
+                reply(&answers(&[("Sicilian", NO)])),
+                Err(anyhow::anyhow!("connection reset")),
+            ]);
+
+        let outcomes = [
+            unreachable,
+            model_missing,
+            down_during_call,
+            down_during_fallback,
+        ]
+        .map(|llm| {
+            let db = TestDatabase::new();
+            seed(&db, &video, &[&sicilian, &tech]);
+            let task = categorize_video_task(&db, Arc::new(llm));
+
+            let result = run(&task, &video);
+
+            let verdicts = SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap();
+            let categorization = SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap()
+                .map(|video| video.categorization);
+            (result, verdicts, categorization)
+        });
+
+        let failed = Some(StepState {
+            status: StepStatus::Failed,
+            attempts: RetryAttempts {
+                failed: 11,
+                last_failed_at: Some(later()),
+            },
+        });
+        let all_failed = by_category([
+            failed_verdict(&video, &sicilian),
+            failed_verdict(&video, &tech),
+        ]);
+        assert_eq!(
+            outcomes,
+            [
+                (Ok(TaskOutcome::Done), all_failed.clone(), failed),
+                (Ok(TaskOutcome::Done), all_failed.clone(), failed),
+                (Ok(TaskOutcome::Done), all_failed, failed),
+                (
+                    Ok(TaskOutcome::Done),
+                    by_category([
+                        ai_verdict(&video, &sicilian, Verdict::No, "A chess game."),
+                        failed_verdict(&video, &tech),
+                    ]),
+                    failed
+                ),
+            ]
         );
     }
 
@@ -1178,7 +1352,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         );
 
         let lines = captured_log_lines(|| {
-            run(&task, &video).unwrap_err();
+            run(&task, &video).unwrap();
         });
 
         let line = |needle: &str| {
@@ -1283,17 +1457,13 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                     Arc::new(CategoryLock::default()),
                 ),
                 Arc::new(FixedClock(later())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
             )),
         )
     }
 
-    fn run(task: &CategorizeVideoTask, video: &Video) -> Result<(), String> {
-        task.handle(&task_for(video), false)
-            .map_err(|error| error.to_string())
-    }
-
-    fn run_last_attempt(task: &CategorizeVideoTask, video: &Video) -> Result<(), String> {
-        task.handle(&task_for(video), true)
+    fn run(task: &CategorizeVideoTask, video: &Video) -> Result<TaskOutcome, String> {
+        task.handle(&task_for(video))
             .map_err(|error| error.to_string())
     }
 
@@ -1464,11 +1634,10 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         verdicts.to_vec()
     }
 
-    fn unavailable_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
+    fn failed_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
         VideoCategoryVerdict {
-            verdict: Verdict::Unavailable,
             reason: None,
-            ..ai_verdict(video, category, Verdict::Unavailable, "")
+            ..ai_verdict(video, category, Verdict::Failed, "")
         }
     }
 

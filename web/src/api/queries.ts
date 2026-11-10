@@ -32,6 +32,7 @@ import {
   updatePlaylist,
   setVideoCategory,
   deleteVideoAiVerdicts,
+  retryVideo,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
 } from './client'
@@ -516,6 +517,21 @@ export function useRerunVideoAi(): (videoId: string) => Promise<void> {
       ])
     },
     [queryClient, invalidateLibraryAndHome],
+  )
+}
+
+/**
+ * Returns a function that retries a video's retrying and failed steps, then
+ * refetches the library (its video lists included) and the home videos.
+ */
+export function useRetryVideo(): (videoId: string) => Promise<void> {
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  return useCallback(
+    async (videoId: string) => {
+      await retryVideo(videoId)
+      await invalidateLibraryAndHome()
+    },
+    [invalidateLibraryAndHome],
   )
 }
 

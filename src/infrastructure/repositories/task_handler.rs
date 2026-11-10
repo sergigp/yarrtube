@@ -1,13 +1,12 @@
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 
 pub trait TaskHandler: Send + Sync {
     /// Runs `task`, which is always of the type this handler is registered
-    /// for. `is_last_attempt` tells the handler whether the task queue has no
-    /// retries left for this task, so it can distinguish a transient failure
-    /// from a permanent one (e.g. to pick between two failure statuses on
-    /// its own aggregate). Handlers that don't need this distinction ignore
-    /// it.
-    fn handle(&self, task: &Task, is_last_attempt: bool) -> anyhow::Result<()>;
+    /// for: done, or to run again later (see the `task-scheduling`
+    /// capability). An error is for failures the domain doesn't handle
+    /// itself (e.g. the database being unavailable): the task queue retries
+    /// and then dead-letters the task.
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome>;
 }
 
 /// The error a handler returns when handed a task of a type it isn't
@@ -23,8 +22,8 @@ mod tests {
     struct FakeHandler;
 
     impl TaskHandler for FakeHandler {
-        fn handle(&self, _task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
-            Ok(())
+        fn handle(&self, _task: &Task) -> anyhow::Result<TaskOutcome> {
+            Ok(TaskOutcome::Done)
         }
     }
 
@@ -32,6 +31,6 @@ mod tests {
     fn it_should_compile_against_a_fake_handler() {
         let handler: Box<dyn TaskHandler> = Box::new(FakeHandler);
 
-        assert!(handler.handle(&Task::UpdateYtdlp, false).is_ok());
+        assert!(handler.handle(&Task::UpdateYtdlp).is_ok());
     }
 }

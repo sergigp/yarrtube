@@ -1,6 +1,6 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs every subsequent reconcile for a playlist (the first one is
@@ -18,14 +18,16 @@ impl ReconcilePlaylistTask {
 }
 
 impl TaskHandler for ReconcilePlaylistTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::ReconcilePlaylist { playlist_id } = task else {
             return Err(unexpected_task(task));
         };
         let Ok(playlist_id) = PlaylistId::new(playlist_id.clone()) else {
-            return Ok(());
+            return Ok(TaskOutcome::Done);
         };
-        self.playlist_video_reconciler.reconcile(playlist_id)
+        self.playlist_video_reconciler
+            .reconcile(playlist_id)
+            .map(|()| TaskOutcome::Done)
     }
 }
 
@@ -49,7 +51,8 @@ mod tests {
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{
-        EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId, YoutubeVideoId,
+        EpisodeNumber, FetchedThumbnail, LateDataChecks, PlaylistEpisodeNumber, VideoId,
+        YoutubeVideoId,
     };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoryVerdict,
@@ -134,7 +137,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL404"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
@@ -144,7 +147,7 @@ mod tests {
     fn it_should_skip_if_invalid_playlist_id_provided() {
         let result = run(&any_task(), &task_for(""));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
     }
 
     #[test]
@@ -182,7 +185,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let video_id = videos[0].id.clone();
         assert_eq!(
@@ -245,7 +248,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let video_id = videos[0].id.clone();
         assert_eq!(
@@ -317,7 +320,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -364,7 +367,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             playlist_video_repository
                 .list_for_playlist(&playlist_id())
@@ -413,7 +416,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let added_id = videos[1].id.clone();
         assert_eq!(
@@ -461,7 +464,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let added_id = videos[0].id.clone();
         assert_eq!(
@@ -531,7 +534,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![one, two]);
         assert_eq!(
             playlist_video_repository
@@ -617,7 +620,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
     }
@@ -696,7 +699,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
     }
@@ -766,7 +769,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             verdict_repository
@@ -811,7 +814,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             playlist_video_repository
@@ -890,7 +893,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             video_categories_repository
@@ -955,7 +958,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             vec![
@@ -1011,7 +1014,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![next_reconcile(1)]
@@ -1041,7 +1044,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -1084,7 +1087,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -1141,7 +1144,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(playlist_repository.list().unwrap(), vec![]);
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
@@ -1210,7 +1213,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![first.clone(), second.clone()]
@@ -1276,7 +1279,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
         assert_eq!(
             playlist_video_repository
@@ -1331,7 +1334,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1388,7 +1391,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1449,7 +1452,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let (first_id, second_id) = (videos[0].id.clone(), videos[1].id.clone());
         assert_eq!(
@@ -1510,7 +1513,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let added = video_repository.list().unwrap()[0].id.clone();
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -1574,7 +1577,7 @@ mod tests {
             reconciling.join().unwrap()
         });
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *show_file_repository.show_nfos.lock().unwrap(),
             vec![(
@@ -1736,8 +1739,8 @@ mod tests {
     /// quality check.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
-            chapters_settled: true,
-            quality_settled: true,
+            chapters_checks: LateDataChecks::done(),
+            quality_checks: LateDataChecks::done(),
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(
@@ -1783,8 +1786,8 @@ mod tests {
     fn downloaded_playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
         let base = format!("Season 1/S01E{episode:03} - {title}");
         Video {
-            chapters_settled: true,
-            quality_settled: true,
+            chapters_checks: LateDataChecks::done(),
+            quality_checks: LateDataChecks::done(),
             ..playlist_episode(youtube_id, title, episode)
                 .start_download(fixed_timestamp())
                 .mark_downloaded(
@@ -1877,7 +1880,7 @@ mod tests {
         }
     }
 
-    fn run(task: &ReconcilePlaylistTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &ReconcilePlaylistTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

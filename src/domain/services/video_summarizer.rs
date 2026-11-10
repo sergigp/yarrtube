@@ -3,7 +3,7 @@ use crate::domain::preferences::{SummaryPrompt, SummarySettings};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{Video, VideoOwner};
+use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_summary::{
     PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
 };
@@ -14,6 +14,7 @@ use crate::infrastructure::repositories::sqlite_preferences_repository::Preferen
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
 use std::sync::Arc;
@@ -35,6 +36,8 @@ enum Skip {
     NotWanted(&'static str),
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
+    /// Ollama can't be reached or hasn't the saved model: a failed attempt.
+    Unreachable(anyhow::Error),
 }
 
 /// Why a generation failed.
@@ -100,22 +103,28 @@ impl VideoSummarizer {
 }
 
 pub trait VideoSummarizerApi: Send + Sync {
-    /// See the `video-summaries` capability. An error fails the task, for the
-    /// queue to retry.
-    fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()>;
+    /// See the `video-summaries` capability. A rejected call, a server fault,
+    /// an unreadable transcript, Ollama unreachable or the model missing is a
+    /// failed attempt, recorded on the video and re-queued under the
+    /// `video-retries` policy.
+    fn summarize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl VideoSummarizerApi for VideoSummarizer {
-    fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn summarize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         match self.prepare(video) {
-            Ok(job) => self.generate(video, &job, is_last_attempt),
+            Ok(job) => self.generate(video, &job),
             Err(Skip::NotWanted(reason)) => {
                 info!(video_id = %video.id, reason, "skipped video summary");
-                Ok(())
+                Ok(VideoStepOutcome::Settled)
             }
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't summarize video");
-                Ok(())
+                Ok(VideoStepOutcome::Settled)
+            }
+            Err(Skip::Unreachable(reason)) => {
+                warn!(video_id = %video.id, %reason, "couldn't summarize video");
+                self.record_failure(video, error_report::cause_chain(&reason))
             }
         }
     }
@@ -140,10 +149,14 @@ impl VideoSummarizer {
         if !owner.summaries_enabled {
             return Err(Skip::NotWanted("its channel or playlist has summaries off"));
         }
-        let server = self.llm_server_repository.find(&url)?;
+        let server = self
+            .llm_server_repository
+            .find(&url)
+            .map_err(Skip::Unreachable)?;
         let model = server
             .model(settings.model.as_str())
-            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?;
+            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))
+            .map_err(Skip::Unreachable)?;
         let thinking = settings.thinking && model.thinking;
         let prompt = settings
             .effective_prompt()
@@ -158,40 +171,30 @@ impl VideoSummarizer {
         })
     }
 
-    fn generate(
-        &self,
-        video: &Video,
-        job: &SummaryJob,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
-        self.try_generate(video, job).map_err(|failure| {
-            let (cause, gives_up) = match failure {
-                Failure::Server(cause) => (cause, false),
-                Failure::Rejected(cause) => (cause, is_last_attempt),
-            };
-            error!(
-                video_id = %video.id,
-                error = format!("{cause:#}"),
-                is_last_attempt,
-                gives_up,
-                "failed to summarize video"
-            );
-            if gives_up {
-                self.give_up(video);
+    fn generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<VideoStepOutcome> {
+        match self.try_generate(video, job) {
+            Ok(()) => Ok(VideoStepOutcome::Settled),
+            Err(Failure::Server(cause) | Failure::Rejected(cause)) => {
+                error!(video_id = %video.id, error = format!("{cause:#}"), "failed to summarize video");
+                self.record_failure(video, error_report::cause_chain(&cause))
             }
-            cause
-        })
+        }
     }
 
-    /// Best effort: the error being reported matters more than this one.
-    fn give_up(&self, video: &Video) {
+    /// Records a failed attempt, failed for `reason`, on the video as
+    /// stored (unless it no longer wants a summary): Retrying, run again
+    /// when its next attempt is due, or Failed.
+    fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
         let now = self.clock.now();
-        if let Err(e) = self
-            .video_updater
-            .update(&video.id, |video| Some(video.mark_summary_unavailable(now)))
-        {
-            error!(video_id = %video.id, error = %e, "failed to give up on a summary");
-        }
+        let recorded = self.video_updater.update(&video.id, |video| {
+            video
+                .is_summarizable()
+                .then(|| video.record_summary_failure(now))
+        })?;
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.summary.next_attempt_at()),
+            reason,
+        ))
     }
 
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> Result<(), Failure> {

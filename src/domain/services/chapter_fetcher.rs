@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
-use crate::domain::video::{Video, VideoChapter};
+use crate::domain::video::{ChaptersProbe, Video, VideoChapter, VideoStepOutcome};
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_chapter_repository::ChapterRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -34,38 +34,48 @@ impl ChapterFetcher {
 
 pub trait ChapterFetcherApi: Send + Sync {
     /// No-ops unless `video.is_chapters_fetchable()`. Otherwise reads the
-    /// video's chapters from YouTube and records the check (chapters,
-    /// checks, settled) under the `late-video-data` policy; a failure is
-    /// logged, counted as a failed attempt and swallowed.
-    fn fetch(&self, video: &Video);
+    /// video's chapters from YouTube and records the check under the
+    /// `late-video-data` policy; a failed fetch is logged and counted as a
+    /// failed attempt, re-queued under the `video-retries` policy. Fails only
+    /// when the video can't be stored.
+    fn fetch(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl ChapterFetcherApi for ChapterFetcher {
-    fn fetch(&self, video: &Video) {
+    fn fetch(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         if !video.is_chapters_fetchable() {
-            return;
+            return Ok(VideoStepOutcome::Settled);
         }
-        if let Err(e) = self.fetch_and_record(video) {
-            warn!(video_id = %video.id, error = %e, "failed to fetch video chapters");
-            self.record_failed_fetch(video);
+        match self.fetch_chapters(video) {
+            Ok(probe) => self
+                .record_check(video, Some(probe.chapters), probe.published_at)
+                .map(|_| VideoStepOutcome::Settled),
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to fetch video chapters");
+                self.record_failed_fetch(video, e.to_string())
+            }
         }
     }
 }
 
 impl ChapterFetcher {
-    /// Best effort, like the fetch itself: a failure to record the failed
-    /// fetch is only logged.
-    fn record_failed_fetch(&self, video: &Video) {
-        if let Err(e) = self.record_check(video, None, None) {
-            warn!(video_id = %video.id, error = %e, "failed to record a failed chapters fetch");
-        }
+    /// Records a failed fetch, failed for `reason`: Retrying, run again when
+    /// its next attempt is due, or Failed.
+    fn record_failed_fetch(
+        &self,
+        video: &Video,
+        reason: String,
+    ) -> anyhow::Result<VideoStepOutcome> {
+        let recorded = self.record_check(video, None, None)?;
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.chapters_checks.state.next_attempt_at()),
+            reason,
+        ))
     }
 
-    fn fetch_and_record(&self, video: &Video) -> anyhow::Result<()> {
-        let probe = self
-            .chapter_repository
-            .fetch_chapters(&video.youtube_id.to_url())?;
-        self.record_check(video, Some(probe.chapters), probe.published_at)
+    fn fetch_chapters(&self, video: &Video) -> anyhow::Result<ChaptersProbe> {
+        self.chapter_repository
+            .fetch_chapters(&video.youtube_id.to_url())
     }
 
     /// Re-reads the video before writing: the fetch may have run while the
@@ -78,15 +88,13 @@ impl ChapterFetcher {
         video: &Video,
         chapters: Option<Vec<VideoChapter>>,
         published_at: Option<DateTime<Utc>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<Video>> {
         let now = self.clock.now();
-        self.video_updater
-            .update(&video.id, |video| {
-                let published_at = published_at.unwrap_or(video.created_at);
-                video
-                    .is_chapters_fetchable()
-                    .then(|| video.record_chapters_check(chapters.clone(), published_at, now))
-            })
-            .map(|_| ())
+        self.video_updater.update(&video.id, |video| {
+            let published_at = published_at.unwrap_or(video.created_at);
+            video
+                .is_chapters_fetchable()
+                .then(|| video.record_chapters_check(chapters.clone(), published_at, now))
+        })
     }
 }

@@ -41,9 +41,19 @@ const VIDEO_CATEGORY_VERDICTS_SQL: &str =
 const CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL: &str =
     include_str!("../../../migrations/0026_categorization_context_length_auto.sql");
 const VIDEO_VERSION_SQL: &str = include_str!("../../../migrations/0027_video_version.sql");
+const VIDEO_STEP_STATUSES_SQL: &str =
+    include_str!("../../../migrations/0028_video_step_statuses.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
-    Migrations::new(vec![
+    Migrations::new(migrations())
+        .to_latest(conn)
+        .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
+        .context("failed to apply database migrations")
+}
+
+/// Every migration, in order.
+fn migrations() -> Vec<M<'static>> {
+    vec![
         M::up(BASELINE_SQL),
         M::up(WATCH_STATE_SQL),
         M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
@@ -74,10 +84,8 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(VIDEO_CATEGORY_VERDICTS_SQL),
         M::up(CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL),
         M::up(VIDEO_VERSION_SQL),
-    ])
-    .to_latest(conn)
-    .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
-    .context("failed to apply database migrations")
+        M::up(VIDEO_STEP_STATUSES_SQL),
+    ]
 }
 
 /// Rewrites every light category color (OKLCH lightness above 0.85) left after
@@ -110,6 +118,9 @@ fn strengthen_light_category_colors(tx: &rusqlite::Transaction) -> HookResult {
 mod tests {
     use super::*;
     use chrono::{DateTime, Duration, Utc};
+
+    /// The migrations applied before the step statuses were introduced.
+    const BEFORE_STEP_STATUSES: usize = 27;
 
     #[test]
     fn it_should_create_every_table_on_a_fresh_in_memory_database() {
@@ -540,7 +551,7 @@ mod tests {
         )
         .unwrap();
 
-        apply(&mut conn).unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
 
         let subtitles = conn.query_row(
             "SELECT subtitle_state, subtitle_filename FROM videos WHERE id = 'rec1'",
@@ -1004,7 +1015,7 @@ mod tests {
         )
         .unwrap();
 
-        apply(&mut conn).unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
 
         let summary = conn.query_row("SELECT summary_state FROM videos", [], |row| {
             row.get::<_, String>(0)
@@ -1026,7 +1037,7 @@ mod tests {
         )
         .unwrap();
 
-        apply(&mut conn).unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
 
         let settled = conn
             .prepare("SELECT id, chapters_settled, quality_settled FROM videos ORDER BY id")
@@ -1072,6 +1083,292 @@ mod tests {
             checks,
             Ok((Some("2026-10-31T12:00:00+00:00".to_string()), 0))
         );
+    }
+
+    #[test]
+    fn it_should_map_download_statuses_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, last_errored_at) VALUES
+             ('retrying', 'yt1', 'A', 'ERRORED_RETRYING', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00', NULL),
+             ('errored', 'yt2', 'B', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-05T00:00:00+00:00', '2026-01-03T00:00:00+00:00'),
+             ('errored_untimed', 'yt3', 'C', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-04T00:00:00+00:00', NULL),
+             ('excluded', 'yt4', 'D', 'EXCLUDED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL),
+             ('downloaded', 'yt5', 'E', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let downloads = conn
+            .prepare("SELECT id, status, download_failed_attempts, last_errored_at FROM videos ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u32>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let row = |id: &str, status: &str, attempts: u32, errored_at: Option<&str>| {
+            (
+                id.to_string(),
+                status.to_string(),
+                attempts,
+                errored_at.map(str::to_string),
+            )
+        };
+        assert_eq!(
+            downloads,
+            Ok(vec![
+                row("retrying", "RETRYING", 1, Some("2026-01-02T00:00:00+00:00")),
+                row("errored", "RETRYING", 4, Some("2026-01-03T00:00:00+00:00")),
+                row(
+                    "errored_untimed",
+                    "RETRYING",
+                    4,
+                    Some("2026-01-04T00:00:00+00:00")
+                ),
+                row("excluded", "UNAVAILABLE", 0, None),
+                row("downloaded", "DOWNLOADED", 0, None),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_backfill_the_download_failure_from_the_download_task_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at) VALUES
+             ('queued', 'yt1', 'A', 'ERRORED_RETRYING', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'),
+             ('dead', 'yt2', 'B', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'),
+             ('unknown', 'yt3', 'C', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00');
+             INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error) VALUES
+             ('download_video', '{\"video_id\":\"queued\"}', 'pending', 2, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'HTTP Error 503');
+             INSERT INTO tasks_dead_letter (original_task_id, task_type, payload, retries, last_error, created_at, failed_at) VALUES
+             (7, 'download_video', '{\"video_id\":\"dead\"}', 5, 'HTTP Error 403: Forbidden', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00'),
+             (8, 'download_video', '{\"video_id\":\"dead\"}', 5, 'HTTP Error 429', '2026-01-01T00:00:00+00:00', '2026-01-03T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let failures = conn
+            .prepare("SELECT id, download_failure FROM videos ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        assert_eq!(
+            failures,
+            Ok(vec![
+                ("queued".to_string(), Some("HTTP Error 503".to_string())),
+                ("dead".to_string(), Some("HTTP Error 429".to_string())),
+                ("unknown".to_string(), None),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_map_subtitle_states_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, subtitle_state, subtitles_failed_attempts) VALUES
+             ('fetched', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'FETCHED', 1),
+             ('gave_up', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'UNAVAILABLE', 3),
+             ('no_captions', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'UNAVAILABLE', 0),
+             ('failing', 'yt4', 'D', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'MISSING', 2),
+             ('missing', 'yt5', 'E', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'MISSING', 0);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(
+            step_columns(&conn, "subtitles_status", "subtitles_failed_attempts"),
+            Ok(vec![
+                ("fetched".to_string(), "DONE".to_string(), 0),
+                ("gave_up".to_string(), "FAILED".to_string(), 11),
+                ("no_captions".to_string(), "UNAVAILABLE".to_string(), 0),
+                ("failing".to_string(), "RETRYING".to_string(), 2),
+                ("missing".to_string(), "PENDING".to_string(), 0),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_map_settled_chapters_and_quality_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, chapters, chapters_settled, chapters_failed_attempts, quality_settled, quality_failed_attempts) VALUES
+             ('gave_up', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 3, 1, 3),
+             ('none_after_failures', 'yt6', 'F', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 2, 1, 2),
+             ('none', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 0, 1, 0),
+             ('found_after_failures', 'yt7', 'G', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[{\"start_seconds\":0,\"end_seconds\":10,\"title\":\"Intro\"}]', 1, 3, 1, 4),
+             ('found', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[{\"start_seconds\":0,\"end_seconds\":10,\"title\":\"Intro\"}]', 1, 1, 1, 1),
+             ('failing', 'yt4', 'D', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL, 0, 2, 0, 2),
+             ('unchecked', 'yt5', 'E', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL, 0, 0, 0, 0);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let step =
+            |id: &str, status: &str, attempts: u32| (id.to_string(), status.to_string(), attempts);
+        assert_eq!(
+            (
+                step_columns(&conn, "chapters_status", "chapters_failed_attempts"),
+                step_columns(&conn, "quality_status", "quality_failed_attempts"),
+            ),
+            (
+                Ok(vec![
+                    step("gave_up", "FAILED", 11),
+                    step("none_after_failures", "UNAVAILABLE", 0),
+                    step("none", "UNAVAILABLE", 0),
+                    step("found_after_failures", "DONE", 0),
+                    step("found", "DONE", 0),
+                    step("failing", "RETRYING", 2),
+                    step("unchecked", "PENDING", 0),
+                ]),
+                Ok(vec![
+                    step("gave_up", "DONE", 0),
+                    step("none_after_failures", "DONE", 0),
+                    step("none", "DONE", 0),
+                    step("found_after_failures", "DONE", 0),
+                    step("found", "DONE", 0),
+                    step("failing", "RETRYING", 2),
+                    step("unchecked", "PENDING", 0),
+                ]),
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_map_summary_states_and_verdicts_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, summary_state) VALUES
+             ('missing', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'MISSING'),
+             ('generated', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'GENERATED'),
+             ('gave_up', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'UNAVAILABLE');
+             INSERT INTO video_category_verdicts (video_id, category_id, verdict, decided_by, decided_at) VALUES
+             ('generated', 'tech', 'YES', 'AI', '2026-01-01T00:00:00+00:00'),
+             ('generated', 'chess', 'UNAVAILABLE', 'AI', '2026-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let verdicts = conn
+            .prepare("SELECT category_id, verdict FROM video_category_verdicts ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let step =
+            |id: &str, status: &str, attempts: u32| (id.to_string(), status.to_string(), attempts);
+        assert_eq!(
+            (
+                step_columns(&conn, "summary_status", "summary_failed_attempts"),
+                verdicts,
+            ),
+            (
+                Ok(vec![
+                    step("missing", "PENDING", 0),
+                    step("generated", "DONE", 0),
+                    step("gave_up", "FAILED", 11),
+                ]),
+                Ok(vec![
+                    ("tech".to_string(), "YES".to_string()),
+                    ("chess".to_string(), "FAILED".to_string()),
+                ]),
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_fail_the_categorization_of_a_video_with_failed_verdicts_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at) VALUES
+             ('gave_up', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00'),
+             ('answered', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00'),
+             ('unasked', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00');
+             INSERT INTO video_category_verdicts (video_id, category_id, verdict, decided_by, decided_at) VALUES
+             ('gave_up', 'tech', 'YES', 'AI', '2026-01-01T00:00:00+00:00'),
+             ('gave_up', 'chess', 'UNAVAILABLE', 'AI', '2026-01-01T00:00:00+00:00'),
+             ('answered', 'tech', 'NO', 'AI', '2026-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let categorizations = conn
+            .prepare(
+                "SELECT id, categorization_status, categorization_failed_attempts, categorization_last_failed_at
+                 FROM videos ORDER BY rowid",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u32>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let row = |id: &str, status: &str, attempts: u32, failed_at: Option<&str>| {
+            (
+                id.to_string(),
+                status.to_string(),
+                attempts,
+                failed_at.map(str::to_string),
+            )
+        };
+        assert_eq!(
+            categorizations,
+            Ok(vec![
+                row("gave_up", "FAILED", 11, Some("2026-01-02T00:00:00+00:00")),
+                row("answered", "PENDING", 0, None),
+                row("unasked", "PENDING", 0, None),
+            ])
+        );
+    }
+
+    /// Each video's id with a step's status and failed attempts, in
+    /// insertion order.
+    fn step_columns(
+        conn: &Connection,
+        status: &str,
+        failed_attempts: &str,
+    ) -> rusqlite::Result<Vec<(String, String, u32)>> {
+        conn.prepare(&format!(
+            "SELECT id, {status}, {failed_attempts} FROM videos ORDER BY rowid"
+        ))?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect()
+    }
+
+    /// Applies the first `count` migrations only.
+    fn migrate_to(conn: &mut Connection, count: usize) {
+        Migrations::new(migrations().into_iter().take(count).collect())
+            .to_latest(conn)
+            .unwrap();
     }
 
     fn migrate_to_video_chapters(conn: &mut Connection) {

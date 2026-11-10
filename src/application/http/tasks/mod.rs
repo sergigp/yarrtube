@@ -28,7 +28,7 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
     use crate::domain::video::{LateDataChecks, VideoId, YoutubeVideoId};
-    use crate::domain::video::{PlaybackPosition, SubtitleState, SummaryState, Video, VideoStatus};
+    use crate::domain::video::{PlaybackPosition, RetryAttempts, StepState, Video, VideoStatus};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -1088,28 +1088,28 @@ mod tests {
             youtube_id: YoutubeVideoId::new("yt1").unwrap(),
             title: title.to_string(),
             status: VideoStatus::Pending,
+            download_attempts: RetryAttempts::default(),
+            download_failure: None,
             quality: None,
             filename: None,
             thumbnail_filename: None,
+            thumbnail: StepState::pending(),
             duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             watched_at: None,
             playback_position: PlaybackPosition::start(),
             synced_at: None,
-            last_errored_at: None,
             last_played_at: None,
             episode_number: None,
-            subtitle_state: SubtitleState::Missing,
+            subtitles: LateDataChecks::default(),
             subtitle_filename: None,
-            subtitle_checks: LateDataChecks::default(),
             chapters: None,
             chapters_checks: LateDataChecks::default(),
-            chapters_settled: false,
             downloaded_height: None,
             quality_checks: LateDataChecks::default(),
-            quality_settled: false,
-            summary_state: SummaryState::Missing,
+            summary: StepState::pending(),
+            categorization: StepState::pending(),
             version: 0,
         }
     }

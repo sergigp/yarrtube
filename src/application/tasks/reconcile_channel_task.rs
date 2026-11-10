@@ -1,6 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::services::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs every subsequent reconcile for a channel (the first one is
@@ -18,14 +18,16 @@ impl ReconcileChannelTask {
 }
 
 impl TaskHandler for ReconcileChannelTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::ReconcileChannel { channel_id } = task else {
             return Err(unexpected_task(task));
         };
         let Ok(channel_id) = ChannelHandle::new(channel_id.clone()) else {
-            return Ok(());
+            return Ok(TaskOutcome::Done);
         };
-        self.channel_video_reconciler.reconcile(channel_id)
+        self.channel_video_reconciler
+            .reconcile(channel_id)
+            .map(|()| TaskOutcome::Done)
     }
 }
 
@@ -54,7 +56,9 @@ mod tests {
     use crate::domain::show::ShowKey;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::{EpisodeNumber, FetchedThumbnail, VideoId, YoutubeVideoId};
+    use crate::domain::video::{
+        EpisodeNumber, FetchedThumbnail, LateDataChecks, VideoId, YoutubeVideoId,
+    };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoryVerdict,
     };
@@ -142,7 +146,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             channel_video_repository
@@ -181,7 +185,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let video_id = videos[0].id.clone();
         assert_eq!(
@@ -262,7 +266,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -372,7 +376,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_categories_repository
                 .find_many(std::slice::from_ref(&existing.id))
@@ -455,7 +459,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             video_categories_repository
@@ -505,7 +509,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             channel_video_repository
@@ -598,7 +602,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
     }
@@ -680,7 +684,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
     }
@@ -753,7 +757,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             verdict_repository
@@ -832,7 +836,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![newest.clone(), middle.clone()]
@@ -916,7 +920,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let added_id = videos
             .iter()
@@ -1010,7 +1014,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
         assert_eq!(
             channel_video_repository
@@ -1049,7 +1053,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![next_reconcile(1)]
@@ -1082,7 +1086,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -1125,7 +1129,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -1159,7 +1163,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(channel_repository.list().unwrap(), vec![]);
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
@@ -1217,7 +1221,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *show_file_repository.show_nfos.lock().unwrap(),
             vec![(
@@ -1301,7 +1305,7 @@ mod tests {
             reconciling.join().unwrap()
         });
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *show_file_repository.show_nfos.lock().unwrap(),
             vec![(
@@ -1371,7 +1375,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             avatar_repository.avatars(),
             vec![(
@@ -1447,7 +1451,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             avatar_repository.avatars(),
             vec![(
@@ -1516,7 +1520,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             avatar_repository.avatars(),
             vec![(
@@ -1596,7 +1600,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             avatar_repository.avatars(),
             vec![(
@@ -1676,7 +1680,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(avatar_repository.avatars(), vec![]);
         assert_eq!(*show_file_repository.posters.lock().unwrap(), vec![]);
         assert_eq!(
@@ -1778,7 +1782,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let video_id = videos[0].id.clone();
         assert_eq!(
@@ -1827,7 +1831,7 @@ mod tests {
     fn it_should_skip_if_invalid_channel_id_provided() {
         let result = run(&any_task(), &task_for(""));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
     }
 
     #[test]
@@ -1884,7 +1888,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![first.clone(), second.clone()]
@@ -1943,7 +1947,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![(
@@ -1991,7 +1995,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
     }
 
@@ -2036,7 +2040,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
     }
 
@@ -2095,7 +2099,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let videos = video_repository.list().unwrap();
         let (first_id, second_id) = (videos[0].id.clone(), videos[1].id.clone());
         assert_eq!(
@@ -2172,7 +2176,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -2214,7 +2218,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
@@ -2268,7 +2272,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
@@ -2305,7 +2309,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         let added = video_repository.list().unwrap()[0].id.clone();
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -2507,8 +2511,8 @@ mod tests {
     /// quality check.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
-            chapters_settled: true,
-            quality_settled: true,
+            chapters_checks: LateDataChecks::done(),
+            quality_checks: LateDataChecks::done(),
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(
@@ -2635,7 +2639,7 @@ mod tests {
         }
     }
 
-    fn run(task: &ReconcileChannelTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &ReconcileChannelTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

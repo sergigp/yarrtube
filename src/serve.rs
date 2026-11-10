@@ -1,17 +1,18 @@
 use crate::application::http::{self, ApiServices, RunningVersion, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
-    CategoryCreator, CategoryDeleter, CategoryMemberRemover, CategoryUpdater,
-    CategoryVideoCollector, CategoryViewSearcher, ChannelAvatarRestorer, ChannelCreator,
-    ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
-    ChapterFetcher, DirectorySearcher, InternalVideoReconciler, LayoutMigrator, LlmServerSearcher,
-    MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
-    PlaylistVideoReconciler, PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer,
-    PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
-    ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
-    VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
-    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
-    VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    CategorizationResetter, CategoryCreator, CategoryDeleter, CategoryMemberRemover,
+    CategoryUpdater, CategoryVideoCollector, CategoryViewSearcher, ChannelAvatarRestorer,
+    ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler,
+    ChannelViewSearcher, ChapterFetcher, DirectorySearcher, InternalVideoReconciler,
+    LayoutMigrator, LlmServerSearcher, MetadataGenerator, PlaylistCreator, PlaylistDeleter,
+    PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher,
+    PlexFolderScanner, PlexLabelSyncer, PlexLabelSyncerApi, PreferencesSearcher,
+    PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover, SubtitleFetcher,
+    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategorizer, VideoCategoryAssigner,
+    VideoCategoryChoiceSearcher, VideoCategoryEditor, VideoDownloader, VideoFileDeleter,
+    VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoRetrier, VideoSearcher,
+    VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -450,6 +451,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.task_repository.clone(),
             infrastructure.event_repository.clone(),
             videos_path(),
+            infrastructure.clock.clone(),
         ),
         video_searcher: VideoSearcher::new(
             infrastructure.playlist_repository.clone(),
@@ -506,6 +508,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.task_repository.clone(),
             infrastructure.event_repository.clone(),
             videos_path(),
+            infrastructure.clock.clone(),
         ),
         channel_video_reconciler: channel_video_reconciler(infrastructure),
         directory_searcher: DirectorySearcher::new(infrastructure.directory_repository.clone()),
@@ -537,6 +540,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.video_category_verdict_repository.clone(),
             infrastructure.category_lock.clone(),
             infrastructure.category_repository.clone(),
+            categorization_resetter(infrastructure),
         ),
         llm_server_searcher: LlmServerSearcher::new(infrastructure.llm_server_repository.clone()),
         video_category_choice_searcher: VideoCategoryChoiceSearcher::new(
@@ -544,6 +548,12 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             video_owner_finder(infrastructure),
             infrastructure.category_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
+        ),
+        video_retrier: VideoRetrier::new(
+            infrastructure.video_repository.clone(),
+            infrastructure.video_category_verdict_repository.clone(),
+            infrastructure.task_repository.clone(),
+            infrastructure.clock.clone(),
         ),
         video_category_editor: VideoCategoryEditor::new(
             infrastructure.video_repository.clone(),
@@ -557,6 +567,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             video_category_assigner(infrastructure),
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
+            categorization_resetter(infrastructure),
         ),
         category_creator: CategoryCreator::new(
             infrastructure.category_repository.clone(),
@@ -564,6 +575,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_repository.clone(),
             video_category_assigner(infrastructure),
             infrastructure.clock.clone(),
+            categorization_resetter(infrastructure),
         ),
         category_updater: CategoryUpdater::new(
             infrastructure.category_repository.clone(),
@@ -571,6 +583,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_repository.clone(),
             video_category_assigner(infrastructure),
             infrastructure.video_category_verdict_repository.clone(),
+            categorization_resetter(infrastructure),
         ),
         category_deleter: CategoryDeleter::new(
             infrastructure.category_repository.clone(),
@@ -596,6 +609,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.event_publisher.clone(),
             infrastructure.show_locks.clone(),
             videos_path(),
+            infrastructure.clock.clone(),
         ),
     }
 }
@@ -776,6 +790,7 @@ fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
         infrastructure.staging_area.clone(),
+        infrastructure.task_repository.clone(),
     )
 }
 
@@ -796,6 +811,16 @@ fn internal_video_reconciler(
         infrastructure.clock.clone(),
         videos_path(),
     ))
+}
+
+fn categorization_resetter(infrastructure: &InfrastructureContainer) -> CategorizationResetter {
+    CategorizationResetter::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.video_category_verdict_repository.clone(),
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.clock.clone(),
+    )
 }
 
 fn video_category_assigner(infrastructure: &InfrastructureContainer) -> VideoCategoryAssigner {
@@ -879,6 +904,7 @@ fn video_categorizer(infrastructure: &InfrastructureContainer) -> Arc<VideoCateg
         infrastructure.llm_server_repository.clone(),
         video_category_assigner(infrastructure),
         infrastructure.clock.clone(),
+        infrastructure.video_repository.clone(),
     ))
 }
 

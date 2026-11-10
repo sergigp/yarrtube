@@ -1,5 +1,5 @@
 use crate::domain::services::{QualityUpgrader, QualityUpgraderApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
@@ -19,12 +19,13 @@ impl UpgradeQualityTask {
 }
 
 impl TaskHandler for UpgradeQualityTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::UpgradeQuality { video_id } = task else {
             return Err(unexpected_task(task));
         };
         self.quality_upgrader
             .upgrade(&VideoId::new(video_id.clone())?)
+            .map(TaskOutcome::from)
     }
 }
 
@@ -38,8 +39,8 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{
-        DownloadedVideo, EpisodeNumber, LateDataChecks, PlaybackPosition, QualityProbe, Video,
-        VideoDownloaded, YoutubeVideoId,
+        DownloadedVideo, EpisodeNumber, LateDataChecks, PlaybackPosition, QualityProbe,
+        RetryAttempts, StepState, StepStatus, Video, VideoDownloaded, YoutubeVideoId,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -115,17 +116,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 downloaded_height: Some(1080),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
-                quality_settled: true,
+                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -219,16 +216,19 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "YouTube's SABR-only streaming degraded the quality check".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 downloaded_height: Some(720),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -315,15 +315,12 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
+                quality_checks: LateDataChecks::checked(Some(now()), 0),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -334,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_if_the_probe_fails() {
+    fn it_should_schedule_the_next_check_if_the_quality_check_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
@@ -377,14 +374,88 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                quality_checks: LateDataChecks::checked(Some(now()), 1),
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
+        assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_fail_the_quality_after_the_eleventh_failed_check() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::new(true)
+                .with_quality_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+        );
+        let video = Video {
+            quality_checks: LateDataChecks::checked(Some(now() - Duration::days(2)), 10),
+            ..sd_video()
+        };
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                now(),
+            ))
+            .unwrap();
+        let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            video_downloader_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+        )));
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 quality_checks: LateDataChecks {
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(now()),
+                        },
+                    },
                     last_checked_at: Some(now()),
-                    failed_attempts: 1,
                 },
                 updated_at: now(),
                 ..video.clone()
@@ -443,15 +514,19 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "yt-dlp failed to download a higher quality: HTTP Error 403: Forbidden"
+                    .to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -515,15 +590,18 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "yt-dlp downloaded no higher quality (Some(240)) than the recorded one (Some(360))".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -587,15 +665,18 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "yt-dlp downloaded no higher quality (Some(360)) than the recorded one (Some(360))".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -655,16 +736,12 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
-                quality_settled: true,
+                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -721,15 +798,18 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "YouTube's SABR-only streaming degraded the quality check".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
+                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -798,16 +878,12 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 downloaded_height: Some(1080),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
-                quality_settled: true,
+                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
                 version: 2,
                 ..progressed
@@ -870,7 +946,7 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -943,7 +1019,7 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -968,7 +1044,7 @@ mod tests {
             })),
         );
         let video = Video {
-            quality_settled: true,
+            quality_checks: LateDataChecks::done(),
             ..sd_video()
         };
         video_repository.insert(&video).unwrap();
@@ -1004,7 +1080,7 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(
             *video_downloader_repository.quality_calls.lock().unwrap(),
@@ -1067,18 +1143,14 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 quality: Some(Quality::Mid),
                 downloaded_height: Some(720),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 0,
-                },
-                quality_settled: true,
+                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
                 ..video.clone()
             }]
@@ -1136,7 +1208,7 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(
             *video_downloader_repository.quality_calls.lock().unwrap(),
@@ -1174,7 +1246,7 @@ mod tests {
 
         let result = run(&task, &task_for(&sd_video()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             *video_downloader_repository.quality_calls.lock().unwrap(),
@@ -1194,11 +1266,8 @@ mod tests {
         let downloaded_at = now() - Duration::days(1);
         Video {
             downloaded_height: Some(360),
-            quality_checks: LateDataChecks {
-                last_checked_at: Some(downloaded_at),
-                failed_attempts: 0,
-            },
-            chapters_settled: true,
+            quality_checks: LateDataChecks::checked(Some(downloaded_at), 0),
+            chapters_checks: LateDataChecks::done(),
             ..Video::create(
                 YoutubeVideoId::new("yt1").unwrap(),
                 "My Video",
@@ -1278,7 +1347,7 @@ mod tests {
             .to_utc()
     }
 
-    fn run(task: &UpgradeQualityTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &UpgradeQualityTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

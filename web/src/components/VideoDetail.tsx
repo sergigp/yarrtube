@@ -11,13 +11,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Badge } from '@/components/ui/badge'
 import { storageLocation } from '@/lib/storageLocation'
 import { channelPath } from '@/lib/sourcePath'
+import { canRetry, failingStepLines, statusLabel } from '@/lib/videoSteps'
+import { RetryVideoButton } from './RetryVideoButton'
 
-const STATUS_LABELS: Record<string, string> = {
-  IN_PROGRESS: 'Downloading',
-  PENDING: 'Pending',
-  ERRORED_RETRYING: 'Retrying',
-  ERRORED: 'Errored',
-}
 
 interface VideoDetailProps {
   basePath: string
@@ -79,12 +75,29 @@ export function VideoDetail({
       <div className="mt-2">
         {video.status !== 'DOWNLOADED' && (
           <Badge variant="outline" className="mb-2">
-            {STATUS_LABELS[video.status] ?? video.status}
+            {statusLabel(video.status)}
           </Badge>
         )}
+        <FailingSteps video={video} />
+        {canRetry(video.steps) && <RetryVideoButton videoId={video.id} title={video.title} />}
         <p className="text-xs break-words text-muted-foreground">{location}</p>
       </div>
     </div>
+  )
+}
+
+/** One line per step of the video that is retrying or failed. */
+function FailingSteps({ video }: { video: Video }) {
+  const lines = failingStepLines(video.steps, new Date())
+  if (lines.length === 0) {
+    return null
+  }
+  return (
+    <ul aria-label="Failing steps" className="mb-2 text-xs text-muted-foreground">
+      {lines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
   )
 }
 

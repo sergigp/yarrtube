@@ -162,8 +162,8 @@ actually loaded rather than the placeholder a broken one is swapped for.
   Every episode checked on disk must be `.mp4` (that real downloads are
   H.264/AAC is checked by the YouTube contract tests).
 - **Errored download** (`tests/erroredDownload.spec.js`): a download that
-  keeps failing is listed in the Downloads tab with its reason while it's
-  retried, and its video is Errored once the retries run out.
+  fails shows Retrying with its reason and next attempt, is listed pending in
+  the Downloads tab with its reason, and "Retry now" runs it again at once.
 - **Premieres** (`tests/premiere.spec.js`): a playlist's upcoming premiere
   is neither listed nor downloaded; its other video is.
 - **Search** (`tests/search.spec.js`): with 16 playlists, the sidebar search

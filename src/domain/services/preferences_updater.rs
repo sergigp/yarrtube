@@ -1,6 +1,7 @@
 use crate::domain::preferences::{
     Preferences, PreferencesChange, ResolvedPreferences, UpdatePreferencesError,
 };
+use crate::domain::services::{CategorizationResetter, CategorizationResetterApi};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -14,6 +15,7 @@ use std::sync::Arc;
 pub struct PreferencesUpdater {
     repository: Arc<dyn PreferencesRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    categorization_resetter: CategorizationResetter,
     clock: Arc<dyn Clock>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     category_lock: Arc<CategoryLock>,
@@ -28,9 +30,11 @@ impl PreferencesUpdater {
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
         category_lock: Arc<CategoryLock>,
         category_repository: Arc<dyn CategoryRepository>,
+        categorization_resetter: CategorizationResetter,
     ) -> Self {
         Self {
             repository,
+            categorization_resetter,
             video_repository,
             clock,
             video_category_verdict_repository,
@@ -68,11 +72,11 @@ impl PreferencesUpdaterApi for PreferencesUpdater {
             .map_err(UpdatePreferencesError::Repository)?;
         if stored.changes_summaries(&updated) {
             self.video_repository
-                .reset_unavailable_summaries(self.clock.now())
+                .reset_failed_summaries(self.clock.now())
                 .map_err(UpdatePreferencesError::Repository)?;
         }
         if stored.changes_categorization(&updated) {
-            self.reset_unavailable_verdicts()?;
+            self.reset_failed_categorizations()?;
         }
         self.resolve(updated)
     }
@@ -99,13 +103,16 @@ impl PreferencesUpdater {
             .map_err(UpdatePreferencesError::Repository)
     }
 
-    /// New settings may get answers the old ones couldn't: every unavailable
-    /// verdict goes. Under the category lock, so a running categorization
-    /// giving up either sees the new settings or has its verdicts deleted here.
-    fn reset_unavailable_verdicts(&self) -> Result<(), UpdatePreferencesError> {
+    /// New settings may get answers the old ones couldn't: every `failed`
+    /// verdict goes and the categorization of each video that had one is
+    /// Pending again. Under the category lock, so a running categorization
+    /// giving up either sees the new settings or has its verdicts deleted
+    /// here.
+    fn reset_failed_categorizations(&self) -> Result<(), UpdatePreferencesError> {
         let _guard = self.category_lock.lock();
         self.video_category_verdict_repository
-            .delete_unavailable()
+            .delete_failed()
+            .and_then(|video_ids| self.categorization_resetter.reset(&video_ids))
             .map_err(UpdatePreferencesError::Repository)
     }
 }

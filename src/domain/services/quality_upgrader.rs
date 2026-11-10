@@ -4,7 +4,8 @@ use crate::domain::services::{
 };
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId, VideoTarget,
+    DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId, VideoStepOutcome,
+    VideoTarget,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -17,6 +18,9 @@ use chrono::{DateTime, Utc};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+
+/// Why a check the SABR-only streaming experiment degraded runs again.
+const DEGRADED_REASON: &str = "YouTube's SABR-only streaming degraded the quality check";
 
 /// Upgrades a young downloaded video to the better quality YouTube finished
 /// processing after its download — see the `video-download` capability's
@@ -63,24 +67,25 @@ pub trait QualityUpgraderApi: Send + Sync {
     /// re-downloads into the video's staging dir and replaces its episode
     /// file in the owner's show directory in place, then records the new tier and height
     /// and publishes `VideoDownloaded`. Every check is recorded under the
-    /// `late-video-data` policy. Best effort: a failed probe or re-download
-    /// is recorded as a failed check, never returned.
-    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<()>;
+    /// `late-video-data` policy: a failed, degraded or no-better probe or
+    /// re-download is a failed attempt, re-queued under the `video-retries`
+    /// policy. Fails only when the video can't be read or stored.
+    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl QualityUpgraderApi for QualityUpgrader {
-    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<()> {
+    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome> {
         let Some((video, target)) = self.find_checkable(video_id)? else {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         let staged = self.staging_area.for_video(&video.id);
-        if let Err(e) =
-            self.check_and_upgrade(&video, target.quality, staged.path(), &target.output_dir)
-        {
-            warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
-            self.record_failed_check(&video);
+        match self.check_and_upgrade(&video, target.quality, staged.path(), &target.output_dir) {
+            Ok(()) => self.retry_if_degraded(&video),
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
+                self.record_failed_check(&video, e.to_string())
+            }
         }
-        Ok(())
     }
 }
 
@@ -121,7 +126,8 @@ impl QualityUpgrader {
             self.redownload(video, quality, staging, output_dir, published_at)
         } else {
             let probed_height = probe.height.filter(|_| !probe.degraded);
-            self.record_check(video, probed_height, published_at)
+            self.record_check_on(video, probed_height, published_at)
+                .map(|_| ())
         }
     }
 
@@ -206,28 +212,41 @@ impl QualityUpgrader {
             .is_some_and(|stored| stored.is_downloaded() && stored.filename == video.filename))
     }
 
-    /// Records a quality check that found nothing better (`probed_height`)
-    /// or failed (`None`).
-    fn record_check(
+    /// The video as stored once the check is recorded on it.
+    fn record_check_on(
         &self,
         video: &Video,
         probed_height: Option<u32>,
         published_at: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<Video>> {
         let now = self.clock.now();
-        self.video_updater
-            .update(&video.id, |video| {
-                Some(video.record_quality_check(probed_height, published_at, now))
-            })
-            .map(|_| ())
+        self.video_updater.update(&video.id, |video| {
+            Some(video.record_quality_check(probed_height, published_at, now))
+        })
     }
 
-    /// Best effort, like the check itself: a failure to record the failed
-    /// check is only logged.
-    fn record_failed_check(&self, video: &Video) {
-        if let Err(e) = self.record_check(video, None, video.created_at) {
-            warn!(video_id = %video.id, error = %e, "failed to record a failed quality check");
-        }
+    /// A check that completed but was degraded by SABR left the quality
+    /// Retrying: it runs again when its next attempt is due.
+    fn retry_if_degraded(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
+        let stored = self.video_repository.find(&video.id)?;
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            stored.and_then(|video| video.quality_checks.state.next_attempt_at()),
+            DEGRADED_REASON.to_string(),
+        ))
+    }
+
+    /// Records a failed check, failed for `reason`: Retrying, run again when
+    /// its next attempt is due, or Failed.
+    fn record_failed_check(
+        &self,
+        video: &Video,
+        reason: String,
+    ) -> anyhow::Result<VideoStepOutcome> {
+        let recorded = self.record_check_on(video, None, video.created_at)?;
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.quality_checks.state.next_attempt_at()),
+            reason,
+        ))
     }
 
     /// Best effort, like `VideoDownloader`'s: the upgrade is already

@@ -7,11 +7,15 @@ Generates a short AI summary of each video from its transcript, through the user
 ## Requirements
 
 ### Requirement: Summary State
-Every stored video SHALL have a summary state: Missing, Generated or Unavailable. Videos stored before this state existed SHALL be Missing. Generated is final. Unavailable lasts until the summary settings change.
+Every stored video SHALL have a summary status from the `video-retries` vocabulary: Pending (formerly Missing), Retrying, Done (formerly Generated) or Failed (formerly Unavailable), stored as `PENDING`, `RETRYING`, `DONE` and `FAILED`. Videos stored before this state existed SHALL be Pending. Done is final. Failed lasts until the summary settings change or the user retries the video.
 
 #### Scenario: Existing videos after upgrade
 - **WHEN** the daemon starts on a database with videos stored before summaries existed
-- **THEN** every one of them has summary state Missing
+- **THEN** every one of them has summary status Pending
+
+#### Scenario: Stored states upgraded
+- **WHEN** the system starts on a database with summary states `MISSING`, `GENERATED` and `UNAVAILABLE`
+- **THEN** they become `PENDING`, `DONE` and `FAILED`
 
 ### Requirement: Summary Generation Conditions
 A summary SHALL be generated for a video only when, at the moment it runs, AI and summaries are on, the video's channel or playlist has `summaries_enabled` `true`, the video is Downloaded, its subtitles are Fetched and its summary state is Missing. Otherwise the run SHALL do nothing and change nothing.
@@ -182,45 +186,26 @@ A successful generation SHALL store the summary with the model that wrote it and
 - **THEN** nothing is stored
 
 ### Requirement: Ollama Unavailable
-When Ollama can't be reached before generating, or the saved model isn't installed on it, the generation SHALL stop with a logged warning, changing nothing, and the task SHALL complete, so a later sync tries again.
+When Ollama can't be reached before generating, or the saved model isn't installed on it, the generation SHALL stop with a logged warning, make the summary Retrying with one more failed attempt and re-queue it under the `video-retries` policy, without failing the task.
 
 #### Scenario: Ollama down
 - **WHEN** a summary task runs while nothing answers at the Ollama URL
-- **THEN** the video stays Missing and the task completes
+- **THEN** the summary is Retrying with one failed attempt and is re-queued for its next attempt
 
 #### Scenario: Model not installed
 - **WHEN** the saved model isn't among those Ollama lists
-- **THEN** the video stays Missing and the task completes
+- **THEN** the summary is Retrying with one failed attempt and is re-queued for its next attempt
 
-### Requirement: Failed Summaries Retried
-A generation that fails SHALL fail its task, so the task queue retries it with its usual backoff. On the last attempt, a rejected call or an unreadable transcript SHALL set the summary state to Unavailable, while a server fault (Ollama unreachable, or answering an error other than 400) SHALL leave the video Missing for a later sync.
-
-#### Scenario: Failure before the last attempt
-- **WHEN** a generation fails on an attempt that isn't the last
-- **THEN** the task fails and the video stays Missing
-
-#### Scenario: Rejected on the last attempt
-- **WHEN** Ollama stops at the output cap on the last attempt
-- **THEN** the task fails and the video's summary state is Unavailable
-
-#### Scenario: Server fault on the last attempt
-- **WHEN** Ollama answers 500 on the last attempt
-- **THEN** the task fails and the video stays Missing
-
-#### Scenario: Subtitle file missing
-- **WHEN** a video's recorded subtitle file is no longer on disk on the last attempt
-- **THEN** Ollama is not asked to summarize and the video's summary state is Unavailable
-
-### Requirement: Unavailable Summaries Reset
-Saving a change to the Ollama URL or to any summary setting (model, context length, temperature, thinking, prompt) SHALL put every video with summary state Unavailable back to Missing, because the new settings may succeed. Saving the same values SHALL change nothing.
+### Requirement: Failed Summaries Reset
+Saving a change to the Ollama URL or to any summary setting (model, context length, temperature, thinking, prompt) SHALL put every video whose summary is Failed back to Pending with no failed attempts, because the new settings may succeed. Saving the same values SHALL change nothing.
 
 #### Scenario: Context length raised
-- **WHEN** a video is Unavailable and the context length is changed
-- **THEN** the video is Missing and a later sync schedules its summary
+- **WHEN** a video's summary is Failed and the context length is changed
+- **THEN** its summary is Pending and a later sync schedules its summary
 
 #### Scenario: Unrelated change
-- **WHEN** a video is Unavailable and a preference unrelated to summaries is changed
-- **THEN** the video stays Unavailable
+- **WHEN** a video's summary is Failed and a preference unrelated to summaries is changed
+- **THEN** its summary stays Failed
 
 ### Requirement: Summary Deleted With Its Video
 A video's summary SHALL be deleted whenever the video's record is deleted, including when its whole playlist or channel is deleted.
@@ -278,3 +263,22 @@ A stored summary SHALL be shown only while AI is on, summaries are on and the so
 #### Scenario: Same video in two sources
 - **WHEN** a YouTube video is tracked by a channel with `summaries_enabled` `true` and a playlist with it `false`, and both copies have a stored summary
 - **THEN** the channel's copy shows its summary and the playlist's copy shows none
+
+### Requirement: Failed Summaries Follow The Retry Policy
+A rejected call, an unreadable transcript, or a server fault during generation (Ollama unreachable, or answering an error other than 400) SHALL make the summary Retrying with one more failed attempt and re-queue it under the `video-retries` policy, without failing the task. After the 11th consecutive failed attempt the summary SHALL become Failed. A generated summary SHALL make it Done and clear the failed attempts.
+
+#### Scenario: Rejected
+- **WHEN** Ollama stops at the output cap on a summary's first attempt
+- **THEN** the summary is Retrying with one failed attempt and is re-queued 10 minutes later
+
+#### Scenario: Server fault
+- **WHEN** Ollama answers 500 during generation
+- **THEN** the summary is Retrying with one more failed attempt and the task does not fail
+
+#### Scenario: Eleventh failure
+- **WHEN** a summary with 10 consecutive failed attempts is rejected again
+- **THEN** the summary is Failed and the task completes
+
+#### Scenario: Subtitle file missing
+- **WHEN** a video's recorded subtitle file is no longer on disk
+- **THEN** Ollama is not asked to summarize, and the summary is Retrying with one more failed attempt

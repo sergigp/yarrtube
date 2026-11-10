@@ -1,6 +1,7 @@
 use crate::domain::category::{Category, CategoryId, CategoryMember};
 use crate::domain::services::{
-    VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
+    CategorizationResetter, CategorizationResetterApi, VideoCategoryAssigner,
+    VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
 use crate::domain::task::Task;
 use crate::domain::video::VideoId;
@@ -31,6 +32,7 @@ pub struct VideoCategoryEditor {
     video_category_assigner: VideoCategoryAssigner,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
+    categorization_resetter: CategorizationResetter,
 }
 
 impl VideoCategoryEditor {
@@ -47,8 +49,10 @@ impl VideoCategoryEditor {
         video_category_assigner: VideoCategoryAssigner,
         task_repository: Arc<dyn TaskRepository>,
         clock: Arc<dyn Clock>,
+        categorization_resetter: CategorizationResetter,
     ) -> Self {
         Self {
+            categorization_resetter,
             video_repository,
             video_owner_finder,
             category_repository,
@@ -78,8 +82,8 @@ pub trait VideoCategoryEditorApi: Send + Sync {
     fn rerun_video(&self, video_id: &VideoId) -> Result<(), EditVideoCategoriesError>;
     /// The same for every video of `source`; schedules its reconcile pass.
     fn rerun_source(&self, source: &CategoryMember) -> Result<(), EditVideoCategoriesError>;
-    /// Deletes the category's AI verdicts, recomputes and syncs the videos
-    /// that had one.
+    /// Deletes the category's AI verdicts, makes the categorization of the
+    /// videos that had one Pending, recomputes and syncs them.
     fn rerun_category(&self, category_id: &CategoryId) -> Result<(), EditVideoCategoriesError>;
 }
 
@@ -124,6 +128,7 @@ impl VideoCategoryEditorApi for VideoCategoryEditor {
             .video_category_verdict_repository
             .delete_ai_for_category(category_id)
             .map_err(EditVideoCategoriesError::Repository)?;
+        self.reset_categorizations(&affected)?;
         self.recompute(&affected)?;
         affected.iter().try_for_each(|video_id| {
             self.schedule(&Task::SyncVideo {
@@ -155,7 +160,16 @@ impl VideoCategoryEditor {
             .video_category_verdict_repository
             .delete_ai_for_videos(video_ids)
             .map_err(EditVideoCategoriesError::Repository)?;
+        self.reset_categorizations(&affected)?;
         self.recompute(&affected)
+    }
+
+    /// The categorization of each of `video_ids` back to Pending: their AI
+    /// verdicts are gone, so their categories are pending again.
+    fn reset_categorizations(&self, video_ids: &[VideoId]) -> Result<(), EditVideoCategoriesError> {
+        self.categorization_resetter
+            .reset(video_ids)
+            .map_err(EditVideoCategoriesError::Repository)
     }
 
     fn recompute(&self, video_ids: &[VideoId]) -> Result<(), EditVideoCategoriesError> {

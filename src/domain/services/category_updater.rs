@@ -2,7 +2,10 @@ use crate::domain::category::{
     Category, CategoryColor, CategoryId, CategoryMember, CategoryName, CategoryPrompt,
     UpdateCategoryError,
 };
-use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
+use crate::domain::services::{
+    CategorizationResetter, CategorizationResetterApi, VideoCategoryAssigner,
+    VideoCategoryAssignerApi,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -26,6 +29,7 @@ pub struct CategoryUpdater {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_category_assigner: VideoCategoryAssigner,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    categorization_resetter: CategorizationResetter,
 }
 
 impl CategoryUpdater {
@@ -35,6 +39,7 @@ impl CategoryUpdater {
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_category_assigner: VideoCategoryAssigner,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        categorization_resetter: CategorizationResetter,
     ) -> Self {
         Self {
             repository,
@@ -42,6 +47,7 @@ impl CategoryUpdater {
             playlist_repository,
             video_category_assigner,
             video_category_verdict_repository,
+            categorization_resetter,
         }
     }
 }
@@ -50,7 +56,9 @@ pub trait CategoryUpdaterApi: Send + Sync {
     /// Applies the present fields of `update` in one save. Another category
     /// with the same name ignoring case → `NameTaken`. A rename is announced
     /// for every video in the category; a recolor is not. A changed AI prompt also deletes the
-    /// category's unavailable verdicts, so those videos are asked again.
+    /// category's unavailable verdicts, so those videos are asked again; a
+    /// first AI prompt makes the category pending for every stored video
+    /// outside its members, whose categorization is Pending again.
     fn update(&self, id: &CategoryId, update: CategoryUpdate) -> Result<(), UpdateCategoryError>;
     /// Replaces the members, then recomputes the categories of every video of
     /// a former or new member. Every member must be a tracked
@@ -70,9 +78,14 @@ impl CategoryUpdaterApi for CategoryUpdater {
         }
         let renamed = update.name.is_some();
         let reprompted = Self::changes_prompt(&category, &update);
-        self.save(&Self::applied(category, update))?;
+        let first_prompt = category.ai_prompt.is_none() && reprompted;
+        let updated = Self::applied(category, update);
+        self.save(&updated)?;
         if reprompted {
-            self.reset_unavailable_verdicts(id)?;
+            self.reset_failed_categorizations(id)?;
+        }
+        if first_prompt {
+            self.reset_pending_categorizations(&updated)?;
         }
         if renamed {
             self.video_category_assigner
@@ -187,13 +200,28 @@ impl CategoryUpdater {
     }
 
     /// A new prompt may get answers the old one couldn't: the category's
-    /// unavailable verdicts go, so it is pending again for their videos.
-    /// Under the lock, so a running categorization giving up either sees the
-    /// new prompt or has its unavailable verdicts deleted here.
-    fn reset_unavailable_verdicts(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
+    /// `failed` verdicts go, so it is pending again for their videos, whose
+    /// categorization is Pending again. Under the lock, so a running
+    /// categorization giving up either sees the new prompt or has its failed
+    /// verdicts deleted here.
+    fn reset_failed_categorizations(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
         let _guard = self.video_category_assigner.lock();
         self.video_category_verdict_repository
-            .delete_unavailable_for_category(id)
+            .delete_failed_for_category(id)
+            .and_then(|video_ids| self.categorization_resetter.reset(&video_ids))
+            .map_err(UpdateCategoryError::Repository)
+    }
+
+    /// Given its first AI prompt, `category` is pending for every stored
+    /// video outside its members, whose categorization is Pending again.
+    /// Under the lock, as `reset_failed_categorizations`.
+    fn reset_pending_categorizations(
+        &self,
+        category: &Category,
+    ) -> Result<(), UpdateCategoryError> {
+        let _guard = self.video_category_assigner.lock();
+        self.categorization_resetter
+            .reset_pending_for(category)
             .map_err(UpdateCategoryError::Repository)
     }
 

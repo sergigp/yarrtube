@@ -1,10 +1,46 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VideoDetail } from './VideoDetail'
-import { aChannel, aVideo, mockApi, renderWithProviders } from '@/test/helpers'
+import { usePlaylistVideos } from '@/api/queries'
+import type { Video } from '@/api/types'
+import { aChannel, aStep, aVideo, mockApi, renderWithProviders, someSteps } from '@/test/helpers'
 
 describe('VideoDetail', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('lists each retrying or failed step with its next attempt or how it gave up', () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-11-10T10:00:00Z'))
+    const video = aVideo({
+      status: 'DOWNLOADED',
+      steps: someSteps({
+        download: aStep({ status: 'DONE' }),
+        subtitles: aStep({
+          status: 'RETRYING',
+          failed_attempts: 2,
+          next_attempt_at: '2026-11-10T11:00:00Z',
+        }),
+        summary: aStep({ status: 'FAILED', failed_attempts: 11 }),
+      }),
+    })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('list', { name: 'Failing steps' })).toHaveTextContent(
+      'Subtitles: retrying, next attempt in 1 hourSummary: failed, gave up after 11 attempts',
+    )
+  })
+
   it('shows the storage location with no More control', () => {
     // The matchMedia stub reports a non-desktop viewport.
     const video = aVideo({ title: 'My Video', filename: 'my-video.mp4' })
@@ -88,7 +124,7 @@ describe('VideoDetail', () => {
   })
 
   it('shows the status of a video that is not downloaded', () => {
-    const video = aVideo({ status: 'ERRORED_RETRYING', filename: null })
+    const video = aVideo({ status: 'RETRYING', filename: null })
     renderWithProviders(
       <VideoDetail
         basePath="playlists/mix"
@@ -141,6 +177,76 @@ describe('VideoDetail', () => {
     )
     expect(screen.queryByText('The Channel', { selector: 'span' })).not.toBeInTheDocument()
   })
+  it('retries a video from the detail pane and shows it refetched', async () => {
+    const failed = aVideo({
+      id: 'abc',
+      status: 'FAILED',
+      filename: null,
+      steps: someSteps({ download: aStep({ status: 'FAILED', failed_attempts: 11 }) }),
+    })
+    let stored: Video = failed
+    const retry = vi.fn(() => {
+      stored = { ...failed, status: 'PENDING', steps: someSteps() }
+      return null
+    })
+    mockApi({
+      'GET /api/playlists/PL1/videos': () => [stored],
+      'POST /api/videos/abc/retry': retry,
+    })
+    renderWithProviders(<PlaylistVideoDetail />)
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Retry now' }))
+
+    expect(retry).toHaveBeenCalledOnce()
+    expect(await screen.findByText('Pending')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument()
+  })
+
+  it('offers no retry for a video with no retrying or failed step', () => {
+    const video = aVideo({
+      steps: someSteps({
+        download: aStep({ status: 'DONE' }),
+        subtitles: aStep({ status: 'UNAVAILABLE' }),
+      }),
+    })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Failing steps' })).not.toBeInTheDocument()
+  })
+
+  it('tells the user when retrying fails and leaves the video as it was', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const video = aVideo({
+      id: 'abc',
+      title: 'My Video',
+      status: 'FAILED',
+      filename: null,
+      steps: someSteps({ download: aStep({ status: 'FAILED', failed_attempts: 11 }) }),
+    })
+    mockApi({
+      'GET /api/playlists/PL1/videos': [video],
+      'POST /api/videos/abc/retry': { status: 500, error: 'database is locked' },
+    })
+    renderWithProviders(<PlaylistVideoDetail />)
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Retry now' }))
+
+    await vi.waitFor(() =>
+      expect(alert).toHaveBeenCalledWith('Failed to retry "My Video": database is locked'),
+    )
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry now' })).toBeEnabled()
+  })
+
   it('marks the selected video watched from the detail pane', async () => {
     const markWatched = vi.fn(() => null)
     mockApi({ 'POST /api/videos/abc/watched': markWatched })
@@ -193,3 +299,17 @@ describe('VideoDetail', () => {
     expect(screen.getByRole('button', { name: 'Playback speed' })).toBeDisabled()
   })
 })
+
+/** The detail pane of the first video of playlist PL1, as the API lists it. */
+function PlaylistVideoDetail() {
+  const { data } = usePlaylistVideos('PL1')
+  const video = data?.[0]
+  return video ? (
+    <VideoDetail
+      basePath="playlists/mix"
+      video={video}
+      playbackRate={1}
+      onPlaybackRateChange={() => {}}
+    />
+  ) : null
+}

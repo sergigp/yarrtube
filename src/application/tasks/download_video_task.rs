@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
@@ -17,12 +17,13 @@ impl DownloadVideoTask {
 }
 
 impl TaskHandler for DownloadVideoTask {
-    fn handle(&self, task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::DownloadVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
         self.video_downloader
-            .download(VideoId::new(video_id.clone())?, is_last_attempt)
+            .download(VideoId::new(video_id.clone())?)
+            .map(TaskOutcome::from)
     }
 }
 
@@ -38,14 +39,18 @@ mod tests {
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::DownloadedVideo;
     use crate::domain::video::EpisodeNumber;
     use crate::domain::video::LateDataChecks;
     use crate::domain::video::PlaybackPosition;
     use crate::domain::video::PlaylistEpisodeNumber;
+    use crate::domain::video::RetryAttempts;
+    use crate::domain::video::StepState;
     use crate::domain::video::Video;
     use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
+    use crate::domain::video::VideoStatus;
     use crate::domain::video::YoutubeVideoId;
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
@@ -62,6 +67,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        SqliteTaskRepository, TaskRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         SqliteVideoMetadataRepository, VideoMetadataRepository,
@@ -125,9 +133,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -230,18 +238,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 downloaded_height: Some(720),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 0,
-                },
+                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -292,19 +297,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 downloaded_height: Some(1080),
-                quality_settled: true,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 0,
-                },
+                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -356,19 +357,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 downloaded_height: Some(1080),
-                quality_settled: true,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 0,
-                },
+                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -426,18 +423,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 downloaded_height: Some(360),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 1,
-                },
+                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 1),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -452,6 +446,64 @@ mod tests {
                         EpisodeNumber::from_columns(2023, 101501).unwrap(),
                         fixed_timestamp(),
                     )
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_requeue_the_quality_check_of_a_degraded_download() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    height: Some(360),
+                    sabr_notice: Some(
+                        "YouTube may have enabled the SABR-only streaming experiment".to_string(),
+                    ),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+                .list_non_completed()
+                .unwrap(),
+            vec![ScheduledTask {
+                id: 1,
+                task: Task::UpgradeQuality {
+                    video_id: video.id.as_str().to_string(),
+                },
+                status: TaskStatus::Pending,
+                retries: 0,
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                created_at: fixed_timestamp(),
+                updated_at: fixed_timestamp(),
+                last_error: None,
             }]
         );
     }
@@ -491,18 +543,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 downloaded_height: Some(360),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 0,
-                },
+                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -553,19 +602,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 downloaded_height: Some(720),
-                quality_settled: true,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 0,
-                },
+                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -616,19 +661,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 chapters: Some(game_chapters()),
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 0,
-                },
-                chapters_settled: true,
+                chapters_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -680,18 +721,15 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 chapters: Some(vec![]),
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 0,
-                },
+                chapters_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -743,9 +781,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -813,9 +851,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *nfo_when_media_moved.lock().unwrap(),
             Some(render_episode_nfo(
@@ -879,9 +917,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
@@ -946,9 +984,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -982,6 +1020,122 @@ mod tests {
                         .join("Season 2026/S2026E031503 - My Video.jpg"),
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_the_fetched_thumbnail_if_the_download_brings_none() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let video = my_video()
+            .with_thumbnail("Season 2026/S2026E031503 - My Video.jpg", fixed_timestamp())
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31503).unwrap(),
+                fixed_timestamp(),
+            );
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    thumbnail_path: None,
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                ..video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031503 - My Video.mp4",
+                        Some("Season 2026/S2026E031503 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .quality_checked_at(fixed_timestamp())
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_reference_the_kept_thumbnail_in_the_episode_nfo() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let output_dir = videos_dir.path().join("creators/somechannel");
+        let number = EpisodeNumber::from_columns(2026, 31503).unwrap();
+        let video = my_video()
+            .with_thumbnail("Season 2026/S2026E031503 - My Video.jpg", fixed_timestamp())
+            .with_episode_number(number, fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    thumbnail_path: None,
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            std::fs::read_to_string(
+                output_dir
+                    .as_path()
+                    .join("Season 2026/S2026E031503 - My Video.nfo")
+            )
+            .unwrap(),
+            render_episode_nfo(
+                &generated_metadata(Some("S2026E031503 - My Video.jpg")),
+                &number
+            )
         );
     }
 
@@ -1027,14 +1181,14 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                quality_settled: true,
+                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -1100,9 +1254,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1158,9 +1312,9 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1232,11 +1386,14 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(
             result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("yt-dlp failed to download video {}", video.id),
+            })
         );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
@@ -1248,68 +1405,6 @@ mod tests {
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
         assert_eq!(folder_entries(videos_dir.path()), Vec::<String>::new());
-    }
-
-    #[test]
-    fn it_should_mark_errored_if_the_download_cannot_be_moved_into_place_on_the_last_attempt() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
-        let videos_dir = tempfile::tempdir().unwrap();
-        let video = my_video();
-        let staged_media =
-            PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
-        let video_file_repository =
-            Arc::new(FakeVideoFileRepository::default().with_failing_move(staged_media.clone()));
-        video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            videos_dir.path(),
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
-                staged_download(),
-            )),
-            video_file_repository.clone(),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
-
-        let result = run(&task, &task_for(video.id.as_str()), true);
-
-        assert_eq!(
-            result,
-            Err(format!("permission denied moving {staged_media:?}"))
-        );
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![Video {
-                version: 3,
-                ..video
-                    .clone()
-                    .start_download(fixed_timestamp())
-                    .mark_errored(fixed_timestamp())
-                    .with_episode_number(published_episode(), fixed_timestamp())
-            }]
-        );
-        assert_eq!(
-            *video_file_repository.deleted_dirs.lock().unwrap(),
-            vec![PathBuf::from(format!(
-                "/videos/.downloads/{}",
-                video.id.as_str()
-            ))]
-        );
-        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
     #[test]
@@ -1340,22 +1435,299 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(
             result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("yt-dlp failed to download video {}", video.id),
+            })
+        );
+        let failed_id = video.id.clone();
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                ..video.start_download(fixed_timestamp()).mark_errored(
+                    format!("yt-dlp failed to download video {}", failed_id),
+                    fixed_timestamp()
+                )
+            }]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_schedule_the_next_attempt_if_the_download_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
+                "HTTP Error 503",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "HTTP Error 503".to_string(),
+            })
         );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
+                status: VideoStatus::Retrying,
+                download_attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                download_failure: Some("HTTP Error 503".to_string()),
+                updated_at: fixed_timestamp(),
                 ..video
-                    .start_download(fixed_timestamp())
-                    .mark_errored_retrying(fixed_timestamp())
             }]
         );
-        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_wait_longer_after_each_failed_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = retrying_video(1);
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = failing_download_task(&db, video_repository.clone(), "HTTP Error 503");
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::hours(1),
+                reason: "HTTP Error 503".to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                download_attempts: RetryAttempts {
+                    failed: 2,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_retry_daily_from_the_fourth_failure() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = retrying_video(4);
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = failing_download_task(&db, video_repository.clone(), "HTTP Error 503");
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::hours(24),
+                reason: "HTTP Error 503".to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                download_attempts: RetryAttempts {
+                    failed: 5,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_give_up_after_the_eleventh_failed_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = retrying_video(10);
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = failing_download_task(&db, video_repository.clone(), "HTTP Error 503");
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                status: VideoStatus::Failed,
+                download_attempts: RetryAttempts {
+                    failed: 11,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_requeue_without_downloading_if_the_next_attempt_is_not_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let video = Video {
+            download_attempts: RetryAttempts {
+                failed: 2,
+                last_failed_at: Some(fixed_timestamp() - Duration::minutes(20)),
+            },
+            ..retrying_video(2)
+        };
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(40),
+                reason: "HTTP Error 503".to_string(),
+            })
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_download_a_retrying_video_once_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let video = Video {
+            download_attempts: RetryAttempts {
+                failed: 3,
+                last_failed_at: Some(fixed_timestamp() - Duration::hours(6)),
+            },
+            ..retrying_video(3)
+        };
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    height: Some(720),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 3,
+                status: VideoStatus::Downloaded,
+                download_attempts: RetryAttempts::default(),
+                download_failure: None,
+                quality: Some(Quality::High),
+                filename: Some("Season 2026/S2026E031501 - My Video.mp4".to_string()),
+                thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                thumbnail: StepState::pending().succeed(),
+                episode_number: Some(published_episode()),
+                downloaded_height: Some(720),
+                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
+                synced_at: Some(fixed_timestamp()),
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_skip_a_failed_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let video = my_video().mark_download_failed("HTTP Error 503", fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_fail_if_the_video_cannot_be_read() {
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+
+        let result = run(&any_task(downloader.clone()), &task_for("rec1"));
+
+        assert_eq!(result, Err("failed to find video".to_string()));
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
 
     #[test]
@@ -1387,16 +1759,22 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "HTTP Error 403: Forbidden".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
                 ..video
                     .start_download(fixed_timestamp())
-                    .mark_errored_retrying(fixed_timestamp())
+                    .mark_errored("HTTP Error 403: Forbidden", fixed_timestamp())
             }]
         );
     }
@@ -1435,17 +1813,14 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(fixed_timestamp()),
-                    failed_attempts: 1,
-                },
+                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 1),
                 ..video
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -1490,16 +1865,22 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "HTTP Error 403: Forbidden".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
                 ..video
                     .start_download(fixed_timestamp())
-                    .mark_errored_retrying(fixed_timestamp())
+                    .mark_errored("HTTP Error 403: Forbidden", fixed_timestamp())
             }]
         );
     }
@@ -1534,7 +1915,7 @@ mod tests {
         ));
 
         let logs = captured_log_messages(|| {
-            let _ = run(&task, &task_for(video.id.as_str()), false);
+            let _ = run(&task, &task_for(video.id.as_str()));
         });
 
         assert!(
@@ -1575,7 +1956,7 @@ mod tests {
         ));
 
         let logs = captured_log_messages(|| {
-            let _ = run(&task, &task_for(video.id.as_str()), false);
+            let _ = run(&task, &task_for(video.id.as_str()));
         });
 
         assert!(
@@ -1613,7 +1994,7 @@ mod tests {
         ));
 
         let logs = captured_log_messages(|| {
-            let _ = run(&task, &task_for(video.id.as_str()), false);
+            let _ = run(&task, &task_for(video.id.as_str()));
         });
 
         assert!(
@@ -1624,66 +2005,12 @@ mod tests {
     }
 
     #[test]
-    fn it_should_mark_errored_after_last_attempt() {
+    fn it_should_record_the_failure_if_yt_dlp_cannot_run() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            Path::new("/videos"),
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(false)),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
-
-        let result = run(&task, &task_for(video.id.as_str()), true);
-
-        assert_eq!(
-            result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
-        );
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![Video {
-                version: 2,
-                ..video
-                    .start_download(fixed_timestamp())
-                    .mark_errored(fixed_timestamp())
-            }]
-        );
-    }
-
-    #[test]
-    fn it_should_retry_a_download_that_errored() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video();
-        video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
+        seed_channel_video(&db, &video);
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             Path::new("/videos"),
@@ -1696,60 +2023,27 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("yt-dlp could not be run".to_string()));
         assert_eq!(
-            video_repository.list().unwrap(),
-            vec![Video {
-                version: 2,
-                ..video
-                    .start_download(fixed_timestamp())
-                    .mark_errored_retrying(fixed_timestamp())
-            }]
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "yt-dlp could not be run".to_string(),
+            })
         );
-    }
-
-    #[test]
-    fn it_should_exclude_a_permanently_unavailable_video_without_dead_lettering_on_the_last_attempt()
-     {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video();
-        video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            Path::new("/videos"),
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
-                "It was blocked due to the claimed content by Mediatoon. | Video unavailable",
-            )),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
-
-        let result = run(&task, &task_for(video.id.as_str()), true);
-
-        assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
+                status: VideoStatus::Retrying,
+                download_attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                download_failure: Some("yt-dlp could not be run".to_string()),
+                updated_at: fixed_timestamp(),
                 ..video
-                    .start_download(fixed_timestamp())
-                    .mark_excluded(fixed_timestamp())
             }]
         );
     }
@@ -1783,59 +2077,45 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
                 ..video
                     .start_download(fixed_timestamp())
-                    .mark_excluded(fixed_timestamp())
+                    .mark_unavailable(fixed_timestamp())
             }]
         );
     }
 
     #[test]
-    fn it_should_exclude_a_members_only_video() {
+    fn it_should_mark_the_video_unavailable_if_the_failure_is_permanent() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video();
+        let video = retrying_video(3);
         video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
+        seed_channel_video(&db, &video);
+        let task = failing_download_task(
             &db,
-            Path::new("/videos"),
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
-                "Join this channel to get access to members-only content like this video, and other exclusive perks.",
-            )),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
+            "Join this channel to get access to members-only content like this video, and other exclusive perks.",
+        );
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
+                status: VideoStatus::Unavailable,
+                download_attempts: RetryAttempts::default(),
+                download_failure: None,
+                updated_at: fixed_timestamp(),
                 ..video
-                    .start_download(fixed_timestamp())
-                    .mark_excluded(fixed_timestamp())
             }]
         );
     }
@@ -1869,16 +2149,22 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("Video unavailable".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "Video unavailable".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
                 ..video
                     .start_download(fixed_timestamp())
-                    .mark_errored_retrying(fixed_timestamp())
+                    .mark_errored("Video unavailable", fixed_timestamp())
             }]
         );
     }
@@ -1898,9 +2184,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(my_video().id.as_str()), false);
+        let result = run(&task, &task_for(my_video().id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
@@ -1943,9 +2229,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2007,9 +2293,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
@@ -2050,9 +2336,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
@@ -2061,7 +2347,7 @@ mod tests {
     fn it_should_skip_the_download_of_an_excluded_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video().mark_excluded(fixed_timestamp());
+        let video = my_video().mark_unavailable(fixed_timestamp());
         video_repository.insert(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         SqliteChannelRepository::new(db.database())
@@ -2085,9 +2371,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
@@ -2096,7 +2382,7 @@ mod tests {
     fn it_should_skip_the_download_of_an_errored_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video().mark_errored(fixed_timestamp());
+        let video = my_video().mark_download_failed("HTTP Error 503", fixed_timestamp());
         video_repository.insert(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         SqliteChannelRepository::new(db.database())
@@ -2120,9 +2406,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
@@ -2167,9 +2453,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
         assert_eq!(
@@ -2217,9 +2503,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2274,20 +2560,25 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(
             result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("yt-dlp failed to download video {}", video.id),
+            })
         );
+        let failed_id = video.id.clone();
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
                 ..with_watch_state_recorded_meanwhile(
-                    video
-                        .start_download(fixed_timestamp())
-                        .mark_errored_retrying(fixed_timestamp())
+                    video.start_download(fixed_timestamp()).mark_errored(
+                        format!("yt-dlp failed to download video {}", failed_id),
+                        fixed_timestamp()
+                    )
                 )
             }]
         );
@@ -2329,9 +2620,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2339,8 +2630,57 @@ mod tests {
                 ..with_watch_state_recorded_meanwhile(
                     video
                         .start_download(fixed_timestamp())
-                        .mark_excluded(fixed_timestamp())
+                        .mark_unavailable(fixed_timestamp())
                 )
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_record_the_failure_if_the_download_cannot_be_placed() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        let staged_media =
+            PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
+            Arc::new(FakeVideoFileRepository::default().with_failing_move(staged_media.clone())),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        let reason = format!("permission denied moving {staged_media:?}");
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: reason.clone(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 3,
+                status: VideoStatus::Retrying,
+                download_attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                download_failure: Some(reason),
+                episode_number: Some(published_episode()),
+                updated_at: fixed_timestamp(),
+                ..video
             }]
         );
     }
@@ -2381,11 +2721,14 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), true);
+        let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(
             result,
-            Err(format!("permission denied moving {staged_media:?}"))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("permission denied moving {staged_media:?}"),
+            })
         );
         assert_eq!(
             video_repository.list().unwrap(),
@@ -2394,7 +2737,10 @@ mod tests {
                 ..with_watch_state_recorded_meanwhile(
                     video
                         .start_download(fixed_timestamp())
-                        .mark_errored(fixed_timestamp())
+                        .mark_errored(
+                            format!("permission denied moving {staged_media:?}"),
+                            fixed_timestamp()
+                        )
                         .with_episode_number(published_episode(), fixed_timestamp())
                 )
             }]
@@ -2435,9 +2781,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2461,7 +2807,7 @@ mod tests {
     fn it_should_fail_if_invalid_video_id_provided() {
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
 
-        let result = run(&any_task(downloader.clone()), &task_for(""), false);
+        let result = run(&any_task(downloader.clone()), &task_for(""));
 
         assert_eq!(result, Err("Video ID must not be empty".to_string()));
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
@@ -2472,7 +2818,6 @@ mod tests {
         let result = run(
             &any_task(Arc::new(FakeVideoDownloaderRepository::new(true))),
             &Task::UpdateYtdlp,
-            false,
         );
 
         assert_eq!(
@@ -2516,9 +2861,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2581,9 +2926,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2660,9 +3005,9 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_metadata_repository.find(&video.id).unwrap(),
             Some(VideoMetadata {
@@ -2705,9 +3050,9 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_metadata_repository.find(&video.id).unwrap(),
             Some(generated_metadata(Some("S2026E031501 - My Video.jpg")))
@@ -2750,9 +3095,9 @@ mod tests {
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             std::fs::read_to_string(
                 output_dir
@@ -2796,9 +3141,9 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_metadata_repository.find(&video.id).unwrap(),
             Some(generated_metadata(Some("S2026E031501 - My Video.jpg")))
@@ -2865,11 +3210,15 @@ mod tests {
                 Arc::new(FilesystemVideoFileRepository),
                 videos_root.to_string_lossy(),
             )),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         ));
 
-        let result = run(&task, &task_for(video.id.as_str()), false);
+        let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2931,6 +3280,10 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(StagingArea::new(video_file_repository, "/videos")),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         )
     }
 
@@ -2968,6 +3321,10 @@ mod tests {
                 Arc::new(FakeVideoFileRepository::default()),
                 "/videos",
             )),
+            Arc::new(SqliteTaskRepository::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         ))
     }
 
@@ -2986,10 +3343,7 @@ mod tests {
     impl QualityCheckedAt for Video {
         fn quality_checked_at(self, at: DateTime<Utc>) -> Video {
             Video {
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(at),
-                    failed_attempts: 0,
-                },
+                quality_checks: LateDataChecks::checked(Some(at), 0),
                 ..self
             }
         }
@@ -3031,6 +3385,52 @@ mod tests {
             None,
             fixed_timestamp(),
         )
+    }
+
+    /// A video whose download failed `failed` times, the last a month ago,
+    /// so its next attempt is due.
+    fn retrying_video(failed: u32) -> Video {
+        Video {
+            status: VideoStatus::Retrying,
+            download_attempts: RetryAttempts {
+                failed,
+                last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+            },
+            download_failure: Some("HTTP Error 503".to_string()),
+            ..my_video()
+        }
+    }
+
+    /// Stores `my_channel()` holding `video`.
+    fn seed_channel_video(db: &TestDatabase, video: &Video) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    /// A download task whose `yt-dlp` always fails with `reason`.
+    fn failing_download_task(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        reason: &str,
+    ) -> DownloadVideoTask {
+        DownloadVideoTask::new(video_downloader(
+            db,
+            Path::new("/videos"),
+            video_repository,
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(reason)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ))
     }
 
     fn my_video() -> Video {
@@ -3164,8 +3564,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn run(task: &DownloadVideoTask, queued: &Task, is_last_attempt: bool) -> Result<(), String> {
-        task.handle(queued, is_last_attempt)
-            .map_err(|e| e.to_string())
+    fn run(task: &DownloadVideoTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

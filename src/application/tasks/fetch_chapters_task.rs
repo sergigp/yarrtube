@@ -1,5 +1,5 @@
 use crate::domain::services::{ChapterFetcher, ChapterFetcherApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
@@ -27,15 +27,15 @@ impl FetchChaptersTask {
 }
 
 impl TaskHandler for FetchChaptersTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::FetchChapters { video_id } = task else {
             return Err(unexpected_task(task));
         };
         let video_id = VideoId::new(video_id.clone())?;
-        if let Some(video) = self.video_repository.find(&video_id)? {
-            self.chapter_fetcher.fetch(&video);
+        match self.video_repository.find(&video_id)? {
+            Some(video) => self.chapter_fetcher.fetch(&video).map(TaskOutcome::from),
+            None => Ok(TaskOutcome::Done),
         }
-        Ok(())
     }
 }
 
@@ -44,7 +44,8 @@ mod tests {
     use super::*;
     use crate::domain::shared::Quality;
     use crate::domain::video::{
-        ChaptersProbe, LateDataChecks, PlaybackPosition, Video, VideoChapter, YoutubeVideoId,
+        ChaptersProbe, LateDataChecks, PlaybackPosition, RetryAttempts, StepState, StepStatus,
+        Video, VideoChapter, YoutubeVideoId,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_chapter_repository::FakeChapterRepository;
@@ -71,17 +72,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 chapters: Some(intro_chapters()),
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(later()),
-                    failed_attempts: 0,
-                },
-                chapters_settled: true,
+                chapters_checks: LateDataChecks::done_at(Some(later())),
                 updated_at: later(),
                 ..video
             }]
@@ -99,10 +96,7 @@ mod tests {
         let chapter_repository =
             Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = Video {
-            chapters_checks: LateDataChecks {
-                last_checked_at: Some(fixed_timestamp()),
-                failed_attempts: 0,
-            },
+            chapters_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
             ..downloaded_video().with_chapters(vec![], fixed_timestamp())
         };
         video_repository.insert(&video).unwrap();
@@ -117,17 +111,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 chapters: Some(intro_chapters()),
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(later()),
-                    failed_attempts: 0,
-                },
-                chapters_settled: true,
+                chapters_checks: LateDataChecks::done_at(Some(later())),
                 updated_at: later(),
                 ..video
             }]
@@ -156,16 +146,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 chapters: Some(vec![]),
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(later()),
-                    failed_attempts: 0,
-                },
+                chapters_checks: LateDataChecks::checked(Some(later()), 0),
                 updated_at: later(),
                 ..video
             }]
@@ -173,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_settle_empty_chapters_of_an_old_video() {
+    fn it_should_make_empty_chapters_of_an_old_video_unavailable() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let chapter_repository = Arc::new(FakeChapterRepository::with_probe(Ok(ChaptersProbe {
@@ -193,17 +180,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
                 chapters: Some(vec![]),
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(later()),
-                    failed_attempts: 0,
-                },
-                chapters_settled: true,
+                chapters_checks: LateDataChecks::unavailable_at(Some(later())),
                 updated_at: later(),
                 ..video
             }]
@@ -211,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_chapters_attempt() {
+    fn it_should_schedule_the_next_check_if_the_chapters_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Err(
@@ -230,15 +213,18 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "Video unavailable".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(later()),
-                    failed_attempts: 1,
-                },
+                chapters_checks: LateDataChecks::checked(Some(later()), 1),
                 updated_at: later(),
                 ..video
             }]
@@ -250,18 +236,17 @@ mod tests {
     }
 
     #[test]
-    fn it_should_settle_chapters_as_none_after_three_failed_checks_of_an_old_video() {
+    fn it_should_fail_the_chapters_after_the_eleventh_failed_fetch() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Err(
             anyhow::anyhow!("Video unavailable"),
         )));
         let video = Video {
-            created_at: later() - Duration::days(30),
-            chapters_checks: LateDataChecks {
-                last_checked_at: Some(later() - Duration::days(1)),
-                failed_attempts: 2,
-            },
+            chapters_checks: LateDataChecks::checked(
+                Some(fixed_timestamp() - Duration::days(2)),
+                10,
+            ),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -269,31 +254,31 @@ mod tests {
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
                 video_repository.clone(),
-                chapter_repository.clone(),
+                chapter_repository,
                 Arc::new(FixedClock(later())),
             )),
         );
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters: Some(vec![]),
                 chapters_checks: LateDataChecks {
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(later()),
+                        },
+                    },
                     last_checked_at: Some(later()),
-                    failed_attempts: 3,
                 },
-                chapters_settled: true,
                 updated_at: later(),
                 ..video
             }]
-        );
-        assert_eq!(
-            *chapter_repository.calls.lock().unwrap(),
-            vec![YT1_URL.to_string()]
         );
     }
 
@@ -304,7 +289,7 @@ mod tests {
         let chapter_repository =
             Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = Video {
-            chapters_settled: true,
+            chapters_checks: LateDataChecks::done(),
             ..downloaded_video().with_chapters(vec![], fixed_timestamp())
         };
         video_repository.insert(&video).unwrap();
@@ -319,7 +304,7 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(
             *chapter_repository.calls.lock().unwrap(),
@@ -344,7 +329,7 @@ mod tests {
 
         let result = run(&task, &task_for(&downloaded_video()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             *chapter_repository.calls.lock().unwrap(),
@@ -381,17 +366,13 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
                 chapters: Some(intro_chapters()),
-                chapters_checks: LateDataChecks {
-                    last_checked_at: Some(later()),
-                    failed_attempts: 0,
-                },
-                chapters_settled: true,
+                chapters_checks: LateDataChecks::done_at(Some(later())),
                 updated_at: later(),
                 ..played
             }]
@@ -421,7 +402,7 @@ mod tests {
 
         let result = run(&task, &task_for(&video));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             *chapter_repository.calls.lock().unwrap(),
@@ -477,7 +458,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap()
     }
 
-    fn run(task: &FetchChaptersTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &FetchChaptersTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

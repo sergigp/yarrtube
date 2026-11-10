@@ -1,6 +1,6 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Recursively deletes a deleted playlist's output directory, scheduled by
@@ -17,15 +17,16 @@ impl DeletePlaylistFilesTask {
 }
 
 impl TaskHandler for DeletePlaylistFilesTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::DeletePlaylistFiles { playlist_id, path } = task else {
             return Err(unexpected_task(task));
         };
         let Ok(playlist_id) = PlaylistId::new(playlist_id.clone()) else {
-            return Ok(());
+            return Ok(TaskOutcome::Done);
         };
         self.video_file_deleter
             .delete_playlist_video_files(playlist_id, path.clone())
+            .map(|()| TaskOutcome::Done)
     }
 }
 
@@ -46,7 +47,7 @@ mod tests {
 
         let result = run(&task, &task_for("PL1", "music/chill"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![PathBuf::from("/videos/music/chill")]
@@ -63,7 +64,7 @@ mod tests {
 
         let result = run(&task, &task_for("", "music/chill"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             Vec::<PathBuf>::new()
@@ -97,7 +98,7 @@ mod tests {
         }
     }
 
-    fn run(task: &DeletePlaylistFilesTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &DeletePlaylistFilesTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

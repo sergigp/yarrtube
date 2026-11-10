@@ -62,7 +62,7 @@ A pair with a user verdict SHALL NOT be evaluated by the AI, and SHALL keep its 
 - **THEN** the user `no` stays and the video still doesn't belong to "Food for thought"
 
 ### Requirement: Re-run A Video's AI Categorization
-`DELETE /api/videos/{id}/ai-verdicts` SHALL delete every AI verdict of the video (`yes`, `no` and `unavailable`), keep its user verdicts, recompute its categories, schedule its video sync, and respond with HTTP status 204. An unknown video SHALL get HTTP status 404.
+`DELETE /api/videos/{id}/ai-verdicts` SHALL delete every AI verdict of the video (`yes`, `no` and `failed`), keep its user verdicts, recompute its categories, schedule its video sync, and respond with HTTP status 204. An unknown video SHALL get HTTP status 404.
 
 #### Scenario: Wrong AI category
 - **WHEN** a video of a channel with categorization on belongs to "Politics" through an AI `yes` and a client re-runs its AI categorization

@@ -1,15 +1,16 @@
 use super::errors::VideoError;
 
 /// A video's position in its download lifecycle: stored, then downloaded via
-/// `yt-dlp`, tracking success or failure (with retries) along the way.
+/// `yt-dlp`, tracking success or failure (with retries, see the `video-retries`
+/// capability) along the way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VideoStatus {
     Pending,
     InProgress,
     Downloaded,
-    ErroredRetrying,
-    Errored,
-    Excluded,
+    Retrying,
+    Failed,
+    Unavailable,
 }
 
 impl VideoStatus {
@@ -18,9 +19,9 @@ impl VideoStatus {
             Self::Pending => "PENDING",
             Self::InProgress => "IN_PROGRESS",
             Self::Downloaded => "DOWNLOADED",
-            Self::ErroredRetrying => "ERRORED_RETRYING",
-            Self::Errored => "ERRORED",
-            Self::Excluded => "EXCLUDED",
+            Self::Retrying => "RETRYING",
+            Self::Failed => "FAILED",
+            Self::Unavailable => "UNAVAILABLE",
         }
     }
 
@@ -29,9 +30,9 @@ impl VideoStatus {
             "PENDING" => Ok(Self::Pending),
             "IN_PROGRESS" => Ok(Self::InProgress),
             "DOWNLOADED" => Ok(Self::Downloaded),
-            "ERRORED_RETRYING" => Ok(Self::ErroredRetrying),
-            "ERRORED" => Ok(Self::Errored),
-            "EXCLUDED" => Ok(Self::Excluded),
+            "RETRYING" => Ok(Self::Retrying),
+            "FAILED" => Ok(Self::Failed),
+            "UNAVAILABLE" => Ok(Self::Unavailable),
             other => Err(VideoError(format!("unknown video status '{other}'"))),
         }
     }
@@ -66,26 +67,26 @@ mod tests {
     }
 
     #[test]
-    fn it_should_round_trip_errored_retrying_through_its_string_representation() {
+    fn it_should_round_trip_retrying_through_its_string_representation() {
         assert_eq!(
-            VideoStatus::parse(VideoStatus::ErroredRetrying.as_str()).unwrap(),
-            VideoStatus::ErroredRetrying
+            VideoStatus::parse(VideoStatus::Retrying.as_str()).unwrap(),
+            VideoStatus::Retrying
         );
     }
 
     #[test]
-    fn it_should_round_trip_errored_through_its_string_representation() {
+    fn it_should_round_trip_failed_through_its_string_representation() {
         assert_eq!(
-            VideoStatus::parse(VideoStatus::Errored.as_str()).unwrap(),
-            VideoStatus::Errored
+            VideoStatus::parse(VideoStatus::Failed.as_str()).unwrap(),
+            VideoStatus::Failed
         );
     }
 
     #[test]
-    fn it_should_round_trip_excluded_through_its_string_representation() {
+    fn it_should_round_trip_unavailable_through_its_string_representation() {
         assert_eq!(
-            VideoStatus::parse(VideoStatus::Excluded.as_str()).unwrap(),
-            VideoStatus::Excluded
+            VideoStatus::parse(VideoStatus::Unavailable.as_str()).unwrap(),
+            VideoStatus::Unavailable
         );
     }
 

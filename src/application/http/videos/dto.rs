@@ -1,6 +1,6 @@
 use crate::domain::video::{
-    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, VideoChapter, VideoSource,
-    VideoView,
+    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, LateDataChecks, StepState,
+    StepStatus, Video, VideoChapter, VideoSource, VideoStatus, VideoView,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,7 @@ pub struct VideoResponse {
     pub youtube_id: String,
     pub title: String,
     pub status: String,
+    pub steps: VideoStepsResponse,
     pub quality: Option<String>,
     pub filename: Option<String>,
     pub thumbnail_filename: Option<String>,
@@ -40,6 +41,78 @@ pub struct VideoResponse {
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
     pub summary: Option<String>,
+}
+
+/// Where each of a video's steps stands — see the `video-listing`
+/// capability.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct VideoStepsResponse {
+    pub download: StepResponse,
+    pub thumbnail: StepResponse,
+    pub subtitles: StepResponse,
+    pub chapters: StepResponse,
+    pub quality: StepResponse,
+    pub summary: StepResponse,
+    pub categorization: StepResponse,
+}
+
+/// One step's status (`PENDING`, `RETRYING`, `DONE`, `UNAVAILABLE`,
+/// `FAILED`; the download also `IN_PROGRESS`), its consecutive failed
+/// attempts, when its next attempt is due (only while Retrying) and its last
+/// failure reason (download only, while Retrying or Failed).
+#[derive(Debug, Serialize, PartialEq)]
+pub struct StepResponse {
+    pub status: String,
+    pub failed_attempts: u32,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub failure: Option<String>,
+}
+
+impl From<&Video> for VideoStepsResponse {
+    fn from(video: &Video) -> Self {
+        Self {
+            download: StepResponse::download(video),
+            thumbnail: StepResponse::from(video.thumbnail),
+            subtitles: StepResponse::from(video.subtitles),
+            chapters: StepResponse::from(video.chapters_checks),
+            quality: StepResponse::from(video.quality_checks),
+            summary: StepResponse::from(video.summary),
+            categorization: StepResponse::from(video.categorization),
+        }
+    }
+}
+
+impl From<StepState> for StepResponse {
+    fn from(state: StepState) -> Self {
+        Self {
+            status: state.status.as_str().to_string(),
+            failed_attempts: state.attempts.failed,
+            next_attempt_at: state.next_attempt_at(),
+            failure: None,
+        }
+    }
+}
+
+impl From<LateDataChecks> for StepResponse {
+    fn from(checks: LateDataChecks) -> Self {
+        Self::from(checks.state)
+    }
+}
+
+impl StepResponse {
+    fn download(video: &Video) -> Self {
+        let status = match video.status {
+            VideoStatus::Downloaded => StepStatus::Done.as_str(),
+            other => other.as_str(),
+        };
+        let failing = matches!(video.status, VideoStatus::Retrying | VideoStatus::Failed);
+        Self {
+            status: status.to_string(),
+            failed_attempts: video.download_attempts.failed,
+            next_attempt_at: video.next_download_at(),
+            failure: video.download_failure.clone().filter(|_| failing),
+        }
+    }
 }
 
 /// One of a video's chapters, in whole seconds from the start of the video.
@@ -71,6 +144,7 @@ impl From<VideoView> for VideoResponse {
             None => (None, None),
         };
         Self {
+            steps: VideoStepsResponse::from(&video),
             subtitle_language: video.subtitle_language(),
             watched: video.is_watched(),
             position_seconds: video.playback_position.seconds(),
@@ -186,6 +260,7 @@ pub struct CategoryVideoResponse {
     pub youtube_id: String,
     pub title: String,
     pub status: String,
+    pub steps: VideoStepsResponse,
     pub quality: Option<String>,
     pub filename: Option<String>,
     pub thumbnail_filename: Option<String>,
@@ -217,6 +292,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
             youtube_id: video.youtube_id,
             title: video.title,
             status: video.status,
+            steps: video.steps,
             quality: video.quality,
             filename: video.filename,
             thumbnail_filename: video.thumbnail_filename,
