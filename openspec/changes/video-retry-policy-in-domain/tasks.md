@@ -23,7 +23,7 @@
 - [x] 2.4 `it_should_give_up_after_the_eleventh_failed_attempt`
 - [x] 2.5 `it_should_record_the_failure_if_yt_dlp_cannot_run`
 - [x] 2.6 `it_should_record_the_failure_if_the_download_cannot_be_placed`
-- [ ] 2.7 `it_should_mark_the_video_unavailable_if_the_failure_is_permanent`
+- [x] 2.7 `it_should_mark_the_video_unavailable_if_the_failure_is_permanent`
 - [ ] 2.8 `it_should_requeue_without_downloading_if_the_next_attempt_is_not_due`
 - [ ] 2.9 `it_should_download_a_retrying_video_once_due`
 - [ ] 2.10 `it_should_skip_a_failed_video`

@@ -1786,33 +1786,17 @@ mod tests {
     }
 
     #[test]
-    fn it_should_exclude_a_members_only_video() {
+    fn it_should_mark_the_video_unavailable_if_the_failure_is_permanent() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video();
+        let video = retrying_video(3);
         video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
+        seed_channel_video(&db, &video);
+        let task = failing_download_task(
             &db,
-            Path::new("/videos"),
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
-                "Join this channel to get access to members-only content like this video, and other exclusive perks.",
-            )),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
+            "Join this channel to get access to members-only content like this video, and other exclusive perks.",
+        );
 
         let result = run(&task, &task_for(video.id.as_str()));
 
@@ -1821,9 +1805,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
+                status: VideoStatus::Unavailable,
+                download_attempts: RetryAttempts::default(),
+                download_failure: None,
+                updated_at: fixed_timestamp(),
                 ..video
-                    .start_download(fixed_timestamp())
-                    .mark_unavailable(fixed_timestamp())
             }]
         );
     }

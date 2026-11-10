@@ -175,10 +175,13 @@ impl Video {
     }
 
     /// Marks a video's download Unavailable: final, for a video that can
-    /// never be downloaded (see the `video-download` capability).
+    /// never be downloaded (see the `video-download` capability), its failed
+    /// attempts and failure cleared.
     pub fn mark_unavailable(self, now: DateTime<Utc>) -> Self {
         Self {
             status: VideoStatus::Unavailable,
+            download_attempts: RetryAttempts::default(),
+            download_failure: None,
             updated_at: now,
             ..self
         }
