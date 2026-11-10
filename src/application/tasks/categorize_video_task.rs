@@ -330,6 +330,43 @@ mod tests {
     }
 
     #[test]
+    fn it_should_cap_the_output_at_3072_for_one_category() {
+        let db = TestDatabase::new();
+        let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(output_caps(&llm), vec![3072]);
+    }
+
+    #[test]
+    fn it_should_cap_the_output_at_the_context_length() {
+        let db = TestDatabase::new();
+        let names = NINE_CATEGORIES;
+        let llm = llm_replying(vec![reply(&answers(&names.map(|name| (name, NO))))]);
+        let video = summarized_video();
+        let categories = names.map(prompted_category);
+        seed(&db, &video, &categories.each_ref());
+        SqlitePreferencesRepository::new(db.database())
+            .save(&Preferences {
+                categorization: CategorizationSettings {
+                    context_length: Some(ContextLength::new(8192).unwrap()),
+                    ..categorization_on().categorization
+                },
+                ..categorization_on()
+            })
+            .unwrap();
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(output_caps(&llm), vec![8192]);
+    }
+
+    #[test]
     fn it_should_read_the_answer_after_leaked_thinking() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
@@ -1023,6 +1060,27 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             })
             .collect()
     }
+
+    /// The output cap of each chat, in order.
+    fn output_caps(llm: &FakeLlmServerRepository) -> Vec<u32> {
+        llm.chats()
+            .iter()
+            .map(|chat| chat.max_output_tokens)
+            .collect()
+    }
+
+    /// The nine categories `evals/categories` measures.
+    const NINE_CATEGORIES: [&str; 9] = [
+        "AI news",
+        "Chess gameplays",
+        "Coding tutorials",
+        "Food for thought",
+        "Jobava London",
+        "Politics and Economy News",
+        "Science News",
+        "Sicilian",
+        "Tech",
+    ];
 
     /// An answer about each named category, keyed by its name.
     fn answers(entries: &[(&str, &str)]) -> String {
