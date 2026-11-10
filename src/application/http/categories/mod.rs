@@ -1267,11 +1267,11 @@ mod tests {
         let food = category(None, "Food");
         repository.insert(&tech).unwrap();
         repository.insert(&food).unwrap();
-        let food_unavailable = unavailable_verdict(&video, &food);
+        let food_failed = failed_verdict(&video, &food);
         verdict_repository
-            .save(&unavailable_verdict(&video, &tech))
+            .save(&failed_verdict(&video, &tech))
             .unwrap();
-        verdict_repository.save(&food_unavailable).unwrap();
+        verdict_repository.save(&food_failed).unwrap();
         let category_updater = CategoryUpdater::new(
             repository,
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -1298,7 +1298,7 @@ mod tests {
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
-            vec![food_unavailable]
+            vec![food_failed]
         );
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
@@ -1311,7 +1311,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_keep_unavailable_verdicts_when_a_category_prompt_is_saved_unchanged() {
+    async fn it_should_keep_failed_verdicts_when_a_category_prompt_is_saved_unchanged() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
         let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
@@ -1321,8 +1321,8 @@ mod tests {
             ..category(None, "Tech")
         };
         repository.insert(&tech).unwrap();
-        let tech_unavailable = unavailable_verdict(&video, &tech);
-        verdict_repository.save(&tech_unavailable).unwrap();
+        let tech_failed = failed_verdict(&video, &tech);
+        verdict_repository.save(&tech_failed).unwrap();
         let category_updater = CategoryUpdater::new(
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -1356,7 +1356,7 @@ mod tests {
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
-            vec![tech_unavailable]
+            vec![tech_failed]
         );
     }
 
@@ -2957,13 +2957,10 @@ mod tests {
                 fixed_timestamp(),
             ),
         ];
-        [
-            yes_verdict(&first, &food),
-            unavailable_verdict(&second, &food),
-        ]
-        .iter()
-        .chain(&kept)
-        .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+        [yes_verdict(&first, &food), failed_verdict(&second, &food)]
+            .iter()
+            .chain(&kept)
+            .for_each(|verdict| verdict_repository.save(verdict).unwrap());
         let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
         video_categories_repository
             .save_many(&[VideoCategories::new(
@@ -3050,7 +3047,7 @@ mod tests {
         let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
         [
             yes_verdict(&first, &sicilian),
-            unavailable_verdict(&second, &sicilian),
+            failed_verdict(&second, &sicilian),
             VideoCategoryVerdict::by_user(
                 third.id.clone(),
                 sicilian.id.clone(),
@@ -3438,7 +3435,7 @@ mod tests {
         }
     }
 
-    fn unavailable_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
+    fn failed_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
         VideoCategoryVerdict {
             verdict: Verdict::Failed,
             reason: None,

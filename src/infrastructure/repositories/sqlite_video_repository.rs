@@ -883,7 +883,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_bump_the_version_when_resetting_unavailable_summaries() {
+    fn it_should_bump_the_version_when_resetting_failed_summaries() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();

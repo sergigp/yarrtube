@@ -330,7 +330,32 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_only_unavailable_verdicts() {
+    fn it_should_delete_only_the_failed_verdicts_of_a_video() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let kept = [
+            ai_verdict("rec1", "chess", Verdict::Yes),
+            ai_verdict("rec1", "funny", Verdict::No),
+            ai_verdict("rec2", "chess", Verdict::Failed),
+        ];
+        [ai_verdict("rec1", "tech", Verdict::Failed)]
+            .iter()
+            .chain(&kept)
+            .for_each(|verdict| repository.save(verdict).unwrap());
+
+        let result = repository.delete_failed_for_video(&video_id("rec1"));
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            repository
+                .find_many(&[video_id("rec1"), video_id("rec2")])
+                .unwrap(),
+            kept.to_vec()
+        );
+    }
+
+    #[test]
+    fn it_should_delete_only_failed_verdicts() {
         let db = TestDatabase::new();
         let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let kept = [
@@ -357,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_the_unavailable_verdicts_of_one_category() {
+    fn it_should_delete_the_failed_verdicts_of_one_category() {
         let db = TestDatabase::new();
         let repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let kept = [

@@ -360,7 +360,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_keep_unavailable_summaries_on_an_unrelated_change() {
+    async fn it_should_keep_failed_summaries_on_an_unrelated_change() {
         let requests = [
             UpdatePreferencesRequest {
                 categories_enabled: Some(false),
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_keep_unavailable_verdicts_when_the_same_settings_are_saved() {
+    async fn it_should_keep_failed_verdicts_when_the_same_settings_are_saved() {
         let requests = [
             UpdatePreferencesRequest {
                 categorization_model: Some("qwen3:4b".to_string()),
@@ -740,7 +740,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_keep_unavailable_summaries_when_the_categorization_settings_change() {
+    async fn it_should_keep_failed_summaries_when_the_categorization_settings_change() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let video_repository = SqliteVideoRepository::new(db.database());
