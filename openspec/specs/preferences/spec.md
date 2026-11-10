@@ -222,8 +222,8 @@ Until a `categorization_prompt` is saved, it SHALL read as the prompt shipped wi
 - **THEN** the daemon responds with HTTP status 400 and the message `Categorization prompt must not be empty`
 
 #### Scenario: Summaries left alone
-- **WHEN** a video's summary is unavailable and a client changes `categorization_model`
-- **THEN** the video's summary stays unavailable
+- **WHEN** a video's summary is Failed and a client changes `categorization_model`
+- **THEN** the video's summary stays Failed
 
 ### Requirement: Auto Categorization Context Length
 Until a `categorization_context_length` is saved, it SHALL be Auto: 1,820 tokens per category with an AI prompt, rounded up to a multiple of 1,024, at least 4,096 and at most 131,072, read as that number with `categorization_context_length_is_auto` `true`. Saving a number SHALL store it, with `_is_auto` `false`; saving `null` SHALL drop it, back to Auto. Saving other preferences SHALL NOT store it. A `4096` stored by a version before Auto, its old default, SHALL be dropped once by a migration and read as Auto; a `4096` saved since SHALL read as saved.

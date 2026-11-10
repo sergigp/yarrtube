@@ -273,7 +273,7 @@ A category SHALL have an optional AI prompt describing the videos that belong in
 - **THEN** every one of them has no AI prompt
 
 ### Requirement: AI Verdict Count In Category Responses
-Every category in `GET /api/categories` SHALL include `ai_verdict_count`: how many stored videos have an AI verdict (`yes`, `no` or `unavailable`) for it.
+Every category in `GET /api/categories` SHALL include `ai_verdict_count`: how many stored videos have an AI verdict (`yes`, `no` or `failed`) for it.
 
 #### Scenario: Category evaluated for some videos
 - **WHEN** "Sicilian" has AI verdicts for 40 videos and user verdicts for 2 others
