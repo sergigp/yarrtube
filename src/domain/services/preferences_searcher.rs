@@ -46,18 +46,10 @@ impl PreferencesSearcher {
         &self,
         preferences: Preferences,
     ) -> Result<ResolvedPreferences, ReadPreferencesError> {
-        let prompted = self
+        let categories = self
             .category_repository
             .list()
-            .map_err(ReadPreferencesError::Repository)?
-            .iter()
-            .filter(|category| category.ai_prompt.is_some())
-            .count();
-        Ok(ResolvedPreferences {
-            categorization_context_length: preferences
-                .categorization
-                .effective_context_length(prompted),
-            preferences,
-        })
+            .map_err(ReadPreferencesError::Repository)?;
+        Ok(ResolvedPreferences::new(preferences, &categories))
     }
 }

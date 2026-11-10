@@ -85,19 +85,11 @@ impl PreferencesUpdater {
         &self,
         preferences: Preferences,
     ) -> Result<ResolvedPreferences, UpdatePreferencesError> {
-        let prompted = self
+        let categories = self
             .category_repository
             .list()
-            .map_err(UpdatePreferencesError::Repository)?
-            .iter()
-            .filter(|category| category.ai_prompt.is_some())
-            .count();
-        Ok(ResolvedPreferences {
-            categorization_context_length: preferences
-                .categorization
-                .effective_context_length(prompted),
-            preferences,
-        })
+            .map_err(UpdatePreferencesError::Repository)?;
+        Ok(ResolvedPreferences::new(preferences, &categories))
     }
 
     fn stored(&self) -> Result<Preferences, UpdatePreferencesError> {

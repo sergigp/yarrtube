@@ -407,6 +407,34 @@ mod tests {
     }
 
     #[test]
+    fn it_should_fail_if_the_server_is_unreachable() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let url = OllamaUrl::new(format!("http://{closed}")).unwrap();
+
+        let result = OllamaLlmServerRepository::new().chat(&url, &chat());
+
+        assert!(result.is_err(), "expected an error, got {result:?}");
+    }
+
+    #[test]
+    fn it_should_fail_if_the_server_drops_the_connection() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = OllamaUrl::new(format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                drop(stream);
+            }
+        });
+
+        let result = OllamaLlmServerRepository::new().chat(&url, &chat());
+
+        assert!(result.is_err(), "expected an error, got {result:?}");
+    }
+
+    #[test]
     fn it_should_fail_on_an_error_status() {
         let mut server = mockito::Server::new();
         let _chat = server.mock("POST", "/api/chat").with_status(500).create();
