@@ -9,10 +9,6 @@ use std::time::Duration;
 /// doesn't answer fails it quickly.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// A summary takes minutes on a small machine, and thinking can loop for an
-/// hour: past this, the call has failed.
-const CHAT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-
 /// Port to an LLM server's HTTP API.
 pub trait LlmServerRepository: Send + Sync {
     /// The server at `url`: its version and installed models, each with
@@ -23,15 +19,11 @@ pub trait LlmServerRepository: Send + Sync {
 }
 
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
-pub struct OllamaLlmServerRepository {
-    chat_timeout: Duration,
-}
+pub struct OllamaLlmServerRepository;
 
 impl OllamaLlmServerRepository {
     pub fn new() -> Self {
-        Self {
-            chat_timeout: CHAT_TIMEOUT,
-        }
+        Self
     }
 }
 
@@ -58,14 +50,14 @@ impl LlmServerRepository for OllamaLlmServerRepository {
     }
 
     fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
-        let client = Self::client(self.chat_timeout)?;
+        let client = Self::client(chat.timeout)?;
         let sent = client
             .post(format!("{url}/api/chat"))
             .json(&Self::chat_body(chat))
             .send();
         let response = match sent {
             Err(e) if e.is_timeout() && !e.is_connect() => {
-                let minutes = self.chat_timeout.as_secs() / 60;
+                let minutes = chat.timeout.as_secs() / 60;
                 return Ok(LlmReply::refused(format!(
                     "no answer within {minutes} minutes"
                 )));
@@ -82,6 +74,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
         Ok(LlmReply {
             content: response.message.content,
             input_tokens: response.prompt_eval_count,
+            output_tokens: response.eval_count,
             stopped_at_limit: response.done_reason.as_deref() == Some("length"),
             refusal: None,
         })
@@ -195,6 +188,8 @@ struct ChatResponse {
     message: ChatMessage,
     #[serde(default)]
     prompt_eval_count: u32,
+    #[serde(default)]
+    eval_count: u32,
     done_reason: Option<String>,
 }
 
@@ -285,7 +280,7 @@ impl LlmServerRepository for FakeLlmServerRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::llm_server::LlmModel;
+    use crate::domain::llm_server::{LlmModel, MIN_CHAT_TIMEOUT};
 
     #[test]
     fn it_should_post_the_chat_with_its_options() {
@@ -340,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_read_the_answer_and_input_tokens() {
+    fn it_should_read_the_answer_and_tokens() {
         let mut server = mockito::Server::new();
         let _chat = server.mock("POST", "/api/chat").with_body(ANSWER).create();
 
@@ -353,6 +348,7 @@ mod tests {
             LlmReply {
                 content: "Three games.".to_string(),
                 input_tokens: 120,
+                output_tokens: 250,
                 stopped_at_limit: false,
                 refusal: None,
             }
@@ -400,13 +396,42 @@ mod tests {
         // Connections queue in the backlog but nobody ever answers.
         let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = OllamaUrl::new(format!("http://{}", silent.local_addr().unwrap())).unwrap();
-        let repository = OllamaLlmServerRepository {
-            chat_timeout: Duration::from_millis(100),
+        let chat = LlmChat {
+            timeout: Duration::from_millis(100),
+            ..chat()
         };
 
-        let reply = repository.chat(&url, &chat()).unwrap();
+        let reply = OllamaLlmServerRepository::new().chat(&url, &chat).unwrap();
 
         assert_eq!(reply, LlmReply::refused("no answer within 0 minutes"));
+    }
+
+    #[test]
+    fn it_should_fail_if_the_server_is_unreachable() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let url = OllamaUrl::new(format!("http://{closed}")).unwrap();
+
+        let result = OllamaLlmServerRepository::new().chat(&url, &chat());
+
+        assert!(result.is_err(), "expected an error, got {result:?}");
+    }
+
+    #[test]
+    fn it_should_fail_if_the_server_drops_the_connection() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = OllamaUrl::new(format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                drop(stream);
+            }
+        });
+
+        let result = OllamaLlmServerRepository::new().chat(&url, &chat());
+
+        assert!(result.is_err(), "expected an error, got {result:?}");
     }
 
     #[test]
@@ -584,7 +609,7 @@ mod tests {
         OllamaUrl::new(server.url()).unwrap()
     }
 
-    const ANSWER: &str = r#"{"message": {"role": "assistant", "content": "Three games."}, "done_reason": "stop", "prompt_eval_count": 120}"#;
+    const ANSWER: &str = r#"{"message": {"role": "assistant", "content": "Three games."}, "done_reason": "stop", "prompt_eval_count": 120, "eval_count": 250}"#;
 
     fn chat() -> LlmChat {
         LlmChat {
@@ -596,6 +621,7 @@ mod tests {
             thinking: true,
             max_output_tokens: 3288,
             format: None,
+            timeout: MIN_CHAT_TIMEOUT,
         }
     }
 }

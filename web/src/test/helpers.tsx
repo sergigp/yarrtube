@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, type InitialEntry } from 'react-router-dom'
 import { vi } from 'vitest'
 import SHIPPED_PROMPT from '../../../prompts/summaries/v3.md?raw'
-import SHIPPED_CATEGORIZATION_PROMPT from '../../../prompts/categorization/v2.md?raw'
+import SHIPPED_CATEGORIZATION_PROMPT from '../../../prompts/categorization/v2-batch.md?raw'
 import { VideoCategoriesEditor } from '@/components/VideoCategoriesEditor'
 import type {
   Announcement,
@@ -343,6 +343,7 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     categorization_enabled: false,
     categorization_model: 'qwen3:4b',
     categorization_context_length: 4096,
+    categorization_context_length_is_auto: true,
     categorization_temperature: 0,
     categorization_thinking: true,
     categorization_prompt: SHIPPED_CATEGORIZATION_PROMPT,

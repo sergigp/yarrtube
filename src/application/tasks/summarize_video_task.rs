@@ -45,7 +45,9 @@ mod tests {
     use crate::application::tasks::log_capture::captured_log_lines;
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
-    use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
+    use crate::domain::llm_server::{
+        LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    };
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::{
         ContextLength, Preferences, SummaryPrompt, SummarySettings, Temperature,
@@ -1751,6 +1753,7 @@ mod tests {
             thinking: true,
             max_output_tokens: 12288,
             format: None,
+            timeout: MIN_CHAT_TIMEOUT,
         }
     }
 
@@ -1936,6 +1939,7 @@ mod tests {
         Ok(LlmReply {
             content: content.to_string(),
             input_tokens: 100,
+            output_tokens: 0,
             stopped_at_limit: false,
             refusal: None,
         })

@@ -1,11 +1,10 @@
 use crate::domain::category::Category;
-use crate::domain::llm_server::OllamaUrl;
-use crate::domain::preferences::{CategorizationSettings, Preferences};
+use crate::domain::llm_server::{LlmReply, OllamaUrl};
+use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
 use crate::domain::video::{Video, VideoOwner};
-use crate::domain::video_category::categorization_question::MAX_OUTPUT_TOKENS;
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -35,12 +34,12 @@ impl From<anyhow::Error> for Skip {
     }
 }
 
-/// How one call ended, when it didn't stop the categorization.
-enum Outcome {
-    /// Its verdict was applied.
-    Answered,
-    /// The model didn't answer usably, for this reason: retrying may.
-    Rejected(String),
+/// Which call of a categorization: the one about every pending category,
+/// or one about a category it left without an answer.
+#[derive(Clone, Copy)]
+enum Call {
+    First,
+    Fallback,
 }
 
 /// Why the categorization stops before trying every category.
@@ -63,6 +62,7 @@ struct CategorizationJob {
     url: OllamaUrl,
     settings: CategorizationSettings,
     thinking: bool,
+    context_length: ContextLength,
     owner: VideoOwner,
     summary: SummaryText,
     pending: Vec<Category>,
@@ -182,15 +182,28 @@ impl VideoCategorizer {
                 .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?
                 .thinking;
         let pending = self.pending(video, &owner)?;
+        let context_length = settings.effective_context_length(self.prompted_categories()?);
         Ok(CategorizationJob {
             preferences,
             url,
             settings,
             thinking,
+            context_length,
             owner,
             summary: summary.text,
             pending,
         })
+    }
+
+    /// How many categories have an AI prompt: what Auto sizes the context
+    /// length from.
+    fn prompted_categories(&self) -> anyhow::Result<usize> {
+        Ok(self
+            .category_repository
+            .list()?
+            .iter()
+            .filter(|category| category.ai_prompt.is_some())
+            .count())
     }
 
     /// Asks about every pending category, then fails naming the rejected
@@ -222,51 +235,89 @@ impl VideoCategorizer {
         video: &Video,
         job: &'a CategorizationJob,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
-        job.pending
+        let rejected = self.ask(video, job, &job.pending, Call::First)?;
+        self.fall_back(video, job, rejected)
+    }
+
+    /// One call about `categories`, storing each usable verdict; the ones
+    /// rejected, with why.
+    fn ask<'a>(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        categories: &'a [Category],
+        call: Call,
+    ) -> Result<Vec<(&'a Category, String)>, Stop> {
+        let started = Instant::now();
+        let question =
+            CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, categories);
+        let reply = self
+            .llm_server_repository
+            .chat(
+                &job.url,
+                &question.chat(&job.settings, job.context_length, job.thinking),
+            )
+            .map_err(Stop::Server)?;
+        Self::log_call(video, categories, call, &reply, started);
+        let rejection = match (&reply.refusal, reply.stopped_at_limit) {
+            (Some(refusal), _) => Some(format!("Ollama refused the call: {refusal}")),
+            (None, true) => Some(format!(
+                "it hit the {}-token output limit",
+                question.max_output_tokens(job.context_length)
+            )),
+            (None, false) => None,
+        };
+        if let Some(reason) = rejection {
+            return Ok(Self::rejected_all(categories, &reason));
+        }
+        categories
             .iter()
-            .filter_map(|category| match self.evaluate(video, job, category) {
-                Ok(Outcome::Answered) => None,
-                Ok(Outcome::Rejected(reason)) => {
-                    error!(
-                        video_id = %video.id,
-                        category = %category.name.as_str(),
-                        %reason,
-                        "the model couldn't answer for a category"
-                    );
-                    Some(Ok((category, reason)))
-                }
-                Err(stop) => Some(Err(stop)),
+            .zip(question.answers(&reply.content))
+            .filter_map(|(category, (_, answer))| match answer {
+                Some(answer) => self
+                    .store(video, job, category, answer)
+                    .err()
+                    .map(|error| Err(Stop::Failed(error))),
+                None => Some(Ok((category, "its answer isn't usable".to_string()))),
             })
             .collect()
     }
 
-    /// Asks the model whether `video` fits `category` and applies its verdict.
-    fn evaluate(
+    /// `rejected` of the call about every pending category, each asked
+    /// again alone when that call was about several; the ones rejected again.
+    fn fall_back<'a>(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        rejected: Vec<(&'a Category, String)>,
+    ) -> Result<Vec<(&'a Category, String)>, Stop> {
+        let rejected = match job.pending.len() {
+            0 | 1 => rejected,
+            _ => rejected
+                .into_iter()
+                .map(|(category, reason)| {
+                    Self::log_falling_back(video, category, &reason);
+                    self.ask(video, job, std::slice::from_ref(category), Call::Fallback)
+                })
+                .collect::<Result<Vec<_>, Stop>>()?
+                .into_iter()
+                .flatten()
+                .collect(),
+        };
+        rejected
+            .iter()
+            .for_each(|(category, reason)| Self::log_rejected(video, category, reason));
+        Ok(rejected)
+    }
+
+    /// Applies `category`'s verdict, unless the pair changed during the call.
+    fn store(
         &self,
         video: &Video,
         job: &CategorizationJob,
         category: &Category,
-    ) -> Result<Outcome, Stop> {
-        let started = Instant::now();
-        let question =
-            CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, category);
-        let reply = self
-            .llm_server_repository
-            .chat(&job.url, &question.chat(&job.settings, job.thinking))
-            .map_err(Stop::Server)?;
-        if let Some(refusal) = reply.refusal {
-            return Ok(Outcome::Rejected(format!(
-                "Ollama refused the call: {refusal}"
-            )));
-        }
-        if reply.stopped_at_limit {
-            return Ok(Outcome::Rejected(format!(
-                "it hit the {MAX_OUTPUT_TOKENS}-token output limit"
-            )));
-        }
-        let Some(answer) = CategorizationAnswer::parse(&reply.content) else {
-            return Ok(Outcome::Rejected("its answer isn't usable".to_string()));
-        };
+        answer: CategorizationAnswer,
+    ) -> anyhow::Result<()> {
         let verdict = VideoCategoryVerdict::answered(
             video.id.clone(),
             category.id.clone(),
@@ -285,18 +336,65 @@ impl VideoCategorizer {
                 category = %category.name.as_str(),
                 "dropped a verdict: the pair was decided or changed during its call"
             );
-            return Ok(Outcome::Answered);
+            return Ok(());
         }
         info!(
             video_id = %video.id,
             category = %category.name.as_str(),
             verdict = %verdict.verdict.as_str(),
             reason = %verdict.reason.as_deref().unwrap_or_default(),
-            input_tokens = reply.input_tokens,
-            duration_seconds = started.elapsed().as_secs_f64(),
             "video categorized"
         );
-        Ok(Outcome::Answered)
+        Ok(())
+    }
+
+    /// Every one of `categories`, rejected for `reason`.
+    fn rejected_all<'a>(categories: &'a [Category], reason: &str) -> Vec<(&'a Category, String)> {
+        categories
+            .iter()
+            .map(|category| (category, reason.to_string()))
+            .collect()
+    }
+
+    fn log_call(
+        video: &Video,
+        categories: &[Category],
+        call: Call,
+        reply: &LlmReply,
+        started: Instant,
+    ) {
+        let names = categories
+            .iter()
+            .map(|category| category.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        info!(
+            video_id = %video.id,
+            categories = %names,
+            fallback = matches!(call, Call::Fallback),
+            input_tokens = reply.input_tokens,
+            output_tokens = reply.output_tokens,
+            duration_seconds = started.elapsed().as_secs_f64(),
+            "asked the model"
+        );
+    }
+
+    fn log_falling_back(video: &Video, category: &Category, reason: &str) {
+        warn!(
+            video_id = %video.id,
+            category = %category.name.as_str(),
+            %reason,
+            "the model couldn't answer for a category, asking it alone"
+        );
+    }
+
+    fn log_rejected(video: &Video, category: &Category, reason: &str) {
+        error!(
+            video_id = %video.id,
+            category = %category.name.as_str(),
+            %reason,
+            "the model couldn't answer for a category"
+        );
     }
 
     /// Gives each of `rejected` an unavailable verdict, unless it is no

@@ -5,7 +5,8 @@ use super::{CategorizationModel, CategorizationPrompt, ContextLength, Temperatur
 pub struct CategorizationSettings {
     pub enabled: bool,
     pub model: CategorizationModel,
-    pub context_length: ContextLength,
+    /// The length the user saved; `None` is Auto.
+    pub context_length: Option<ContextLength>,
     pub temperature: Temperature,
     pub thinking: bool,
     /// The prompt the user saved; `None` uses the shipped one.
@@ -18,7 +19,7 @@ impl Default for CategorizationSettings {
         Self {
             enabled: false,
             model: CategorizationModel::default(),
-            context_length: ContextLength::categorization_default(),
+            context_length: None,
             temperature: Temperature::categorization_default(),
             thinking: true,
             prompt: None,
@@ -27,6 +28,13 @@ impl Default for CategorizationSettings {
 }
 
 impl CategorizationSettings {
+    /// The saved length, or Auto's for `prompted_categories` categories
+    /// with an AI prompt.
+    pub fn effective_context_length(&self, prompted_categories: usize) -> ContextLength {
+        self.context_length
+            .unwrap_or_else(|| ContextLength::auto(prompted_categories))
+    }
+
     pub fn effective_prompt(&self) -> CategorizationPrompt {
         self.prompt
             .clone()

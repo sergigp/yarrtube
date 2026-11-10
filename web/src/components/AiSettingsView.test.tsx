@@ -116,6 +116,7 @@ describe('AiSettingsView', () => {
     await user.click(
       await screen.findByRole('button', { name: 'Advanced categorization settings' }),
     )
+    await user.click(screen.getByRole('switch', { name: 'Auto context length' }))
     const contextLength = screen.getByRole('spinbutton', { name: 'Categorization context length' })
     await user.clear(contextLength)
     await user.type(contextLength, '8192')
@@ -123,6 +124,87 @@ describe('AiSettingsView', () => {
 
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ categorization_context_length: 8192 }])
+  })
+
+  it('shows the Auto context length read-only, with how it scales', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({
+        ai_enabled: true,
+        categorization_enabled: true,
+        categorization_context_length: 16384,
+        categorization_context_length_is_auto: true,
+      }),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+
+    expect(screen.getByRole('switch', { name: 'Auto context length' })).toBeChecked()
+    const contextLength = screen.getByRole('spinbutton', { name: 'Categorization context length' })
+    expect(contextLength).toHaveValue(16384)
+    expect(contextLength).toHaveAttribute('readonly')
+    expect(
+      screen.getByText(
+        'Auto sizes it from your categories with an AI prompt, about 1,800 tokens each. ' +
+          'Too small and videos are asked about one category at a time, which is slower.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('makes the context length editable when Auto is turned off', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({
+        ai_enabled: true,
+        categorization_enabled: true,
+        categorization_context_length: 16384,
+        categorization_context_length_is_auto: true,
+      }),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+    await user.click(screen.getByRole('switch', { name: 'Auto context length' }))
+
+    const contextLength = screen.getByRole('spinbutton', { name: 'Categorization context length' })
+    expect(contextLength).toHaveValue(16384)
+    expect(contextLength).not.toHaveAttribute('readonly')
+  })
+
+  it('goes back to the Auto context length', async () => {
+    const saved = aPreferences({
+      ai_enabled: true,
+      categorization_enabled: true,
+      categorization_context_length: 8192,
+      categorization_context_length_is_auto: false,
+    })
+    const fetchMock = mockApi({
+      'GET /api/preferences': saved,
+      'PATCH /api/preferences': {
+        ...saved,
+        categorization_context_length: 16384,
+        categorization_context_length_is_auto: true,
+      },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
+    )
+    await user.click(screen.getByRole('switch', { name: 'Auto context length' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await screen.findByText('Saved')
+    expect(patchBodies(fetchMock)).toEqual([{ categorization_context_length: null }])
+    const contextLength = screen.getByRole('spinbutton', { name: 'Categorization context length' })
+    expect(contextLength).toHaveValue(16384)
+    expect(contextLength).toHaveAttribute('readonly')
   })
 
   it('resets a saved categorization prompt to the default', async () => {

@@ -67,7 +67,7 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
             .transpose()?,
         categorization_context_length: request
             .categorization_context_length
-            .map(ContextLength::new)
+            .map(|length| length.map(ContextLength::new).transpose())
             .transpose()?,
         categorization_temperature: request
             .categorization_temperature
@@ -100,10 +100,17 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::CategoryId;
-    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
+    use crate::domain::category::{
+        Category, CategoryColor, CategoryId, CategoryName, CategoryPrompt,
+    };
+    use crate::domain::preferences::{
+        CategorizationSettings, Preferences, ResolvedPreferences, SummarySettings,
+    };
     use crate::domain::video::{SummaryState, Video, VideoId, YoutubeVideoId};
     use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
+    use crate::infrastructure::repositories::sqlite_category_repository::{
+        CategoryRepository, SqliteCategoryRepository,
+    };
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
     };
@@ -124,7 +131,10 @@ mod tests {
     async fn it_should_return_the_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -132,10 +142,152 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_an_auto_context_length_from_the_categories_with_a_prompt() {
+        let db = TestDatabase::new();
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        (1..=9).for_each(|n| {
+            category_repository
+                .insert(&prompted_category(&format!("Category {n}")))
+                .unwrap()
+        });
+        category_repository
+            .insert(&prompted_category("Funny").with_ai_prompt(None))
+            .unwrap();
+        let preferences_searcher = PreferencesSearcher::new(
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            category_repository,
+        );
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_context_length: 16384,
+                categorization_context_length_is_auto: true,
+                ..all_on_response()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_4096_for_auto_with_few_categories() {
+        let db = TestDatabase::new();
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        ["Chess", "Tech"].iter().for_each(|name| {
+            category_repository
+                .insert(&prompted_category(name))
+                .unwrap()
+        });
+        let preferences_searcher = PreferencesSearcher::new(
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            category_repository,
+        );
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_context_length: 4096,
+                categorization_context_length_is_auto: true,
+                ..all_on_response()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_override_the_categorization_context_length() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        (1..=9).for_each(|n| {
+            category_repository
+                .insert(&prompted_category(&format!("Category {n}")))
+                .unwrap()
+        });
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_context_length: Some(Some(8192)),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_context_length: 8192,
+                categorization_context_length_is_auto: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                categorization: CategorizationSettings {
+                    context_length: Some(ContextLength::new(8192).unwrap()),
+                    ..CategorizationSettings::default()
+                },
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_go_back_to_the_auto_context_length() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        repository
+            .save(&Preferences {
+                categorization: CategorizationSettings {
+                    context_length: Some(ContextLength::new(8192).unwrap()),
+                    ..CategorizationSettings::default()
+                },
+                ..Preferences::default()
+            })
+            .unwrap();
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_context_length: Some(None),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(response, Ok(all_on_response()));
+        assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_auto_when_saving_other_preferences() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_temperature: Some(0.5),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(
+            repository
+                .find()
+                .unwrap()
+                .map(|preferences| preferences.categorization.context_length),
+            Some(None)
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_ai_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -273,6 +425,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
                 verdict_repository.clone(),
                 Arc::new(CategoryLock::default()),
+                Arc::new(SqliteCategoryRepository::new(db.database())),
             );
 
             update(preferences_updater, request).await.unwrap();
@@ -314,6 +467,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
                 verdict_repository.clone(),
                 Arc::new(CategoryLock::default()),
+                Arc::new(SqliteCategoryRepository::new(db.database())),
             );
 
             update(preferences_updater, request).await.unwrap();
@@ -329,7 +483,10 @@ mod tests {
     async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -338,8 +495,10 @@ mod tests {
             Ok(PreferencesResponse {
                 categorization_enabled: false,
                 categorization_model: "qwen3:4b".to_string(),
-                categorization_prompt: include_str!("../../../../prompts/categorization/v2.md")
-                    .to_string(),
+                categorization_prompt: include_str!(
+                    "../../../../prompts/categorization/v2-batch.md"
+                )
+                .to_string(),
                 categorization_prompt_is_default: true,
                 ..all_on_response()
             })
@@ -347,10 +506,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_ship_the_categorization_prompt_v2() {
+    async fn it_should_ship_the_categorization_prompt_v2_batch() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -360,7 +522,7 @@ mod tests {
                 preferences.categorization_prompt_is_default
             )),
             Ok((
-                include_str!("../../../../prompts/categorization/v2.md").to_string(),
+                include_str!("../../../../prompts/categorization/v2-batch.md").to_string(),
                 true
             ))
         );
@@ -370,7 +532,10 @@ mod tests {
     async fn it_should_return_the_categorization_generation_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -428,7 +593,7 @@ mod tests {
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
-            categorization_context_length: Some(8192),
+            categorization_context_length: Some(Some(8192)),
             categorization_temperature: Some(0.5),
             categorization_thinking: Some(false),
             ..UpdatePreferencesRequest::default()
@@ -441,6 +606,7 @@ mod tests {
             Ok(PreferencesResponse {
                 categorization_enabled: false,
                 categorization_context_length: 8192,
+                categorization_context_length_is_auto: false,
                 categorization_temperature: 0.5,
                 categorization_thinking: false,
                 ..all_on_response()
@@ -450,7 +616,7 @@ mod tests {
             repository.find().unwrap(),
             Some(Preferences {
                 categorization: CategorizationSettings {
-                    context_length: ContextLength::new(8192).unwrap(),
+                    context_length: Some(ContextLength::new(8192).unwrap()),
                     temperature: Temperature::new(0.5).unwrap(),
                     thinking: false,
                     ..CategorizationSettings::default()
@@ -463,7 +629,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_if_the_categorization_context_length_is_out_of_range() {
         let request = UpdatePreferencesRequest {
-            categorization_context_length: Some(512),
+            categorization_context_length: Some(Some(512)),
             ..UpdatePreferencesRequest::default()
         };
 
@@ -1052,7 +1218,10 @@ mod tests {
                 ..Preferences::default()
             })
             .unwrap();
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -1093,6 +1262,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
             Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(database())),
         )
     }
 
@@ -1106,6 +1276,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
         )
     }
 
@@ -1151,6 +1322,20 @@ mod tests {
         format!("{}{}", &shipped[..start], &shipped[end..])
     }
 
+    /// A category named `name` with an AI prompt.
+    fn prompted_category(name: &str) -> Category {
+        Category::create(
+            CategoryName::new(name).unwrap(),
+            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            fixed_timestamp(),
+        )
+        .with_ai_prompt(Some(
+            CategoryPrompt::new(format!("The video is about {name}."))
+                .unwrap()
+                .unwrap(),
+        ))
+    }
+
     fn all_on_response() -> PreferencesResponse {
         PreferencesResponse {
             categories_enabled: true,
@@ -1159,7 +1344,10 @@ mod tests {
             home_show_quick_watches: true,
             home_show_latest: true,
             theme: "light".to_string(),
-            ..PreferencesResponse::from(Preferences::default())
+            ..PreferencesResponse::from(ResolvedPreferences {
+                preferences: Preferences::default(),
+                categorization_context_length: ContextLength::auto(0),
+            })
         }
     }
 }

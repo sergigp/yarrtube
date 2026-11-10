@@ -295,7 +295,10 @@ export interface Preferences {
   summaries_prompt_is_default: boolean
   categorization_enabled: boolean
   categorization_model: string
+  /** The saved length, or what Auto sizes it to now. */
   categorization_context_length: number
+  /** Whether it is Auto: sized from the categories with an AI prompt. */
+  categorization_context_length_is_auto: boolean
   categorization_temperature: number
   categorization_thinking: boolean
   /** The saved prompt, or the shipped one when none is saved. */
@@ -306,7 +309,8 @@ export interface Preferences {
 /**
  * Body of `PATCH /api/preferences`: only the preferences to change.
  * `ollama_url: ""` unsets the URL; `summaries_prompt: null` and
- * `categorization_prompt: null` go back to the shipped prompt.
+ * `categorization_prompt: null` go back to the shipped prompt;
+ * `categorization_context_length: null` goes back to Auto.
  */
 export type PreferencesPatch = Partial<
   Omit<
@@ -314,11 +318,14 @@ export type PreferencesPatch = Partial<
     | 'ollama_url'
     | 'summaries_prompt'
     | 'summaries_prompt_is_default'
+    | 'categorization_context_length'
+    | 'categorization_context_length_is_auto'
     | 'categorization_prompt'
     | 'categorization_prompt_is_default'
   >
 > & {
   ollama_url?: string
+  categorization_context_length?: number | null
   summaries_prompt?: string | null
   categorization_prompt?: string | null
 }

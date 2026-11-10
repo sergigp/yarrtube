@@ -1,4 +1,4 @@
-use crate::domain::llm_server::{LlmChat, OllamaUrl};
+use crate::domain::llm_server::{LlmChat, MIN_CHAT_TIMEOUT, OllamaUrl};
 use crate::domain::preferences::{SummaryPrompt, SummarySettings};
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
 use crate::domain::video::{Video, VideoOwner};
@@ -331,6 +331,7 @@ impl VideoSummarizer {
                     thinking: job.thinking,
                     max_output_tokens: context_length.value(),
                     format: None,
+                    timeout: MIN_CHAT_TIMEOUT,
                 },
             )
             .map_err(Failure::Server)?;

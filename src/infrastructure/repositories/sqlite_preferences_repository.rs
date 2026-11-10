@@ -112,9 +112,10 @@ impl From<&Preferences> for StoredPreferences {
                 .map(|prompt| prompt.as_str().to_string()),
             categorization_enabled: Some(preferences.categorization.enabled),
             categorization_model: Some(preferences.categorization.model.as_str().to_string()),
-            categorization_context_length: Some(
-                preferences.categorization.context_length.value().into(),
-            ),
+            categorization_context_length: preferences
+                .categorization
+                .context_length
+                .map(|length| length.value().into()),
             categorization_temperature: Some(preferences.categorization.temperature.value()),
             categorization_thinking: Some(preferences.categorization.thinking),
             categorization_prompt: preferences
@@ -184,10 +185,11 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_model
                     .and_then(|model| CategorizationModel::new(model).ok())
                     .unwrap_or(defaults.categorization.model),
+                // A value no longer valid reads as Auto. The old default
+                // every save stored before Auto was dropped by a migration.
                 context_length: stored
                     .categorization_context_length
-                    .and_then(|length| ContextLength::new(length).ok())
-                    .unwrap_or(defaults.categorization.context_length),
+                    .and_then(|length| ContextLength::new(length).ok()),
                 temperature: stored
                     .categorization_temperature
                     .and_then(|temperature| Temperature::new(temperature).ok())
@@ -255,6 +257,60 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_a_context_length_of_4096() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            categorization: CategorizationSettings {
+                context_length: Some(ContextLength::new(4096).unwrap()),
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_round_trip_an_overridden_context_length() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            categorization: CategorizationSettings {
+                context_length: Some(ContextLength::new(8192).unwrap()),
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_an_invalid_categorization_context_length_as_auto() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"categorization_context_length\": 5}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository
+                .find()
+                .unwrap()
+                .map(|found| found.categorization.context_length),
+            Some(None)
+        );
+    }
+
+    #[test]
     fn it_should_read_missing_categorization_keys_as_defaults() {
         let db = TestDatabase::new();
         db.connection()
@@ -286,7 +342,6 @@ mod tests {
             repository.find().unwrap().map(|found| found.categorization),
             Some(CategorizationSettings {
                 model: CategorizationModel::new("gemma3:4b").unwrap(),
-                context_length: ContextLength::new(4096).unwrap(),
                 temperature: Temperature::new(0.0).unwrap(),
                 thinking: true,
                 ..CategorizationSettings::default()
@@ -308,7 +363,6 @@ mod tests {
         assert_eq!(
             repository.find().unwrap().map(|found| found.categorization),
             Some(CategorizationSettings {
-                context_length: ContextLength::new(4096).unwrap(),
                 temperature: Temperature::new(0.0).unwrap(),
                 ..CategorizationSettings::default()
             })

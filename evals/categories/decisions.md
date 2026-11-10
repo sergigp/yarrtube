@@ -5,10 +5,99 @@ works: [README.md](README.md).
 
 ## In use
 
-Nothing yet: no settings pass the bar. Leading: **`qwen3:4b` with thinking**,
-prompt [`v2`](../../prompts/categorization/v2.md), temperature 0, `num_ctx` 4096,
-a higher output cap, once the [category prompts](category-prompts.md) are
-tuned.
+Nothing passes the bar yet. The app ships **`qwen3:4b` with thinking**, prompt
+[`v2-batch`](../../prompts/categorization/v2-batch.md), temperature 0, one call
+per video about all its pending categories (Auto `num_ctx`, 16384 for 9; output
+cap 1,365 per category, at least 3072), and one call per category for a video
+that call can't answer. See the two entries below.
+
+## 2026-11-10 · batch shipped with its fallback · single calls on `v2-batch` unmeasured
+
+The app now asks as recommended below: one call per video, and for a video
+whose call is rejected (output cap, refusal, timeout) or leaves categories
+without a usable answer, one call per such category, in the same run.
+`--batch` does the same (rows marked `fallback`, report section "Fallbacks"),
+with the app's Auto `num_ctx` and per-call cap.
+
+**Gap: a single-category call with prompt `v2-batch` has never been measured.**
+The app uses `v2-batch` for every call, fallback ones included, so there is
+one prompt to edit; every per-category number so far is from `v2`. The two
+differ only in wording for one category vs several. The check planned for this
+change, the fallback on *1 in a Billion Checkmate?* (whose 9 categories `v2`
+got right one at a time), was stopped: Ollama was shared and ran at 4 tokens/s.
+It concerns about 1 video in 58. To close it: run `--batch` on an idle machine
+and read the fallback rows of that video, or, for a real measure, a run one
+call per category with `--prompt v2-batch` (not wired up: `--prompt` changes
+the system prompt, the user message stays v2's).
+
+The new `--batch` code was checked on synthetic rows (Auto `num_ctx`, caps,
+"Fallbacks" and speed sections), not yet in a run against Ollama.
+
+## 2026-11-09 · batch vs one call per category · batch, with a fallback
+
+Runs, both on the tuned prompts, `qwen3:4b` digest `359d7dd4bcda`, on a
+MacBook Pro: [`per category`](results/2026-11-09_1958_prompt-v2_qwen3-4b_think-on/report.md)
+(prompt `v2`, `num_ctx` 4096, cap 3072),
+[`batch`](results/2026-11-09_1903_prompt-v2-batch_qwen3-4b_think-on_batch/report.md)
+(prompt `v2-batch`, `num_ctx` 16384, cap 12288). 58 videos: the same 2 still
+have no summary.
+
+Wrong / missed / errors. Pass needs at most 1 wrong and no errors:
+
+| Category | Labeled | Per category | Pass | Batch | Pass |
+|---|---|---|---|---|---|
+| Jobava London | 5 | 0 / 1 / 2 | no | 0 / 1 / 1 | no |
+| Sicilian | 7 | 0 / 0 / 6 | no | 0 / 0 / 1 | no |
+| Chess gameplays | 13 | 1 / 0 / 0 | yes | 1 / 0 / 1 | no |
+| Science News | 9 | 1 / 1 / 2 | no | 1 / 1 / 1 | no |
+| AI news | 10 | 1 / 4 / 0 | yes | 1 / 3 / 1 | no |
+| Tech | 4 | 1 / 1 / 2 | no | 0 / 2 / 1 | no |
+| Politics and Economy News | 4 | 3 / 0 / 1 | no | 2 / 1 / 1 | no |
+| Food for thought | 9 | 4 / 1 / 1 | no | 2 / 2 / 1 | no |
+| Coding tutorials | 5 | 1 / 0 / 1 | no | 1 / 1 / 1 | no |
+| **Total** | | **12 / 8 / 15** | **2** | **8 / 11 / 9** | **0** |
+
+| | Calls | Output tokens per video | Min per video on the Air (11 tokens/s) |
+|---|---|---|---|
+| Per category | 522 | 10,706 | 16.2 |
+| Batch | 58 | 3,580 | 5.4 |
+
+- **Batch is 3× cheaper**: a third of the output tokens per video. Seconds on
+  the Pro (64-74 tokens/s) don't carry over; the Air estimate is from tokens.
+- **No bleed**: batch made no wrong answer that one call per category didn't. The
+  8 wrong it made are all shared, so they come from the prompts or labels.
+  Missed answers where batch reasons with another category's rule: none. The
+  *$18K/Month App* miss quotes Tech's own "AI tools" exclusion.
+- **No drop on later categories**: wrong plus missed by position, per category
+  vs batch: 1/1, 0/0, 1/1, 2/2, 5/4, 2/2, 3/3, 5/4, 1/2. Food for thought and
+  Politics, near the end, do better in batch.
+- **Wrong only per category (4)**, by cause: exclusions ignored when the
+  category is asked alone. *Mariana Trench nuke* and *Komarov* in Food for
+  thought (science is excluded), *SpaceX shows off the ship for the Moon* in
+  Politics (the "one segment" rule again), *FAANG mock interviews* in Tech.
+  Batch rejected each one quoting the exclusion.
+- **Missed only in batch (4) vs per category (1)**: *FAANG mock interviews* for
+  Coding tutorials ("not a step-by-step tutorial"), *Contra el colapso* for Food
+  for thought (read as current events), *The world's most extreme places* for
+  Politics, *$18K/Month App* for Tech. Per category missed *How to Test Your
+  Code* for AI news. Borderline cases each way, no pattern.
+- **Errors are all the output cap, but fail differently**: per category, 15
+  calls hit 3072, 8 of them chess videos asked about Jobava London or Sicilian.
+  Batch hit 12288 once, on *1 in a Billion Checkmate?* (six openings in one
+  stream), which loses all 9 categories of that video. Its next largest call was
+  8,217 tokens (*Alapin Sicilian*), median 3,331. Both runs fail every category
+  that had an error: without errors, both would pass 7 of 9, failing Politics
+  and Food for thought.
+- **Shared misses**: the Jobava London miss on *This rare opening...* is in both:
+  the summary never names the opening, as in the first runs.
+
+Recommendation: **batch**, falling back to one call per category for a video
+whose batch call hits the cap. Batch is as good or better and a third of the
+cost; chunks of a few categories would only limit what a cap hit loses, and the
+fallback does that without paying for every video. What batch gives up from
+the 2026-11-06 design: editing one category re-runs all 58 calls instead of
+58 single-category ones, about 3× the tokens of that one category. Next: the
+fallback in the eval, then Politics and Food for thought, which fail in both.
 
 ## 2026-11-07 · prompts tuned, not measured yet
 

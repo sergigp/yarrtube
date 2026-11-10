@@ -47,7 +47,9 @@ mod tests {
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
-    use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
+    use crate::domain::llm_server::{
+        LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    };
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::SummaryModel;
     use crate::domain::preferences::{
@@ -98,9 +100,47 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
+    use std::time::Duration;
 
     const YES: &str = r#"{"reason": "A Sicilian game.", "belongs": true}"#;
     const NO: &str = r#"{"reason": "A chess game.", "belongs": false}"#;
+
+    #[test]
+    fn it_should_ask_about_every_pending_category_in_one_call() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech, ai_news) = (
+            prompted_category("Sicilian"),
+            prompted_category("Tech"),
+            prompted_category("AI news"),
+        );
+        seed(&db, &video, &[&sicilian, &tech, &ai_news]);
+        let llm = llm_replying(vec![reply(&answers(&[
+            ("Sicilian", YES),
+            ("Tech", NO),
+            ("AI news", NO),
+        ]))]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![vec!["AI news", "Sicilian", "Tech"]]
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+                ai_verdict(&video, &ai_news, Verdict::No, "A chess game."),
+            ])
+        );
+    }
 
     #[test]
     fn it_should_store_a_yes_verdict_and_add_the_category_to_the_video() {
@@ -111,7 +151,10 @@ mod tests {
         let video = summarized_video();
         let sicilian = prompted_category("Sicilian");
         seed(&db, &video, &[&sicilian]);
-        let task = categorize_video_task(&db, llm_replying(vec![reply(YES)]));
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]),
+        );
 
         let result = run(&task, &video);
 
@@ -156,7 +199,8 @@ mod tests {
         let video = summarized_video();
         let tech = prompted_category("Tech");
         seed(&db, &video, &[&tech]);
-        let task = categorize_video_task(&db, llm_replying(vec![reply(NO)]));
+        let llm = llm_replying(vec![reply(&answers(&[("Tech", NO)]))]);
+        let task = categorize_video_task(&db, llm);
 
         let result = run(&task, &video);
 
@@ -179,13 +223,13 @@ mod tests {
     #[test]
     fn it_should_ask_with_the_saved_context_length_temperature_and_thinking() {
         let db = TestDatabase::new();
-        let llm = llm_replying(vec![reply(YES)]);
+        let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
         let video = summarized_video();
         seed(&db, &video, &[&prompted_category("Sicilian")]);
         SqlitePreferencesRepository::new(db.database())
             .save(&Preferences {
                 categorization: CategorizationSettings {
-                    context_length: ContextLength::new(2048).unwrap(),
+                    context_length: Some(ContextLength::new(2048).unwrap()),
                     temperature: Temperature::new(0.7).unwrap(),
                     thinking: false,
                     ..categorization_on().categorization
@@ -212,9 +256,13 @@ mod tests {
     }
 
     #[test]
-    fn it_should_send_the_video_details_and_category_prompt_with_the_categorization_settings() {
+    fn it_should_send_the_video_details_and_category_prompts_with_the_categorization_settings() {
         let db = TestDatabase::new();
-        let llm = llm_replying(vec![reply(YES)]);
+        let llm = llm_replying(vec![reply(&answers(&[
+            ("Chess", YES),
+            ("Sicilian", YES),
+            ("Tech", NO),
+        ]))]);
         let video = Video {
             chapters: Some(vec![VideoChapter {
                 start_seconds: 0,
@@ -223,11 +271,27 @@ mod tests {
             }]),
             ..summarized_video()
         };
-        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        seed(
+            &db,
+            &video,
+            &[
+                &prompted_category("Chess"),
+                &prompted_category("Sicilian"),
+                &prompted_category("Tech"),
+            ],
+        );
         let task = categorize_video_task(&db, llm.clone());
 
         run(&task, &video).unwrap();
 
+        let entry = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "reason": {"type": "string"},
+                "belongs": {"type": "boolean"},
+            },
+            "required": ["reason", "belongs"],
+        });
         assert_eq!(
             llm.chats(),
             vec![LlmChat {
@@ -240,25 +304,336 @@ mod tests {
                        0:00 Intro\n\
                        Summary: Three online games in the Najdorf Sicilian.\n\
                        \n\
-                       Category: Sicilian\n\
-                       Description:\n\
+                       Categories:\n\
+                       \n\
+                       ### Chess\n\
+                       The video is about Chess.\n\
+                       \n\
+                       ### Sicilian\n\
                        The video is about Sicilian.\n\
                        \n\
-                       Answer in JSON: \"reason\", one sentence on what the video covers and how it fits, then \"belongs\", true or false."
+                       ### Tech\n\
+                       The video is about Tech.\n\
+                       \n\
+                       Answer in JSON with one entry per category, keyed by its name: \"reason\", one sentence on what the video covers and how it fits that category, then \"belongs\", true or false."
                     .to_string(),
-                context_length: 4096,
+                context_length: 6144,
                 temperature: 0.0,
                 thinking: true,
-                max_output_tokens: 3072,
+                max_output_tokens: 4095,
+                timeout: MIN_CHAT_TIMEOUT,
                 format: Some(serde_json::json!({
                     "type": "object",
-                    "properties": {
-                        "reason": {"type": "string"},
-                        "belongs": {"type": "boolean"},
-                    },
-                    "required": ["reason", "belongs"],
+                    "properties": {"Chess": entry, "Sicilian": entry, "Tech": entry},
+                    "required": ["Chess", "Sicilian", "Tech"],
                 })),
             }]
+        );
+    }
+
+    #[test]
+    fn it_should_cap_the_output_at_3072_for_one_category() {
+        let db = TestDatabase::new();
+        let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(output_caps(&llm), vec![3072]);
+    }
+
+    #[test]
+    fn it_should_cap_the_output_at_the_context_length() {
+        let db = TestDatabase::new();
+        let names = NINE_CATEGORIES;
+        let llm = llm_replying(vec![reply(&answers(&names.map(|name| (name, NO))))]);
+        let video = summarized_video();
+        let categories = names.map(prompted_category);
+        seed(&db, &video, &categories.each_ref());
+        SqlitePreferencesRepository::new(db.database())
+            .save(&Preferences {
+                categorization: CategorizationSettings {
+                    context_length: Some(ContextLength::new(8192).unwrap()),
+                    ..categorization_on().categorization
+                },
+                ..categorization_on()
+            })
+            .unwrap();
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(output_caps(&llm), vec![8192]);
+    }
+
+    #[test]
+    fn it_should_wait_longer_for_a_call_about_more_categories() {
+        let timeouts = [&NINE_CATEGORIES[..], &["Sicilian"]].map(|names| {
+            let db = TestDatabase::new();
+            let entries = names.iter().map(|name| (*name, NO)).collect::<Vec<_>>();
+            let llm = llm_replying(vec![reply(&answers(&entries))]);
+            let video = summarized_video();
+            let categories = names
+                .iter()
+                .map(|name| prompted_category(name))
+                .collect::<Vec<_>>();
+            seed(&db, &video, &categories.iter().collect::<Vec<_>>());
+            SqlitePreferencesRepository::new(db.database())
+                .save(&Preferences {
+                    categorization: CategorizationSettings {
+                        context_length: Some(ContextLength::new(16384).unwrap()),
+                        ..categorization_on().categorization
+                    },
+                    ..categorization_on()
+                })
+                .unwrap();
+            let task = categorize_video_task(&db, llm.clone());
+
+            run(&task, &video).unwrap();
+
+            llm.chats()
+                .iter()
+                .map(|chat| chat.timeout)
+                .collect::<Vec<_>>()
+        });
+
+        assert_eq!(
+            timeouts,
+            [
+                vec![Duration::from_secs(2457)],
+                vec![Duration::from_secs(30 * 60)]
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_ask_with_the_auto_context_length() {
+        let db = TestDatabase::new();
+        let names = NINE_CATEGORIES;
+        let llm = llm_replying(vec![reply(&answers(&names.map(|name| (name, NO))))]);
+        let video = summarized_video();
+        let categories = names.map(prompted_category);
+        seed(&db, &video, &categories.each_ref());
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(
+            llm.chats()
+                .iter()
+                .map(|chat| (chat.context_length, chat.max_output_tokens))
+                .collect::<Vec<_>>(),
+            vec![(16384, 12285)]
+        );
+    }
+
+    #[test]
+    fn it_should_store_the_usable_answers_of_a_partly_usable_call() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        seed(&db, &video, &[&sicilian, &tech]);
+        let llm = llm_replying(vec![
+            reply(&answers(&[
+                ("Sicilian", YES),
+                ("Tech", r#"{"reason": "A chess game."}"#),
+            ])),
+            reply(&answers(&[("Tech", NO)])),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![vec!["Sicilian", "Tech"], vec!["Tech"]]
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_ask_each_category_alone_when_the_call_hits_the_output_limit() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (chess, sicilian, tech) = (
+            prompted_category("Chess"),
+            prompted_category("Sicilian"),
+            prompted_category("Tech"),
+        );
+        seed(&db, &video, &[&chess, &sicilian, &tech]);
+        let llm = llm_replying(vec![
+            Ok(LlmReply {
+                stopped_at_limit: true,
+                ..reply("").unwrap()
+            }),
+            reply(&answers(&[("Chess", YES)])),
+            reply(&answers(&[("Sicilian", YES)])),
+            reply(&answers(&[("Tech", NO)])),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![
+                vec!["Chess", "Sicilian", "Tech"],
+                vec!["Chess"],
+                vec!["Sicilian"],
+                vec!["Tech"]
+            ]
+        );
+        assert_eq!(output_caps(&llm), vec![4095, 3072, 3072, 3072]);
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &chess, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_ask_each_category_alone_when_the_call_is_refused() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        seed(&db, &video, &[&sicilian, &tech]);
+        let llm = llm_replying(vec![
+            Ok(LlmReply::refused("the prompt is too long")),
+            reply(&answers(&[("Sicilian", YES)])),
+            reply(&answers(&[("Tech", NO)])),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![vec!["Sicilian", "Tech"], vec!["Sicilian"], vec!["Tech"]]
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_not_fall_back_for_a_single_category() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        let llm = llm_replying(vec![Ok(LlmReply {
+            stopped_at_limit: true,
+            ..reply("").unwrap()
+        })]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Err(
+                "the model couldn't answer for Sicilian (it hit the 3072-token output limit)"
+                    .to_string()
+            )
+        );
+        assert_eq!(asked_categories(&llm), vec![vec!["Sicilian"]]);
+    }
+
+    #[test]
+    fn it_should_stop_quietly_if_ollama_is_unreachable_during_the_fallback() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[&prompted_category("Sicilian"), &prompted_category("Tech")],
+        );
+        let llm = llm_replying(vec![
+            Ok(LlmReply::refused("the prompt is too long")),
+            Err(anyhow::anyhow!("connection reset")),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run_last_attempt(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![vec!["Sicilian", "Tech"], vec!["Sicilian"]]
+        );
+        assert_eq!(
+            SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_the_other_verdicts_of_a_call_when_one_prompt_changed_during_it() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        seed(&db, &video, &[&sicilian, &tech]);
+        let (database, edited) = (
+            db.database(),
+            tech.clone().with_ai_prompt(Some(
+                CategoryPrompt::new("The video is about cooking.")
+                    .unwrap()
+                    .unwrap(),
+            )),
+        );
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply(&answers(&[("Sicilian", YES), ("Tech", YES)]))])
+                .with_on_chat(move || {
+                    SqliteCategoryRepository::new(database.clone())
+                        .update(&edited)
+                        .unwrap()
+                }),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(
+                &video,
+                &sicilian,
+                Verdict::Yes,
+                "A Sicilian game."
+            )]
         );
     }
 
@@ -269,8 +644,8 @@ mod tests {
         let video = summarized_video();
         let sicilian = prompted_category("Sicilian");
         seed(&db, &video, &[&sicilian]);
-        let answer = r#"<think>Is {"belongs": false} right?</think>
-Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
+        let answer = r#"<think>Is {"Sicilian": {"belongs": false}} right?</think>
+Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         let task = categorize_video_task(&db, llm_replying(vec![reply(answer)]));
 
         let result = run(&task, &video);
@@ -294,7 +669,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         let db = TestDatabase::new();
         let category_repository = SqliteCategoryRepository::new(db.database());
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
-        let llm = llm_replying(vec![reply(YES)]);
+        let llm = llm_replying(vec![reply(&answers(&[("Tech", YES)]))]);
         let video = summarized_video();
         let sicilian = prompted_category("Sicilian");
         let tech = unprompted_category("Tech");
@@ -307,7 +682,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         let result = run(&task, &video);
 
         assert_eq!(result, Ok(()));
-        assert_eq!(asked_categories(&llm), vec!["Tech"]);
+        assert_eq!(asked_categories(&llm), vec![vec!["Tech"]]);
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -320,7 +695,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     fn it_should_not_evaluate_a_pair_with_a_user_verdict() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
-        let llm = llm_replying(vec![reply(YES)]);
+        let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
         let video = summarized_video();
         let sicilian = prompted_category("Sicilian");
         let tech = prompted_category("Tech");
@@ -337,7 +712,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         let result = run(&task, &video);
 
         assert_eq!(result, Ok(()));
-        assert_eq!(asked_categories(&llm), vec!["Sicilian"]);
+        assert_eq!(asked_categories(&llm), vec![vec!["Sicilian"]]);
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -367,7 +742,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
 
         let asked = [source_off, categorization_off].map(|turn_off| {
             let db = TestDatabase::new();
-            let llm = llm_replying(vec![reply(YES)]);
+            let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
             let video = summarized_video();
             seed(&db, &video, &[&prompted_category("Sicilian")]);
             let task = categorize_video_task(&db, llm.clone());
@@ -393,7 +768,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         let (database, deleted) = (db.database(), sicilian.id.clone());
         let llm = Arc::new(
             FakeLlmServerRepository::new(server_with(thinking_model()))
-                .with_replies(vec![reply(YES)])
+                .with_replies(vec![reply(&answers(&[("Sicilian", YES)]))])
                 .with_on_chat(move || {
                     SqliteCategoryRepository::new(database.clone())
                         .delete(&deleted)
@@ -430,7 +805,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         let (database, removed) = (db.database(), video.id.clone());
         let llm = Arc::new(
             FakeLlmServerRepository::new(server_with(thinking_model()))
-                .with_replies(vec![reply(YES)])
+                .with_replies(vec![reply(&answers(&[("Sicilian", YES)]))])
                 .with_on_chat(move || {
                     SqliteVideoRepository::new(database.clone())
                         .delete(&removed)
@@ -468,7 +843,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         let (database, decided) = (db.database(), user_no.clone());
         let llm = Arc::new(
             FakeLlmServerRepository::new(server_with(thinking_model()))
-                .with_replies(vec![reply(YES)])
+                .with_replies(vec![reply(&answers(&[("Tech", YES)]))])
                 .with_on_chat(move || {
                     SqliteVideoCategoryVerdictRepository::new(database.clone())
                         .save(&decided)
@@ -511,7 +886,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         );
         let llm = Arc::new(
             FakeLlmServerRepository::new(server_with(thinking_model()))
-                .with_replies(vec![reply(YES)])
+                .with_replies(vec![reply(&answers(&[("Tech", YES)]))])
                 .with_on_chat(move || {
                     SqliteCategoryRepository::new(database.clone())
                         .update(&edited)
@@ -552,7 +927,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
                 Arc::new(SqliteCategoryRepository::new(db.database())),
                 Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
                 Arc::new(SqliteVideoSummaryRepository::new(db.database())),
-                llm_replying(vec![reply(YES)]),
+                llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]),
                 VideoCategoryAssigner::new(
                     Arc::new(SqliteVideoRepository::new(db.database())),
                     Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
@@ -600,7 +975,10 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         seed(&db, &video, &[&sicilian, &tech]);
         let task = categorize_video_task(
             &db,
-            llm_replying(vec![reply("It might belong."), reply(NO)]),
+            llm_replying(vec![
+                reply(&answers(&[("Tech", NO)])),
+                reply("It might belong."),
+            ]),
         );
 
         let result = run(&task, &video);
@@ -628,37 +1006,43 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         );
         let first = categorize_video_task(
             &db,
-            llm_replying(vec![reply(YES), reply("It might belong.")]),
+            llm_replying(vec![
+                reply(&answers(&[("Sicilian", YES)])),
+                reply("It might belong."),
+            ]),
         );
         run(&first, &video).unwrap_err();
-        let llm = llm_replying(vec![reply(NO)]);
+        let llm = llm_replying(vec![reply(&answers(&[("Tech", NO)]))]);
         let retry = categorize_video_task(&db, llm.clone());
 
         let result = run(&retry, &video);
 
         assert_eq!(result, Ok(()));
-        assert_eq!(asked_categories(&llm), vec!["Tech"]);
+        assert_eq!(asked_categories(&llm), vec![vec!["Tech"]]);
     }
 
     #[test]
-    fn it_should_mark_rejected_categories_unavailable_on_the_last_attempt() {
+    fn it_should_mark_unavailable_only_what_its_own_call_rejected_on_the_last_attempt() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
         let video = summarized_video();
-        let (food, sicilian, tech) = (
+        let (chess, food, sicilian, tech) = (
+            prompted_category("Chess"),
             prompted_category("Food"),
             prompted_category("Sicilian"),
             prompted_category("Tech"),
         );
-        seed(&db, &video, &[&food, &sicilian, &tech]);
+        seed(&db, &video, &[&chess, &food, &sicilian, &tech]);
         let stopped_at_limit = Ok(LlmReply {
             stopped_at_limit: true,
-            ..reply(YES).unwrap()
+            ..reply("").unwrap()
         });
         let task = categorize_video_task(
             &db,
             llm_replying(vec![
+                Ok(LlmReply::refused("model is too large")),
+                reply(&answers(&[("Chess", NO)])),
                 stopped_at_limit,
                 Ok(LlmReply::refused("model is too large")),
                 reply("It might belong."),
@@ -680,9 +1064,12 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
-            by_category(
-                [&food, &sicilian, &tech].map(|category| unavailable_verdict(&video, category))
-            )
+            by_category([
+                ai_verdict(&video, &chess, Verdict::No, "A chess game."),
+                unavailable_verdict(&video, &food),
+                unavailable_verdict(&video, &sicilian),
+                unavailable_verdict(&video, &tech),
+            ])
         );
         assert_eq!(
             video_categories_repository
@@ -774,7 +1161,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     }
 
     #[test]
-    fn it_should_log_each_verdict() {
+    fn it_should_log_each_call_and_each_verdict() {
         let db = TestDatabase::new();
         let video = summarized_video();
         seed(
@@ -784,29 +1171,82 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         );
         let task = categorize_video_task(
             &db,
-            llm_replying(vec![reply(YES), reply("It might belong.")]),
+            llm_replying(vec![
+                reply(&answers(&[("Sicilian", YES)])),
+                reply("It might belong."),
+            ]),
         );
 
         let lines = captured_log_lines(|| {
             run(&task, &video).unwrap_err();
         });
 
-        let verdict = lines
-            .iter()
-            .find(|line| line.contains("category=Sicilian"))
-            .unwrap();
-        let rejected = lines
-            .iter()
-            .find(|line| line.contains("category=Tech"))
-            .unwrap();
+        let line = |needle: &str| {
+            lines
+                .iter()
+                .find(|line| line.contains(needle))
+                .cloned()
+                .unwrap_or_default()
+        };
+        let first_call = line("categories=Sicilian, Tech");
+        let fallback_call = line("categories=Tech ");
+        let verdict = line("category=Sicilian");
+        let rejected = line("ERROR ");
+        assert!(first_call.starts_with("INFO asked the model"));
+        assert!(first_call.contains(&format!("video_id={}", video.id)));
+        assert!(first_call.contains("fallback=false"));
+        assert!(first_call.contains("input_tokens=100"));
+        assert!(first_call.contains("output_tokens=200"));
+        assert!(first_call.contains("duration_seconds="));
+        assert!(fallback_call.starts_with("INFO asked the model"));
+        assert!(fallback_call.contains("fallback=true"));
         assert!(verdict.starts_with("INFO "));
         assert!(verdict.contains(&format!("video_id={}", video.id)));
         assert!(verdict.contains("verdict=YES"));
         assert!(verdict.contains("reason=A Sicilian game."));
-        assert!(verdict.contains("input_tokens=100"));
-        assert!(verdict.contains("duration_seconds="));
         assert!(rejected.starts_with("ERROR "));
+        assert!(rejected.contains("category=Tech"));
         assert!(rejected.contains("reason=its answer isn't usable"));
+    }
+
+    #[test]
+    fn it_should_log_the_fallback() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[&prompted_category("Sicilian"), &prompted_category("Tech")],
+        );
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![
+                Ok(LlmReply {
+                    stopped_at_limit: true,
+                    ..reply("").unwrap()
+                }),
+                reply(&answers(&[("Sicilian", YES)])),
+                reply(&answers(&[("Tech", NO)])),
+            ]),
+        );
+
+        let lines = captured_log_lines(|| {
+            run(&task, &video).unwrap();
+        });
+
+        let fallbacks = lines
+            .iter()
+            .filter(|line| line.starts_with("WARN ") || line.starts_with("ERROR "))
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            fallbacks,
+            ["Sicilian", "Tech"].map(|name| format!(
+                "WARN the model couldn't answer for a category, asking it alone \
+                 video_id={} category={name} reason=it hit the 3072-token output limit",
+                video.id
+            ))
+        );
     }
 
     /// The task over `db`, asking `llm`.
@@ -954,17 +1394,49 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         prompted_category(name).with_ai_prompt(None)
     }
 
-    /// The category each chat asked about, in order.
-    fn asked_categories(llm: &FakeLlmServerRepository) -> Vec<String> {
+    /// The categories each chat asked about, in order.
+    fn asked_categories(llm: &FakeLlmServerRepository) -> Vec<Vec<String>> {
         llm.chats()
             .iter()
-            .filter_map(|chat| {
+            .map(|chat| {
                 chat.user
                     .lines()
-                    .find_map(|line| line.strip_prefix("Category: "))
+                    .filter_map(|line| line.strip_prefix("### "))
                     .map(str::to_string)
+                    .collect()
             })
             .collect()
+    }
+
+    /// The output cap of each chat, in order.
+    fn output_caps(llm: &FakeLlmServerRepository) -> Vec<u32> {
+        llm.chats()
+            .iter()
+            .map(|chat| chat.max_output_tokens)
+            .collect()
+    }
+
+    /// The nine categories `evals/categories` measures.
+    const NINE_CATEGORIES: [&str; 9] = [
+        "AI news",
+        "Chess gameplays",
+        "Coding tutorials",
+        "Food for thought",
+        "Jobava London",
+        "Politics and Economy News",
+        "Science News",
+        "Sicilian",
+        "Tech",
+    ];
+
+    /// An answer about each named category, keyed by its name.
+    fn answers(entries: &[(&str, &str)]) -> String {
+        let entries = entries
+            .iter()
+            .map(|(name, answer)| format!("{name:?}: {answer}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{{{entries}}}")
     }
 
     fn ai_verdict(
@@ -1054,6 +1526,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         Ok(LlmReply {
             content: content.to_string(),
             input_tokens: 100,
+            output_tokens: 200,
             stopped_at_limit: false,
             refusal: None,
         })

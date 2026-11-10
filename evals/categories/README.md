@@ -47,7 +47,26 @@ python3 -I evals/categories/eval.py --model qwen3:4b --think      # again with t
 - **Change one category**: edit `category-prompts.md` and start a new run with
   `--reuse <run-id>`. Answers are copied when the settings and that category's
   prompt match, so only the changed category is asked again.
-- **Other flags**: `--prompt`, `--num-ctx` and `--temperature` for a new run.
+- **Other flags**: `--prompt`, `--num-ctx`, `--max-output` and `--temperature`
+  for a new run.
+- **Batch**: `--batch` asks as the app does: every category in one call per
+  video, with prompt [`v2-batch`](../../prompts/categorization/v2-batch.md)
+  and a schema keyed by category name. `num_ctx` is the app's Auto for the
+  number of categories (16384 for 9) and each call's output cap is scaled to
+  the categories it asks about (1,365 each, at least 3072); `--num-ctx` and
+  `--max-output` override them. When a call about several categories is
+  rejected or leaves some without a usable answer, each of those is asked
+  alone, as the app's fallback does: those rows are marked `fallback` and keep
+  the failed call's stats in `batch_call`, and the report's "Fallbacks" section
+  counts them and the tokens spent on the calls that failed. Rows are scored
+  like the others. To compare with one call per category, run both on the
+  same machine and compare the report's output tokens per video: they don't
+  depend on the hardware, seconds do.
+
+```bash
+python3 -I evals/categories/eval.py --model qwen3:4b --think           # one call per category
+python3 -I evals/categories/eval.py --model qwen3:4b --think --batch   # one call per video
+```
 
 `--limit 10` run first: thinking with an enforced JSON format hasn't been tried
 yet, so check the report's errors before starting the full run.
