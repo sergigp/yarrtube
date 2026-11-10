@@ -1101,6 +1101,33 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_schedule_failed_steps() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let long_ago = fixed_timestamp() - Duration::days(30);
+        let failed = LateDataChecks::checked(Some(long_ago), 11);
+        let video = Video {
+            thumbnail_filename: None,
+            thumbnail: (0..11).fold(StepState::pending(), |state, _| state.fail(long_ago)),
+            subtitles: failed,
+            chapters_checks: failed,
+            quality_checks: failed,
+            ..downloaded_video()
+        };
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_schedule_nothing_for_a_settled_errored_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -3262,7 +3289,8 @@ mod tests {
         );
     }
 
-    /// A sync whose file, metadata and AI ports no test of it observes.
+    /// A sync whose file, metadata and AI ports no test of it observes; a
+    /// downloaded video's file is on disk.
     fn sync_task(
         db: &TestDatabase,
         video_repository: Arc<SqliteVideoRepository>,
@@ -3278,7 +3306,9 @@ mod tests {
                 "/videos",
             )),
             task_repository,
-            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                DOWNLOADED_FILENAME.to_string(),
+            ])),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(MetadataGenerator::new(
                 Arc::new(FakeYoutubeMetadataRepository::default()),
