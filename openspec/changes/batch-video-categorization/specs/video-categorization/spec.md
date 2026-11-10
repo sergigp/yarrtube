@@ -49,7 +49,7 @@ Each request SHALL use the saved categorization model, temperature 0, the catego
 
 #### Scenario: Thinking model
 - **WHEN** the categorization model is `qwen3:4b`, Ollama lists `thinking` among its capabilities, the context length is Auto with 9 categories with an AI prompt, and 9 are asked about
-- **THEN** the request asks for thinking, temperature 0, context 16384, at most 12288 output tokens and the JSON schema with the 9 categories
+- **THEN** the request asks for thinking, temperature 0, context 16384, at most 12285 output tokens and the JSON schema with the 9 categories
 
 #### Scenario: One category
 - **WHEN** one category is asked about
@@ -90,8 +90,8 @@ A call SHALL be rejected when Ollama stopped at the output limit, when Ollama re
 - **THEN** the retry asks only about "Tech"
 
 #### Scenario: Timeout scales with the cap
-- **WHEN** a call about 9 categories allows 12288 output tokens
-- **THEN** it is rejected only after 2458 seconds without an answer, and a call about one category after 30 minutes
+- **WHEN** a call about 9 categories allows 12285 output tokens
+- **THEN** it is rejected only after 2457 seconds without an answer, and a call about one category after 30 minutes
 
 #### Scenario: Ollama down during the fallback
 - **WHEN** the call about 9 categories is rejected and Ollama can't be reached for the first of their own calls

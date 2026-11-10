@@ -5,12 +5,17 @@ use crate::domain::video::{Video, VideoChapter};
 use crate::domain::video_summary::SummaryText;
 use std::time::Duration;
 
-/// Room for one category's thinking and answer: 12,288 for 9, as measured
+/// Room for one category's thinking and answer: about the 12,288 measured for 9
 /// in `evals/categories`.
 pub const OUTPUT_TOKENS_PER_CATEGORY: u32 = 1365;
 /// The least a call gets, whatever it asks: stops runaway thinking loops
 /// without cutting a single category short.
 pub const MIN_OUTPUT_TOKENS: u32 = 3072;
+
+/// The slowest a server is expected to write, thinking included: a call
+/// gets as long as its output cap takes at this rate (the MacBook Air does
+/// about 11).
+const SLOWEST_TOKENS_PER_SECOND: u32 = 5;
 
 /// What the model is asked about a video and some categories, in one call
 /// — see the `video-categorization` capability.
@@ -89,8 +94,9 @@ impl CategorizationQuestion {
     }
 
     /// The output cap at 5 tokens a second, at least 30 minutes.
-    pub fn timeout(&self, _context_length: ContextLength) -> Duration {
-        MIN_CHAT_TIMEOUT
+    pub fn timeout(&self, context_length: ContextLength) -> Duration {
+        let at_slowest = self.max_output_tokens(context_length) / SLOWEST_TOKENS_PER_SECOND;
+        Duration::from_secs(at_slowest.into()).max(MIN_CHAT_TIMEOUT)
     }
 
     /// Each category with its usable answer, if any: the entry under its

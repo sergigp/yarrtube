@@ -180,7 +180,7 @@ render    -> "## Fallbacks": videos that fell back, fallback calls, their output
 2. `it_should_send_the_video_details_and_category_prompts_with_the_categorization_settings`: the exact `LlmChat`, with the schema keyed by the three names, the Auto context length and a 4,095-token cap.
 3. `it_should_cap_the_output_at_3072_for_one_category`.
 4. `it_should_cap_the_output_at_the_context_length`: override 8192, 9 categories, cap 8192.
-4a. `it_should_wait_longer_for_a_call_about_more_categories`: 9 categories give a 2,458 s timeout, 1 category gives 30 min.
+4a. `it_should_wait_longer_for_a_call_about_more_categories`: 9 categories give a 2,457 s timeout, 1 category gives 30 min.
 5. `it_should_ask_with_the_auto_context_length`: 9 categories with a prompt, `context_length` 16384.
 6. `it_should_store_the_usable_answers_of_a_partly_usable_call`: "Sicilian" stored, "Tech" asked alone.
 7. `it_should_ask_each_category_alone_when_the_call_hits_the_output_limit`: 1 batch plus N single calls, all stored.

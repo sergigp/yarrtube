@@ -100,6 +100,7 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
+    use std::time::Duration;
 
     const YES: &str = r#"{"reason": "A Sicilian game.", "belongs": true}"#;
     const NO: &str = r#"{"reason": "A chess game.", "belongs": false}"#;
@@ -364,6 +365,46 @@ mod tests {
         run(&task, &video).unwrap();
 
         assert_eq!(output_caps(&llm), vec![8192]);
+    }
+
+    #[test]
+    fn it_should_wait_longer_for_a_call_about_more_categories() {
+        let timeouts = [&NINE_CATEGORIES[..], &["Sicilian"]].map(|names| {
+            let db = TestDatabase::new();
+            let entries = names.iter().map(|name| (*name, NO)).collect::<Vec<_>>();
+            let llm = llm_replying(vec![reply(&answers(&entries))]);
+            let video = summarized_video();
+            let categories = names
+                .iter()
+                .map(|name| prompted_category(name))
+                .collect::<Vec<_>>();
+            seed(&db, &video, &categories.iter().collect::<Vec<_>>());
+            SqlitePreferencesRepository::new(db.database())
+                .save(&Preferences {
+                    categorization: CategorizationSettings {
+                        context_length: Some(ContextLength::new(16384).unwrap()),
+                        ..categorization_on().categorization
+                    },
+                    ..categorization_on()
+                })
+                .unwrap();
+            let task = categorize_video_task(&db, llm.clone());
+
+            run(&task, &video).unwrap();
+
+            llm.chats()
+                .iter()
+                .map(|chat| chat.timeout)
+                .collect::<Vec<_>>()
+        });
+
+        assert_eq!(
+            timeouts,
+            [
+                vec![Duration::from_secs(2457)],
+                vec![Duration::from_secs(30 * 60)]
+            ]
+        );
     }
 
     #[test]
