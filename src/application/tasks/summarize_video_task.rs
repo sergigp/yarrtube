@@ -176,6 +176,50 @@ mod tests {
     }
 
     #[test]
+    fn it_should_mark_the_summary_done_once_generated() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let video = Video {
+            summary: retrying_summary(3),
+            ..subtitled_video()
+        };
+        video_repository.insert(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm_replying(vec![reply("Three games.")]),
+            files_with(SHORT_SRT),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            summary_repository.find(&video.id).unwrap(),
+            Some(stored_summary(&video, "Three games."))
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                summary: StepState {
+                    status: StepStatus::Done,
+                    attempts: RetryAttempts::default(),
+                },
+                updated_at: later(),
+                ..video
+            })
+        );
+    }
+
+    #[test]
     fn it_should_send_the_shipped_prompt_filled_with_the_videos_data() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
