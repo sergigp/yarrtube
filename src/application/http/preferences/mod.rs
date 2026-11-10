@@ -100,13 +100,17 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::CategoryId;
+    use crate::domain::category::{
+        Category, CategoryColor, CategoryId, CategoryName, CategoryPrompt,
+    };
     use crate::domain::preferences::{
         CategorizationSettings, Preferences, ResolvedPreferences, SummarySettings,
     };
     use crate::domain::video::{SummaryState, Video, VideoId, YoutubeVideoId};
     use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
-    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
+    use crate::infrastructure::repositories::sqlite_category_repository::{
+        CategoryRepository, SqliteCategoryRepository,
+    };
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
     };
@@ -135,6 +139,35 @@ mod tests {
         let response = get(preferences_searcher).await;
 
         assert_eq!(response, Ok(all_on_response()));
+    }
+
+    #[tokio::test]
+    async fn it_should_return_an_auto_context_length_from_the_categories_with_a_prompt() {
+        let db = TestDatabase::new();
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        (1..=9).for_each(|n| {
+            category_repository
+                .insert(&prompted_category(&format!("Category {n}")))
+                .unwrap()
+        });
+        category_repository
+            .insert(&prompted_category("Funny").with_ai_prompt(None))
+            .unwrap();
+        let preferences_searcher = PreferencesSearcher::new(
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            category_repository,
+        );
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_context_length: 16384,
+                categorization_context_length_is_auto: true,
+                ..all_on_response()
+            })
+        );
     }
 
     #[tokio::test]
@@ -1175,6 +1208,20 @@ mod tests {
         let start = shipped.find("## map user").unwrap();
         let end = shipped.find("## map chapters").unwrap();
         format!("{}{}", &shipped[..start], &shipped[end..])
+    }
+
+    /// A category named `name` with an AI prompt.
+    fn prompted_category(name: &str) -> Category {
+        Category::create(
+            CategoryName::new(name).unwrap(),
+            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            fixed_timestamp(),
+        )
+        .with_ai_prompt(Some(
+            CategoryPrompt::new(format!("The video is about {name}."))
+                .unwrap()
+                .unwrap(),
+        ))
     }
 
     fn all_on_response() -> PreferencesResponse {

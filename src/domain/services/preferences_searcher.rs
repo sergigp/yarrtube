@@ -40,13 +40,23 @@ impl PreferencesSearcherApi for PreferencesSearcher {
 }
 
 impl PreferencesSearcher {
+    /// `preferences` with the categorization context length they resolve
+    /// to for the categories with an AI prompt now.
     fn resolve(
         &self,
         preferences: Preferences,
     ) -> Result<ResolvedPreferences, ReadPreferencesError> {
-        let _ = &self.category_repository;
+        let prompted = self
+            .category_repository
+            .list()
+            .map_err(ReadPreferencesError::Repository)?
+            .iter()
+            .filter(|category| category.ai_prompt.is_some())
+            .count();
         Ok(ResolvedPreferences {
-            categorization_context_length: preferences.categorization.effective_context_length(0),
+            categorization_context_length: preferences
+                .categorization
+                .effective_context_length(prompted),
             preferences,
         })
     }

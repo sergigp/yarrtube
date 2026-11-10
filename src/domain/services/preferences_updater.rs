@@ -79,13 +79,23 @@ impl PreferencesUpdaterApi for PreferencesUpdater {
 }
 
 impl PreferencesUpdater {
+    /// `preferences` with the categorization context length they resolve
+    /// to for the categories with an AI prompt now.
     fn resolve(
         &self,
         preferences: Preferences,
     ) -> Result<ResolvedPreferences, UpdatePreferencesError> {
-        let _ = &self.category_repository;
+        let prompted = self
+            .category_repository
+            .list()
+            .map_err(UpdatePreferencesError::Repository)?
+            .iter()
+            .filter(|category| category.ai_prompt.is_some())
+            .count();
         Ok(ResolvedPreferences {
-            categorization_context_length: preferences.categorization.effective_context_length(0),
+            categorization_context_length: preferences
+                .categorization
+                .effective_context_length(prompted),
             preferences,
         })
     }
