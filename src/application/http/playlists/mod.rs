@@ -3435,6 +3435,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_move_a_source_whose_only_unfinished_video_waits_for_a_retry() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let task_repository = task_repository(&db);
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        save_downloaded_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        let retrying = playlist_episode("vid_retrying", "Retrying", 2)
+            .mark_errored("HTTP Error 503", fixed_timestamp())
+            .mark_errored("HTTP Error 503", fixed_timestamp())
+            .mark_errored("HTTP Error 503", fixed_timestamp());
+        save_playlist_video_as(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            retrying.clone(),
+            1,
+        );
+        task_repository
+            .schedule(
+                &Task::DownloadVideo {
+                    video_id: retrying.id.as_str().to_string(),
+                },
+                fixed_timestamp() + chrono::Duration::hours(6),
+            )
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository);
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/lofi")]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_the_new_path_if_the_show_directory_is_missing() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

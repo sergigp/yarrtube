@@ -56,7 +56,7 @@
 - [x] 2.37 `it_should_fail_to_retry_an_unknown_video` (http)
 - [x] 2.38 `it_should_list_a_retrying_video_with_its_steps` (http)
 - [x] 2.39 `it_should_list_a_downloaded_video_with_a_failed_summary` (http)
-- [ ] 2.40 `it_should_move_a_source_whose_only_unfinished_video_waits_for_a_retry` (http)
+- [x] 2.40 `it_should_move_a_source_whose_only_unfinished_video_waits_for_a_retry` (http)
 - [ ] 2.41 `it_should_reset_failed_summaries_when_the_summary_settings_change` (renamed, regression)
 - [ ] 2.42 `it_should_reset_failed_verdicts_when_the_categorization_model_changes` (renamed, regression)
 - [ ] 2.43 Web `videoSteps.test.ts`: one cycle per case (labels, retrying line, failed line, overdue, `canRetry`); `npm run test` green
