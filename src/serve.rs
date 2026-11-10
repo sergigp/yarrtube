@@ -888,6 +888,7 @@ fn video_categorizer(infrastructure: &InfrastructureContainer) -> Arc<VideoCateg
         infrastructure.llm_server_repository.clone(),
         video_category_assigner(infrastructure),
         infrastructure.clock.clone(),
+        infrastructure.video_repository.clone(),
     ))
 }
 

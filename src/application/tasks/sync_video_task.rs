@@ -3241,8 +3241,9 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
             Arc::new(SqliteVideoSummaryRepository::new(database.clone())),
             Arc::new(FakeLlmServerRepository::failing()),
-            video_category_assigner(database),
+            video_category_assigner(database.clone()),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteVideoRepository::new(database)),
         ))
     }
 }

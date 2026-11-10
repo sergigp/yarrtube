@@ -60,7 +60,9 @@ mod tests {
     };
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoChapter, YoutubeVideoId};
+    use crate::domain::video::{
+        RetryAttempts, StepState, StepStatus, Video, VideoChapter, YoutubeVideoId,
+    };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -559,10 +561,12 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(
-                "the model couldn't answer for Sicilian (it hit the 3072-token output limit)"
-                    .to_string()
-            )
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason:
+                    "the model couldn't answer for Sicilian (it hit the 3072-token output limit)"
+                        .to_string(),
+            })
         );
         assert_eq!(asked_categories(&llm), vec![vec!["Sicilian"]]);
     }
@@ -954,6 +958,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                     Arc::new(CategoryLock::default()),
                 ),
                 Arc::new(FixedClock(later())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
             )),
         );
 
@@ -975,9 +980,10 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_fail_after_trying_every_category_when_a_call_is_rejected() {
+    fn it_should_schedule_the_next_attempt_if_a_category_is_rejected() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video_repository = SqliteVideoRepository::new(db.database());
         let video = summarized_video();
         let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
         seed(&db, &video, &[&sicilian, &tech]);
@@ -993,7 +999,26 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
 
         assert_eq!(
             result,
-            Err("the model couldn't answer for Sicilian (its answer isn't usable)".to_string())
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason: "the model couldn't answer for Sicilian (its answer isn't usable)"
+                    .to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 1,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video.clone()
+            })
         );
         assert_eq!(
             verdict_repository
@@ -1019,7 +1044,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                 reply("It might belong."),
             ]),
         );
-        run(&first, &video).unwrap_err();
+        run(&first, &video).unwrap();
         let llm = llm_replying(vec![reply(&answers(&[("Tech", NO)]))]);
         let retry = categorize_video_task(&db, llm.clone());
 
@@ -1070,7 +1095,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             );
             let task = categorize_video_task(&db, llm);
 
-            run(&task, &video).unwrap_err();
+            run(&task, &video).unwrap();
 
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -1132,7 +1157,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         );
 
         let lines = captured_log_lines(|| {
-            run(&task, &video).unwrap_err();
+            run(&task, &video).unwrap();
         });
 
         let line = |needle: &str| {
@@ -1237,6 +1262,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                     Arc::new(CategoryLock::default()),
                 ),
                 Arc::new(FixedClock(later())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
             )),
         )
     }

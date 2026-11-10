@@ -3,6 +3,7 @@ use crate::domain::llm_server::{LlmReply, OllamaUrl};
 use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
+    VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_category::{
@@ -13,6 +14,7 @@ use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServer
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
@@ -81,6 +83,7 @@ pub struct VideoCategorizer {
     llm_server_repository: Arc<dyn LlmServerRepository>,
     video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
+    video_updater: VideoUpdater,
 }
 
 impl VideoCategorizer {
@@ -94,8 +97,10 @@ impl VideoCategorizer {
         llm_server_repository: Arc<dyn LlmServerRepository>,
         video_category_assigner: VideoCategoryAssigner,
         clock: Arc<dyn Clock>,
+        video_repository: Arc<dyn VideoRepository>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository),
             preferences_repository,
             video_owner_finder,
             category_repository,
@@ -216,7 +221,10 @@ impl VideoCategorizer {
             }
             Err(Stop::Failed(error)) => return Err(error),
         };
-        Self::fail_if_rejected(&rejected).map(|_| VideoStepOutcome::Settled)
+        match Self::fail_if_rejected(&rejected) {
+            Ok(()) => Ok(VideoStepOutcome::Settled),
+            Err(cause) => self.record_failure(video, cause.to_string()),
+        }
     }
 
     /// Asks about each pending category in turn; the ones rejected, with why.
@@ -418,6 +426,21 @@ impl VideoCategorizer {
     }
 
     /// An error naming each of `rejected`, with why; `Ok` when none was.
+    /// Records a failed attempt, failed for `reason`: Retrying, run again
+    /// when its next attempt is due, or Failed.
+    fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
+        let now = self.clock.now();
+        let recorded = self.video_updater.update(&video.id, |video| {
+            Some(video.record_categorization_failure(now))
+        })?;
+        Ok(
+            match recorded.and_then(|video| video.categorization.next_attempt_at()) {
+                Some(at) => VideoStepOutcome::RetryAt { at, reason },
+                None => VideoStepOutcome::Settled,
+            },
+        )
+    }
+
     fn fail_if_rejected(rejected: &[(&Category, String)]) -> anyhow::Result<()> {
         if rejected.is_empty() {
             return Ok(());

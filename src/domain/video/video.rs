@@ -485,7 +485,6 @@ impl Video {
 
     /// Records a failed categorization attempt: Retrying, or Failed on the
     /// last.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn record_categorization_failure(self, now: DateTime<Utc>) -> Self {
         Self {
             categorization: self.categorization.fail(now),
