@@ -34,10 +34,10 @@
 - [x] 2.14 `it_should_log_each_call_and_each_verdict`: the call line has the categories, `fallback`, the input and output tokens and the duration; each verdict gets its own line.
 - [x] 2.15 `it_should_log_the_fallback`: the warning names the video, the reason and that each category is asked alone.
 - [x] 2.16 `it_should_return_an_auto_context_length_from_the_categories_with_a_prompt` (preferences handler): 9 categories give 16384 with `is_auto` true.
-- [ ] 2.17 `it_should_return_4096_for_auto_with_few_categories`.
-- [ ] 2.18 `it_should_override_the_categorization_context_length`: 8192 with `is_auto` false, whatever the number of categories.
-- [ ] 2.19 `it_should_go_back_to_the_auto_context_length`: PATCH `null` gives the Auto value.
-- [ ] 2.20 `it_should_keep_auto_when_saving_other_preferences`.
+- [x] 2.17 `it_should_return_4096_for_auto_with_few_categories`.
+- [x] 2.18 `it_should_override_the_categorization_context_length`: 8192 with `is_auto` false, whatever the number of categories.
+- [x] 2.19 `it_should_go_back_to_the_auto_context_length`: PATCH `null` gives the Auto value.
+- [x] 2.20 `it_should_keep_auto_when_saving_other_preferences`.
 - [ ] 2.21 `it_should_ship_the_categorization_prompt_v2_batch`: `categorization_prompt.rs` includes `v2-batch.md`. Update `prompts/categorization/README.md` to mark v2-batch as shipped.
 - [ ] 2.22 Web `aiSettingsForm.test.ts`, one cycle per case:
   - Auto on sends nothing.

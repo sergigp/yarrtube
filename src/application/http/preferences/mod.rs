@@ -171,6 +171,116 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_4096_for_auto_with_few_categories() {
+        let db = TestDatabase::new();
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        ["Chess", "Tech"].map(|name| {
+            category_repository
+                .insert(&prompted_category(name))
+                .unwrap()
+        });
+        let preferences_searcher = PreferencesSearcher::new(
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            category_repository,
+        );
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_context_length: 4096,
+                categorization_context_length_is_auto: true,
+                ..all_on_response()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_override_the_categorization_context_length() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        (1..=9).for_each(|n| {
+            category_repository
+                .insert(&prompted_category(&format!("Category {n}")))
+                .unwrap()
+        });
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_context_length: Some(Some(8192)),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                categorization_context_length: 8192,
+                categorization_context_length_is_auto: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                categorization: CategorizationSettings {
+                    context_length: Some(ContextLength::new(8192).unwrap()),
+                    ..CategorizationSettings::default()
+                },
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_go_back_to_the_auto_context_length() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        repository
+            .save(&Preferences {
+                categorization: CategorizationSettings {
+                    context_length: Some(ContextLength::new(8192).unwrap()),
+                    ..CategorizationSettings::default()
+                },
+                ..Preferences::default()
+            })
+            .unwrap();
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_context_length: Some(None),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(response, Ok(all_on_response()));
+        assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_auto_when_saving_other_preferences() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = preferences_updater(&db, repository.clone());
+        let request = UpdatePreferencesRequest {
+            categorization_temperature: Some(0.5),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(
+            repository
+                .find()
+                .unwrap()
+                .map(|preferences| preferences.categorization.context_length),
+            Some(None)
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_ai_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
