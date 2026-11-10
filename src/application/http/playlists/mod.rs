@@ -2140,7 +2140,6 @@ mod tests {
             .schedule(
                 &Task::FetchSubtitles {
                     video_id: video.id.as_str().to_string(),
-                    output_dir: "/videos/music/busy".to_string(),
                 },
                 fixed_timestamp(),
             )
@@ -2933,7 +2932,6 @@ mod tests {
                     1,
                     &Task::FetchThumbnail {
                         video_id: video_id.as_str().to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -2941,8 +2939,6 @@ mod tests {
                     2,
                     &Task::DownloadVideo {
                         video_id: video_id.as_str().to_string(),
-                        quality: "high".to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -3061,7 +3057,6 @@ mod tests {
                     1,
                     &Task::FetchThumbnail {
                         video_id: videos_after_first_reconcile[0].id.as_str().to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -3069,8 +3064,6 @@ mod tests {
                     2,
                     &Task::DownloadVideo {
                         video_id: videos_after_first_reconcile[0].id.as_str().to_string(),
-                        quality: "high".to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -3203,7 +3196,6 @@ mod tests {
                     1,
                     &Task::FetchThumbnail {
                         video_id: existing.id.as_str().to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -3211,8 +3203,6 @@ mod tests {
                     2,
                     &Task::DownloadVideo {
                         video_id: existing.id.as_str().to_string(),
-                        quality: Quality::High.as_str().to_string(),
-                        output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -3848,6 +3838,146 @@ mod tests {
             .schedule(
                 &Task::FetchThumbnail {
                     video_id: video.id.as_str().to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist or channel still has work in progress, try again once its downloads finish"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_a_download_is_queued() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let video = save_downloaded_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::DownloadVideo {
+                    video_id: video.id.as_str().to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist or channel still has work in progress, try again once its downloads finish"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_move_a_playlist_while_a_download_of_another_source_is_queued() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        playlist_repository
+            .insert(&playlist("PL2", "music/rock"))
+            .unwrap();
+        let other_video = save_downloaded_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL2",
+            "vid_rock",
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::DownloadVideo {
+                    video_id: other_video.id.as_str().to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/lofi"), playlist("PL2", "music/rock")]
+        );
+        assert_eq!(
+            video_file_repository.renamed_dirs(),
+            vec![(
+                std::path::PathBuf::from("/videos/music/chill"),
+                std::path::PathBuf::from("/videos/music/lofi")
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, show_moved("music/chill", "music/lofi"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_a_video_file_deletion_is_queued() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        task_repository
+            .schedule(
+                &Task::DeleteVideoFile {
+                    filename: Some("Season 1/S01E001 - My Video.mp4".to_string()),
+                    thumbnail_filename: None,
+                    subtitle_filename: None,
                     output_dir: "/videos/music/chill".to_string(),
                 },
                 fixed_timestamp(),

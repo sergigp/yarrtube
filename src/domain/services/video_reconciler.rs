@@ -98,12 +98,7 @@ impl VideoReconcilerApi for VideoReconciler {
         self.warn_if_stranded(&video)?;
         let summaries_wanted = video.is_summarizable() && self.summaries_wanted(&owner)?;
         let categorization_wanted = self.categorization_wanted(&video, &owner)?;
-        self.schedule_steps(
-            &video,
-            &owner.target,
-            summaries_wanted,
-            categorization_wanted,
-        )
+        self.schedule_steps(&video, summaries_wanted, categorization_wanted)
     }
 }
 
@@ -265,7 +260,6 @@ impl VideoReconciler {
     fn schedule_steps(
         &self,
         video: &Video,
-        target: &VideoTarget,
         summaries_wanted: bool,
         categorization_wanted: bool,
     ) -> anyhow::Result<()> {
@@ -279,7 +273,7 @@ impl VideoReconciler {
         .iter()
         .try_for_each(|step| {
             self.task_repository
-                .schedule(&step.task_for(video, target), self.clock.now())
+                .schedule(&step.task_for(video), self.clock.now())
         })
     }
 }

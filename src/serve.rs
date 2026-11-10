@@ -765,6 +765,7 @@ fn video_relocator(infrastructure: &InfrastructureContainer) -> Arc<VideoRelocat
 fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader {
     VideoDownloader::new(
         infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
@@ -837,6 +838,7 @@ fn video_owner_finder(infrastructure: &InfrastructureContainer) -> Arc<VideoOwne
 fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {
     Arc::new(ThumbnailFetcher::new(
         infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.thumbnail_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.clock.clone(),
@@ -881,6 +883,7 @@ fn video_categorizer(infrastructure: &InfrastructureContainer) -> Arc<VideoCateg
 fn quality_upgrader(infrastructure: &InfrastructureContainer) -> Arc<QualityUpgrader> {
     Arc::new(QualityUpgrader::new(
         infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.event_publisher.clone(),
@@ -892,6 +895,7 @@ fn quality_upgrader(infrastructure: &InfrastructureContainer) -> Arc<QualityUpgr
 fn subtitle_fetcher(infrastructure: &InfrastructureContainer) -> Arc<SubtitleFetcher> {
     Arc::new(SubtitleFetcher::new(
         infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.video_transcript_repository.clone(),
         infrastructure.caption_repository.clone(),
         infrastructure.video_file_repository.clone(),

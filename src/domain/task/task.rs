@@ -14,10 +14,11 @@ pub enum Task {
     ReconcileChannel {
         channel_id: String,
     },
+    /// Quality and show folder are resolved through the video's owner when
+    /// the task runs. Rows queued before that still carry `quality` and
+    /// `output_dir`; they decode, the extra keys ignored.
     DownloadVideo {
         video_id: String,
-        quality: String,
-        output_dir: String,
     },
     DeleteVideoFile {
         filename: Option<String>,
@@ -38,11 +39,9 @@ pub enum Task {
     UpdateYtdlp,
     FetchThumbnail {
         video_id: String,
-        output_dir: String,
     },
     FetchSubtitles {
         video_id: String,
-        output_dir: String,
     },
     SyncVideo {
         video_id: String,
@@ -53,8 +52,6 @@ pub enum Task {
     },
     UpgradeQuality {
         video_id: String,
-        quality: String,
-        output_dir: String,
     },
     SummarizeVideo {
         video_id: String,
@@ -133,16 +130,28 @@ impl Task {
         !matches!(self, Self::SyncVideo { .. })
     }
 
-    /// The show directory a per-video task (`download_video`,
-    /// `fetch_thumbnail`, `fetch_subtitles`, `upgrade_quality`,
-    /// `delete_video_file`) writes to or deletes from; `None` for any other.
+    /// The show directory a `delete_video_file` task deletes from; `None`
+    /// for any other. The other per-video tasks write into their video's
+    /// owner's show directory, resolved when they run (see
+    /// `show_writing_video_id`).
     pub fn output_dir(&self) -> Option<&str> {
         match self {
-            Self::DownloadVideo { output_dir, .. }
-            | Self::FetchThumbnail { output_dir, .. }
-            | Self::FetchSubtitles { output_dir, .. }
-            | Self::DeleteVideoFile { output_dir, .. }
-            | Self::UpgradeQuality { output_dir, .. } => Some(output_dir),
+            Self::DeleteVideoFile { output_dir, .. } => Some(output_dir),
+            _ => None,
+        }
+    }
+
+    /// The video whose show directory this task writes into (or, for
+    /// `sync_video`, may have read before a move): `download_video`,
+    /// `fetch_thumbnail`, `fetch_subtitles`, `upgrade_quality` and
+    /// `sync_video`; `None` for any other.
+    pub fn show_writing_video_id(&self) -> Option<&str> {
+        match self {
+            Self::DownloadVideo { video_id }
+            | Self::FetchThumbnail { video_id }
+            | Self::FetchSubtitles { video_id }
+            | Self::UpgradeQuality { video_id }
+            | Self::SyncVideo { video_id } => Some(video_id),
             _ => None,
         }
     }
@@ -161,14 +170,14 @@ impl Task {
 
     fn keyed_video_id(&self) -> Option<&str> {
         match self {
-            Self::DownloadVideo { video_id, .. }
-            | Self::FetchThumbnail { video_id, .. }
-            | Self::FetchSubtitles { video_id, .. }
+            Self::DownloadVideo { video_id }
+            | Self::FetchThumbnail { video_id }
+            | Self::FetchSubtitles { video_id }
             | Self::SyncVideo { video_id }
             | Self::FetchChapters { video_id }
             | Self::SummarizeVideo { video_id }
             | Self::CategorizeVideo { video_id }
-            | Self::UpgradeQuality { video_id, .. } => Some(video_id),
+            | Self::UpgradeQuality { video_id } => Some(video_id),
             _ => None,
         }
     }
@@ -238,16 +247,12 @@ mod tests {
         let tasks = [
             Task::DownloadVideo {
                 video_id: "rec1".to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/music".to_string(),
             },
             Task::FetchThumbnail {
                 video_id: "rec1".to_string(),
-                output_dir: "/videos/music".to_string(),
             },
             Task::FetchSubtitles {
                 video_id: "rec1".to_string(),
-                output_dir: "/videos/music".to_string(),
             },
             Task::SyncVideo {
                 video_id: "rec1".to_string(),
@@ -260,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_read_the_output_dir_of_every_per_video_task() {
+    fn it_should_read_the_output_dir_of_a_video_file_deletion_only() {
         let tasks = every_task();
 
         let output_dirs: Vec<Option<&str>> = tasks.iter().map(Task::output_dir).collect();
@@ -269,8 +274,24 @@ mod tests {
         assert_eq!(
             output_dirs,
             vec![
-                None, None, music, music, None, None, None, music, music, None, None, None, music,
+                None, None, None, music, None, None, None, None, None, None, None, None, None,
                 None, None, None,
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_read_the_video_of_every_task_writing_into_its_show_folder() {
+        let tasks = every_task();
+
+        let video_ids: Vec<Option<&str>> = tasks.iter().map(Task::show_writing_video_id).collect();
+
+        let rec1 = Some("rec1");
+        assert_eq!(
+            video_ids,
+            vec![
+                None, None, rec1, None, None, None, None, rec1, rec1, rec1, None, None, rec1, None,
+                None, None,
             ]
         );
     }
@@ -313,8 +334,6 @@ mod tests {
             },
             Task::DownloadVideo {
                 video_id: "rec1".to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/music".to_string(),
             },
             Task::DeleteVideoFile {
                 filename: Some("My Video.mp4".to_string()),
@@ -333,11 +352,9 @@ mod tests {
             Task::UpdateYtdlp,
             Task::FetchThumbnail {
                 video_id: "rec1".to_string(),
-                output_dir: "/videos/music".to_string(),
             },
             Task::FetchSubtitles {
                 video_id: "rec1".to_string(),
-                output_dir: "/videos/music".to_string(),
             },
             Task::SyncVideo {
                 video_id: "rec1".to_string(),
@@ -348,8 +365,6 @@ mod tests {
             },
             Task::UpgradeQuality {
                 video_id: "rec1".to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/music".to_string(),
             },
             Task::SummarizeVideo {
                 video_id: "rec1".to_string(),

@@ -489,8 +489,6 @@ mod tests {
         let reconcile = task();
         let download = Task::DownloadVideo {
             video_id: "rec1".to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         };
 
         repo.schedule(&reconcile, later_due).unwrap();
@@ -728,7 +726,6 @@ mod tests {
         let repo = repo_with_clock(now);
         let fetch_thumbnail = Task::FetchThumbnail {
             video_id: "rec1".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         };
 
         repo.schedule(&fetch_thumbnail, now).unwrap();
@@ -1024,10 +1021,82 @@ mod tests {
     }
 
     #[test]
+    fn it_should_read_per_video_tasks_queued_with_their_quality_and_output_dir() {
+        let repo = repo();
+        insert_row(
+            &repo,
+            "download_video",
+            r#"{"output_dir":"/videos/music","quality":"high","video_id":"rec1"}"#,
+        );
+        insert_row(
+            &repo,
+            "upgrade_quality",
+            r#"{"output_dir":"/videos/music","quality":"mid","video_id":"rec1"}"#,
+        );
+        insert_row(
+            &repo,
+            "fetch_thumbnail",
+            r#"{"output_dir":"/videos/music","video_id":"rec1"}"#,
+        );
+        insert_row(
+            &repo,
+            "fetch_subtitles",
+            r#"{"output_dir":"/videos/music","video_id":"rec1"}"#,
+        );
+
+        let tasks: Vec<Task> = repo
+            .list_non_completed()
+            .unwrap()
+            .into_iter()
+            .map(|scheduled| scheduled.task)
+            .collect();
+
+        assert_eq!(
+            tasks,
+            vec![
+                Task::DownloadVideo {
+                    video_id: "rec1".to_string(),
+                },
+                Task::UpgradeQuality {
+                    video_id: "rec1".to_string(),
+                },
+                Task::FetchThumbnail {
+                    video_id: "rec1".to_string(),
+                },
+                Task::FetchSubtitles {
+                    video_id: "rec1".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_download_if_one_queued_with_its_quality_and_output_dir_is_pending()
+    {
+        let repo = repo();
+        insert_row(
+            &repo,
+            "download_video",
+            r#"{"output_dir":"/videos/music","quality":"high","video_id":"rec1"}"#,
+        );
+
+        repo.schedule(&download_task("rec1"), repo.clock.now())
+            .unwrap();
+
+        assert_eq!(
+            stored_rows(&repo),
+            vec![(
+                "download_video".to_string(),
+                r#"{"output_dir":"/videos/music","quality":"high","video_id":"rec1"}"#.to_string()
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_read_a_row_it_cannot_decode_as_unreadable() {
         let repo = repo();
         insert_row(&repo, "reconcile_plex_collections", "{}");
-        insert_row(&repo, "download_video", r#"{"video_id":"rec1"}"#);
+        insert_row(&repo, "download_video", r#"{"quality":"high"}"#);
         insert_row(&repo, "sync_video", "not json");
 
         let tasks: Vec<Task> = repo
@@ -1053,8 +1122,8 @@ mod tests {
                 },
                 Task::Unreadable {
                     task_type: "download_video".to_string(),
-                    payload: r#"{"video_id":"rec1"}"#.to_string(),
-                    error: "missing field `quality`".to_string(),
+                    payload: r#"{"quality":"high"}"#.to_string(),
+                    error: "missing field `video_id`".to_string(),
                 },
                 Task::Unreadable {
                     task_type: "sync_video".to_string(),
@@ -1143,11 +1212,9 @@ mod tests {
             Task::UpdateYtdlp,
             Task::FetchThumbnail {
                 video_id: "rec1".to_string(),
-                output_dir: "/videos/my-playlist".to_string(),
             },
             Task::FetchSubtitles {
                 video_id: "rec1".to_string(),
-                output_dir: "/videos/my-playlist".to_string(),
             },
             sync_video_task("rec1"),
             Task::SyncPlexLabels,
@@ -1156,8 +1223,6 @@ mod tests {
             },
             Task::UpgradeQuality {
                 video_id: "rec1".to_string(),
-                quality: "mid".to_string(),
-                output_dir: "/videos/my-playlist".to_string(),
             },
             Task::SummarizeVideo {
                 video_id: "rec1".to_string(),
@@ -1174,10 +1239,7 @@ mod tests {
         vec![
             ("reconcile_playlist", r#"{"playlist_id":"PL1"}"#),
             ("reconcile_channel", r#"{"channel_id":"@somechannel"}"#),
-            (
-                "download_video",
-                r#"{"output_dir":"/videos/my-playlist","quality":"high","video_id":"rec1"}"#,
-            ),
+            ("download_video", r#"{"video_id":"rec1"}"#),
             (
                 "delete_video_file",
                 r#"{"filename":"My Video.mp4","output_dir":"/videos/my-playlist","subtitle_filename":"My Video.en.srt","thumbnail_filename":null}"#,
@@ -1191,21 +1253,12 @@ mod tests {
                 r#"{"channel_id":"@somechannel","path":"creators/somechannel"}"#,
             ),
             ("update_ytdlp", "{}"),
-            (
-                "fetch_thumbnail",
-                r#"{"output_dir":"/videos/my-playlist","video_id":"rec1"}"#,
-            ),
-            (
-                "fetch_subtitles",
-                r#"{"output_dir":"/videos/my-playlist","video_id":"rec1"}"#,
-            ),
+            ("fetch_thumbnail", r#"{"video_id":"rec1"}"#),
+            ("fetch_subtitles", r#"{"video_id":"rec1"}"#),
             ("sync_video", r#"{"video_id":"rec1"}"#),
             ("sync_plex_labels", "{}"),
             ("fetch_chapters", r#"{"video_id":"rec1"}"#),
-            (
-                "upgrade_quality",
-                r#"{"output_dir":"/videos/my-playlist","quality":"mid","video_id":"rec1"}"#,
-            ),
+            ("upgrade_quality", r#"{"video_id":"rec1"}"#),
             ("summarize_video", r#"{"video_id":"rec1"}"#),
             ("categorize_video", r#"{"video_id":"rec1"}"#),
         ]
@@ -1214,8 +1267,6 @@ mod tests {
     fn download_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 
