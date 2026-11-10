@@ -85,7 +85,7 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 | `YARRTUBE_DB_PATH`                    | `/config/yarrtube.db` | Path to the SQLite database (inside the container)                                                                                                                                                            |
 | `YARRTUBE_VIDEOS_PATH`                | `/videos`             | Root directory downloaded videos are saved under (inside the container)                                                                                                                                       |
 | `YARRTUBE_DOWNLOAD_CONCURRENCY`       | `2`                   | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you                                                                            |
-| `YARRTUBE_RETRY_BASE_DELAY_SECONDS`   | `150`                 | Delay before retrying a failed task; it grows exponentially with each further retry                                                                                                                           |
+| `YARRTUBE_RETRY_BASE_DELAY_SECONDS`   | `150`                 | Delay before retrying a task that failed for an infrastructure reason (e.g. the database being unavailable); it grows exponentially with each further retry. Failed downloads, thumbnails, subtitles, chapters, quality checks, summaries and categorizations follow their own schedule instead (10 min, 1 h, 6 h, then daily, giving up after 11 attempts; retry a video from its detail pane) |
 | `YARRTUBE_AVATARS_PATH`               | `/config/avatars`     | Directory channel avatars are stored in (inside the container)                                                                                                                                                |
 | `YTDLP_PATH`                          | `/app/bin/yt-dlp`     | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time)                                                                                                                      |
 | `RUST_LOG`                            | `info`                | Log verbosity (e.g. `RUST_LOG=debug`)                                                                                                                                                                         |
@@ -148,6 +148,11 @@ show's folder as soon as one of its videos is downloaded. The library setup
 and the scan trigger are covered step by step in [PLEX.md](PLEX.md).
 
 ## Updating
+
+> [!IMPORTANT]
+> Back up the database (`/config/yarrtube.db` by default, `YARRTUBE_DB_PATH`) before
+> updating. Some updates migrate it in a way an older image can't read, so
+> going back to an older version means restoring that backup.
 
 > [!NOTE]
 > Updating from 0.8.x or older? 0.9.0 moved the library to a TV show layout

@@ -5,8 +5,9 @@ import { expect } from '@playwright/test'
 const STATUS_LABELS = {
   IN_PROGRESS: 'Downloading',
   PENDING: 'Pending',
-  ERRORED_RETRYING: 'Retrying',
-  ERRORED: 'Errored',
+  RETRYING: 'Retrying',
+  FAILED: 'Failed',
+  UNAVAILABLE: 'Unavailable',
 }
 
 export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', timeoutMs = 30_000 } = {}) {
@@ -24,11 +25,15 @@ export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', t
     await expect(indicator).toBeVisible({ timeout: timeoutMs })
     return
   }
-  // A download that has given up won't recover, so fail on it right away
-  // rather than after the whole timeout.
-  const errored = main.getByText(STATUS_LABELS.ERRORED, { exact: true }).first()
-  await expect(indicator.or(errored).first()).toBeVisible({ timeout: timeoutMs })
-  await expect(errored, 'the download errored').toBeHidden()
+  // A failed download waits at least 10 minutes for its next attempt, and one
+  // that gave up won't recover, so fail on either right away rather than
+  // after the whole timeout.
+  const failing = main
+    .getByText(STATUS_LABELS.RETRYING, { exact: true })
+    .or(main.getByText(STATUS_LABELS.FAILED, { exact: true }))
+    .first()
+  await expect(indicator.or(failing).first()).toBeVisible({ timeout: timeoutMs })
+  await expect(failing, 'the download failed').toBeHidden()
 }
 
 export async function assertVideoPlays(page) {

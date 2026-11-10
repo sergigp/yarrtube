@@ -76,7 +76,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 e2e: update `helpers/video.js` (labels `RETRYING` "Retrying", `FAILED` "Failed", `UNAVAILABLE` "Unavailable"; fail fast on either of the first two while waiting for a download) and `tests/erroredDownload.spec.js`:
+- [x] 4.1 e2e: update `helpers/video.js` (labels `RETRYING` "Retrying", `FAILED` "Failed", `UNAVAILABLE` "Unavailable"; fail fast on either of the first two while waiting for a download) and `tests/erroredDownload.spec.js`:
   - after the first failure the video shows "Retrying", "next attempt in 10 minutes" and the reason;
   - the Downloads tab lists its download pending with the reason;
   - "Retry now" runs it again; after the next failure it shows "next attempt in 1 hour". This covers `POST /api/videos/{id}/retry`.

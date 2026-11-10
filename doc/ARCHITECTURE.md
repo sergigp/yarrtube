@@ -103,11 +103,13 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    the channel, including the ones it just added, holding each video's lock
    so it never overlaps a `SyncVideo` task of the same video. Per video it
    assigns the channel's categories, resets a `DOWNLOADED` video whose file
-   is missing or not mp4, recovers an `ERRORED` video after its 24h
-   cooldown, regenerates missing metadata (relocating a video still in the
+   is missing or not mp4, regenerates missing metadata (relocating a video still in the
    previous layout), warns about a stranded video, and schedules every step
    still needed (`FetchThumbnail`, `DownloadVideo`, `FetchSubtitles`,
-   `FetchChapters`, each skipped when one is already pending). That backfills
+   `FetchChapters`, each skipped when one is already pending, or when its
+   step is Failed or Retrying with its next attempt not due yet: a failed
+   step re-queues its own task for its next attempt, see the
+   `video-retries` capability). That backfills
    an upgraded library and retries videos whose captions weren't available
    yet. `FetchChapters` (subtitles lane) reads a `DOWNLOADED` video's
    chapters with `yt-dlp` when they were never checked, downloading nothing. Only then does
