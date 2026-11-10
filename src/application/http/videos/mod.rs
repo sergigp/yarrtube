@@ -6874,6 +6874,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_bring_forward_a_queued_retry() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+        .mark_errored("HTTP Error 503", fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        let download = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+        };
+        task_repository
+            .schedule(&download, fixed_timestamp() + Duration::hours(6))
+            .unwrap();
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &download),
+                pending_task(
+                    2,
+                    &Task::SyncVideo {
+                        video_id: video.id.as_str().to_string()
+                    }
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_rerun_a_videos_ai_categorization() {
         let db = TestDatabase::new();
         SqliteChannelRepository::new(db.database())

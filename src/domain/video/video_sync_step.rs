@@ -17,6 +17,17 @@ pub enum VideoSyncStep {
 }
 
 impl VideoSyncStep {
+    /// Every step, in the order a sync schedules them.
+    pub const ALL: [Self; 7] = [
+        Self::FetchThumbnail,
+        Self::Download,
+        Self::FetchSubtitles,
+        Self::FetchChapters,
+        Self::UpgradeQuality,
+        Self::Summarize,
+        Self::Categorize,
+    ];
+
     /// The task performing this step for `video`, run in that task's own
     /// lane. It carries only the video's id: what it needs from the video's
     /// owner (quality, show folder) is resolved when it runs.

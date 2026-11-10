@@ -1,6 +1,6 @@
 use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
-use crate::domain::task::Task;
-use crate::domain::video::{RetryVideoError, Video, VideoId};
+use crate::domain::task::{Task, TaskStatus};
+use crate::domain::video::{RetryVideoError, Video, VideoId, VideoSyncStep};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -43,8 +43,9 @@ pub trait VideoRetrierApi: Send + Sync {
 impl VideoRetrierApi for VideoRetrier {
     fn retry(&self, video_id: &VideoId) -> Result<(), RetryVideoError> {
         let now = self.clock.now();
-        self.retry_steps(video_id, now)?;
+        let video = self.retry_steps(video_id, now)?;
         self.delete_failed_verdicts(video_id)?;
+        self.bring_forward_queued_steps(&video, now)?;
         self.schedule_sync(video_id, now)
     }
 }
@@ -67,6 +68,36 @@ impl VideoRetrier {
         self.video_category_verdict_repository
             .delete_failed_for_video(video_id)
             .map_err(RetryVideoError::Repository)
+    }
+
+    /// Each step task of the video waiting for a later retry runs now.
+    fn bring_forward_queued_steps(
+        &self,
+        video: &Video,
+        now: DateTime<Utc>,
+    ) -> Result<(), RetryVideoError> {
+        VideoSyncStep::ALL
+            .iter()
+            .try_for_each(|step| self.bring_forward(&step.task_for(video), &video.id, now))
+            .map_err(RetryVideoError::Repository)
+    }
+
+    /// `task` of the video, when pending, runs now.
+    fn bring_forward(
+        &self,
+        task: &Task,
+        video_id: &VideoId,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        match self
+            .task_repository
+            .find_non_completed_for_video(task.task_type(), video_id)?
+        {
+            Some(queued) if queued.status == TaskStatus::Pending => {
+                self.task_repository.update(&queued.bring_forward(now, now))
+            }
+            _ => Ok(()),
+        }
     }
 
     fn schedule_sync(&self, video_id: &VideoId, now: DateTime<Utc>) -> Result<(), RetryVideoError> {
