@@ -225,14 +225,7 @@ impl VideoCategorizer {
         video: &Video,
         job: &'a CategorizationJob,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
-        let rejected = job
-            .pending
-            .iter()
-            .map(|category| self.ask(video, job, std::slice::from_ref(category), Call::First))
-            .collect::<Result<Vec<_>, Stop>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+        let rejected = self.ask(video, job, &job.pending, Call::First)?;
         self.fall_back(video, job, rejected)
     }
 

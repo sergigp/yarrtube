@@ -41,24 +41,20 @@ impl CategorizationQuestion {
         }
     }
 
-    /// The video's details, the categories and what to answer.
+    /// The video's details, every category and what to answer.
     pub fn user_message(&self) -> String {
-        let category = &self.categories[0];
         format!(
             "Title: {}\nChannel: {}\nDuration: {} minutes\nChapters:\n{}\nSummary: {}\n\n\
-             Category: {}\nDescription:\n{}\n\n\
-             Answer in JSON: \"reason\", one sentence on what the video covers and how it fits, \
-             then \"belongs\", true or false.",
+             Categories:\n\n{}\n\n\
+             Answer in JSON with one entry per category, keyed by its name: \"reason\", one \
+             sentence on what the video covers and how it fits that category, then \"belongs\", \
+             true or false.",
             self.title,
             self.source_name,
             self.minutes,
             self.chapter_list(),
             self.summary,
-            category.name.as_str(),
-            category
-                .ai_prompt
-                .as_ref()
-                .map_or("", |prompt| prompt.as_str()),
+            self.category_list(),
         )
     }
 
@@ -93,12 +89,34 @@ impl CategorizationQuestion {
         MIN_CHAT_TIMEOUT
     }
 
-    /// Each category with its usable answer, if any.
+    /// Each category with its usable answer, if any: the entry under its
+    /// name in the JSON object after the last `</think>`.
     pub fn answers(&self, content: &str) -> Vec<(&Category, Option<CategorizationAnswer>)> {
         self.categories
             .iter()
-            .map(|category| (category, CategorizationAnswer::parse(content)))
+            .map(|category| {
+                let answer = CategorizationAnswer::parse(content, category.name.as_str());
+                (category, answer)
+            })
             .collect()
+    }
+
+    /// Each category as `### <name>` then its AI prompt.
+    fn category_list(&self) -> String {
+        self.categories
+            .iter()
+            .map(|category| {
+                format!(
+                    "### {}\n{}",
+                    category.name.as_str(),
+                    category
+                        .ai_prompt
+                        .as_ref()
+                        .map_or("", |prompt| prompt.as_str())
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 
     /// One chapter per line, or `(none)`.
@@ -135,17 +153,18 @@ pub struct CategorizationAnswer {
 }
 
 impl CategorizationAnswer {
-    /// After the last `</think>`, the JSON object with a boolean `belongs`;
-    /// `None` otherwise.
-    pub fn parse(content: &str) -> Option<Self> {
+    /// After the last `</think>`, the entry under `name` of the JSON
+    /// object, with a boolean `belongs`; `None` otherwise.
+    pub fn parse(content: &str, name: &str) -> Option<Self> {
         let answer = content
             .rsplit_once("</think>")
             .map_or(content, |(_, after)| after);
         let object = answer.get(answer.find('{')?..=answer.rfind('}')?)?;
         let answer: serde_json::Value = serde_json::from_str(object).ok()?;
+        let entry = answer.get(name)?;
         Some(Self {
-            belongs: answer.get("belongs")?.as_bool()?,
-            reason: answer
+            belongs: entry.get("belongs")?.as_bool()?,
+            reason: entry
                 .get("reason")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default()
@@ -161,7 +180,7 @@ mod tests {
     #[test]
     fn it_should_parse_a_json_answer() {
         assert_eq!(
-            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game.", "belongs": true}"#),
+            sicilian(r#"{"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#),
             Some(sicilian_answer(true))
         );
     }
@@ -169,8 +188,8 @@ mod tests {
     #[test]
     fn it_should_parse_the_answer_after_the_last_leaked_thinking() {
         assert_eq!(
-            CategorizationAnswer::parse(
-                r#"<think>{"belongs": true}</think><think>Hmm.</think>{"reason": "A Sicilian game.", "belongs": false}"#
+            sicilian(
+                r#"<think>{"Sicilian": {"belongs": true}}</think><think>Hmm.</think>{"Sicilian": {"reason": "A Sicilian game.", "belongs": false}}"#
             ),
             Some(sicilian_answer(false))
         );
@@ -179,8 +198,8 @@ mod tests {
     #[test]
     fn it_should_parse_a_json_answer_surrounded_by_prose() {
         assert_eq!(
-            CategorizationAnswer::parse(
-                r#"Here it is: {"reason": "A Sicilian game.", "belongs": true} Hope it helps."#
+            sicilian(
+                r#"Here it is: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}} Hope it helps."#
             ),
             Some(sicilian_answer(true))
         );
@@ -188,13 +207,13 @@ mod tests {
 
     #[test]
     fn it_should_not_parse_an_answer_without_a_json_object() {
-        assert_eq!(CategorizationAnswer::parse("It belongs."), None);
+        assert_eq!(sicilian("It belongs."), None);
     }
 
     #[test]
     fn it_should_not_parse_an_answer_whose_json_object_is_only_in_the_thinking() {
         assert_eq!(
-            CategorizationAnswer::parse(r#"<think>{"belongs": true}</think>It belongs."#),
+            sicilian(r#"<think>{"Sicilian": {"belongs": true}}</think>It belongs."#),
             None
         );
     }
@@ -202,7 +221,7 @@ mod tests {
     #[test]
     fn it_should_not_parse_an_answer_with_invalid_json() {
         assert_eq!(
-            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game.", "belongs": tru}"#),
+            sicilian(r#"{"Sicilian": {"reason": "A Sicilian game.", "belongs": tru}}"#),
             None
         );
     }
@@ -210,7 +229,7 @@ mod tests {
     #[test]
     fn it_should_not_parse_an_answer_without_belongs() {
         assert_eq!(
-            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game."}"#),
+            sicilian(r#"{"Sicilian": {"reason": "A Sicilian game."}}"#),
             None
         );
     }
@@ -218,9 +237,14 @@ mod tests {
     #[test]
     fn it_should_not_parse_an_answer_whose_belongs_is_not_a_boolean() {
         assert_eq!(
-            CategorizationAnswer::parse(r#"{"reason": "A Sicilian game.", "belongs": "true"}"#),
+            sicilian(r#"{"Sicilian": {"reason": "A Sicilian game.", "belongs": "true"}}"#),
             None
         );
+    }
+
+    /// The answer for "Sicilian" in `content`.
+    fn sicilian(content: &str) -> Option<CategorizationAnswer> {
+        CategorizationAnswer::parse(content, "Sicilian")
     }
 
     fn sicilian_answer(belongs: bool) -> CategorizationAnswer {
