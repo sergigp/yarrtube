@@ -58,12 +58,15 @@ END;
 UPDATE videos SET subtitles_failed_attempts = 11 WHERE subtitles_status = 'FAILED';
 UPDATE videos SET subtitles_failed_attempts = 0 WHERE subtitles_status IN ('DONE', 'UNAVAILABLE');
 
--- Chapters and quality.
+-- Chapters and quality. The old failed attempts were never reset on
+-- success, so settled data is mapped by what was found: found chapters are
+-- done, none found is unavailable unless it took at least 3 failed checks,
+-- and a settled quality is done (the old binary never retried it either).
 UPDATE videos
 SET chapters_status = CASE
+    WHEN chapters_settled = 1 AND chapters <> '[]' THEN 'DONE'
     WHEN chapters_settled = 1 AND chapters_failed_attempts >= 3 THEN 'FAILED'
-    WHEN chapters_settled = 1 AND chapters = '[]' AND chapters_failed_attempts = 0 THEN 'UNAVAILABLE'
-    WHEN chapters_settled = 1 THEN 'DONE'
+    WHEN chapters_settled = 1 THEN 'UNAVAILABLE'
     WHEN chapters_failed_attempts > 0 THEN 'RETRYING'
     ELSE 'PENDING'
 END;
@@ -71,12 +74,10 @@ UPDATE videos SET chapters_failed_attempts = 11 WHERE chapters_status = 'FAILED'
 UPDATE videos SET chapters_failed_attempts = 0 WHERE chapters_status IN ('DONE', 'UNAVAILABLE');
 UPDATE videos
 SET quality_status = CASE
-    WHEN quality_settled = 1 AND quality_failed_attempts >= 3 THEN 'FAILED'
     WHEN quality_settled = 1 THEN 'DONE'
     WHEN quality_failed_attempts > 0 THEN 'RETRYING'
     ELSE 'PENDING'
 END;
-UPDATE videos SET quality_failed_attempts = 11 WHERE quality_status = 'FAILED';
 UPDATE videos SET quality_failed_attempts = 0 WHERE quality_status = 'DONE';
 
 -- Summary: an unavailable summary was given up on.
@@ -90,6 +91,13 @@ UPDATE videos SET summary_failed_attempts = 11 WHERE summary_status = 'FAILED';
 
 -- Verdicts: an unavailable verdict was given up on.
 UPDATE video_category_verdicts SET verdict = 'FAILED' WHERE verdict = 'UNAVAILABLE';
+
+-- Categorization: a video with a failed verdict gave up, so it is failed
+-- (11 attempts) and offers "Retry now"; every other one is pending.
+UPDATE videos
+SET categorization_status = 'FAILED', categorization_failed_attempts = 11,
+    categorization_last_failed_at = updated_at
+WHERE id IN (SELECT video_id FROM video_category_verdicts WHERE verdict = 'FAILED');
 
 ALTER TABLE videos DROP COLUMN subtitle_state;
 ALTER TABLE videos DROP COLUMN summary_state;

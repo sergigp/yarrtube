@@ -1208,7 +1208,9 @@ mod tests {
         conn.execute_batch(
             "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, chapters, chapters_settled, chapters_failed_attempts, quality_settled, quality_failed_attempts) VALUES
              ('gave_up', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 3, 1, 3),
+             ('none_after_failures', 'yt6', 'F', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 2, 1, 2),
              ('none', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 0, 1, 0),
+             ('found_after_failures', 'yt7', 'G', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[{\"start_seconds\":0,\"end_seconds\":10,\"title\":\"Intro\"}]', 1, 3, 1, 4),
              ('found', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[{\"start_seconds\":0,\"end_seconds\":10,\"title\":\"Intro\"}]', 1, 1, 1, 1),
              ('failing', 'yt4', 'D', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL, 0, 2, 0, 2),
              ('unchecked', 'yt5', 'E', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL, 0, 0, 0, 0);",
@@ -1227,14 +1229,18 @@ mod tests {
             (
                 Ok(vec![
                     step("gave_up", "FAILED", 11),
+                    step("none_after_failures", "UNAVAILABLE", 0),
                     step("none", "UNAVAILABLE", 0),
+                    step("found_after_failures", "DONE", 0),
                     step("found", "DONE", 0),
                     step("failing", "RETRYING", 2),
                     step("unchecked", "PENDING", 0),
                 ]),
                 Ok(vec![
-                    step("gave_up", "FAILED", 11),
+                    step("gave_up", "DONE", 0),
+                    step("none_after_failures", "DONE", 0),
                     step("none", "DONE", 0),
+                    step("found_after_failures", "DONE", 0),
                     step("found", "DONE", 0),
                     step("failing", "RETRYING", 2),
                     step("unchecked", "PENDING", 0),
@@ -1273,11 +1279,6 @@ mod tests {
         assert_eq!(
             (
                 step_columns(&conn, "summary_status", "summary_failed_attempts"),
-                step_columns(
-                    &conn,
-                    "categorization_status",
-                    "categorization_failed_attempts"
-                ),
                 verdicts,
             ),
             (
@@ -1287,15 +1288,62 @@ mod tests {
                     step("gave_up", "FAILED", 11),
                 ]),
                 Ok(vec![
-                    step("missing", "PENDING", 0),
-                    step("generated", "PENDING", 0),
-                    step("gave_up", "PENDING", 0),
-                ]),
-                Ok(vec![
                     ("tech".to_string(), "YES".to_string()),
                     ("chess".to_string(), "FAILED".to_string()),
                 ]),
             )
+        );
+    }
+
+    #[test]
+    fn it_should_fail_the_categorization_of_a_video_with_failed_verdicts_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 27);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at) VALUES
+             ('gave_up', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00'),
+             ('answered', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00'),
+             ('unasked', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00');
+             INSERT INTO video_category_verdicts (video_id, category_id, verdict, decided_by, decided_at) VALUES
+             ('gave_up', 'tech', 'YES', 'AI', '2026-01-01T00:00:00+00:00'),
+             ('gave_up', 'chess', 'UNAVAILABLE', 'AI', '2026-01-01T00:00:00+00:00'),
+             ('answered', 'tech', 'NO', 'AI', '2026-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let categorizations = conn
+            .prepare(
+                "SELECT id, categorization_status, categorization_failed_attempts, categorization_last_failed_at
+                 FROM videos ORDER BY rowid",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u32>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let row = |id: &str, status: &str, attempts: u32, failed_at: Option<&str>| {
+            (
+                id.to_string(),
+                status.to_string(),
+                attempts,
+                failed_at.map(str::to_string),
+            )
+        };
+        assert_eq!(
+            categorizations,
+            Ok(vec![
+                row("gave_up", "FAILED", 11, Some("2026-01-02T00:00:00+00:00")),
+                row("answered", "PENDING", 0, None),
+                row("unasked", "PENDING", 0, None),
+            ])
         );
     }
 
