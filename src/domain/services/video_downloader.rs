@@ -20,25 +20,42 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
-/// Emits the dedicated, greppable SABR event when `yt-dlp` reported YouTube's
-/// SABR-only streaming experiment for this download (see the `video-download`
-/// capability's "SABR-Only Streaming Is Surfaced" requirement). It is purely
-/// observational: it fires on both a failed and a degraded-successful download
-/// and never changes the video's status, recorded reason, or retry flow.
-fn log_sabr(video: &Video, sabr_notice: Option<&str>) {
-    if let Some(reason) = sabr_notice {
-        warn!(
-            video_id = %video.id,
-            reason = %reason,
-            "SABR-only streaming experiment reported by yt-dlp; higher-quality formats were skipped"
-        );
+/// Where a downloaded video's files go in its show: the recorded media and
+/// thumbnail paths (relative to the show dir), the episode NFO's path, and the
+/// thumbnail's name as the NFO references it.
+struct EpisodeFiles {
+    filename: String,
+    thumbnail_filename: Option<String>,
+    nfo_path: PathBuf,
+    thumb: Option<String>,
+}
+
+impl EpisodeFiles {
+    fn new(
+        number: &EpisodeNumber,
+        title: &str,
+        downloaded: &DownloadedVideo,
+        output_dir: &Path,
+    ) -> Self {
+        let extension = downloaded
+            .media_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("mp4");
+        let has_thumbnail = downloaded.thumbnail_path.is_some();
+        let paths = EpisodePaths::new(number, title);
+        Self {
+            filename: paths.media(extension),
+            thumbnail_filename: has_thumbnail.then(|| paths.thumbnail()),
+            nfo_path: output_dir.join(paths.nfo()),
+            thumb: has_thumbnail.then(|| paths.thumb()),
+        }
     }
 }
 
 /// Downloads one video via `yt-dlp`, transitioning it through in-progress to
 /// downloaded/errored, at its owner's quality and into its owner's show
 /// directory as they are when the download runs.
-#[derive(Clone)]
 pub struct VideoDownloader {
     video_repository: Arc<dyn VideoRepository>,
     video_owner_finder: Arc<VideoOwnerFinder>,
@@ -97,33 +114,11 @@ impl VideoDownloaderApi for VideoDownloader {
         let Some((video, target)) = self.find_downloadable(&video_id)? else {
             return Ok(());
         };
-        let (quality, output_dir) = (target.quality, target.output_dir.as_path());
-
-        let started = video.start_download(self.clock.now());
-        self.video_repository.update(&started)?;
+        let started = self.start_download(video)?;
         let metadata = self.fetch_metadata(&started);
         let staged = self.staging_area.for_video(&started.id);
-        match self.run_download(&started, quality, staged.path()) {
-            Ok(DownloadAttempt::Succeeded(downloaded)) => {
-                log_sabr(&started, downloaded.sabr_notice.as_deref());
-                self.record_unless_deleted(
-                    started.clone(),
-                    downloaded,
-                    quality,
-                    output_dir,
-                    metadata,
-                )
-                .or_else(|e| self.record_placement_errored(started, e, is_last_attempt))
-            }
-            Ok(DownloadAttempt::Failed {
-                failure,
-                sabr_notice,
-            }) => {
-                log_sabr(&started, sabr_notice.as_deref());
-                self.record_failed(started, failure, is_last_attempt)
-            }
-            Err(e) => self.record_errored(started, e, is_last_attempt),
-        }
+        let attempt = self.run_download(&started, target.quality, staged.path());
+        self.record_attempt(started, attempt, &target, metadata, is_last_attempt)
     }
 }
 
@@ -150,6 +145,12 @@ impl VideoDownloader {
         Ok(Some((video, owner.target)))
     }
 
+    fn start_download(&self, video: Video) -> anyhow::Result<Video> {
+        let started = video.start_download(self.clock.now());
+        self.video_repository.update(&started)?;
+        Ok(started)
+    }
+
     fn run_download(
         &self,
         video: &Video,
@@ -161,20 +162,50 @@ impl VideoDownloader {
             .download(&video.youtube_id.to_url(), quality, staging)
     }
 
+    /// Records the download's outcome: places a successful one as an
+    /// episode, excludes or errors a failed one.
+    fn record_attempt(
+        &self,
+        started: Video,
+        attempt: anyhow::Result<DownloadAttempt>,
+        target: &VideoTarget,
+        metadata: Option<VideoMetadata>,
+        is_last_attempt: bool,
+    ) -> anyhow::Result<()> {
+        match attempt {
+            Ok(DownloadAttempt::Succeeded(downloaded)) => {
+                Self::log_sabr(&started, downloaded.sabr_notice.as_deref());
+                self.record_unless_deleted(started.clone(), downloaded, target, metadata)
+                    .or_else(|e| self.record_placement_errored(started, e, is_last_attempt))
+            }
+            Ok(DownloadAttempt::Failed {
+                failure,
+                sabr_notice,
+            }) => {
+                Self::log_sabr(&started, sabr_notice.as_deref());
+                self.record_failed(started, failure, is_last_attempt)
+            }
+            Err(e) => self.record_errored(started, e, is_last_attempt),
+        }
+    }
+
     /// The video (or its whole playlist/channel) may have been deleted while
     /// it downloaded: then nothing is placed, and `download` discards its
-    /// staging dir like on every other outcome, so nothing outlives it.
+    /// staging dir like on every other outcome, so nothing outlives it. This
+    /// re-read can't reuse `find_downloadable`'s: the download in between
+    /// runs for minutes. `save` reads once more right before writing, so
+    /// watch state recorded while the files were placed isn't lost either.
     fn record_unless_deleted(
         &self,
         started: Video,
         downloaded: DownloadedVideo,
-        quality: Quality,
-        output_dir: &Path,
+        target: &VideoTarget,
         metadata: Option<VideoMetadata>,
     ) -> anyhow::Result<()> {
         if self.video_repository.find(&started.id)?.is_none() {
             return Ok(());
         }
+        let (quality, output_dir) = (target.quality, target.output_dir.as_path());
         self.place_download(started, downloaded, quality, output_dir, metadata)
     }
 
@@ -199,7 +230,7 @@ impl VideoDownloader {
         let downloaded_video =
             self.record_downloaded(video, &downloaded, &files, quality, number)?;
         self.save_metadata(&downloaded_video, metadata, &number, &files);
-        self.publish_downloaded(&downloaded_video, output_dir, &number.season_folder());
+        self.publish_downloaded(&downloaded_video, output_dir, &number);
         Ok(())
     }
 
@@ -312,12 +343,9 @@ impl VideoDownloader {
 
     /// Best-effort: the download is already recorded, and losing the event
     /// only skips reacting to it (e.g. asking Plex to scan the show).
-    fn publish_downloaded(&self, video: &Video, output_dir: &Path, folder: &str) {
-        let event = DomainEvent::VideoDownloaded(VideoDownloaded {
-            video_id: video.id.as_str().to_string(),
-            output_dir: output_dir.to_string_lossy().to_string(),
-            folder: folder.to_string(),
-        });
+    fn publish_downloaded(&self, video: &Video, output_dir: &Path, number: &EpisodeNumber) {
+        let event =
+            DomainEvent::VideoDownloaded(VideoDownloaded::new(&video.id, output_dir, number));
         if let Err(e) = self.event_publisher.publish(&event) {
             warn!(video_id = %video.id, error = %e, "failed to publish that the video was downloaded");
         }
@@ -374,34 +402,49 @@ impl VideoDownloader {
     ) -> anyhow::Result<()> {
         let video_id = started.id.clone();
         self.mark_errored(started, is_last_attempt)?;
-        error!(video_id = %video_id, error = %error, "video download errored");
-        Err(error)
+        Self::fail_errored(&video_id, error)
     }
 
     /// Placing a successful download failed (numbering, moving or recording
     /// it): errors the video like a failed download, so it settles as
     /// errored instead of staying in progress. Re-reads the video so a
-    /// number assigned before the failure is kept; a video deleted meanwhile
-    /// gets nothing recorded.
+    /// number assigned before the failure is kept; that read already holds
+    /// the current watch state, so it is written as is rather than through
+    /// `save`'s second read. A video deleted meanwhile gets nothing recorded.
     fn record_placement_errored(
         &self,
         started: Video,
         error: anyhow::Error,
         is_last_attempt: bool,
     ) -> anyhow::Result<()> {
-        match self.video_repository.find(&started.id)? {
-            Some(current) => self.record_errored(current, error, is_last_attempt),
-            None => Err(error),
-        }
+        let Some(current) = self.video_repository.find(&started.id)? else {
+            return Err(error);
+        };
+        let video_id = current.id.clone();
+        self.video_repository
+            .update(&self.errored(current, is_last_attempt))?;
+        Self::fail_errored(&video_id, error)
     }
 
     fn mark_errored(&self, started: Video, is_last_attempt: bool) -> anyhow::Result<()> {
-        let updated = if is_last_attempt {
-            started.mark_errored(self.clock.now())
+        self.save(self.errored(started, is_last_attempt))
+            .map(|_| ())
+    }
+
+    /// The video errored: permanently on the last attempt, else retrying.
+    fn errored(&self, video: Video, is_last_attempt: bool) -> Video {
+        if is_last_attempt {
+            video.mark_errored(self.clock.now())
         } else {
-            started.mark_errored_retrying(self.clock.now())
-        };
-        self.save(updated).map(|_| ())
+            video.mark_errored_retrying(self.clock.now())
+        }
+    }
+
+    /// Logs a systemic download error and returns it, so the task queue
+    /// retries/dead-letters the download.
+    fn fail_errored(video_id: &VideoId, error: anyhow::Error) -> anyhow::Result<()> {
+        error!(video_id = %video_id, error = %error, "video download errored");
+        Err(error)
     }
 
     /// Saves `video` with the watch state stored now, not the one read when
@@ -433,37 +476,19 @@ impl VideoDownloader {
         self.metadata_generator
             .generate(video, playlist_position, None)
     }
-}
 
-/// Where a downloaded video's files go in its show: the recorded media and
-/// thumbnail paths (relative to the show dir), the episode NFO's path, and the
-/// thumbnail's name as the NFO references it.
-struct EpisodeFiles {
-    filename: String,
-    thumbnail_filename: Option<String>,
-    nfo_path: PathBuf,
-    thumb: Option<String>,
-}
-
-impl EpisodeFiles {
-    fn new(
-        number: &EpisodeNumber,
-        title: &str,
-        downloaded: &DownloadedVideo,
-        output_dir: &Path,
-    ) -> Self {
-        let extension = downloaded
-            .media_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("mp4");
-        let has_thumbnail = downloaded.thumbnail_path.is_some();
-        let paths = EpisodePaths::new(number, title);
-        Self {
-            filename: paths.media(extension),
-            thumbnail_filename: has_thumbnail.then(|| paths.thumbnail()),
-            nfo_path: output_dir.join(paths.nfo()),
-            thumb: has_thumbnail.then(|| paths.thumb()),
+    /// Emits the dedicated, greppable SABR event when `yt-dlp` reported YouTube's
+    /// SABR-only streaming experiment for this download (see the `video-download`
+    /// capability's "SABR-Only Streaming Is Surfaced" requirement). It is purely
+    /// observational: it fires on both a failed and a degraded-successful download
+    /// and never changes the video's status, recorded reason, or retry flow.
+    fn log_sabr(video: &Video, sabr_notice: Option<&str>) {
+        if let Some(reason) = sabr_notice {
+            warn!(
+                video_id = %video.id,
+                reason = %reason,
+                "SABR-only streaming experiment reported by yt-dlp; higher-quality formats were skipped"
+            );
         }
     }
 }

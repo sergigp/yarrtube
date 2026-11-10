@@ -38,6 +38,20 @@ impl ChannelEpisodeNumber {
         }
     }
 
+    /// The episode after `last_of_day`, the highest same-day episode its
+    /// channel already recorded on `published_at`'s day, or the day's first
+    /// when it has none. Fails past the day's 99th episode.
+    pub fn next_of_day(
+        published_at: DateTime<Utc>,
+        last_of_day: Option<u32>,
+    ) -> Result<Self, ValidationError> {
+        let first = Self::first_of_day(published_at);
+        match last_of_day {
+            Some(last) => Self::new(first.season, last + 1),
+            None => Ok(first),
+        }
+    }
+
     pub fn season(&self) -> i32 {
         self.season
     }
@@ -131,5 +145,42 @@ mod tests {
             ChannelEpisodeNumber::first_of_day(published_at),
             ChannelEpisodeNumber::new(2026, 31501).unwrap()
         );
+    }
+
+    #[test]
+    fn it_should_number_the_first_episode_of_a_day() {
+        assert_eq!(
+            ChannelEpisodeNumber::next_of_day(published_at(), None),
+            Ok(ChannelEpisodeNumber {
+                season: 2026,
+                episode: 31501
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_number_the_episode_after_the_last_of_the_day() {
+        assert_eq!(
+            ChannelEpisodeNumber::next_of_day(published_at(), Some(31502)),
+            Ok(ChannelEpisodeNumber {
+                season: 2026,
+                episode: 31503
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_fail_to_number_past_the_99th_episode_of_a_day() {
+        assert_eq!(
+            ChannelEpisodeNumber::next_of_day(published_at(), Some(31599)),
+            Err(ValidationError(
+                "Channel episode must be MMDD followed by a same-day index from 01 to 99 (got 31600)"
+                    .to_string()
+            ))
+        );
+    }
+
+    fn published_at() -> DateTime<Utc> {
+        "2026-03-15T10:00:00Z".parse().unwrap()
     }
 }

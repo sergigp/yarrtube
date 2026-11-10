@@ -2,7 +2,6 @@ use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
-use tracing::warn;
 
 /// Downloads one video via `yt-dlp`, scheduled by
 /// the video sync (`SyncVideoTask` via `VideoReconciler`) whenever a video
@@ -22,13 +21,8 @@ impl TaskHandler for DownloadVideoTask {
         let Task::DownloadVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
-        match VideoId::new(video_id.clone()) {
-            Ok(video_id) => self.video_downloader.download(video_id, is_last_attempt),
-            Err(e) => {
-                warn!(video_id = %video_id, error = %e, "invalid video id, skipping download");
-                Ok(())
-            }
-        }
+        self.video_downloader
+            .download(VideoId::new(video_id.clone())?, is_last_attempt)
     }
 }
 
@@ -1648,6 +1642,48 @@ mod tests {
     }
 
     #[test]
+    fn it_should_retry_a_download_that_errored() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::failing(
+                "yt-dlp could not be run",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()), false);
+
+        assert_eq!(result, Err("yt-dlp could not be run".to_string()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_errored_retrying(fixed_timestamp())
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_exclude_a_permanently_unavailable_video_without_dead_lettering_on_the_last_attempt()
      {
         let db = TestDatabase::new();
@@ -2377,12 +2413,12 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_if_invalid_video_id_provided() {
+    fn it_should_fail_if_invalid_video_id_provided() {
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
 
         let result = run(&any_task(downloader.clone()), &task_for(""), false);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Err("Video ID must not be empty".to_string()));
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
 

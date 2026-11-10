@@ -103,6 +103,9 @@ pub struct FakeVideoDownloaderRepository {
     pub(crate) quality_probe: std::sync::Mutex<Option<anyhow::Result<QualityProbe>>>,
     /// The (url, quality) pairs `probe_quality` was called with.
     pub(crate) quality_calls: std::sync::Mutex<Vec<(String, Quality)>>,
+    /// When set, `download` errors with this message instead of reporting an
+    /// attempt, as when `yt-dlp` can't be run at all.
+    pub(crate) download_error: Option<String>,
 }
 
 #[cfg(test)]
@@ -174,6 +177,15 @@ impl FakeVideoDownloaderRepository {
         })
     }
 
+    /// Errors every download with `message`, a systemic failure (e.g.
+    /// `yt-dlp` can't be run) rather than a failed attempt.
+    pub fn failing(message: &str) -> Self {
+        Self {
+            download_error: Some(message.to_string()),
+            ..Self::default()
+        }
+    }
+
     pub fn with_quality_probe(self, result: anyhow::Result<QualityProbe>) -> Self {
         Self {
             quality_probe: std::sync::Mutex::new(Some(result)),
@@ -196,6 +208,7 @@ impl FakeVideoDownloaderRepository {
             on_download: None,
             quality_probe: Default::default(),
             quality_calls: Default::default(),
+            download_error: None,
         }
     }
 }
@@ -217,6 +230,9 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         ));
         if let Some(hook) = &self.on_download {
             hook();
+        }
+        if let Some(message) = &self.download_error {
+            return Err(anyhow::anyhow!(message.clone()));
         }
         Ok(match self.result.lock().unwrap().clone() {
             DownloadAttempt::Succeeded(downloaded) => DownloadAttempt::Succeeded(DownloadedVideo {
