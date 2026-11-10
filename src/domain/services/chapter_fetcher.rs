@@ -67,16 +67,28 @@ impl ChapterFetcher {
         self.record_check(video, Some(probe.chapters), probe.published_at)
     }
 
+    /// Re-reads the video before writing: the fetch may have run while the
+    /// video was deleted or had its chapters settled by a redownload, so the
+    /// check is recorded onto the stored row, or skipped when it no longer
+    /// wants one, rather than written from the stale copy read when the fetch
+    /// started.
     fn record_check(
         &self,
         video: &Video,
         chapters: Option<Vec<VideoChapter>>,
         published_at: Option<DateTime<Utc>>,
     ) -> anyhow::Result<()> {
+        let Some(stored) = self.video_repository.find(&video.id)? else {
+            return Ok(());
+        };
+        if !stored.is_chapters_fetchable() {
+            return Ok(());
+        }
+        let published_at = published_at.unwrap_or(stored.created_at);
         self.video_repository
-            .update_chapters(&video.clone().record_chapters_check(
+            .update_chapters(&stored.record_chapters_check(
                 chapters,
-                published_at.unwrap_or(video.created_at),
+                published_at,
                 self.clock.now(),
             ))
     }

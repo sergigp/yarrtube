@@ -391,6 +391,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_discard_the_chapters_check_if_the_video_was_deleted_meanwhile() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let chapter_repository = Arc::new({
+            let video_repository = video_repository.clone();
+            let deleted_id = video.id.clone();
+            FakeChapterRepository::with_chapters(Ok(intro_chapters()))
+                .with_on_fetch(move || video_repository.delete(&deleted_id).unwrap())
+        });
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                chapter_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            *chapter_repository.calls.lock().unwrap(),
+            vec![YT1_URL.to_string()]
+        );
+    }
+
     const YT1_URL: &str = "https://www.youtube.com/watch?v=yt1";
 
     /// `yt1`, downloaded with its chapters never checked.

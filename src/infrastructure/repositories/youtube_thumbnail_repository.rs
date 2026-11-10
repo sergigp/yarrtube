@@ -51,6 +51,10 @@ pub struct FakeThumbnailRepository {
     pub(crate) result: std::sync::Mutex<Option<anyhow::Result<ThumbnailFetch>>>,
     /// The (url, staging dir) pairs `fetch_thumbnail` was called with.
     pub(crate) calls: std::sync::Mutex<Vec<(String, PathBuf)>>,
+    /// Runs while `fetch_thumbnail` is in flight, e.g. to delete the video
+    /// mid-fetch.
+    #[allow(clippy::type_complexity)]
+    pub(crate) on_fetch: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
 #[cfg(test)]
@@ -74,6 +78,14 @@ impl FakeThumbnailRepository {
             ..Self::default()
         }
     }
+
+    /// Runs `hook` while `fetch_thumbnail` is in flight.
+    pub fn with_on_fetch(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            on_fetch: Some(Box::new(hook)),
+            ..self
+        }
+    }
 }
 
 #[cfg(test)]
@@ -89,6 +101,9 @@ impl ThumbnailRepository for FakeThumbnailRepository {
             .lock()
             .unwrap()
             .push((video_url.to_string(), staging_dir.to_path_buf()));
+        if let Some(hook) = &self.on_fetch {
+            hook();
+        }
         match self.result.lock().unwrap().take() {
             Some(Ok(ThumbnailFetch::Fetched(fetched))) => {
                 Ok(ThumbnailFetch::Fetched(FetchedThumbnail {
