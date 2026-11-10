@@ -1537,6 +1537,16 @@ mod tests {
     }
 
     #[test]
+    fn it_should_fail_if_the_video_cannot_be_read() {
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+
+        let result = run(&any_task(downloader.clone()), &task_for("rec1"));
+
+        assert_eq!(result, Err("failed to find video".to_string()));
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_record_the_download_error() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
