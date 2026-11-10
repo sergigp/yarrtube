@@ -867,6 +867,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_downloaded_video_with_a_failed_summary() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp())
+        .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp())
+        .mark_summary_failed(fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                steps: VideoStepsResponse {
+                    subtitles: step("DONE"),
+                    summary: StepResponse {
+                        failed_attempts: 11,
+                        ..step("FAILED")
+                    },
+                    ..steps_with_download("DONE")
+                },
+                subtitle_language: Some("en".to_string()),
+                ..downloaded_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_download_details_of_downloaded_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
