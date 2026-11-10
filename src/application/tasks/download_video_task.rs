@@ -1512,6 +1512,31 @@ mod tests {
     }
 
     #[test]
+    fn it_should_skip_a_failed_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let video = my_video().mark_download_failed("HTTP Error 503", fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_record_the_download_error() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

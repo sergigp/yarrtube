@@ -26,7 +26,7 @@
 - [x] 2.7 `it_should_mark_the_video_unavailable_if_the_failure_is_permanent`
 - [x] 2.8 `it_should_requeue_without_downloading_if_the_next_attempt_is_not_due`
 - [x] 2.9 `it_should_download_a_retrying_video_once_due`
-- [ ] 2.10 `it_should_skip_a_failed_video`
+- [x] 2.10 `it_should_skip_a_failed_video`
 - [ ] 2.11 `it_should_fail_if_the_video_cannot_be_read`
 - [ ] 2.12 `it_should_schedule_the_next_attempt_if_no_thumbnail_is_obtained`
 - [ ] 2.13 `it_should_fail_the_thumbnail_after_the_eleventh_failed_attempt`
