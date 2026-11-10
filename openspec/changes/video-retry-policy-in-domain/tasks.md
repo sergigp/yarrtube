@@ -82,7 +82,7 @@
   - "Retry now" runs it again; after the next failure it shows "next attempt in 1 hour". This covers `POST /api/videos/{id}/retry`.
 
   Update `doc/INSTALLATION.md` (`YARRTUBE_RETRY_BASE_DELAY_SECONDS`, back up the database before upgrading).
-- [ ] 4.2 `scripts/run-tests.sh --only web --only rust` passes.
+- [x] 4.2 `scripts/run-tests.sh --only web --only rust` passes.
 - [ ] 4.3 `scripts/run-tests.sh --only e2e` passes.
 - [ ] 4.4 Manual (agent):
   1. Start `scripts/run-local.sh --port <free port> --fresh-videos`.
