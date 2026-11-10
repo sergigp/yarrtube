@@ -1334,6 +1334,38 @@ mod tests {
     }
 
     #[test]
+    fn it_should_wait_longer_after_each_failed_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = retrying_video(1);
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = failing_download_task(&db, video_repository.clone(), "HTTP Error 503");
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::hours(1),
+                reason: "HTTP Error 503".to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                download_attempts: RetryAttempts {
+                    failed: 2,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_record_the_download_error() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2937,6 +2969,52 @@ mod tests {
             None,
             fixed_timestamp(),
         )
+    }
+
+    /// A video whose download failed `failed` times, the last a month ago,
+    /// so its next attempt is due.
+    fn retrying_video(failed: u32) -> Video {
+        Video {
+            status: VideoStatus::Retrying,
+            download_attempts: RetryAttempts {
+                failed,
+                last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+            },
+            download_failure: Some("HTTP Error 503".to_string()),
+            ..my_video()
+        }
+    }
+
+    /// Stores `my_channel()` holding `video`.
+    fn seed_channel_video(db: &TestDatabase, video: &Video) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    /// A download task whose `yt-dlp` always fails with `reason`.
+    fn failing_download_task(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        reason: &str,
+    ) -> DownloadVideoTask {
+        DownloadVideoTask::new(video_downloader(
+            db,
+            Path::new("/videos"),
+            video_repository,
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(reason)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ))
     }
 
     fn my_video() -> Video {
