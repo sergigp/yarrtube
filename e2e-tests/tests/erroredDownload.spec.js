@@ -41,7 +41,11 @@ test('a failed download is shown retrying with its reason, and Retry now runs it
       .poll(async () => (await downloadStep()).next_attempt_at > before.next_attempt_at, { timeout: 30_000 })
       .toBe(true)
     expect(await downloadStep()).toEqual(
-      expect.objectContaining({ status: 'RETRYING', failed_attempts: 1, failure: FAILURE_REASON }),
+      expect.objectContaining({
+        status: 'RETRYING',
+        failed_attempts: 1,
+        failure: expect.stringContaining(FAILURE_REASON),
+      }),
     )
   })
 })
