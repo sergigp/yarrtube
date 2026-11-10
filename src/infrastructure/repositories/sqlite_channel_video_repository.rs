@@ -1,6 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::channel_video::ChannelVideo;
-use crate::domain::video::{VideoId, VideoRecordId};
+use crate::domain::video::VideoId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -11,14 +11,15 @@ use rusqlite::{OptionalExtension, params};
 pub trait ChannelVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(channel_id, video_id)`.
     fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()>;
-    /// Finds whichever channel a video belongs to, keyed by the video's own
-    /// surrogate ID rather than a `(channel_id, youtube_video_id)` pair.
-    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>>;
+    /// Finds whichever channel a video belongs to, keyed by the stored
+    /// video's `VideoId` rather than a `(channel_id, youtube_id)` pair.
+    fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<ChannelVideo>>;
     /// Ordered by recency position (`0` = most recent).
     fn list_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<Vec<ChannelVideo>>;
     /// Every stored channel video, across all channels.
     fn list(&self) -> anyhow::Result<Vec<ChannelVideo>>;
-    fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()>;
+    /// Deletes the row holding the stored video `video_id`.
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_all_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<()>;
 }
 
@@ -55,7 +56,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
         Ok(())
     }
 
-    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>> {
+    fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<ChannelVideo>> {
         let conn = self.db.read()?;
         conn.query_row(
             "SELECT id, channel_id, video_id, position, created_at
@@ -113,18 +114,15 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
         rows_to_channel_videos(rows)
     }
 
-    fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()> {
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "DELETE FROM channel_videos
-             WHERE channel_id = ?1 AND video_id IN (
-                SELECT id FROM videos WHERE youtube_id = ?2
-             )",
-            params![channel_id.as_str(), youtube_video_id.as_str()],
+            "DELETE FROM channel_videos WHERE video_id = ?1",
+            params![video_id.as_str()],
         )
-        .inspect_err(|e| {
-            tracing::error!(channel_id = %channel_id, error = %e, "failed to delete channel video")
-        })
+        .inspect_err(
+            |e| tracing::error!(video_id = %video_id, error = %e, "failed to delete channel video"),
+        )
         .context("failed to delete channel video")?;
         Ok(())
     }
@@ -172,7 +170,7 @@ fn columns_to_channel_video(columns: Columns) -> anyhow::Result<ChannelVideo> {
     Ok(ChannelVideo {
         id,
         channel_id: ChannelHandle::new(channel_id)?,
-        video_id: VideoRecordId::new(video_id)?,
+        video_id: VideoId::new(video_id)?,
         position,
         created_at: DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
@@ -184,6 +182,7 @@ fn columns_to_channel_video(columns: Columns) -> anyhow::Result<ChannelVideo> {
 mod tests {
     use super::*;
     use crate::domain::video::Video;
+    use crate::domain::video::YoutubeVideoId;
 
     fn repo() -> SqliteChannelVideoRepository {
         let mut conn = Connection::open_in_memory().unwrap();
@@ -197,7 +196,7 @@ mod tests {
 
     fn seed_video(repo: &SqliteChannelVideoRepository, youtube_id: &str, title: &str) -> Video {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let video = Video::create(VideoId::new(youtube_id).unwrap(), title, now);
+        let video = Video::create(YoutubeVideoId::new(youtube_id).unwrap(), title, now);
         let conn = repo.db.write().unwrap();
         conn.execute(
             "INSERT INTO videos (id, youtube_id, title, status, quality, filename, created_at, updated_at)
@@ -320,8 +319,7 @@ mod tests {
         repo.save(&ChannelVideo::create(channel_id(), two.id.clone(), 1, now))
             .unwrap();
 
-        repo.delete(&channel_id(), &VideoId::new("yt1").unwrap())
-            .unwrap();
+        repo.delete(&one.id).unwrap();
 
         assert_eq!(
             repo.list_for_channel(&channel_id())
@@ -357,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_find_a_channel_video_by_its_video_record_id() {
+    fn it_should_find_a_channel_video_by_its_video_id() {
         let repo = repo();
         let video = seed_video(&repo, "yt1", "First");
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
@@ -380,7 +378,7 @@ mod tests {
         let repo = repo();
 
         let found = repo
-            .find_by_video(&VideoRecordId::new("missing").unwrap())
+            .find_by_video(&VideoId::new("missing").unwrap())
             .unwrap();
 
         assert!(found.is_none());

@@ -34,7 +34,6 @@ export function CategoryPlayer({ videos, error }: CategoryPlayerProps) {
         {source && (
           <VideoPlayer
             basePath={source.path}
-            source={source}
             video={video}
             autoplay={autoplay}
             onVideoElement={setVideoElement}

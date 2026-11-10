@@ -5,7 +5,7 @@ use crate::domain::preferences::Preferences;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
     CategoryVideoView, HomeCategorySection, HomeLimits, HomeVideoView, HomeVideos, ListVideosError,
-    SourcedVideo, Video, VideoId, VideoSearchText, VideoSource, VideoStatus, VideoView,
+    SourcedVideo, Video, VideoSearchText, VideoSource, VideoStatus, VideoView, YoutubeVideoId,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -273,7 +273,7 @@ impl VideoSearcher {
     fn category_view(
         &self,
         sourced: SourcedVideo,
-        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        by_video: &HashMap<YoutubeVideoId, Vec<CategoryId>>,
         summaries_available: bool,
     ) -> anyhow::Result<CategoryVideoView> {
         let summaries_shown =
@@ -325,7 +325,7 @@ impl VideoSearcher {
     /// `by_video` (see `category_ids_by_video`).
     fn with_categories(
         views: Vec<HomeVideoView>,
-        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        by_video: &HashMap<YoutubeVideoId, Vec<CategoryId>>,
     ) -> Vec<HomeVideoView> {
         views
             .into_iter()
@@ -348,7 +348,7 @@ impl VideoSearcher {
     fn category_sections_in(
         videos: &[SourcedVideo],
         categories: &[Category],
-        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        by_video: &HashMap<YoutubeVideoId, Vec<CategoryId>>,
         limits: HomeLimits,
     ) -> Vec<(Category, Vec<SourcedVideo>)> {
         Self::ranked_by_pending(videos, categories, by_video)
@@ -372,7 +372,7 @@ impl VideoSearcher {
     fn ranked_by_pending<'a>(
         videos: &[SourcedVideo],
         categories: &'a [Category],
-        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        by_video: &HashMap<YoutubeVideoId, Vec<CategoryId>>,
     ) -> Vec<&'a Category> {
         let mut ranked: Vec<&Category> = categories.iter().collect();
         ranked.sort_by_cached_key(|category| {
@@ -389,7 +389,7 @@ impl VideoSearcher {
     fn pending_in(
         videos: &[SourcedVideo],
         category: &CategoryId,
-        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        by_video: &HashMap<YoutubeVideoId, Vec<CategoryId>>,
     ) -> Vec<SourcedVideo> {
         Self::pick_once(
             videos,
@@ -409,7 +409,7 @@ impl VideoSearcher {
     fn category_section_views(
         &self,
         sections: Vec<(Category, Vec<SourcedVideo>)>,
-        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        by_video: &HashMap<YoutubeVideoId, Vec<CategoryId>>,
     ) -> Result<Vec<HomeCategorySection>, ListVideosError> {
         sections
             .into_iter()
@@ -429,10 +429,10 @@ impl VideoSearcher {
     fn category_ids_by_video(
         &self,
         categories: &[Category],
-    ) -> anyhow::Result<HashMap<VideoId, Vec<CategoryId>>> {
+    ) -> anyhow::Result<HashMap<YoutubeVideoId, Vec<CategoryId>>> {
         categories.iter().try_fold(
             HashMap::new(),
-            |mut by_video: HashMap<VideoId, Vec<CategoryId>>, category| {
+            |mut by_video: HashMap<YoutubeVideoId, Vec<CategoryId>>, category| {
                 self.category_video_collector
                     .downloaded_videos(category)?
                     .into_iter()
@@ -511,7 +511,7 @@ impl VideoSearcher {
 
     /// `videos` without any copy of the YouTube videos in `shown`.
     fn not_shown_in(videos: &[SourcedVideo], shown: &[SourcedVideo]) -> Vec<SourcedVideo> {
-        let shown: HashSet<&VideoId> = shown
+        let shown: HashSet<&YoutubeVideoId> = shown
             .iter()
             .map(|sourced| &sourced.video.youtube_id)
             .collect();
@@ -568,7 +568,7 @@ impl VideoSearcher {
             .collect()
     }
 
-    /// The channel tracking `video` (a video record is tracked by one
+    /// The channel tracking `video` (a stored video is tracked by one
     /// source), otherwise the playlist tracking it.
     fn source_of(&self, video: &Video) -> anyhow::Result<Option<VideoSource>> {
         if let Some(channel_video) = self.channel_video_repository.find_by_video(&video.id)? {

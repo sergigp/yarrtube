@@ -191,7 +191,7 @@ A subtitle fetch SHALL run as its own scheduled task, separately from the video 
 - **THEN** the video keeps its new download fields and gains the recorded subtitle state and filename
 
 ### Requirement: Subtitles Served As WebVTT
-The system SHALL provide HTTP endpoints that return a video's fetched subtitles in WebVTT format, addressed by the video's owning playlist or channel and the video's YouTube ID: `GET /api/playlists/{id}/videos/{video_id}/subtitles.vtt` and `GET /api/channels/{handle}/videos/{video_id}/subtitles.vtt`. The body SHALL be produced from the video's recorded subtitle file when requested, keeping every cue's timing and text, and SHALL be served with content type `text/vtt; charset=utf-8`. Serving SHALL NOT write any file to the videos root. The system SHALL respond with HTTP status 404 when the playlist or channel is not tracked, when the video is not recorded for it, when the video's subtitles are not fetched, or when its recorded subtitle file no longer exists, and with HTTP status 400 for an invalid playlist ID, channel handle or video ID.
+The system SHALL provide an HTTP endpoint that returns a stored video's fetched subtitles in WebVTT format, addressed by the video's own `id`: `GET /api/videos/{id}/subtitles.vtt`, read from the show folder of the playlist or channel holding it. The body SHALL be produced from the video's recorded subtitle file when requested, keeping every cue's timing and text, and SHALL be served with content type `text/vtt; charset=utf-8`. Serving SHALL NOT write any file to the videos root. The system SHALL respond with HTTP status 404 when the video is not stored or the playlist or channel holding it is gone, when the video's subtitles are not fetched, or when its recorded subtitle file no longer exists, and with HTTP status 400 for an invalid video ID.
 
 #### Scenario: Requesting a playlist video's subtitles
 - **WHEN** a client requests the subtitles of a playlist video whose subtitle file contains the cue `00:00:01,500 --> 00:00:03,000` with text `Hello there`
@@ -209,12 +209,16 @@ The system SHALL provide HTTP endpoints that return a video's fetched subtitles 
 - **WHEN** a client requests the subtitles of a video whose subtitles are Fetched but whose subtitle file no longer exists
 - **THEN** the daemon responds with HTTP status 404
 
-#### Scenario: Video not recorded for the source
-- **WHEN** a client requests the subtitles of a video ID under a playlist or channel that does not record that video
+#### Scenario: Requesting one copy of a video stored twice
+- **WHEN** a YouTube video is stored by a playlist without subtitles and by a channel with fetched subtitles, and a client requests the subtitles of the channel's copy
+- **THEN** the daemon responds with HTTP status 200 and the channel copy's subtitles in WebVTT format
+
+#### Scenario: Unknown video
+- **WHEN** a client requests the subtitles of a video `id` that is not stored
 - **THEN** the daemon responds with HTTP status 404
 
-#### Scenario: Unknown source
-- **WHEN** a client requests subtitles under a playlist ID or channel handle that is not tracked
+#### Scenario: Source gone
+- **WHEN** a client requests the subtitles of a stored video whose playlist or channel is no longer tracked
 - **THEN** the daemon responds with HTTP status 404
 
 #### Scenario: Nothing written to the library

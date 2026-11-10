@@ -1,6 +1,6 @@
 use crate::domain::services::plex_label_syncer::AFTER_DOWNLOAD_DELAY;
 use crate::domain::services::{PlexLabelSyncer, PlexLabelSyncerApi};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 
@@ -10,7 +10,7 @@ struct VideoDownloadedPayload {
     video_id: String,
 }
 
-/// Reacts to `VideoDownloaded` by marking the record's Plex labels stale
+/// Reacts to `VideoDownloaded` by marking the video's Plex labels stale
 /// and requesting a label sync in a minute, once Plex has imported the
 /// episode. Registered only when the Plex integration is configured.
 pub struct SyncPlexLabelsOnVideoDownloaded {
@@ -26,7 +26,7 @@ impl SyncPlexLabelsOnVideoDownloaded {
 impl EventSubscriber for SyncPlexLabelsOnVideoDownloaded {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let payload: VideoDownloadedPayload = serde_json::from_str(payload)?;
-        let video_id = VideoRecordId::new(payload.video_id)?;
+        let video_id = VideoId::new(payload.video_id)?;
         self.plex_label_syncer
             .mark(&[video_id], AFTER_DOWNLOAD_DELAY)
     }
@@ -37,7 +37,7 @@ mod tests {
     use super::*;
     use crate::domain::plex_label::EpisodeLabels;
     use crate::domain::services::VideoOwnerFinder;
-    use crate::domain::task::{ScheduledTask, TaskStatus};
+    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
     use crate::infrastructure::repositories::sqlite_category_playlist_repository::SqliteCategoryPlaylistRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
@@ -74,9 +74,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             episode_labels_repository
-                .find_many(&[record("rec1")])
+                .find_many(&[video_id("rec1")])
                 .unwrap(),
-            vec![EpisodeLabels::pending(record("rec1"))]
+            vec![EpisodeLabels::pending(video_id("rec1"))]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -123,8 +123,7 @@ mod tests {
     fn pending_sync(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: "sync_plex_labels".to_string(),
-            payload: "{}".to_string(),
+            task: Task::SyncPlexLabels,
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -134,8 +133,8 @@ mod tests {
         }
     }
 
-    fn record(id: &str) -> VideoRecordId {
-        VideoRecordId::new(id).unwrap()
+    fn video_id(id: &str) -> VideoId {
+        VideoId::new(id).unwrap()
     }
 
     fn now() -> DateTime<Utc> {

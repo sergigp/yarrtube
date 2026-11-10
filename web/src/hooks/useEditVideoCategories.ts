@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 
 /** The video copy whose categories are being edited. */
 export interface EditedVideo {
-  recordId: string
+  videoId: string
   title: string
   sourceName: string
 }

@@ -1,5 +1,5 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use chrono::{DateTime, Utc};
 
 /// Records that a `Video` belongs to a `Channel`'s tracked most-recent
@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 pub struct ChannelVideo {
     pub id: i64,
     pub channel_id: ChannelHandle,
-    pub video_id: VideoRecordId,
+    pub video_id: VideoId,
     pub position: i64,
     pub created_at: DateTime<Utc>,
 }
@@ -17,7 +17,7 @@ pub struct ChannelVideo {
 impl ChannelVideo {
     pub fn create(
         channel_id: ChannelHandle,
-        video_id: VideoRecordId,
+        video_id: VideoId,
         position: i64,
         now: DateTime<Utc>,
     ) -> Self {

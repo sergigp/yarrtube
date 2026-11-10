@@ -1,4 +1,4 @@
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::domain::video_transcript::{
     CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
 };
@@ -11,8 +11,8 @@ use rusqlite::{OptionalExtension, Row, params};
 pub trait VideoTranscriptRepository: Send + Sync {
     /// Inserts the transcript, replacing the video's previous one.
     fn save(&self, transcript: &VideoTranscript) -> anyhow::Result<()>;
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoTranscript>>;
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
+    fn find(&self, video_id: &VideoId) -> anyhow::Result<Option<VideoTranscript>>;
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()>;
 }
 
 /// A `video_transcripts` row as read, before its values are parsed into a
@@ -61,7 +61,7 @@ impl VideoTranscriptRepository for SqliteVideoTranscriptRepository {
         Ok(())
     }
 
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoTranscript>> {
+    fn find(&self, video_id: &VideoId) -> anyhow::Result<Option<VideoTranscript>> {
         let conn = self.db.read()?;
         conn.query_row(
             "SELECT video_id, language, source, text, created_at
@@ -78,7 +78,7 @@ impl VideoTranscriptRepository for SqliteVideoTranscriptRepository {
         .transpose()
     }
 
-    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+    fn delete(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
             "DELETE FROM video_transcripts WHERE video_id = ?1",
@@ -105,7 +105,7 @@ impl SqliteVideoTranscriptRepository {
 
     fn row_to_video_transcript(row: VideoTranscriptRow) -> anyhow::Result<VideoTranscript> {
         Ok(VideoTranscript {
-            video_id: VideoRecordId::new(row.video_id)?,
+            video_id: VideoId::new(row.video_id)?,
             language: CaptionLanguage::new(&row.language)?,
             source: CaptionSource::parse(&row.source)?,
             text: TranscriptText::new(&row.text),
@@ -126,7 +126,7 @@ mod tests {
     fn it_should_replace_the_transcript_of_a_video_on_save() {
         let db = TestDatabase::new();
         let repository = SqliteVideoTranscriptRepository::new(db.database());
-        let video_id = VideoRecordId::new("rec1").unwrap();
+        let video_id = VideoId::new("rec1").unwrap();
         let replacement = transcript(&video_id, "es-orig", "es", CaptionSource::Automatic, "Hola");
         repository
             .save(&transcript(
@@ -148,8 +148,8 @@ mod tests {
     fn it_should_delete_a_video_transcript() {
         let db = TestDatabase::new();
         let repository = SqliteVideoTranscriptRepository::new(db.database());
-        let deleted_id = VideoRecordId::new("rec1").unwrap();
-        let kept_id = VideoRecordId::new("rec2").unwrap();
+        let deleted_id = VideoId::new("rec1").unwrap();
+        let kept_id = VideoId::new("rec2").unwrap();
         let kept = transcript(&kept_id, "en", "en", CaptionSource::Manual, "Kept");
         repository
             .save(&transcript(
@@ -172,7 +172,7 @@ mod tests {
     }
 
     fn transcript(
-        video_id: &VideoRecordId,
+        video_id: &VideoId,
         key: &str,
         language: &str,
         source: CaptionSource,

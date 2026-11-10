@@ -1,6 +1,6 @@
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 
 /// Deletes one video's downloaded file, scheduled by
@@ -18,13 +18,21 @@ impl DeleteVideoFileTask {
 }
 
 impl TaskHandler for DeleteVideoFileTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let payload = Task::decode_delete_video_file_payload(payload)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::DeleteVideoFile {
+            filename,
+            thumbnail_filename,
+            subtitle_filename,
+            output_dir,
+        } = task
+        else {
+            return Err(unexpected_task(task));
+        };
         self.video_file_deleter.delete_video_file(
-            payload.filename,
-            payload.thumbnail_filename,
-            payload.subtitle_filename,
-            Path::new(&payload.output_dir),
+            filename.clone(),
+            thumbnail_filename.clone(),
+            subtitle_filename.clone(),
+            Path::new(output_dir),
         )
     }
 }
@@ -44,7 +52,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for(Some("My Video.mp4"), None));
+        let result = run(&task, &task_for(Some("My Video.mp4"), None));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -61,25 +69,25 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for(None, None));
+        let result = run(&task, &task_for(None, None));
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
     }
 
     #[test]
-    fn it_should_reject_a_malformed_payload() {
+    fn it_should_fail_if_handed_another_task() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(true)));
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
             "/videos",
         ));
 
-        let result = run(&task, "not json");
+        let result = run(&task, &Task::UpdateYtdlp);
 
         assert_eq!(
             result,
-            Err("invalid delete_video_file payload: expected ident at line 1 column 2".to_string())
+            Err("unexpected update_ytdlp task for this handler".to_string())
         );
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
     }
@@ -92,7 +100,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for(Some("My Video.mp4"), None));
+        let result = run(&task, &task_for(Some("My Video.mp4"), None));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -109,10 +117,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(
-            &task,
-            &payload_for(Some("My Video.mp4"), Some("My Video.jpg")),
-        );
+        let result = run(&task, &task_for(Some("My Video.mp4"), Some("My Video.jpg")));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -129,7 +134,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for(Some("My Video.mp4"), None));
+        let result = run(&task, &task_for(Some("My Video.mp4"), None));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -146,7 +151,7 @@ mod tests {
             "/videos",
         ));
 
-        let result = run(&task, &payload_for(None, Some("My Video.jpg")));
+        let result = run(&task, &task_for(None, Some("My Video.jpg")));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -165,7 +170,7 @@ mod tests {
 
         let result = run(
             &task,
-            &payload_for(
+            &task_for(
                 Some("Season 2026/S2026E031501 - My Video.mp4"),
                 Some("Season 2026/S2026E031501 - My Video.jpg"),
             ),
@@ -197,9 +202,7 @@ mod tests {
                 thumbnail_filename: None,
                 subtitle_filename: Some("Season 2026/S2026E031501 - My Video.en.srt".to_string()),
                 output_dir: "/videos/my-playlist".to_string(),
-            }
-            .payload()
-            .to_string(),
+            },
         );
 
         assert_eq!(result, Ok(()));
@@ -214,29 +217,6 @@ mod tests {
     }
 
     #[test]
-    fn it_should_decode_a_payload_queued_without_a_subtitle_filename() {
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
-            video_file_repository.clone(),
-            "/videos",
-        ));
-
-        let result = run(
-            &task,
-            r#"{"filename": "Season 2026/S2026E031501 - My Video.mp4", "thumbnail_filename": null, "output_dir": "/videos/my-playlist"}"#,
-        );
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            *video_file_repository.deleted_calls.lock().unwrap(),
-            vec![
-                deleted("Season 2026/S2026E031501 - My Video.mp4"),
-                deleted("Season 2026/S2026E031501 - My Video.nfo"),
-            ]
-        );
-    }
-
-    #[test]
     fn it_should_delete_a_legacy_per_video_folder() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
@@ -246,7 +226,7 @@ mod tests {
 
         let result = run(
             &task,
-            &payload_for(Some("My Video/My Video.mp4"), Some("My Video/My Video.jpg")),
+            &task_for(Some("My Video/My Video.mp4"), Some("My Video/My Video.jpg")),
         );
 
         assert_eq!(result, Ok(()));
@@ -256,15 +236,13 @@ mod tests {
         );
     }
 
-    fn payload_for(filename: Option<&str>, thumbnail_filename: Option<&str>) -> String {
+    fn task_for(filename: Option<&str>, thumbnail_filename: Option<&str>) -> Task {
         Task::DeleteVideoFile {
             filename: filename.map(str::to_string),
             thumbnail_filename: thumbnail_filename.map(str::to_string),
             subtitle_filename: None,
             output_dir: "/videos/my-playlist".to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     /// The `(output_dir, entry)` pair the fake records for one delete call.
@@ -272,7 +250,7 @@ mod tests {
         (PathBuf::from("/videos/my-playlist"), entry.to_string())
     }
 
-    fn run(task: &DeleteVideoFileTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &DeleteVideoFileTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 }

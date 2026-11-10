@@ -1,12 +1,12 @@
 use crate::domain::plex::{PlexEpisode, PlexLabels};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use chrono::{DateTime, Utc};
 
-/// A stored video record's Plex label state: whether its episode's labels
+/// A stored video's Plex label state: whether its episode's labels
 /// may be stale, and what yarrtube last wrote to which episode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EpisodeLabels {
-    pub video_id: VideoRecordId,
+    pub video_id: VideoId,
     pub dirty: bool,
     /// The episode last written; `None` until first synced.
     pub rating_key: Option<String>,
@@ -24,7 +24,7 @@ pub struct EpisodeLabels {
 
 impl EpisodeLabels {
     /// Dirty, never synced.
-    pub fn pending(video_id: VideoRecordId) -> Self {
+    pub fn pending(video_id: VideoId) -> Self {
         Self {
             video_id,
             dirty: true,

@@ -1,6 +1,6 @@
 use crate::domain::services::plex_label_syncer::CATEGORY_CHANGE_DELAY;
 use crate::domain::services::{PlexLabelSyncer, PlexLabelSyncerApi};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 
@@ -9,7 +9,7 @@ struct VideoCategoriesChangedPayload {
     video_ids: Vec<String>,
 }
 
-/// Reacts to `VideoCategoriesChanged` by marking the records' Plex labels
+/// Reacts to `VideoCategoriesChanged` by marking videos' Plex labels
 /// stale and requesting a label sync shortly. Registered only when the Plex
 /// integration is configured.
 pub struct SyncPlexLabelsOnVideoCategoriesChanged {
@@ -28,7 +28,7 @@ impl EventSubscriber for SyncPlexLabelsOnVideoCategoriesChanged {
         let video_ids = payload
             .video_ids
             .into_iter()
-            .map(VideoRecordId::new)
+            .map(VideoId::new)
             .collect::<Result<Vec<_>, _>>()?;
         self.plex_label_syncer
             .mark(&video_ids, CATEGORY_CHANGE_DELAY)
@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             episode_labels_repository
-                .find_many(&[record("rec1"), record("rec2")])
+                .find_many(&[video_id("rec1"), video_id("rec2")])
                 .unwrap(),
             vec![
                 EpisodeLabels {
@@ -89,7 +89,7 @@ mod tests {
                     generation: 1,
                     ..synced("rec1")
                 },
-                EpisodeLabels::pending(record("rec2")),
+                EpisodeLabels::pending(video_id("rec2")),
             ]
         );
         assert_eq!(
@@ -139,11 +139,11 @@ mod tests {
         assert_eq!(results, [Ok(()), Ok(())]);
         assert_eq!(
             episode_labels_repository
-                .find_many(&[record("rec1"), record("rec2")])
+                .find_many(&[video_id("rec1"), video_id("rec2")])
                 .unwrap(),
             vec![
-                EpisodeLabels::pending(record("rec1")),
-                EpisodeLabels::pending(record("rec2")),
+                EpisodeLabels::pending(video_id("rec1")),
+                EpisodeLabels::pending(video_id("rec2")),
             ]
         );
         assert_eq!(
@@ -191,8 +191,7 @@ mod tests {
     fn pending_sync(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: "sync_plex_labels".to_string(),
-            payload: "{}".to_string(),
+            task: Task::SyncPlexLabels,
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -203,7 +202,7 @@ mod tests {
     }
 
     fn synced(id: &str) -> EpisodeLabels {
-        EpisodeLabels::pending(record(id)).synced(
+        EpisodeLabels::pending(video_id(id)).synced(
             &PlexEpisode {
                 rating_key: "101".to_string(),
                 section_id: "19".to_string(),
@@ -214,8 +213,8 @@ mod tests {
         )
     }
 
-    fn record(id: &str) -> VideoRecordId {
-        VideoRecordId::new(id).unwrap()
+    fn video_id(id: &str) -> VideoId {
+        VideoId::new(id).unwrap()
     }
 
     fn now() -> DateTime<Utc> {

@@ -1,7 +1,7 @@
 use super::CategorizationAnswer;
 use crate::domain::category::CategoryId;
 use crate::domain::shared::ValidationError;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use chrono::{DateTime, Utc};
 
 /// Whether a video belongs to a category, as decided — see the
@@ -61,7 +61,7 @@ impl VerdictAuthor {
 /// it does, is never evaluated again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoCategoryVerdict {
-    pub video_id: VideoRecordId,
+    pub video_id: VideoId,
     pub category_id: CategoryId,
     pub verdict: Verdict,
     pub decided_by: VerdictAuthor,
@@ -75,7 +75,7 @@ pub struct VideoCategoryVerdict {
 impl VideoCategoryVerdict {
     /// The AI's `answer`: `yes` when it belongs, else `no`.
     pub fn answered(
-        video_id: VideoRecordId,
+        video_id: VideoId,
         category_id: CategoryId,
         answer: CategorizationAnswer,
         model: &str,
@@ -97,7 +97,7 @@ impl VideoCategoryVerdict {
 
     /// The AI couldn't answer for this pair under the current settings.
     pub fn unavailable(
-        video_id: VideoRecordId,
+        video_id: VideoId,
         category_id: CategoryId,
         model: &str,
         now: DateTime<Utc>,
@@ -115,7 +115,7 @@ impl VideoCategoryVerdict {
 
     /// The user's own decision for the pair.
     pub fn by_user(
-        video_id: VideoRecordId,
+        video_id: VideoId,
         category_id: CategoryId,
         belongs: bool,
         now: DateTime<Utc>,

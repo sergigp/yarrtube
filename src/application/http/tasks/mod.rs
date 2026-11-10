@@ -27,7 +27,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
-    use crate::domain::video::{LateDataChecks, VideoId, VideoRecordId};
+    use crate::domain::video::{LateDataChecks, VideoId, YoutubeVideoId};
     use crate::domain::video::{PlaybackPosition, SubtitleState, SummaryState, Video, VideoStatus};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
@@ -310,7 +310,7 @@ mod tests {
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -352,7 +352,6 @@ mod tests {
             .schedule(
                 &Task::FetchThumbnail {
                     video_id: "rec1".to_string(),
-                    output_dir: "/videos/my-playlist".to_string(),
                 },
                 fixed_timestamp(),
             )
@@ -364,7 +363,7 @@ mod tests {
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -406,7 +405,6 @@ mod tests {
             .schedule(
                 &Task::FetchSubtitles {
                     video_id: "rec1".to_string(),
-                    output_dir: "/videos/my-playlist".to_string(),
                 },
                 fixed_timestamp(),
             )
@@ -418,7 +416,7 @@ mod tests {
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -471,7 +469,7 @@ mod tests {
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -524,7 +522,7 @@ mod tests {
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -577,7 +575,7 @@ mod tests {
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -659,7 +657,7 @@ mod tests {
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -701,8 +699,6 @@ mod tests {
             .schedule(
                 &Task::UpgradeQuality {
                     video_id: "rec1".to_string(),
-                    quality: "high".to_string(),
-                    output_dir: "/videos/My Playlist".to_string(),
                 },
                 fixed_timestamp(),
             )
@@ -714,7 +710,7 @@ mod tests {
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -767,7 +763,7 @@ mod tests {
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -815,7 +811,7 @@ mod tests {
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
-                VideoRecordId::new("rec1").unwrap(),
+                VideoId::new("rec1").unwrap(),
                 0,
                 fixed_timestamp(),
             ))
@@ -1036,8 +1032,6 @@ mod tests {
     fn download_video_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 
@@ -1090,8 +1084,8 @@ mod tests {
 
     fn video(id: &str, title: &str) -> Video {
         Video {
-            id: VideoRecordId::new(id).unwrap(),
-            youtube_id: VideoId::new("yt1").unwrap(),
+            id: VideoId::new(id).unwrap(),
+            youtube_id: YoutubeVideoId::new("yt1").unwrap(),
             title: title.to_string(),
             status: VideoStatus::Pending,
             quality: None,

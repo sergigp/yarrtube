@@ -1,8 +1,8 @@
 use crate::domain::services::{VideoCategorizer, VideoCategorizerApi};
 use crate::domain::task::Task;
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
 
 /// Asks the AI which of its pending categories one video fits, scheduled by
@@ -27,8 +27,11 @@ impl CategorizeVideoTask {
 }
 
 impl TaskHandler for CategorizeVideoTask {
-    fn handle(&self, payload: &str, is_last_attempt: bool) -> anyhow::Result<()> {
-        let video_id = VideoRecordId::new(Task::decode_categorize_video_payload(payload)?)?;
+    fn handle(&self, task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::CategorizeVideo { video_id } = task else {
+            return Err(unexpected_task(task));
+        };
+        let video_id = VideoId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
             return Ok(());
         };
@@ -53,7 +56,7 @@ mod tests {
     };
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoChapter, VideoId};
+    use crate::domain::video::{Video, VideoChapter, YoutubeVideoId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -845,21 +848,19 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     }
 
     fn run(task: &CategorizeVideoTask, video: &Video) -> Result<(), String> {
-        task.handle(&payload_for(video), false)
+        task.handle(&task_for(video), false)
             .map_err(|error| error.to_string())
     }
 
     fn run_last_attempt(task: &CategorizeVideoTask, video: &Video) -> Result<(), String> {
-        task.handle(&payload_for(video), true)
+        task.handle(&task_for(video), true)
             .map_err(|error| error.to_string())
     }
 
-    fn payload_for(video: &Video) -> String {
+    fn task_for(video: &Video) -> Task {
         Task::CategorizeVideo {
             video_id: video.id.as_str().to_string(),
         }
-        .payload()
-        .to_string()
     }
 
     /// Stores `video` with its summary, `my_channel()` with categorization on
@@ -918,7 +919,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     /// A downloaded, subtitled, summarized 30-minute video.
     fn summarized_video() -> Video {
         Video::create(
-            VideoId::new("yt1").unwrap(),
+            YoutubeVideoId::new("yt1").unwrap(),
             "Crushing the Sicilian",
             fixed_timestamp(),
         )
@@ -1071,7 +1072,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
     struct RemovingVideoOnPublish {
         publisher: SqliteEventPublisher,
         video_repository: SqliteVideoRepository,
-        video_id: VideoRecordId,
+        video_id: VideoId,
     }
 
     impl EventPublisher for RemovingVideoOnPublish {

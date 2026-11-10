@@ -24,6 +24,6 @@ test('a download that keeps failing is shown as errored with its reason', async 
     await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
     await waitForVideoStatus(page, { status: 'ERRORED', timeoutMs: 30_000 })
     const videos = await (await page.request.get(`/api/playlists/${encodeURIComponent(playlist.id)}/videos`)).json()
-    expect(videos.map(({ id, status }) => ({ id, status }))).toEqual([{ id: video, status: 'ERRORED' }])
+    expect(videos.map(({ youtube_id, status }) => ({ youtube_id, status }))).toEqual([{ youtube_id: video, status: 'ERRORED' }])
   })
 })

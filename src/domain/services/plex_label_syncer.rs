@@ -3,7 +3,7 @@ use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection, plex_folder_path
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoRecordId};
+use crate::domain::video::{Video, VideoId};
 use crate::domain::video_category::VideoCategories;
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_category_playlist_repository::CategoryPlaylistRepository;
@@ -28,7 +28,7 @@ pub const AFTER_DOWNLOAD_DELAY: Duration = Duration::seconds(60);
 /// video; the first one schedules the sync this far out and `bring_forward`
 /// keeps it there, so the pass's events collapse into one sync.
 pub const CATEGORY_CHANGE_DELAY: Duration = Duration::seconds(10);
-/// Dirty records labelled per sync; a full batch that made progress ⇒ the
+/// Dirty videos labelled per sync; a full batch that made progress ⇒ the
 /// next sync runs now.
 pub const BATCH_SIZE: usize = 500;
 
@@ -107,13 +107,13 @@ impl PlexLabelSyncer {
 }
 
 pub trait PlexLabelSyncerApi: Send + Sync {
-    /// Marks the records dirty (creating their rows) and requests a sync at
+    /// Marks the videos dirty (creating their rows) and requests a sync at
     /// now + `delay`.
-    fn mark(&self, video_ids: &[VideoRecordId], delay: Duration) -> anyhow::Result<()>;
+    fn mark(&self, video_ids: &[VideoId], delay: Duration) -> anyhow::Result<()>;
     /// A pending sync moves forward to `run_at` if due later, else one is
     /// scheduled.
     fn request_sync(&self, run_at: DateTime<Utc>) -> anyhow::Result<()>;
-    /// One sync: heals drift, labels a batch of dirty records, reconciles
+    /// One sync: heals drift, labels a batch of dirty videos, reconciles
     /// playlists, then requests the next sync (now if the batch was full and
     /// at least one of its records was labelled or forgotten, else now +
     /// `SYNC_INTERVAL`). Plex unreachable ⇒ logs, keeps
@@ -122,9 +122,9 @@ pub trait PlexLabelSyncerApi: Send + Sync {
 }
 
 impl PlexLabelSyncerApi for PlexLabelSyncer {
-    fn mark(&self, video_ids: &[VideoRecordId], delay: Duration) -> anyhow::Result<()> {
+    fn mark(&self, video_ids: &[VideoId], delay: Duration) -> anyhow::Result<()> {
         let existing = self.episode_labels_repository.find_many(video_ids)?;
-        let mut existing: HashMap<VideoRecordId, EpisodeLabels> = existing
+        let mut existing: HashMap<VideoId, EpisodeLabels> = existing
             .into_iter()
             .map(|row| (row.video_id.clone(), row))
             .collect();
@@ -157,24 +157,24 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
             }
         };
         self.mark_reimported(&library.episodes)?;
-        self.track_categorized_records()?;
-        let backlog = self.label_dirty_records(&library.episodes)?;
+        self.track_categorized_videos()?;
+        let backlog = self.label_dirty_videos(&library.episodes)?;
         self.reconcile_playlists(&library.sections)?;
         self.request_next_sync(backlog)
     }
 }
 
 impl PlexLabelSyncer {
-    /// Labels a batch of dirty records, least recently checked first;
+    /// Labels a batch of dirty videos, least recently checked first;
     /// returns whether more may be labellable right away: the batch was full
     /// and at least one of its rows was synced or deleted, so a batch of
-    /// records none of which can be labelled yet never chains syncs.
-    fn label_dirty_records(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<bool> {
+    /// videos none of which can be labelled yet never chains syncs.
+    fn label_dirty_videos(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<bool> {
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
         let taken = rows.len();
         let desired = self.desired_labels(&rows)?;
-        let ids: Vec<VideoRecordId> = rows.iter().map(|row| row.video_id.clone()).collect();
-        let videos: HashMap<VideoRecordId, Video> = self
+        let ids: Vec<VideoId> = rows.iter().map(|row| row.video_id.clone()).collect();
+        let videos: HashMap<VideoId, Video> = self
             .video_repository
             .find_many(&ids)?
             .into_iter()
@@ -287,7 +287,7 @@ impl PlexLabelSyncer {
         })
     }
 
-    /// Right away while a backlog of dirty records remains, else after
+    /// Right away while a backlog of dirty videos remains, else after
     /// `SYNC_INTERVAL`.
     fn request_next_sync(&self, backlog: bool) -> anyhow::Result<()> {
         let now = self.clock.now();
@@ -351,11 +351,11 @@ impl PlexLabelSyncer {
         self.episode_labels_repository.save_many(&reimported)
     }
 
-    /// Starts tracking, dirty, every categorized record without a row: one
+    /// Starts tracking, dirty, every categorized video without a row: one
     /// categorized before this sync existed, or whose row was lost.
-    fn track_categorized_records(&self) -> anyhow::Result<()> {
-        let categorized = self.categorized_records()?;
-        let tracked: HashSet<VideoRecordId> = self
+    fn track_categorized_videos(&self) -> anyhow::Result<()> {
+        let categorized = self.categorized_videos()?;
+        let tracked: HashSet<VideoId> = self
             .episode_labels_repository
             .find_many(&categorized)?
             .into_iter()
@@ -369,9 +369,9 @@ impl PlexLabelSyncer {
         self.episode_labels_repository.save_many(&untracked)
     }
 
-    /// Every record in at least one category, each once.
-    fn categorized_records(&self) -> anyhow::Result<Vec<VideoRecordId>> {
-        let ids: HashSet<VideoRecordId> = self
+    /// Every video in at least one category, each once.
+    fn categorized_videos(&self) -> anyhow::Result<Vec<VideoId>> {
+        let ids: HashSet<VideoId> = self
             .category_repository
             .list()?
             .iter()
@@ -391,14 +391,14 @@ impl PlexLabelSyncer {
     fn desired_labels(
         &self,
         rows: &[EpisodeLabels],
-    ) -> anyhow::Result<HashMap<VideoRecordId, PlexLabels>> {
+    ) -> anyhow::Result<HashMap<VideoId, PlexLabels>> {
         let names: HashMap<CategoryId, CategoryName> = self
             .category_repository
             .list()?
             .into_iter()
             .map(|category| (category.id, category.name))
             .collect();
-        let ids: Vec<VideoRecordId> = rows.iter().map(|row| row.video_id.clone()).collect();
+        let ids: Vec<VideoId> = rows.iter().map(|row| row.video_id.clone()).collect();
         Ok(self
             .video_categories_repository
             .find_many(&ids)?
@@ -407,13 +407,13 @@ impl PlexLabelSyncer {
             .collect())
     }
 
-    /// Writes the record's desired labels to its episode; `None` once the
+    /// Writes the video's desired labels to its episode; `None` once the
     /// record is gone and its row deleted.
     fn label(
         &self,
         row: EpisodeLabels,
         video: Option<&Video>,
-        desired: &HashMap<VideoRecordId, PlexLabels>,
+        desired: &HashMap<VideoId, PlexLabels>,
         episodes: &HashMap<String, PlexEpisode>,
     ) -> anyhow::Result<Option<EpisodeLabels>> {
         let Some(video) = video else {
@@ -460,7 +460,7 @@ impl PlexLabelSyncer {
             .save_labels(episode, desired, &current.missing_from(desired))
     }
 
-    /// The Plex episode of the record's file.
+    /// The Plex episode of the video's file.
     fn find_episode<'a>(
         &self,
         video: &Video,
@@ -480,7 +480,7 @@ impl PlexLabelSyncer {
     }
 }
 
-/// The names of the record's categories.
+/// The names of the video's categories.
 fn labels_of(
     categories: &VideoCategories,
     names: &HashMap<CategoryId, CategoryName>,

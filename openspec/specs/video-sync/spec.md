@@ -30,11 +30,15 @@ The system SHALL sync a stored video through a video sync task that targets that
 - **THEN** the sync completes successfully and schedules nothing
 
 ### Requirement: Sync Schedules the Download
-A video sync SHALL schedule a download of the video, with its playlist's or channel's quality and output directory, when the video's download status is Pending, In Progress or Errored Retrying. It SHALL NOT schedule one for a Downloaded, Excluded or Errored video, nor add a second download for a video that already has one pending or running.
+A video sync SHALL schedule a download of the video when the video's download status is Pending, In Progress or Errored Retrying. It SHALL NOT schedule one for a Downloaded, Excluded or Errored video, nor add a second download for a video that already has one pending or running. The download SHALL use its playlist's or channel's quality and output directory as they are when it runs, not when it was scheduled.
 
 #### Scenario: New video
 - **WHEN** a video sync runs for a Pending video with no download pending or running
-- **THEN** a download of the video is scheduled to run immediately, with its owner's quality and output directory
+- **THEN** a download of the video is scheduled to run immediately
+
+#### Scenario: Owner changed while the download is queued
+- **WHEN** a video's download is queued and its playlist's or channel's quality or folder changes before it runs
+- **THEN** the video is downloaded at the new quality into the new folder
 
 #### Scenario: Download already queued
 - **WHEN** a video sync runs for a Pending video that already has a download pending

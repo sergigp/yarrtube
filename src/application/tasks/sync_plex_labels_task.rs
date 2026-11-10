@@ -1,6 +1,6 @@
 use crate::domain::services::{PlexLabelSyncer, PlexLabelSyncerApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs one Plex label sync (`PlexLabelSyncer::sync`), which requests the
 /// next one itself. Registered only when the Plex integration is configured.
@@ -15,8 +15,10 @@ impl SyncPlexLabelsTask {
 }
 
 impl TaskHandler for SyncPlexLabelsTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        Task::decode_sync_plex_labels_payload(payload)?;
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::SyncPlexLabels = task else {
+            return Err(unexpected_task(task));
+        };
         self.plex_label_syncer.sync()
     }
 }
@@ -34,7 +36,7 @@ mod tests {
     use crate::domain::services::plex_label_syncer::BATCH_SIZE;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
-    use crate::domain::video::{Video, VideoId, VideoRecordId};
+    use crate::domain::video::{Video, VideoId, YoutubeVideoId};
     use crate::domain::video_category::VideoCategories;
     use crate::infrastructure::repositories::plex_library_repository::{
         FakePlaylist, FakePlexLibraryRepository,
@@ -294,7 +296,7 @@ mod tests {
         );
         let video = seed_video(
             &db,
-            Video::create(VideoId::new("yt1").unwrap(), "One", now()),
+            Video::create(YoutubeVideoId::new("yt1").unwrap(), "One", now()),
         );
         seed_category(&db, "chess", "Chess", &[&video]);
         episode_labels_repository
@@ -327,7 +329,7 @@ mod tests {
         let plex = Arc::new(
             FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
         );
-        let deleted = VideoRecordId::new("deleted").unwrap();
+        let deleted = VideoId::new("deleted").unwrap();
         episode_labels_repository
             .save_many(&[EpisodeLabels::pending(deleted.clone())])
             .unwrap();
@@ -514,7 +516,7 @@ mod tests {
         episode_labels_repository
             .save_many(
                 &(0..BATCH_SIZE)
-                    .map(|i| EpisodeLabels::pending(VideoRecordId::new(format!("rec{i}")).unwrap()))
+                    .map(|i| EpisodeLabels::pending(VideoId::new(format!("rec{i}")).unwrap()))
                     .collect::<Vec<_>>(),
             )
             .unwrap();
@@ -548,7 +550,11 @@ mod tests {
                     .map(|i| {
                         seed_video(
                             &db,
-                            Video::create(VideoId::new(format!("w{i}")).unwrap(), "Waiting", now()),
+                            Video::create(
+                                YoutubeVideoId::new(format!("w{i}")).unwrap(),
+                                "Waiting",
+                                now(),
+                            ),
                         )
                     })
                     .map(|video| EpisodeLabels::pending(video.id))
@@ -587,7 +593,11 @@ mod tests {
             .map(|i| {
                 seed_video(
                     &db,
-                    Video::create(VideoId::new(format!("w{i}")).unwrap(), "Waiting", now()),
+                    Video::create(
+                        YoutubeVideoId::new(format!("w{i}")).unwrap(),
+                        "Waiting",
+                        now(),
+                    ),
                 )
             })
             .map(|video| EpisodeLabels::pending(video.id))
@@ -1101,8 +1111,7 @@ mod tests {
     fn pending_sync(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: "sync_plex_labels".to_string(),
-            payload: "{}".to_string(),
+            task: Task::SyncPlexLabels,
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -1117,13 +1126,14 @@ mod tests {
     fn seed_downloaded_video(db: &TestDatabase, youtube_id: &str, file_name: &str) -> Video {
         seed_video(
             db,
-            Video::create(VideoId::new(youtube_id).unwrap(), youtube_id, now()).mark_downloaded(
-                Quality::High,
-                format!("Season 2023/{file_name}"),
-                None,
-                None,
-                now(),
-            ),
+            Video::create(YoutubeVideoId::new(youtube_id).unwrap(), youtube_id, now())
+                .mark_downloaded(
+                    Quality::High,
+                    format!("Season 2023/{file_name}"),
+                    None,
+                    None,
+                    now(),
+                ),
         )
     }
 
@@ -1244,6 +1254,7 @@ mod tests {
     }
 
     fn run(task: &SyncPlexLabelsTask) -> Result<(), String> {
-        task.handle("{}", false).map_err(|e| e.to_string())
+        task.handle(&Task::SyncPlexLabels, false)
+            .map_err(|e| e.to_string())
     }
 }

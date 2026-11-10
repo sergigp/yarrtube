@@ -50,7 +50,7 @@ impl ChannelVideosRepository for YtDlpChannelVideosRepository {
             .into_iter()
             .enumerate()
             .map(|(position, entry)| ChannelVideoListing {
-                youtube_id: entry.video_id,
+                youtube_id: entry.youtube_id,
                 title: entry.title,
                 position: position as i64,
             })

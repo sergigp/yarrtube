@@ -102,7 +102,7 @@ mod tests {
     use super::*;
     use crate::domain::category::CategoryId;
     use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
-    use crate::domain::video::{SummaryState, Video, VideoId, VideoRecordId};
+    use crate::domain::video::{SummaryState, Video, VideoId, YoutubeVideoId};
     use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
@@ -1115,13 +1115,13 @@ mod tests {
 
     fn unavailable_video() -> Video {
         let created = fixed_timestamp() - Duration::days(1);
-        Video::create(VideoId::new("yt1").unwrap(), "A video", created)
+        Video::create(YoutubeVideoId::new("yt1").unwrap(), "A video", created)
             .mark_summary_unavailable(created)
     }
 
     /// The shipped prompt with one rule added to its `system` section.
-    fn verdict_video_id() -> VideoRecordId {
-        VideoRecordId::new("rec1").unwrap()
+    fn verdict_video_id() -> VideoId {
+        VideoId::new("rec1").unwrap()
     }
 
     /// The AI's `verdict` for `verdict_video_id()` and `category`.

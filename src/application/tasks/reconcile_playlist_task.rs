@@ -1,7 +1,7 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs every subsequent reconcile for a playlist (the first one is
 /// triggered by `subscribers::reconcile_on_playlist_created` instead).
@@ -18,9 +18,11 @@ impl ReconcilePlaylistTask {
 }
 
 impl TaskHandler for ReconcilePlaylistTask {
-    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let playlist_id = Task::decode_reconcile_playlist_payload(payload)?;
-        let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
+    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let Task::ReconcilePlaylist { playlist_id } = task else {
+            return Err(unexpected_task(task));
+        };
+        let Ok(playlist_id) = PlaylistId::new(playlist_id.clone()) else {
             return Ok(());
         };
         self.playlist_video_reconciler.reconcile(playlist_id)
@@ -50,7 +52,9 @@ mod tests {
     use crate::domain::show::ShowKey;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::{EpisodeNumber, PlaylistEpisodeNumber, VideoId, VideoRecordId};
+    use crate::domain::video::{
+        EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId, YoutubeVideoId,
+    };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -97,7 +101,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
     };
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::repositories::youtube_thumbnail_repository::FakeThumbnailRepository;
     use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
@@ -107,7 +111,6 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::video_lock::VideoLock;
-    use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
     use std::path::PathBuf;
@@ -135,7 +138,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL404"));
+        let result = run(&task, &task_for("PL404"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -145,20 +148,18 @@ mod tests {
 
     #[test]
     fn it_should_skip_if_invalid_playlist_id_provided() {
-        let result = run(&any_task(), &payload_for(""));
+        let result = run(&any_task(), &task_for(""));
 
         assert_eq!(result, Ok(()));
     }
 
     #[test]
-    fn it_should_reject_a_malformed_payload() {
-        let result = run(&any_task(), "not json");
+    fn it_should_fail_if_handed_another_task() {
+        let result = run(&any_task(), &Task::UpdateYtdlp);
 
         assert_eq!(
             result,
-            Err(
-                "invalid reconcile_playlist payload: expected ident at line 1 column 2".to_string()
-            )
+            Err("unexpected update_ytdlp task for this handler".to_string())
         );
     }
 
@@ -185,7 +186,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -252,7 +253,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -306,8 +307,12 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let existing = Video::create(VideoId::new("vid1").unwrap(), "Original", fixed_timestamp())
-            .start_download(fixed_timestamp());
+        let existing = Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "Original",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -324,7 +329,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -354,7 +359,11 @@ mod tests {
             &existing,
             0,
         );
-        let other = Video::create(VideoId::new("vid2").unwrap(), "Other", fixed_timestamp());
+        let other = Video::create(
+            YoutubeVideoId::new("vid2").unwrap(),
+            "Other",
+            fixed_timestamp(),
+        );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -439,7 +448,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -482,7 +491,11 @@ mod tests {
         ));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let existing = Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp());
+        let existing = Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "One",
+            fixed_timestamp(),
+        );
         let existing_playlist_video = save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -499,7 +512,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -548,7 +561,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -596,7 +609,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -666,7 +679,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![one, two]);
@@ -723,7 +736,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -733,7 +746,6 @@ mod tests {
                     1,
                     &Task::FetchSubtitles {
                         video_id: video.id.as_str().to_string(),
-                        output_dir: "/videos/my-playlist".to_string(),
                     },
                     fixed_timestamp(),
                 ),
@@ -831,7 +843,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -936,7 +948,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1032,7 +1044,7 @@ mod tests {
             verdict_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1056,7 +1068,11 @@ mod tests {
         ));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let _stale = Video::create(VideoId::new("vid1").unwrap(), "Stale", fixed_timestamp());
+        let _stale = Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "Stale",
+            fixed_timestamp(),
+        );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -1073,7 +1089,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1178,7 +1194,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -1204,7 +1220,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let downloaded = Video::create(
-            VideoId::new("vid1").unwrap(),
+            YoutubeVideoId::new("vid1").unwrap(),
             "Downloaded Video",
             fixed_timestamp(),
         )
@@ -1223,7 +1239,7 @@ mod tests {
             0,
         );
         let pending = Video::create(
-            VideoId::new("vid2").unwrap(),
+            YoutubeVideoId::new("vid2").unwrap(),
             "Pending Video",
             fixed_timestamp(),
         );
@@ -1243,7 +1259,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1299,7 +1315,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1329,7 +1345,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1372,7 +1388,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1455,7 +1471,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(playlist_repository.list().unwrap(), vec![]);
@@ -1537,7 +1553,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
@@ -1587,7 +1603,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1642,7 +1658,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1693,7 +1709,7 @@ mod tests {
             video_file_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1711,10 +1727,9 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let event_repository = SqliteEventRepository::new(db.database());
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_thumbnail_result(Some(fetched_thumbnail())),
-        );
+        let thumbnail_repository = Arc::new(FakeThumbnailRepository::with_result(Some(
+            fetched_thumbnail(),
+        )));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
             playlist_repository,
@@ -1775,7 +1790,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
@@ -1793,10 +1808,7 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![]
-        );
+        assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             vec![
@@ -1839,7 +1851,7 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         ));
 
-        let result = run(&task, &payload_for("PL1"));
+        let result = run(&task, &task_for("PL1"));
 
         assert_eq!(result, Ok(()));
         let added = video_repository.list().unwrap()[0].id.clone();
@@ -1923,7 +1935,7 @@ mod tests {
 
         let result = std::thread::scope(|scope| {
             let moving = show_locks.lock(ShowKey::Playlist(playlist_id()));
-            let reconciling = scope.spawn(|| run(&task, &payload_for("PL1")));
+            let reconciling = scope.spawn(|| run(&task, &task_for("PL1")));
             // Gives a reconcile that doesn't wait every chance to run first.
             std::thread::sleep(std::time::Duration::from_millis(100));
             playlist_repository
@@ -2138,7 +2150,11 @@ mod tests {
     }
 
     fn my_video() -> Video {
-        Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+        Video::create(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
     }
 
     /// Its chapters and quality settled, so a sync schedules no chapters fetch or
@@ -2175,11 +2191,15 @@ mod tests {
 
     /// A newly stored playlist video numbered `episode`.
     fn playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
-        Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
-            .with_episode_number(
-                PlaylistEpisodeNumber::new(episode).unwrap().into(),
-                fixed_timestamp(),
-            )
+        Video::create(
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            title,
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            PlaylistEpisodeNumber::new(episode).unwrap().into(),
+            fixed_timestamp(),
+        )
     }
 
     /// A playlist video numbered `episode`, downloaded in the TV-show layout,
@@ -2203,9 +2223,9 @@ mod tests {
         }
     }
 
-    fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
+    fn playlist_item(youtube_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
         YoutubePlaylistItem {
-            video_id: video_id.to_string(),
+            youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             position,
         }
@@ -2235,24 +2255,21 @@ mod tests {
         )
     }
 
-    fn download_video_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+    fn download_video_task(id: i64, video_id: &VideoId) -> ScheduledTask {
         pending_task(
             id,
             &Task::DownloadVideo {
                 video_id: video_id.as_str().to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/my-playlist".to_string(),
             },
             fixed_timestamp(),
         )
     }
 
-    fn fetch_thumbnail_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+    fn fetch_thumbnail_task(id: i64, video_id: &VideoId) -> ScheduledTask {
         pending_task(
             id,
             &Task::FetchThumbnail {
                 video_id: video_id.as_str().to_string(),
-                output_dir: "/videos/my-playlist".to_string(),
             },
             fixed_timestamp(),
         )
@@ -2261,8 +2278,7 @@ mod tests {
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at,
@@ -2299,16 +2315,14 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn payload_for(playlist_id: &str) -> String {
+    fn task_for(playlist_id: &str) -> Task {
         Task::ReconcilePlaylist {
             playlist_id: playlist_id.to_string(),
         }
-        .payload()
-        .to_string()
     }
 
-    fn run(task: &ReconcilePlaylistTask, payload: &str) -> Result<(), String> {
-        task.handle(payload, false).map_err(|e| e.to_string())
+    fn run(task: &ReconcilePlaylistTask, queued: &Task) -> Result<(), String> {
+        task.handle(queued, false).map_err(|e| e.to_string())
     }
 
     fn video_category_assigner(database: Database) -> VideoCategoryAssigner {

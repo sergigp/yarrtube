@@ -1,6 +1,6 @@
 use crate::domain::video::{Video, VideoChapter};
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
+use crate::infrastructure::repositories::youtube_chapter_repository::ChapterRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
@@ -13,19 +13,19 @@ use tracing::warn;
 #[derive(Clone)]
 pub struct ChapterFetcher {
     video_repository: Arc<dyn VideoRepository>,
-    video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    chapter_repository: Arc<dyn ChapterRepository>,
     clock: Arc<dyn Clock>,
 }
 
 impl ChapterFetcher {
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
-        video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        chapter_repository: Arc<dyn ChapterRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             video_repository,
-            video_downloader_repository,
+            chapter_repository,
             clock,
         }
     }
@@ -62,7 +62,7 @@ impl ChapterFetcher {
 
     fn fetch_and_record(&self, video: &Video) -> anyhow::Result<()> {
         let probe = self
-            .video_downloader_repository
+            .chapter_repository
             .fetch_chapters(&video.youtube_id.to_url())?;
         self.record_check(video, Some(probe.chapters), probe.published_at)
     }

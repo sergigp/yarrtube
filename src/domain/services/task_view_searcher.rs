@@ -1,7 +1,7 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::task::{ScheduledTask, Task, TaskView};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -61,10 +61,10 @@ impl TaskViewSearcherApi for TaskViewSearcher {
 
 impl TaskViewSearcher {
     fn to_view(&self, task: ScheduledTask) -> anyhow::Result<TaskView> {
-        let payload = self.resolve_payload(&task)?;
+        let payload = self.resolve_payload(&task.task)?;
         Ok(TaskView {
             id: task.id,
-            task_type: task.task_type,
+            task_type: task.task.task_type().to_string(),
             status: task.status,
             retries: task.retries,
             run_at: task.run_at,
@@ -74,28 +74,37 @@ impl TaskViewSearcher {
         })
     }
 
-    fn resolve_payload(&self, task: &ScheduledTask) -> anyhow::Result<HashMap<String, String>> {
-        match task.task_type.as_str() {
-            "reconcile_playlist" => self.resolve_reconcile_playlist(&task.payload),
-            "reconcile_channel" => self.resolve_reconcile_channel(&task.payload),
-            "download_video" => self.resolve_download_video(&task.payload),
-            "fetch_thumbnail" => self.resolve_fetch_thumbnail(&task.payload),
-            "fetch_subtitles" => self.resolve_fetch_subtitles(&task.payload),
-            "fetch_chapters" => self.resolve_fetch_chapters(&task.payload),
-            "summarize_video" => self.resolve_summarize_video(&task.payload),
-            "categorize_video" => self.resolve_categorize_video(&task.payload),
-            "upgrade_quality" => self.resolve_upgrade_quality(&task.payload),
-            "sync_video" => self.resolve_sync_video(&task.payload),
-            "delete_video_file" => self.resolve_delete_video_file(&task.payload),
-            "delete_playlist_files" => self.resolve_delete_playlist_files(&task.payload),
-            "delete_channel_files" => self.resolve_delete_channel_files(&task.payload),
-            _ => Ok(HashMap::new()),
+    fn resolve_payload(&self, task: &Task) -> anyhow::Result<HashMap<String, String>> {
+        match task {
+            Task::ReconcilePlaylist { playlist_id } => self.resolve_reconcile_playlist(playlist_id),
+            Task::ReconcileChannel { channel_id } => self.resolve_reconcile_channel(channel_id),
+            Task::DownloadVideo { video_id, .. }
+            | Task::FetchThumbnail { video_id, .. }
+            | Task::FetchSubtitles { video_id, .. }
+            | Task::FetchChapters { video_id }
+            | Task::SummarizeVideo { video_id }
+            | Task::CategorizeVideo { video_id }
+            | Task::UpgradeQuality { video_id, .. }
+            | Task::SyncVideo { video_id } => self.resolve_video(VideoId::new(video_id.clone())?),
+            Task::DeleteVideoFile { filename, .. } => Ok(filename
+                .iter()
+                .map(|filename| ("filename".to_string(), filename.clone()))
+                .collect()),
+            Task::DeletePlaylistFiles { path, .. } | Task::DeleteChannelFiles { path, .. } => {
+                Ok(HashMap::from([("path".to_string(), path.clone())]))
+            }
+            Task::UpdateYtdlp | Task::SyncPlexLabels | Task::Unreadable { .. } => {
+                Ok(HashMap::new())
+            }
         }
     }
 
-    fn resolve_reconcile_playlist(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
+    fn resolve_reconcile_playlist(
+        &self,
+        playlist_id: &str,
+    ) -> anyhow::Result<HashMap<String, String>> {
         let mut view = HashMap::new();
-        let playlist_id = PlaylistId::new(Task::decode_reconcile_playlist_payload(payload)?)?;
+        let playlist_id = PlaylistId::new(playlist_id.to_string())?;
         view.insert("playlist_id".to_string(), playlist_id.as_str().to_string());
         if let Some(playlist) = self.playlist_repository.find(&playlist_id)? {
             view.insert(
@@ -106,9 +115,12 @@ impl TaskViewSearcher {
         Ok(view)
     }
 
-    fn resolve_reconcile_channel(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
+    fn resolve_reconcile_channel(
+        &self,
+        channel_id: &str,
+    ) -> anyhow::Result<HashMap<String, String>> {
         let mut view = HashMap::new();
-        let channel_id = ChannelHandle::new(Task::decode_reconcile_channel_payload(payload)?)?;
+        let channel_id = ChannelHandle::new(channel_id.to_string())?;
         view.insert("channel_id".to_string(), channel_id.as_str().to_string());
         if let Some(channel) = self.channel_repository.find(&channel_id)? {
             view.insert("channel_name".to_string(), channel.name.clone());
@@ -116,49 +128,9 @@ impl TaskViewSearcher {
         Ok(view)
     }
 
-    fn resolve_download_video(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let (video_id, _quality, _output_dir) = Task::decode_download_video_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
-    fn resolve_fetch_thumbnail(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let (video_id, _output_dir) = Task::decode_fetch_thumbnail_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
-    fn resolve_fetch_subtitles(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let (video_id, _output_dir) = Task::decode_fetch_subtitles_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
-    fn resolve_fetch_chapters(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let video_id = Task::decode_fetch_chapters_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
-    fn resolve_summarize_video(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let video_id = Task::decode_summarize_video_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
-    fn resolve_categorize_video(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let video_id = Task::decode_categorize_video_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
-    fn resolve_upgrade_quality(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let (video_id, _, _) = Task::decode_upgrade_quality_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
-    fn resolve_sync_video(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let video_id = Task::decode_sync_video_payload(payload)?;
-        self.resolve_video(VideoRecordId::new(video_id)?)
-    }
-
     /// The video's title, plus the name of the playlist or channel it
     /// belongs to.
-    fn resolve_video(&self, video_id: VideoRecordId) -> anyhow::Result<HashMap<String, String>> {
+    fn resolve_video(&self, video_id: VideoId) -> anyhow::Result<HashMap<String, String>> {
         let mut view = HashMap::new();
 
         if let Some(video) = self.video_repository.find(&video_id)? {
@@ -179,35 +151,6 @@ impl TaskViewSearcher {
             view.insert("channel_name".to_string(), channel.name.clone());
         }
 
-        Ok(view)
-    }
-
-    fn resolve_delete_video_file(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let mut view = HashMap::new();
-        let payload = Task::decode_delete_video_file_payload(payload)?;
-        if let Some(filename) = payload.filename {
-            view.insert("filename".to_string(), filename);
-        }
-        Ok(view)
-    }
-
-    fn resolve_delete_playlist_files(
-        &self,
-        payload: &str,
-    ) -> anyhow::Result<HashMap<String, String>> {
-        let mut view = HashMap::new();
-        let (_playlist_id, path) = Task::decode_delete_playlist_files_payload(payload)?;
-        view.insert("path".to_string(), path);
-        Ok(view)
-    }
-
-    fn resolve_delete_channel_files(
-        &self,
-        payload: &str,
-    ) -> anyhow::Result<HashMap<String, String>> {
-        let mut view = HashMap::new();
-        let (_channel_id, path) = Task::decode_delete_channel_files_payload(payload)?;
-        view.insert("path".to_string(), path);
         Ok(view)
     }
 }

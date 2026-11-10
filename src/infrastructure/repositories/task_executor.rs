@@ -51,8 +51,8 @@ impl Slot {
     fn for_task(task: &ScheduledTask) -> Self {
         Self {
             task_id: task.id,
-            lane: Task::lane_for(&task.task_type),
-            key: Task::exclusivity_key(&task.task_type, &task.payload),
+            lane: task.task.lane(),
+            key: task.task.exclusivity_key(),
         }
     }
 }
@@ -124,7 +124,7 @@ impl TaskExecutor {
         let eligible = self.repository.list_eligible()?;
         match eligible
             .iter()
-            .find(|task| Task::lane_for(&task.task_type) == TaskLane::Exclusive)
+            .find(|task| task.task.lane() == TaskLane::Exclusive)
         {
             Some(exclusive) => self.start_exclusive(&mut state, exclusive),
             None => self.start_fitting(&mut state, &eligible),
@@ -263,7 +263,11 @@ impl TaskExecutor {
     /// success, retried or dead-lettered on failure.
     fn execute(&self, running: ScheduledTask) -> anyhow::Result<()> {
         let id = running.id;
-        info!(task_id = id, task_type = %running.task_type, "dispatching task");
+        info!(
+            task_id = id,
+            task_type = running.task.task_type(),
+            "dispatching task"
+        );
         match self.dispatch(&running) {
             Ok(()) => {
                 self.repository.delete(id)?;
@@ -275,16 +279,23 @@ impl TaskExecutor {
     }
 
     /// A handler that panics counts as a failed attempt, like one that
-    /// returns an error, so its task is retried or dead-lettered.
+    /// returns an error, so its task is retried or dead-lettered. So does an
+    /// unreadable task: it is never dropped, it ends up dead-lettered.
     fn dispatch(&self, running: &ScheduledTask) -> anyhow::Result<()> {
-        let Some(handler) = self.handlers.get(&running.task_type) else {
-            return Err(anyhow::anyhow!(
+        if let Task::Unreadable {
+            task_type, error, ..
+        } = &running.task
+        {
+            anyhow::bail!("invalid {task_type} task: {error}");
+        }
+        let Some(handler) = self.handlers.get(running.task.task_type()) else {
+            anyhow::bail!(
                 "no handler registered for task type '{}'",
-                running.task_type
-            ));
+                running.task.task_type()
+            );
         };
         panic::catch_unwind(AssertUnwindSafe(|| {
-            handler.handle(&running.payload, running.is_last_attempt())
+            handler.handle(&running.task, running.is_last_attempt())
         }))
         .unwrap_or_else(|payload| {
             Err(anyhow::anyhow!(
@@ -1147,7 +1158,7 @@ mod tests {
         registry.insert(
             "reconcile_playlist".to_string(),
             Arc::new(PanickingHandler {
-                panics_on: reconcile("PL1").payload().to_string(),
+                panics_on: reconcile("PL1"),
             }),
         );
         let executor = Arc::new(TaskExecutor::new(
@@ -1245,6 +1256,82 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_retry_an_unreadable_task_without_handing_it_to_a_handler() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&unreadable(), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        ));
+
+        let result = run_pass(&executor).await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            Vec::<bool>::new()
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                retries: 1,
+                run_at: now() + chrono::Duration::seconds(450),
+                last_error: Some(
+                    "invalid reconcile_playlist task: missing field `playlist_id`".to_string()
+                ),
+                ..pending(1, &unreadable())
+            }]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_dead_letter_an_unreadable_task_on_the_fifth_attempt() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&unreadable(), now()).unwrap();
+        task_repository
+            .update(&ScheduledTask {
+                retries: 4,
+                ..pending(1, &unreadable())
+            })
+            .unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        ));
+
+        let result = run_pass(&executor).await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            Vec::<ScheduledTask>::new()
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            vec![DeadLetteredTask {
+                task: unreadable(),
+                ..dead_lettered_task("invalid reconcile_playlist task: missing field `playlist_id`")
+            }]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -1262,8 +1349,7 @@ mod tests {
     fn pending_task(retries: i64) -> ScheduledTask {
         ScheduledTask {
             id: 1,
-            task_type: task().task_type().to_string(),
-            payload: task().payload().to_string(),
+            task: task(),
             status: TaskStatus::Pending,
             retries,
             run_at: now(),
@@ -1273,18 +1359,25 @@ mod tests {
         }
     }
 
+    /// A stored `reconcile_playlist` row missing its playlist ID, as the
+    /// repository reads it back.
+    fn unreadable() -> Task {
+        Task::Unreadable {
+            task_type: "reconcile_playlist".to_string(),
+            payload: "{}".to_string(),
+            error: "missing field `playlist_id`".to_string(),
+        }
+    }
+
     fn download(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 
     fn fetch_thumbnail(video_id: &str) -> Task {
         Task::FetchThumbnail {
             video_id: video_id.to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
         }
     }
 
@@ -1303,8 +1396,7 @@ mod tests {
     fn pending(id: i64, task: &Task) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at: now(),
@@ -1347,8 +1439,7 @@ mod tests {
     fn dead_lettered_task(last_error: &str) -> DeadLetteredTask {
         DeadLetteredTask {
             original_task_id: 1,
-            task_type: task().task_type().to_string(),
-            payload: task().payload().to_string(),
+            task: task(),
             retries: 5,
             last_error: last_error.to_string(),
             created_at: now(),
@@ -1381,29 +1472,26 @@ mod tests {
         .collect()
     }
 
-    /// Records every payload it handles, and holds a task whose payload has
-    /// a gate until that gate is opened (or dropped).
+    /// Records every task it handles, and holds a task that has a gate
+    /// until that gate is opened (or dropped).
     #[derive(Default)]
     struct BlockingHandler {
-        started: Mutex<Vec<String>>,
-        gates: Mutex<HashMap<String, Receiver<()>>>,
+        started: Mutex<Vec<Task>>,
+        gates: Mutex<HashMap<Task, Receiver<()>>>,
     }
 
     impl BlockingHandler {
         fn gate(&self, task: &Task) -> Sender<()> {
             let (sender, receiver) = channel();
-            self.gates
-                .lock()
-                .unwrap()
-                .insert(task.payload().to_string(), receiver);
+            self.gates.lock().unwrap().insert(task.clone(), receiver);
             sender
         }
     }
 
     impl TaskHandler for BlockingHandler {
-        fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-            self.started.lock().unwrap().push(payload.to_string());
-            let gate = self.gates.lock().unwrap().remove(payload);
+        fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+            self.started.lock().unwrap().push(task.clone());
+            let gate = self.gates.lock().unwrap().remove(task);
             if let Some(gate) = gate {
                 let _ = gate.recv();
             }
@@ -1411,14 +1499,14 @@ mod tests {
         }
     }
 
-    /// Panics on the task whose payload is `panics_on`, succeeds otherwise.
+    /// Panics on the task `panics_on`, succeeds otherwise.
     struct PanickingHandler {
-        panics_on: String,
+        panics_on: Task,
     }
 
     impl TaskHandler for PanickingHandler {
-        fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-            if payload == self.panics_on {
+        fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+            if *task == self.panics_on {
                 panic!("boom");
             }
             Ok(())
@@ -1458,7 +1546,7 @@ mod tests {
     }
 
     impl TaskHandler for FakeHandler {
-        fn handle(&self, _payload: &str, is_last_attempt: bool) -> anyhow::Result<()> {
+        fn handle(&self, _task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
             self.received_is_last_attempt
                 .lock()
                 .unwrap()

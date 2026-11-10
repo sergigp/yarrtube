@@ -14,7 +14,7 @@ use crate::domain::services::{
 };
 use crate::domain::video::{
     HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, UpdateWatchStateError,
-    VideoDuration, VideoId, VideoRecordId, VideoSearchText, WebVtt,
+    VideoDuration, VideoId, VideoSearchText, WebVtt,
 };
 use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
@@ -108,10 +108,10 @@ pub async fn search_videos(
 
 pub async fn record_video_progress(
     State(video_watch_state_updater): State<VideoWatchStateUpdater>,
-    Path(youtube_id): Path<String>,
+    Path(id): Path<String>,
     Json(request): Json<RecordProgressRequest>,
 ) -> Result<Json<RecordProgressResponse>, ApiError> {
-    let youtube_id = VideoId::new(youtube_id)?;
+    let id = VideoId::new(id)?;
     let position = PlaybackPosition::new(required(request.position_seconds, MISSING_POSITION)?)?;
     let reported_duration = request
         .duration_seconds
@@ -120,7 +120,7 @@ pub async fn record_video_progress(
     let was_watched = required(request.was_watched, MISSING_WAS_WATCHED)?;
 
     let watched = run_blocking(move || {
-        video_watch_state_updater.update(&youtube_id, position, reported_duration, was_watched)
+        video_watch_state_updater.update(&id, position, reported_duration, was_watched)
     })
     .await?
     .map_err(update_watch_state_error)?;
@@ -130,38 +130,24 @@ pub async fn record_video_progress(
 
 pub async fn mark_video_watched(
     State(video_watch_state_updater): State<VideoWatchStateUpdater>,
-    Path(youtube_id): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let youtube_id = VideoId::new(youtube_id)?;
+    let id = VideoId::new(id)?;
 
-    run_blocking(move || video_watch_state_updater.mark_video_watched(&youtube_id))
+    run_blocking(move || video_watch_state_updater.mark_video_watched(&id))
         .await?
         .map_err(update_watch_state_error)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn get_playlist_video_subtitles(
+pub async fn get_video_subtitles(
     State(subtitle_reader): State<SubtitleReader>,
-    Path((playlist_id, youtube_id)): Path<(String, String)>,
+    Path(id): Path<String>,
 ) -> Result<VttResponse, ApiError> {
-    let playlist_id = PlaylistId::new(playlist_id)?;
-    let youtube_id = VideoId::new(youtube_id)?;
+    let id = VideoId::new(id)?;
 
-    let vtt = run_blocking(move || subtitle_reader.read_for_playlist(&playlist_id, &youtube_id))
-        .await?
-        .map_err(read_subtitles_error)?;
-    Ok(vtt_response(vtt))
-}
-
-pub async fn get_channel_video_subtitles(
-    State(subtitle_reader): State<SubtitleReader>,
-    Path((handle, youtube_id)): Path<(String, String)>,
-) -> Result<VttResponse, ApiError> {
-    let channel_id = ChannelHandle::new(handle)?;
-    let youtube_id = VideoId::new(youtube_id)?;
-
-    let vtt = run_blocking(move || subtitle_reader.read_for_channel(&channel_id, &youtube_id))
+    let vtt = run_blocking(move || subtitle_reader.read(&id))
         .await?
         .map_err(read_subtitles_error)?;
     Ok(vtt_response(vtt))
@@ -171,7 +157,7 @@ pub async fn list_video_categories(
     State(video_category_choice_searcher): State<VideoCategoryChoiceSearcher>,
     Path(id): Path<String>,
 ) -> Result<Json<VideoCategoriesResponse>, ApiError> {
-    let id = VideoRecordId::new(id)?;
+    let id = VideoId::new(id)?;
 
     let choices = run_blocking(move || video_category_choice_searcher.search(&id))
         .await?
@@ -185,7 +171,7 @@ pub async fn set_video_category(
     Path((id, category_id)): Path<(String, String)>,
     Json(request): Json<SetVideoCategoryRequest>,
 ) -> Result<Json<VideoCategoriesResponse>, ApiError> {
-    let id = VideoRecordId::new(id)?;
+    let id = VideoId::new(id)?;
     let category_id = CategoryId::new(category_id)?;
     let belongs = required(
         request
@@ -208,7 +194,7 @@ pub async fn delete_video_ai_verdicts(
     State(video_category_editor): State<VideoCategoryEditor>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let id = VideoRecordId::new(id)?;
+    let id = VideoId::new(id)?;
 
     run_blocking(move || video_category_editor.rerun_video(&id))
         .await?
@@ -251,8 +237,6 @@ fn list_videos_error(error: ListVideosError) -> ApiError {
 
 fn read_subtitles_error(error: ReadSubtitlesError) -> ApiError {
     match error {
-        e @ ReadSubtitlesError::PlaylistNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
-        e @ ReadSubtitlesError::ChannelNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
         e @ ReadSubtitlesError::VideoNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
         e @ ReadSubtitlesError::SubtitlesNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
         e @ ReadSubtitlesError::Repository(_) => ApiError::internal(e),
@@ -278,7 +262,7 @@ mod tests {
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoRecordId};
+    use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoId, YoutubeVideoId};
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
     use crate::domain::video_metadata::VideoMetadata;
@@ -342,7 +326,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_summary_when_listing_playlist_videos() {
         let db = TestDatabase::new();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -366,7 +354,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_when_ai_is_off() {
         let db = TestDatabase::new();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -400,7 +392,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_when_summaries_are_off() {
         let db = TestDatabase::new();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -427,7 +423,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_of_a_playlist_with_summaries_off() {
         let db = TestDatabase::new();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         SqlitePlaylistRepository::new(db.database())
@@ -448,7 +448,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_summary_when_listing_channel_videos() {
         let db = TestDatabase::new();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@somechannel", None).with_summaries_enabled(true))
             .unwrap();
@@ -476,7 +480,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_hide_the_summary_of_a_channel_with_summaries_off() {
         let db = TestDatabase::new();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@somechannel", None))
             .unwrap();
@@ -510,7 +518,11 @@ mod tests {
             &video_repository,
             &playlist_video_repository,
             "PL1",
-            &new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp()),
+            &new_video(
+                YoutubeVideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            ),
         );
         save_preferences(&db, summaries_on());
 
@@ -523,10 +535,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_record_id_when_listing_category_videos() {
+    async fn it_should_include_the_video_id_when_listing_category_videos() {
         let db = TestDatabase::new();
         let video = Video {
-            id: VideoRecordId::new("rec1").unwrap(),
+            id: VideoId::new("rec1").unwrap(),
             ..downloaded_video("vid1", "My Video", None, 10)
         };
         SqliteChannelRepository::new(db.database())
@@ -546,7 +558,7 @@ mod tests {
         assert_eq!(
             response,
             Ok(vec![CategoryVideoResponse {
-                record_id: "rec1".to_string(),
+                id: "rec1".to_string(),
                 ..category_video_in(
                     category_video_response("vid1", "My Video", 10, channel_source(None)),
                     &[&chess]
@@ -701,7 +713,11 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -731,15 +747,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_record_id_when_listing_playlist_videos() {
+    async fn it_should_include_the_video_id_when_listing_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video {
-            id: VideoRecordId::new("rec1").unwrap(),
-            ..new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+            id: VideoId::new("rec1").unwrap(),
+            ..new_video(
+                YoutubeVideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
         };
         save_playlist_video(
             video_repository.as_ref(),
@@ -766,7 +786,7 @@ mod tests {
         assert_eq!(
             response,
             Ok(vec![VideoResponse {
-                record_id: "rec1".to_string(),
+                id: "rec1".to_string(),
                 ..pending_video_response("vid1", "My Video")
             }])
         );
@@ -779,15 +799,19 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
-            .start_download(fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                "My Video.mp4",
-                Some("My Video.jpg".to_string()),
-                Some(223),
-                fixed_timestamp(),
-            );
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(
+            Quality::High,
+            "My Video.mp4",
+            Some("My Video.jpg".to_string()),
+            Some(223),
+            fixed_timestamp(),
+        );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -832,9 +856,13 @@ mod tests {
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let synced_at = DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
-            .start_download(fixed_timestamp())
-            .mark_downloaded(Quality::High, "My Video.mp4", None, None, synced_at);
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(Quality::High, "My Video.mp4", None, None, synced_at);
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -879,9 +907,13 @@ mod tests {
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let video_dir = tempfile::tempdir().unwrap();
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
-            .start_download(fixed_timestamp())
-            .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -933,8 +965,12 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
-            .with_chapters(game_chapters(), fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .with_chapters(game_chapters(), fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -974,7 +1010,11 @@ mod tests {
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -1020,7 +1060,11 @@ mod tests {
             ("vid_first", "First", 0),
             ("vid_second", "Second", 1),
         ] {
-            let video = new_video(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
+            let video = new_video(
+                YoutubeVideoId::new(youtube_id).unwrap(),
+                title,
+                fixed_timestamp(),
+            );
             video_repository.save(&video).unwrap();
             playlist_video_repository
                 .save(&PlaylistVideo::create(
@@ -1067,7 +1111,7 @@ mod tests {
         for (video, position) in [
             (
                 new_video(
-                    VideoId::new("vid_watched").unwrap(),
+                    YoutubeVideoId::new("vid_watched").unwrap(),
                     "Watched",
                     fixed_timestamp(),
                 )
@@ -1078,7 +1122,7 @@ mod tests {
                 Video {
                     playback_position: PlaybackPosition::new(42).unwrap(),
                     ..new_video(
-                        VideoId::new("vid_partly").unwrap(),
+                        YoutubeVideoId::new("vid_partly").unwrap(),
                         "Partly",
                         fixed_timestamp(),
                     )
@@ -1159,9 +1203,13 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let kept = new_video(VideoId::new("vid_kept").unwrap(), "Kept", fixed_timestamp());
+        let kept = new_video(
+            YoutubeVideoId::new("vid_kept").unwrap(),
+            "Kept",
+            fixed_timestamp(),
+        );
         let excluded = new_video(
-            VideoId::new("vid_excluded").unwrap(),
+            YoutubeVideoId::new("vid_excluded").unwrap(),
             "Excluded",
             fixed_timestamp(),
         )
@@ -1252,7 +1300,11 @@ mod tests {
         for (youtube_id, title, position) in
             [("vid_newest", "Newest", 0), ("vid_oldest", "Oldest", 1)]
         {
-            let video = new_video(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
+            let video = new_video(
+                YoutubeVideoId::new(youtube_id).unwrap(),
+                title,
+                fixed_timestamp(),
+            );
             save_channel_video(
                 video_repository.as_ref(),
                 channel_video_repository.as_ref(),
@@ -1296,13 +1348,16 @@ mod tests {
             .insert(&channel("@somechannel", None))
             .unwrap();
         let unchecked = new_video(
-            VideoId::new("vid1").unwrap(),
+            YoutubeVideoId::new("vid1").unwrap(),
             "Unchecked",
             fixed_timestamp(),
         );
-        let without_chapters =
-            new_video(VideoId::new("vid2").unwrap(), "Without", fixed_timestamp())
-                .with_chapters(vec![], fixed_timestamp());
+        let without_chapters = new_video(
+            YoutubeVideoId::new("vid2").unwrap(),
+            "Without",
+            fixed_timestamp(),
+        )
+        .with_chapters(vec![], fixed_timestamp());
         [&unchecked, &without_chapters]
             .into_iter()
             .enumerate()
@@ -1351,9 +1406,13 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
-            .start_download(fixed_timestamp())
-            .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .start_download(fixed_timestamp())
+        .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -1413,7 +1472,7 @@ mod tests {
             channel_video_repository.as_ref(),
             "@somechannel",
             &new_video(
-                VideoId::new("vid_watched").unwrap(),
+                YoutubeVideoId::new("vid_watched").unwrap(),
                 "Watched",
                 fixed_timestamp(),
             )
@@ -1427,7 +1486,7 @@ mod tests {
             &Video {
                 playback_position: PlaybackPosition::new(42).unwrap(),
                 ..new_video(
-                    VideoId::new("vid_partly").unwrap(),
+                    YoutubeVideoId::new("vid_partly").unwrap(),
                     "Partly",
                     fixed_timestamp(),
                 )
@@ -1501,9 +1560,13 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
-        let kept = new_video(VideoId::new("vid_kept").unwrap(), "Kept", fixed_timestamp());
+        let kept = new_video(
+            YoutubeVideoId::new("vid_kept").unwrap(),
+            "Kept",
+            fixed_timestamp(),
+        );
         let excluded = new_video(
-            VideoId::new("vid_excluded").unwrap(),
+            YoutubeVideoId::new("vid_excluded").unwrap(),
             "Excluded",
             fixed_timestamp(),
         )
@@ -1626,7 +1689,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_record_id_on_home() {
+    async fn it_should_include_the_video_id_on_home() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
@@ -1637,7 +1700,7 @@ mod tests {
             playlist_video_repository.as_ref(),
             "PL1",
             &Video {
-                id: VideoRecordId::new("rec1").unwrap(),
+                id: VideoId::new("rec1").unwrap(),
                 ..video_lasting("vid1", "Long", Some(3600), 100)
             },
         );
@@ -1661,7 +1724,7 @@ mod tests {
             response,
             Ok(HomeResponse {
                 latest: vec![HomeVideoResponse {
-                    record_id: "rec1".to_string(),
+                    id: "rec1".to_string(),
                     duration_seconds: Some(3600),
                     ..home_video_response("vid1", "Long", playlist_source())
                 }],
@@ -2288,7 +2351,7 @@ mod tests {
         let highlights = named_category("Highlights", &[playlist_member("PL1")]);
         category_repository.insert(&chess).unwrap();
         category_repository.insert(&highlights).unwrap();
-        // `shared` is one record held by both sources, so in both categories.
+        // `shared` is one video held by both sources, so in both categories.
         categorize_source(&db, &channel_member("@somechannel"), &[&chess, &highlights]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -2561,7 +2624,7 @@ mod tests {
             &Video {
                 duration_seconds: Some(600),
                 ..new_video(
-                    VideoId::new("vid_pending").unwrap(),
+                    YoutubeVideoId::new("vid_pending").unwrap(),
                     "Pending",
                     fixed_timestamp(),
                 )
@@ -2598,7 +2661,7 @@ mod tests {
             playlist_video_repository.as_ref(),
             "PL1",
             &new_video(
-                VideoId::new("vid_excluded").unwrap(),
+                YoutubeVideoId::new("vid_excluded").unwrap(),
                 "Excluded",
                 fixed_timestamp(),
             )
@@ -3495,7 +3558,7 @@ mod tests {
             playlist_video_repository.as_ref(),
             "PL1",
             &new_video(
-                VideoId::new("vid1").unwrap(),
+                YoutubeVideoId::new("vid1").unwrap(),
                 "Chess Tactics",
                 fixed_timestamp(),
             ),
@@ -3640,7 +3703,7 @@ mod tests {
         );
         let request = progress_request(30);
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
@@ -3671,7 +3734,7 @@ mod tests {
         );
         let request = progress_request(95);
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
@@ -3705,7 +3768,7 @@ mod tests {
         );
         let request = progress_request(90);
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
@@ -3740,7 +3803,7 @@ mod tests {
             ..progress_request(95)
         };
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
@@ -3771,7 +3834,7 @@ mod tests {
         );
         let request = progress_request(500);
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
@@ -3805,7 +3868,7 @@ mod tests {
             ..progress_request(11)
         };
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
@@ -3840,7 +3903,7 @@ mod tests {
             ..progress_request(95)
         };
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
@@ -3866,7 +3929,7 @@ mod tests {
             .unwrap();
         let channel_copy = video_with_duration("vid1", Some(100));
         let playlist_copy = Video {
-            id: VideoRecordId::new("rec-vid1-playlist").unwrap(),
+            id: VideoId::new("rec-vid1-playlist").unwrap(),
             ..video_with_duration("vid1", Some(100))
         };
         save_channel_video(
@@ -3894,7 +3957,7 @@ mod tests {
         );
         let request = progress_request(40);
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
@@ -3935,7 +3998,7 @@ mod tests {
             ..progress_request(10)
         };
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
@@ -3968,7 +4031,7 @@ mod tests {
             ..progress_request(40)
         };
 
-        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -4083,7 +4146,7 @@ mod tests {
             category_video_collector(&db),
         );
 
-        let response = mark_watched(video_watch_state_updater, "vid1").await;
+        let response = mark_watched(video_watch_state_updater, "rec-vid1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
@@ -4110,7 +4173,7 @@ mod tests {
             .unwrap();
         let channel_copy = video_with_duration("vid1", Some(100));
         let playlist_copy = Video {
-            id: VideoRecordId::new("rec-vid1-playlist").unwrap(),
+            id: VideoId::new("rec-vid1-playlist").unwrap(),
             ..video_with_duration("vid1", Some(100))
         };
         save_channel_video(
@@ -4137,7 +4200,7 @@ mod tests {
             category_video_collector(&db),
         );
 
-        let response = mark_watched(video_watch_state_updater, "vid1").await;
+        let response = mark_watched(video_watch_state_updater, "rec-vid1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
@@ -4172,7 +4235,7 @@ mod tests {
             category_video_collector(&db),
         );
 
-        let response = mark_watched(video_watch_state_updater, "vid1").await;
+        let response = mark_watched(video_watch_state_updater, "rec-vid1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
@@ -4203,7 +4266,7 @@ mod tests {
             category_video_collector(&db),
         );
 
-        let response = mark_watched(video_watch_state_updater, "vid1").await;
+        let response = mark_watched(video_watch_state_updater, "rec-vid1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -4213,7 +4276,11 @@ mod tests {
     async fn it_should_fail_to_mark_watched_a_video_not_downloaded() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
@@ -4226,11 +4293,11 @@ mod tests {
             category_video_collector(&db),
         );
 
-        let response = mark_watched(video_watch_state_updater, "vid1").await;
+        let response = mark_watched(video_watch_state_updater, "rec-vid1").await;
 
         assert_eq!(
             response,
-            Err(ApiError::bad_request("video vid1 is not downloaded"))
+            Err(ApiError::bad_request("video rec-vid1 is not downloaded"))
         );
         assert_eq!(video_repository.list().unwrap(), vec![video]);
     }
@@ -4264,38 +4331,29 @@ mod tests {
 
         assert_eq!(
             response,
-            Err(ApiError::bad_request("YouTube video ID must not be empty"))
+            Err(ApiError::bad_request("Video ID must not be empty"))
         );
     }
 
     #[tokio::test]
     async fn it_should_serve_a_playlist_videos_subtitles_as_web_vtt() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
         save_playlist_video(
-            video_repository.as_ref(),
-            playlist_video_repository.as_ref(),
+            &video_repository,
+            &playlist_video_repository,
             "PL1",
             &video_with_subtitles("vid1"),
         );
-        let video_file_repository = Arc::new(
-            FakeVideoFileRepository::default()
-                .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT),
-        );
-        let subtitle_reader = SubtitleReader::new(
-            playlist_repository,
-            playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            video_repository,
-            video_file_repository,
-            VIDEOS_ROOT,
-        );
+        let video_file_repository = FakeVideoFileRepository::default()
+            .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT);
+        let subtitle_reader = subtitle_reader(&db, video_file_repository);
 
-        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
+        let response = subtitles(subtitle_reader, "rec-vid1").await;
 
         assert_eq!(response, Ok(vtt_body(VTT)));
     }
@@ -4303,34 +4361,67 @@ mod tests {
     #[tokio::test]
     async fn it_should_serve_a_channel_videos_subtitles_as_web_vtt() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        channel_repository
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
             .insert(&channel("@somechannel", None))
             .unwrap();
         save_channel_video(
-            video_repository.as_ref(),
-            channel_video_repository.as_ref(),
+            &video_repository,
+            &channel_video_repository,
             "@somechannel",
             &video_with_subtitles("vid1"),
             0,
         );
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default().with_file(
+        let video_file_repository = FakeVideoFileRepository::default().with_file(
             format!("{VIDEOS_ROOT}/creators/somechannel/{SUBTITLE_FILENAME}"),
             SRT,
-        ));
-        let subtitle_reader = SubtitleReader::new(
-            Arc::new(SqlitePlaylistRepository::new(db.database())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            channel_repository,
-            channel_video_repository,
-            video_repository,
-            video_file_repository,
-            VIDEOS_ROOT,
         );
+        let subtitle_reader = subtitle_reader(&db, video_file_repository);
 
-        let response = channel_subtitles(subtitle_reader, "@somechannel", "vid1").await;
+        let response = subtitles(subtitle_reader, "rec-vid1").await;
+
+        assert_eq!(response, Ok(vtt_body(VTT)));
+    }
+
+    #[tokio::test]
+    async fn it_should_serve_the_subtitles_of_the_requested_copy() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &Video {
+                id: VideoId::new("playlist-copy").unwrap(),
+                ..downloaded_video("vid1", "My Video", None, 1_700_000_000)
+            },
+        );
+        save_channel_video(
+            &video_repository,
+            &channel_video_repository,
+            "@somechannel",
+            &Video {
+                id: VideoId::new("channel-copy").unwrap(),
+                ..video_with_subtitles("vid1")
+            },
+            0,
+        );
+        let video_file_repository = FakeVideoFileRepository::default().with_file(
+            format!("{VIDEOS_ROOT}/creators/somechannel/{SUBTITLE_FILENAME}"),
+            SRT,
+        );
+        let subtitle_reader = subtitle_reader(&db, video_file_repository);
+
+        let response = subtitles(subtitle_reader, "channel-copy").await;
 
         assert_eq!(response, Ok(vtt_body(VTT)));
     }
@@ -4338,37 +4429,28 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_serve_subtitles_if_not_fetched() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
         save_playlist_video(
-            video_repository.as_ref(),
-            playlist_video_repository.as_ref(),
+            &video_repository,
+            &playlist_video_repository,
             "PL1",
             &downloaded_video("vid1", "My Video", None, 1_700_000_000),
         );
-        let video_file_repository = Arc::new(
-            FakeVideoFileRepository::default()
-                .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT),
-        );
-        let subtitle_reader = SubtitleReader::new(
-            playlist_repository,
-            playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            video_repository,
-            video_file_repository,
-            VIDEOS_ROOT,
-        );
+        let video_file_repository = FakeVideoFileRepository::default()
+            .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT);
+        let subtitle_reader = subtitle_reader(&db, video_file_repository);
 
-        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
+        let response = subtitles(subtitle_reader, "rec-vid1").await;
 
         assert_eq!(
             response,
             Err(ApiError::new(
                 StatusCode::NOT_FOUND,
-                "video vid1 has no subtitles"
+                "video rec-vid1 has no subtitles"
             ))
         );
     }
@@ -4376,128 +4458,79 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_serve_subtitles_if_file_missing() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
         save_playlist_video(
-            video_repository.as_ref(),
-            playlist_video_repository.as_ref(),
+            &video_repository,
+            &playlist_video_repository,
             "PL1",
             &video_with_subtitles("vid1"),
         );
-        let subtitle_reader = SubtitleReader::new(
-            playlist_repository,
-            playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            video_repository,
-            Arc::new(FakeVideoFileRepository::default()),
-            VIDEOS_ROOT,
-        );
+        let subtitle_reader = subtitle_reader(&db, FakeVideoFileRepository::default());
 
-        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
+        let response = subtitles(subtitle_reader, "rec-vid1").await;
 
         assert_eq!(
             response,
             Err(ApiError::new(
                 StatusCode::NOT_FOUND,
-                "video vid1 has no subtitles"
+                "video rec-vid1 has no subtitles"
             ))
         );
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_serve_subtitles_if_video_not_in_source() {
+    async fn it_should_fail_to_serve_subtitles_if_video_not_found() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        playlist_repository.insert(&playlist("PL1")).unwrap();
-        playlist_repository.insert(&playlist("PL2")).unwrap();
+        let subtitle_reader = subtitle_reader(&db, FakeVideoFileRepository::default());
+
+        let response = subtitles(subtitle_reader, "rec-vid1").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "video rec-vid1 not found"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_serve_subtitles_if_source_not_found() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         save_playlist_video(
-            video_repository.as_ref(),
-            playlist_video_repository.as_ref(),
-            "PL2",
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
             &video_with_subtitles("vid1"),
         );
-        let video_file_repository = Arc::new(
-            FakeVideoFileRepository::default()
-                .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT),
-        );
-        let subtitle_reader = SubtitleReader::new(
-            playlist_repository,
-            playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            video_repository,
-            video_file_repository,
-            VIDEOS_ROOT,
-        );
+        let video_file_repository = FakeVideoFileRepository::default()
+            .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT);
+        let subtitle_reader = subtitle_reader(&db, video_file_repository);
 
-        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
-
-        assert_eq!(
-            response,
-            Err(ApiError::new(StatusCode::NOT_FOUND, "video vid1 not found"))
-        );
-    }
-
-    #[tokio::test]
-    async fn it_should_fail_to_serve_subtitles_if_playlist_not_found() {
-        let db = TestDatabase::new();
-        let subtitle_reader = SubtitleReader::new(
-            Arc::new(SqlitePlaylistRepository::new(db.database())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            Arc::new(SqliteVideoRepository::new(db.database())),
-            Arc::new(FakeVideoFileRepository::default()),
-            VIDEOS_ROOT,
-        );
-
-        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
+        let response = subtitles(subtitle_reader, "rec-vid1").await;
 
         assert_eq!(
             response,
             Err(ApiError::new(
                 StatusCode::NOT_FOUND,
-                "playlist PL1 not found"
-            ))
-        );
-    }
-
-    #[tokio::test]
-    async fn it_should_fail_to_serve_subtitles_if_channel_not_found() {
-        let db = TestDatabase::new();
-        let subtitle_reader = SubtitleReader::new(
-            Arc::new(SqlitePlaylistRepository::new(db.database())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            Arc::new(SqliteVideoRepository::new(db.database())),
-            Arc::new(FakeVideoFileRepository::default()),
-            VIDEOS_ROOT,
-        );
-
-        let response = channel_subtitles(subtitle_reader, "@somechannel", "vid1").await;
-
-        assert_eq!(
-            response,
-            Err(ApiError::new(
-                StatusCode::NOT_FOUND,
-                "channel @somechannel not found"
+                "video rec-vid1 not found"
             ))
         );
     }
 
     #[tokio::test]
     async fn it_should_fail_to_serve_subtitles_if_invalid_video_id_provided() {
-        let response = playlist_subtitles(any_subtitle_reader(), "PL1", "").await;
+        let response = subtitles(any_subtitle_reader(), "").await;
 
         assert_eq!(
             response,
-            Err(ApiError::bad_request("YouTube video ID must not be empty"))
+            Err(ApiError::bad_request("Video ID must not be empty"))
         );
     }
 
@@ -5387,7 +5420,7 @@ mod tests {
         let streams = named_category("Streams", &[playlist_member("PL1")]);
         category_repository.insert(&chess).unwrap();
         category_repository.insert(&streams).unwrap();
-        // `shared` is one record held by both sources, so in both categories.
+        // `shared` is one video held by both sources, so in both categories.
         categorize_source(&db, &channel_member("@somechannel"), &[&chess, &streams]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -5667,7 +5700,7 @@ mod tests {
             .unwrap();
         let pending = |youtube_id: &str| {
             new_video(
-                VideoId::new(youtube_id).unwrap(),
+                YoutubeVideoId::new(youtube_id).unwrap(),
                 "Not downloaded",
                 fixed_timestamp(),
             )
@@ -6256,7 +6289,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6304,7 +6341,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6338,7 +6379,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None).with_categorization_enabled(true))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6377,7 +6422,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6435,7 +6484,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6497,7 +6550,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6567,7 +6624,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6607,7 +6668,11 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess", None))
             .unwrap();
-        let video = new_video(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -6800,8 +6865,7 @@ mod tests {
     fn pending_task(id: i64, task: &Task) -> ScheduledTask {
         ScheduledTask {
             id,
-            task_type: task.task_type().to_string(),
-            payload: task.payload().to_string(),
+            task: task.clone(),
             status: TaskStatus::Pending,
             retries: 0,
             run_at: fixed_timestamp(),
@@ -6883,13 +6947,34 @@ mod tests {
     /// an unmigrated in-memory database like `any_video_searcher`.
     fn any_subtitle_reader() -> SubtitleReader {
         SubtitleReader::new(
-            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
-            Arc::new(SqliteChannelRepository::new(unused_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+                Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+                Arc::new(SqliteChannelRepository::new(unused_connection())),
+                Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+                VIDEOS_ROOT,
+            )),
             Arc::new(FakeVideoFileRepository::default()),
-            VIDEOS_ROOT,
+        )
+    }
+
+    /// A reader on `db` like the repositories each test seeds, reading
+    /// subtitle files from `video_file_repository`.
+    fn subtitle_reader(
+        db: &TestDatabase,
+        video_file_repository: FakeVideoFileRepository,
+    ) -> SubtitleReader {
+        SubtitleReader::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                VIDEOS_ROOT,
+            )),
+            Arc::new(video_file_repository),
         )
     }
 
@@ -7066,19 +7151,19 @@ mod tests {
         ]
     }
 
-    /// `Video::create` with the record id `rec-<youtube_id>`, so responses
+    /// `Video::create` with the id `rec-<youtube_id>`, so responses
     /// can be expected without reading it back.
-    fn new_video(youtube_id: VideoId, title: &str, now: DateTime<Utc>) -> Video {
+    fn new_video(youtube_id: YoutubeVideoId, title: &str, now: DateTime<Utc>) -> Video {
         Video {
-            id: VideoRecordId::new(format!("rec-{}", youtube_id.as_str())).unwrap(),
+            id: VideoId::new(format!("rec-{}", youtube_id.as_str())).unwrap(),
             ..Video::create(youtube_id, title, now)
         }
     }
 
     fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         VideoResponse {
-            id: youtube_id.to_string(),
-            record_id: format!("rec-{youtube_id}"),
+            id: format!("rec-{youtube_id}"),
+            youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             status: "PENDING".to_string(),
             quality: None,
@@ -7114,8 +7199,8 @@ mod tests {
         source: HomeVideoSourceResponse,
     ) -> HomeVideoResponse {
         HomeVideoResponse {
-            id: youtube_id.to_string(),
-            record_id: format!("rec-{youtube_id}"),
+            id: format!("rec-{youtube_id}"),
+            youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             thumbnail_filename: None,
             duration_seconds: None,
@@ -7135,8 +7220,8 @@ mod tests {
     ) -> CategoryVideoResponse {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
         CategoryVideoResponse {
-            id: youtube_id.to_string(),
-            record_id: format!("rec-{youtube_id}"),
+            id: format!("rec-{youtube_id}"),
+            youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             status: "DOWNLOADED".to_string(),
             quality: Some("high".to_string()),
@@ -7392,7 +7477,7 @@ mod tests {
         created_at_seconds: i64,
     ) -> Video {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
-        new_video(VideoId::new(youtube_id).unwrap(), title, created_at).mark_downloaded(
+        new_video(YoutubeVideoId::new(youtube_id).unwrap(), title, created_at).mark_downloaded(
             Quality::High,
             format!("{title}.mp4"),
             thumbnail_filename.map(str::to_string),
@@ -7432,7 +7517,7 @@ mod tests {
 
     fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {
         new_video(
-            VideoId::new(youtube_id).unwrap(),
+            YoutubeVideoId::new(youtube_id).unwrap(),
             "My Video",
             fixed_timestamp(),
         )
@@ -7548,28 +7633,8 @@ mod tests {
         )
     }
 
-    async fn playlist_subtitles(
-        subtitle_reader: SubtitleReader,
-        playlist_id: &str,
-        youtube_id: &str,
-    ) -> Result<VttResponse, ApiError> {
-        get_playlist_video_subtitles(
-            State(subtitle_reader),
-            Path((playlist_id.to_string(), youtube_id.to_string())),
-        )
-        .await
-    }
-
-    async fn channel_subtitles(
-        subtitle_reader: SubtitleReader,
-        handle: &str,
-        youtube_id: &str,
-    ) -> Result<VttResponse, ApiError> {
-        get_channel_video_subtitles(
-            State(subtitle_reader),
-            Path((handle.to_string(), youtube_id.to_string())),
-        )
-        .await
+    async fn subtitles(subtitle_reader: SubtitleReader, id: &str) -> Result<VttResponse, ApiError> {
+        get_video_subtitles(State(subtitle_reader), Path(id.to_string())).await
     }
 
     async fn search(
@@ -7594,7 +7659,7 @@ mod tests {
 
     /// Seeds every stored video of `source` as belonging to `categories`.
     fn categorize_source(db: &TestDatabase, source: &CategoryMember, categories: &[&Category]) {
-        let video_ids: Vec<VideoRecordId> = match source {
+        let video_ids: Vec<VideoId> = match source {
             CategoryMember::Channel(handle) => SqliteChannelVideoRepository::new(db.database())
                 .list_for_channel(handle)
                 .unwrap()

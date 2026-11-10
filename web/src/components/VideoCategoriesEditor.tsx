@@ -14,8 +14,8 @@ export function VideoCategoriesEditor({ children }: { children: ReactNode }) {
       {children}
       {edited && (
         <VideoCategoriesDialog
-          key={edited.recordId}
-          recordId={edited.recordId}
+          key={edited.videoId}
+          videoId={edited.videoId}
           title={edited.title}
           sourceName={edited.sourceName}
           open

@@ -2,7 +2,7 @@ use crate::domain::event::ScheduledEvent;
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistView};
 use crate::domain::show::has_work_in_progress;
 use crate::domain::task::ScheduledTask;
-use crate::domain::video::{Video, VideoRecordId};
+use crate::domain::video::{Video, VideoId};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -68,11 +68,11 @@ impl PlaylistViewSearcher {
     /// with none are absent.
     fn videos_by_playlist(&self) -> anyhow::Result<HashMap<PlaylistId, Vec<Video>>> {
         let playlist_videos = self.playlist_video_repository.list()?;
-        let video_ids: Vec<VideoRecordId> = playlist_videos
+        let video_ids: Vec<VideoId> = playlist_videos
             .iter()
             .map(|playlist_video| playlist_video.video_id.clone())
             .collect();
-        let videos: HashMap<VideoRecordId, Video> = self
+        let videos: HashMap<VideoId, Video> = self
             .video_repository
             .find_many(&video_ids)?
             .into_iter()

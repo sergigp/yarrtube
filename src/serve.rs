@@ -520,13 +520,9 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             category_video_collector(infrastructure),
         ),
         subtitle_reader: SubtitleReader::new(
-            infrastructure.playlist_repository.clone(),
-            infrastructure.playlist_video_repository.clone(),
-            infrastructure.channel_repository.clone(),
-            infrastructure.channel_video_repository.clone(),
             infrastructure.video_repository.clone(),
+            video_owner_finder(infrastructure),
             infrastructure.video_file_repository.clone(),
-            videos_path(),
         ),
         videos_root: VideosRoot(videos_path()),
         running_version: RunningVersion(AppVersion::current()),
@@ -769,6 +765,7 @@ fn video_relocator(infrastructure: &InfrastructureContainer) -> Arc<VideoRelocat
 fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader {
     VideoDownloader::new(
         infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
@@ -776,7 +773,7 @@ fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader
         infrastructure.video_metadata_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     )
 }
 
@@ -841,17 +838,18 @@ fn video_owner_finder(infrastructure: &InfrastructureContainer) -> Arc<VideoOwne
 fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {
     Arc::new(ThumbnailFetcher::new(
         infrastructure.video_repository.clone(),
-        infrastructure.video_downloader_repository.clone(),
+        video_owner_finder(infrastructure),
+        infrastructure.thumbnail_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     ))
 }
 
 fn chapter_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ChapterFetcher> {
     Arc::new(ChapterFetcher::new(
         infrastructure.video_repository.clone(),
-        infrastructure.video_downloader_repository.clone(),
+        infrastructure.chapter_repository.clone(),
         infrastructure.clock.clone(),
     ))
 }
@@ -885,23 +883,25 @@ fn video_categorizer(infrastructure: &InfrastructureContainer) -> Arc<VideoCateg
 fn quality_upgrader(infrastructure: &InfrastructureContainer) -> Arc<QualityUpgrader> {
     Arc::new(QualityUpgrader::new(
         infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     ))
 }
 
 fn subtitle_fetcher(infrastructure: &InfrastructureContainer) -> Arc<SubtitleFetcher> {
     Arc::new(SubtitleFetcher::new(
         infrastructure.video_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.video_transcript_repository.clone(),
-        infrastructure.video_downloader_repository.clone(),
+        infrastructure.caption_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
+        infrastructure.staging_area.clone(),
     ))
 }
 
@@ -1248,7 +1248,7 @@ mod tests {
                 .list_non_completed()
                 .unwrap()
                 .into_iter()
-                .map(|task| task.task_type)
+                .map(|task| task.task.task_type().to_string())
                 .collect()
         })
         .collect();

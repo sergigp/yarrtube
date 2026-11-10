@@ -9,11 +9,11 @@ test('an upcoming premiere is neither listed nor downloaded', async ({ page }) =
   const videosUrl = `/api/playlists/${encodeURIComponent(playlist.id)}/videos`
 
   await expect
-    .poll(async () => (await (await page.request.get(videosUrl)).json()).map(({ id, status }) => ({ id, status })), {
+    .poll(async () => (await (await page.request.get(videosUrl)).json()).map(({ youtube_id, status }) => ({ youtube_id, status })), {
       message: 'only the regular video, downloaded',
       timeout: 15_000,
     })
-    .toEqual([{ id: regular, status: 'DOWNLOADED' }])
+    .toEqual([{ youtube_id: regular, status: 'DOWNLOADED' }])
 
   await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
   await expect(page.locator('main ul li')).toHaveCount(1)

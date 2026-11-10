@@ -94,7 +94,7 @@ export const queryKeys = {
   playlistPreview: (value: string) => ['playlist-preview', value] as const,
   channelPreview: (value: string) => ['channel-preview', value] as const,
   videoSearch: (text: string) => ['video-search', text] as const,
-  videoCategories: (recordId: string) => ['videos', recordId, 'categories'] as const,
+  videoCategories: (videoId: string) => ['videos', videoId, 'categories'] as const,
 }
 
 /** Shortest trimmed text the daemon searches video titles for. */
@@ -134,12 +134,12 @@ export function useCategoryVideos(id: string): UseQueryResult<CategoryVideo[], E
 
 /** A video copy's categories with where each comes from; idle until `enabled`. */
 export function useVideoCategories(
-  recordId: string,
+  videoId: string,
   enabled: boolean,
 ): UseQueryResult<VideoCategories, Error> {
   return useQuery({
-    queryKey: queryKeys.videoCategories(recordId),
-    queryFn: () => getVideoCategories(recordId),
+    queryKey: queryKeys.videoCategories(videoId),
+    queryFn: () => getVideoCategories(videoId),
     enabled,
   })
 }
@@ -390,11 +390,11 @@ export function useLibraryAction() {
  * Returns a function that marks a video watched, then refetches the channel
  * and playlist lists (and their video lists) and the home videos.
  */
-export function useMarkVideoWatched(): (youtubeId: string) => Promise<void> {
+export function useMarkVideoWatched(): (videoId: string) => Promise<void> {
   const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
-    async (youtubeId: string) => {
-      await markVideoWatched(youtubeId)
+    async (videoId: string) => {
+      await markVideoWatched(videoId)
       await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],
@@ -484,16 +484,16 @@ export function useUpdatePlaylistSettings(): (
  * categories it responds with, then refetches the library and the home videos.
  */
 export function useSetVideoCategory(): (
-  recordId: string,
+  videoId: string,
   categoryId: string,
   belongs: boolean,
 ) => Promise<void> {
   const queryClient = useQueryClient()
   const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
-    async (recordId: string, categoryId: string, belongs: boolean) => {
-      const categories = await setVideoCategory(recordId, categoryId, belongs)
-      queryClient.setQueryData(queryKeys.videoCategories(recordId), categories)
+    async (videoId: string, categoryId: string, belongs: boolean) => {
+      const categories = await setVideoCategory(videoId, categoryId, belongs)
+      queryClient.setQueryData(queryKeys.videoCategories(videoId), categories)
       await invalidateLibraryAndHome()
     },
     [queryClient, invalidateLibraryAndHome],
@@ -504,14 +504,14 @@ export function useSetVideoCategory(): (
  * Returns a function that deletes a video copy's AI verdicts, then refetches
  * its categories, the library and the home videos.
  */
-export function useRerunVideoAi(): (recordId: string) => Promise<void> {
+export function useRerunVideoAi(): (videoId: string) => Promise<void> {
   const queryClient = useQueryClient()
   const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
-    async (recordId: string) => {
-      await deleteVideoAiVerdicts(recordId)
+    async (videoId: string) => {
+      await deleteVideoAiVerdicts(videoId)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.videoCategories(recordId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.videoCategories(videoId) }),
         invalidateLibraryAndHome(),
       ])
     },

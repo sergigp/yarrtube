@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { type VideoSourceRef, videoMediaUrl, videoSubtitlesUrl } from '@/api/client'
+import { videoMediaUrl, videoSubtitlesUrl } from '@/api/client'
 import type { Chapter, Video } from '@/api/types'
 import { useCurrentTime } from '@/hooks/useCurrentTime'
 import { type SeekFeedback, useSeekKeys } from '@/hooks/useSeekKeys'
@@ -10,7 +10,6 @@ import { ChapterRail } from './ChapterRail'
 
 interface VideoPlayerProps {
   basePath: string
-  source: VideoSourceRef
   video: Video | null
   autoplay: boolean
   onVideoElement: (element: HTMLVideoElement | null) => void
@@ -67,7 +66,6 @@ function playFrom(element: HTMLVideoElement, seconds: number) {
  */
 export function VideoPlayer({
   basePath,
-  source,
   video,
   autoplay,
   onVideoElement,
@@ -135,7 +133,7 @@ export function VideoPlayer({
               <track
                 key={video.id}
                 kind="subtitles"
-                src={videoSubtitlesUrl(source, video.id)}
+                src={videoSubtitlesUrl(video.id)}
                 srcLang={video.subtitle_language}
                 label={languageName(video.subtitle_language)}
               />

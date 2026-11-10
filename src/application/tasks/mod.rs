@@ -83,17 +83,11 @@ pub fn registry(
     );
     registry.insert(
         "fetch_thumbnail".to_string(),
-        Arc::new(FetchThumbnailTask::new(
-            video_repository.clone(),
-            thumbnail_fetcher,
-        )),
+        Arc::new(FetchThumbnailTask::new(thumbnail_fetcher)),
     );
     registry.insert(
         "fetch_subtitles".to_string(),
-        Arc::new(FetchSubtitlesTask::new(
-            video_repository.clone(),
-            subtitle_fetcher,
-        )),
+        Arc::new(FetchSubtitlesTask::new(subtitle_fetcher)),
     );
     registry.insert(
         "fetch_chapters".to_string(),

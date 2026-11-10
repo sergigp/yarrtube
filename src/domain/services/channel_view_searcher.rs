@@ -2,7 +2,7 @@ use crate::domain::channel::{Channel, ChannelHandle, ChannelView};
 use crate::domain::event::ScheduledEvent;
 use crate::domain::show::has_work_in_progress;
 use crate::domain::task::ScheduledTask;
-use crate::domain::video::{Video, VideoRecordId};
+use crate::domain::video::{Video, VideoId};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -68,11 +68,11 @@ impl ChannelViewSearcher {
     /// with none are absent.
     fn videos_by_channel(&self) -> anyhow::Result<HashMap<ChannelHandle, Vec<Video>>> {
         let channel_videos = self.channel_video_repository.list()?;
-        let video_ids: Vec<VideoRecordId> = channel_videos
+        let video_ids: Vec<VideoId> = channel_videos
             .iter()
             .map(|channel_video| channel_video.video_id.clone())
             .collect();
-        let videos: HashMap<VideoRecordId, Video> = self
+        let videos: HashMap<VideoId, Video> = self
             .video_repository
             .find_many(&video_ids)?
             .into_iter()
