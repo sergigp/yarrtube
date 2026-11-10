@@ -2345,6 +2345,55 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_the_failure_if_the_download_cannot_be_placed() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        let staged_media =
+            PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
+            Arc::new(FakeVideoFileRepository::default().with_failing_move(staged_media.clone())),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        let reason = format!("permission denied moving {staged_media:?}");
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: reason.clone(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 3,
+                status: VideoStatus::Retrying,
+                download_attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                download_failure: Some(reason),
+                episode_number: Some(published_episode()),
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_keep_the_watch_state_recorded_while_downloading_if_placing_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2384,7 +2433,10 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(format!("permission denied moving {staged_media:?}"))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("permission denied moving {staged_media:?}"),
+            })
         );
         assert_eq!(
             video_repository.list().unwrap(),

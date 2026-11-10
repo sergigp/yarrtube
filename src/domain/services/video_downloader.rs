@@ -187,8 +187,8 @@ impl VideoDownloader {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
                 Self::log_sabr(&started, downloaded.sabr_notice.as_deref());
                 self.record_unless_deleted(started.clone(), downloaded, target, metadata)
-                    .or_else(|e| self.record_placement_errored(started, e))
-                    .map(|_| VideoStepOutcome::Settled)
+                    .map(|()| VideoStepOutcome::Settled)
+                    .or_else(|e| self.record_errored(started, e))
             }
             Ok(DownloadAttempt::Failed {
                 failure,
@@ -421,8 +421,11 @@ impl VideoDownloader {
         }
     }
 
-    /// The download couldn't run at all (e.g. `yt-dlp` failed to start):
-    /// a failed attempt like any other, with that error as its reason.
+    /// The download couldn't run at all (e.g. `yt-dlp` failed to start) or
+    /// its files couldn't be placed (numbering, moving or recording them): a
+    /// failed attempt like any other, with that error as its reason. Applied
+    /// to the video as stored, so a number assigned before the failure is
+    /// kept; a video deleted meanwhile gets nothing recorded.
     fn record_errored(
         &self,
         started: Video,
@@ -432,17 +435,6 @@ impl VideoDownloader {
         let reason = error.to_string();
         let errored = self.mark_errored(started, &reason)?;
         Ok(Self::next_attempt(errored, reason))
-    }
-
-    /// Placing a successful download failed (numbering, moving or recording
-    /// it): errors the video like a failed download, so it settles as
-    /// errored instead of staying in progress. Applied to the video as
-    /// stored, so a number assigned before the failure is kept; a video
-    /// deleted meanwhile gets nothing recorded.
-    fn record_placement_errored(&self, started: Video, error: anyhow::Error) -> anyhow::Result<()> {
-        let video_id = started.id.clone();
-        self.mark_errored(started, &error.to_string())?;
-        Self::fail_errored(&video_id, error)
     }
 
     fn mark_errored(&self, started: Video, reason: &str) -> anyhow::Result<Option<Video>> {
@@ -458,13 +450,6 @@ impl VideoDownloader {
             video.status,
             VideoStatus::Downloaded | VideoStatus::Failed | VideoStatus::Unavailable
         )
-    }
-
-    /// Logs a systemic download error and returns it, so the task queue
-    /// retries/dead-letters the download.
-    fn fail_errored(video_id: &VideoId, error: anyhow::Error) -> anyhow::Result<()> {
-        error!(video_id = %video_id, error = %error, "video download errored");
-        Err(error)
     }
 
     /// Builds `video`'s metadata with its playlist position (no `thumb` yet)
