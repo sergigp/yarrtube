@@ -1425,6 +1425,43 @@ mod tests {
     }
 
     #[test]
+    fn it_should_requeue_without_downloading_if_the_next_attempt_is_not_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let video = Video {
+            download_attempts: RetryAttempts {
+                failed: 2,
+                last_failed_at: Some(fixed_timestamp() - Duration::minutes(20)),
+            },
+            ..retrying_video(2)
+        };
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(40),
+                reason: "HTTP Error 503".to_string(),
+            })
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_record_the_download_error() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

@@ -117,6 +117,9 @@ impl VideoDownloaderApi for VideoDownloader {
         let Some((video, target)) = self.find_downloadable(&video_id)? else {
             return Ok(VideoStepOutcome::Settled);
         };
+        if let Some(waiting) = self.wait_for_next_attempt(&video) {
+            return Ok(waiting);
+        }
         let Some(started) = self.start_download(&video.id)? else {
             return Ok(VideoStepOutcome::Settled);
         };
@@ -148,6 +151,19 @@ impl VideoDownloader {
             return Ok(None);
         };
         Ok(Some((video, owner.target)))
+    }
+
+    /// A Retrying download whose next attempt isn't due yet runs again when
+    /// it is, downloading nothing now.
+    fn wait_for_next_attempt(&self, video: &Video) -> Option<VideoStepOutcome> {
+        let at = video
+            .next_download_at()
+            .filter(|at| *at > self.clock.now())?;
+        debug!(video_id = %video.id, next_attempt_at = %at, "download not due yet, re-queueing it");
+        Some(VideoStepOutcome::RetryAt {
+            at,
+            reason: video.download_failure.clone().unwrap_or_default(),
+        })
     }
 
     /// The video as stored once its download started; `None` (logged) when
