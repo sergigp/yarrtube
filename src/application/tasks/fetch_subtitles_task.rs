@@ -669,7 +669,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "WARNING: [youtube] yt1: Some subtitles may be missing".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -684,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_a_failed_attempt_if_the_probe_fails() {
+    fn it_should_schedule_the_next_check_if_the_subtitle_check_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
@@ -728,7 +734,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -788,7 +800,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -799,67 +817,6 @@ mod tests {
             }]
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
-        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
-    }
-
-    #[test]
-    fn it_should_mark_subtitles_unavailable_after_three_failed_checks_of_an_old_video() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_transcript_repository =
-            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Err(anyhow::anyhow!(
-            "HTTP Error 429: Too Many Requests"
-        ))));
-        let video = Video {
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 2),
-            ..downloaded_video()
-        };
-        video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let task = FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
-            video_repository.clone(),
-            Arc::new(VideoOwnerFinder::new(
-                Arc::new(SqliteChannelVideoRepository::new(db.database())),
-                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                Arc::new(SqliteChannelRepository::new(db.database())),
-                Arc::new(SqlitePlaylistRepository::new(db.database())),
-                "/videos",
-            )),
-            video_transcript_repository.clone(),
-            caption_repository.clone(),
-            video_file_repository.clone(),
-            Arc::new(SqliteEventPublisher::new(
-                db.database(),
-                Arc::new(FixedClock(now())),
-            )),
-            Arc::new(FixedClock(now())),
-            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
-        )));
-
-        let result = run(&task, &task_for(video.id.as_str()));
-
-        assert_eq!(result, Ok(TaskOutcome::Done));
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![Video {
-                version: 1,
-                subtitles: LateDataChecks::checked(Some(now()), 3), /* was settled Unavailable */
-                updated_at: now(),
-                ..video.clone()
-            }]
-        );
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
     }
 
@@ -912,7 +869,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::hours(24),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1559,7 +1522,16 @@ mod tests {
             run(&task, &task_for(failed.id.as_str())),
         ];
 
-        assert_eq!(results, [Ok(TaskOutcome::Done), Ok(TaskOutcome::Done)]);
+        assert_eq!(
+            results,
+            [
+                Ok(TaskOutcome::Done),
+                Ok(TaskOutcome::RunAgainAt {
+                    run_at: now() + Duration::minutes(10),
+                    reason: "no fake caption probe configured".to_string(),
+                }),
+            ]
+        );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![staging_dir(&fetched), staging_dir(&failed)]
@@ -1789,7 +1761,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: now() + Duration::minutes(10),
+                reason: "HTTP Error 429: Too Many Requests".to_string(),
+            })
+        );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
