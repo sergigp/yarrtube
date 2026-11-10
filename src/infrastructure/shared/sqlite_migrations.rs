@@ -38,6 +38,8 @@ const VIDEO_SUMMARIES_SQL: &str = include_str!("../../../migrations/0023_video_s
 const AI_CATEGORIZATION_SQL: &str = include_str!("../../../migrations/0024_ai_categorization.sql");
 const VIDEO_CATEGORY_VERDICTS_SQL: &str =
     include_str!("../../../migrations/0025_video_category_verdicts.sql");
+const CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL: &str =
+    include_str!("../../../migrations/0026_categorization_context_length_auto.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -69,6 +71,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(VIDEO_SUMMARIES_SQL),
         M::up(AI_CATEGORIZATION_SQL),
         M::up(VIDEO_CATEGORY_VERDICTS_SQL),
+        M::up(CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -919,6 +922,43 @@ mod tests {
     }
 
     #[test]
+    fn it_should_drop_the_old_default_categorization_context_length() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_preferences(&mut conn);
+        conn.execute(
+            "INSERT INTO preferences (id, data)
+             VALUES (1, '{\"categorization_context_length\":4096,\"theme\":\"dark\"}')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(
+            stored_preferences(&conn),
+            Ok(r#"{"theme":"dark"}"#.to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_keep_a_categorization_context_length_other_than_the_old_default() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_preferences(&mut conn);
+        conn.execute(
+            "INSERT INTO preferences (id, data) VALUES (1, '{\"categorization_context_length\":8192}')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(
+            stored_preferences(&conn),
+            Ok(r#"{"categorization_context_length":8192}"#.to_string())
+        );
+    }
+
+    #[test]
     fn it_should_disable_summaries_for_sources_stored_before_the_setting() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate_to_late_video_data(&mut conn);
@@ -1091,6 +1131,12 @@ mod tests {
         ])
         .to_latest(conn)
         .unwrap();
+    }
+
+    fn stored_preferences(conn: &Connection) -> rusqlite::Result<String> {
+        conn.query_row("SELECT data FROM preferences WHERE id = 1", [], |row| {
+            row.get(0)
+        })
     }
 
     fn migrate_to_preferences(conn: &mut Connection) {

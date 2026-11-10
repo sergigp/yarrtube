@@ -28,7 +28,7 @@ The daemon SHALL keep one set of preferences: `categories_enabled`, `home_show_c
 ## ADDED Requirements
 
 ### Requirement: Auto Categorization Context Length
-Until a `categorization_context_length` is saved, it SHALL be Auto: 1,820 tokens per category with an AI prompt, rounded up to a multiple of 1,024, at least 4,096 and at most 131,072, read as that number with `categorization_context_length_is_auto` `true`. Saving a number SHALL store it, with `_is_auto` `false`; saving `null` SHALL drop it, back to Auto. Saving other preferences SHALL NOT store it. A stored `4096`, the default before Auto, SHALL read as Auto.
+Until a `categorization_context_length` is saved, it SHALL be Auto: 1,820 tokens per category with an AI prompt, rounded up to a multiple of 1,024, at least 4,096 and at most 131,072, read as that number with `categorization_context_length_is_auto` `true`. Saving a number SHALL store it, with `_is_auto` `false`; saving `null` SHALL drop it, back to Auto. Saving other preferences SHALL NOT store it. A `4096` stored by a version before Auto, its old default, SHALL be dropped once by a migration and read as Auto; a `4096` saved since SHALL read as saved.
 
 #### Scenario: Nine categories
 - **WHEN** no context length is saved and 9 categories have an AI prompt
@@ -57,3 +57,7 @@ Until a `categorization_context_length` is saved, it SHALL be Auto: 1,820 tokens
 #### Scenario: Old default stored
 - **WHEN** an earlier version stored `categorization_context_length` `4096`
 - **THEN** it reads as Auto, with `categorization_context_length_is_auto` `true`
+
+#### Scenario: 4096 saved on purpose
+- **WHEN** a client saves `categorization_context_length` `4096`
+- **THEN** it reads as `4096` with `categorization_context_length_is_auto` `false`

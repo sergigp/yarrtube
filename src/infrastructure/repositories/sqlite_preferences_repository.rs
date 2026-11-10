@@ -8,10 +8,6 @@ use anyhow::Context;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
-/// The categorization context length every save stored before Auto, whether
-/// the user chose it or not.
-const OLD_CATEGORIZATION_DEFAULT: i64 = 4096;
-
 pub trait PreferencesRepository: Send + Sync {
     fn find(&self) -> anyhow::Result<Option<Preferences>>;
     /// Inserts or replaces the single row.
@@ -189,11 +185,10 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_model
                     .and_then(|model| CategorizationModel::new(model).ok())
                     .unwrap_or(defaults.categorization.model),
-                // Every save before Auto stored the old default: it reads as
-                // Auto, like a value no longer valid.
+                // A value no longer valid reads as Auto. The old default
+                // every save stored before Auto was dropped by a migration.
                 context_length: stored
                     .categorization_context_length
-                    .filter(|length| *length != OLD_CATEGORIZATION_DEFAULT)
                     .and_then(|length| ContextLength::new(length).ok()),
                 temperature: stored
                     .categorization_temperature
@@ -262,23 +257,20 @@ mod tests {
     }
 
     #[test]
-    fn it_should_read_the_old_default_context_length_as_auto() {
+    fn it_should_round_trip_a_context_length_of_4096() {
         let db = TestDatabase::new();
-        db.connection()
-            .execute(
-                "INSERT INTO preferences (id, data) VALUES (1, '{\"categorization_context_length\": 4096}')",
-                [],
-            )
-            .unwrap();
         let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            categorization: CategorizationSettings {
+                context_length: Some(ContextLength::new(4096).unwrap()),
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        };
 
-        assert_eq!(
-            repository
-                .find()
-                .unwrap()
-                .map(|found| found.categorization.context_length),
-            Some(None)
-        );
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
     }
 
     #[test]

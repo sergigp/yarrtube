@@ -16,7 +16,10 @@ Rust:
 - `src/domain/llm_server/llm_chat.rs`: `timeout`, a per-request value that replaces the adapter's fixed `CHAT_TIMEOUT`.
 - `src/domain/services/video_summarizer.rs`: sets `timeout` to 30 minutes, unchanged behaviour.
 - `src/infrastructure/repositories/ollama_llm_server_repository.rs`: reads `eval_count` into `output_tokens` and uses `chat.timeout`. The `chat_timeout` field and constant are gone.
-- `src/infrastructure/repositories/sqlite_preferences_repository.rs`: stores the context length only when it is overridden. A stored `4096` and invalid values read as Auto.
+- `src/infrastructure/repositories/sqlite_preferences_repository.rs`: stores the context length only when it is overridden. Invalid values read as Auto.
+- `migrations/0026_categorization_context_length_auto.sql`, `src/infrastructure/shared/sqlite_migrations.rs`: drops the `4096` every save stored before Auto, once, so it reads as Auto while a `4096` saved since round-trips.
+- `src/serve.rs`: wires the category repository into the preferences services.
+- `e2e-tests/ollama-stub.js`, `e2e-tests/tests/aiSettings.spec.js`: the stub answers keyed by category name; the settings spec turns Auto off before setting a length.
 - `src/application/http/preferences/dto.rs`: `categorization_context_length` accepts `null` on PATCH, and the response gets `categorization_context_length_is_auto`. Built from `ResolvedPreferences`.
 - `src/application/http/preferences/mod.rs`, `src/application/tasks/categorize_video_task.rs`: tests. `ApiServices` wiring gets the category repository for both services.
 
@@ -210,7 +213,7 @@ render    -> "## Fallbacks": videos that fell back, fallback calls, their output
 
 `sqlite_preferences_repository.rs`:
 
-22. `it_should_read_the_old_default_context_length_as_auto`: a stored 4096 reads as `None`.
+22. `it_should_round_trip_a_context_length_of_4096`: a 4096 saved after Auto reads as saved. `sqlite_migrations.rs`: `it_should_drop_the_old_default_categorization_context_length` and `it_should_keep_a_categorization_context_length_other_than_the_old_default`.
 23. `it_should_round_trip_an_overridden_context_length`: 8192.
 24. `it_should_read_an_invalid_categorization_context_length_as_auto`, replacing the old invalid-default case.
 

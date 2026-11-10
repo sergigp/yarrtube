@@ -32,8 +32,9 @@ which a per-category fallback for that video recovers.
   **Auto** mode, the new default: 1,820 tokens per category with an AI
   prompt, rounded up to a multiple of 1,024, at least 4,096 (16,384 for 9).
   Saving a number overrides it; saving `null` goes back to Auto. A new
-  read-only `categorization_context_length_is_auto` tells which. A stored
-  `4096` (the old default, written by every earlier save) reads as Auto.
+  read-only `categorization_context_length_is_auto` tells which. A
+  `4096` stored before Auto (the old default, written by every earlier
+  save) is dropped by a migration, so it reads as Auto.
 - The AI settings page gets an "Auto" choice for the categorization context
   length, showing the computed value, with a hint on how it scales.
 - Logs: one info line per call (categories asked, tokens in/out, duration,

@@ -58,9 +58,10 @@
 
 - [x] 3.1 Ollama: `it_should_read_the_answer_and_tokens`, where `eval_count` gives `output_tokens`.
 - [x] 3.2 Ollama: rewrite `it_should_report_a_refusal_when_the_answer_takes_too_long` to use `chat.timeout` (100 ms); remove the `chat_timeout` field.
-- [x] 3.3 SQLite preferences: `it_should_read_the_old_default_context_length_as_auto`, where a stored 4096 reads as `None`.
+- [x] 3.3 SQLite preferences: `it_should_read_the_old_default_context_length_as_auto`, where a stored 4096 reads as `None` (replaced by 3.6).
 - [x] 3.4 SQLite preferences: `it_should_round_trip_an_overridden_context_length` (8192), with Auto stored as no value.
 - [x] 3.5 SQLite preferences: `it_should_read_an_invalid_categorization_context_length_as_auto`, replacing the old invalid-default expectation.
+- [x] 3.6 Migration `0026` drops a stored `4096` (the default before Auto) once; the repository no longer filters it, so a `4096` saved since round-trips. Tests: `it_should_round_trip_a_context_length_of_4096`, `it_should_drop_the_old_default_categorization_context_length`, `it_should_keep_a_categorization_context_length_other_than_the_old_default`.
 
 ## 4. Eval and docs
 
