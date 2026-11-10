@@ -1,6 +1,6 @@
 use crate::domain::shared::ValidationError;
 
-const SHIPPED: &str = include_str!("../../../prompts/categorization/v2.md");
+const SHIPPED: &str = include_str!("../../../prompts/categorization/v2-batch.md");
 
 /// The prompt wrapping every category's own prompt: plain text, sent as is.
 #[derive(Debug, Clone, PartialEq, Eq)]

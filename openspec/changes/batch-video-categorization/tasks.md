@@ -38,7 +38,7 @@
 - [x] 2.18 `it_should_override_the_categorization_context_length`: 8192 with `is_auto` false, whatever the number of categories.
 - [x] 2.19 `it_should_go_back_to_the_auto_context_length`: PATCH `null` gives the Auto value.
 - [x] 2.20 `it_should_keep_auto_when_saving_other_preferences`.
-- [ ] 2.21 `it_should_ship_the_categorization_prompt_v2_batch`: `categorization_prompt.rs` includes `v2-batch.md`. Update `prompts/categorization/README.md` to mark v2-batch as shipped.
+- [x] 2.21 `it_should_ship_the_categorization_prompt_v2_batch`: `categorization_prompt.rs` includes `v2-batch.md`. Update `prompts/categorization/README.md` to mark v2-batch as shipped.
 - [ ] 2.22 Web `aiSettingsForm.test.ts`, one cycle per case:
   - Auto on sends nothing.
   - Off with a new number sends the number.

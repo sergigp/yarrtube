@@ -174,7 +174,7 @@ mod tests {
     async fn it_should_return_4096_for_auto_with_few_categories() {
         let db = TestDatabase::new();
         let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
-        ["Chess", "Tech"].map(|name| {
+        ["Chess", "Tech"].iter().for_each(|name| {
             category_repository
                 .insert(&prompted_category(name))
                 .unwrap()
@@ -495,8 +495,10 @@ mod tests {
             Ok(PreferencesResponse {
                 categorization_enabled: false,
                 categorization_model: "qwen3:4b".to_string(),
-                categorization_prompt: include_str!("../../../../prompts/categorization/v2.md")
-                    .to_string(),
+                categorization_prompt: include_str!(
+                    "../../../../prompts/categorization/v2-batch.md"
+                )
+                .to_string(),
                 categorization_prompt_is_default: true,
                 ..all_on_response()
             })
@@ -504,7 +506,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_ship_the_categorization_prompt_v2() {
+    async fn it_should_ship_the_categorization_prompt_v2_batch() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let preferences_searcher = PreferencesSearcher::new(
@@ -520,7 +522,7 @@ mod tests {
                 preferences.categorization_prompt_is_default
             )),
             Ok((
-                include_str!("../../../../prompts/categorization/v2.md").to_string(),
+                include_str!("../../../../prompts/categorization/v2-batch.md").to_string(),
                 true
             ))
         );

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, type InitialEntry } from 'react-router-dom'
 import { vi } from 'vitest'
 import SHIPPED_PROMPT from '../../../prompts/summaries/v3.md?raw'
-import SHIPPED_CATEGORIZATION_PROMPT from '../../../prompts/categorization/v2.md?raw'
+import SHIPPED_CATEGORIZATION_PROMPT from '../../../prompts/categorization/v2-batch.md?raw'
 import { VideoCategoriesEditor } from '@/components/VideoCategoriesEditor'
 import type {
   Announcement,
