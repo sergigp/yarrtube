@@ -264,7 +264,6 @@ impl Video {
     }
 
     /// Records a thumbnail fetch that obtained no thumbnail.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn record_thumbnail_failure(self, now: DateTime<Utc>) -> Self {
         Self {
             thumbnail: self.thumbnail.fail(now),

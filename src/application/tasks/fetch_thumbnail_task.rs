@@ -38,7 +38,10 @@ mod tests {
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{EpisodeNumber, FetchedThumbnail, Video, YoutubeVideoId};
+    use crate::domain::video::{
+        EpisodeNumber, FetchedThumbnail, RetryAttempts, StepState, StepStatus, Video,
+        YoutubeVideoId,
+    };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
@@ -55,7 +58,7 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::staging_area::StagingArea;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, Duration, Utc};
     use std::path::PathBuf;
 
     #[test]
@@ -469,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_leave_the_video_untouched_when_the_thumbnail_fetch_fails() {
+    fn it_should_schedule_the_next_attempt_if_no_thumbnail_is_obtained() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
@@ -504,8 +507,28 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "fake thumbnail fetch error".to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                thumbnail: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 1,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video.clone()
+            }]
+        );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
