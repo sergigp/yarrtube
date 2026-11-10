@@ -65,18 +65,34 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     const summaryTemperature = await temperature.inputValue()
     await page.getByRole('switch', { name: 'Categorization enabled' }).click()
     await page.getByRole('button', { name: 'Advanced categorization settings' }).click()
+    const auto = page.getByRole('switch', { name: 'Auto context length' })
+    const reopen = async () => {
+      await page.reload()
+      await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+      await page.getByRole('button', { name: 'Advanced categorization settings' }).click()
+    }
+    // Auto, with no category to size it from, is the 4,096 floor.
+    await expect(auto).toBeChecked()
     await expect(contextLength).toHaveValue('4096')
+    await expect(contextLength).not.toBeEditable()
     await expect(page.getByRole('spinbutton', { name: 'Categorization temperature' })).toHaveValue('0')
     await expect(page.getByRole('switch', { name: 'Categorization thinking' })).toBeChecked()
+    await auto.click()
     await contextLength.fill('8192')
     await save.click()
     await expect(page.getByText('Saved')).toBeVisible()
 
-    await page.reload()
-    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
-    await page.getByRole('button', { name: 'Advanced categorization settings' }).click()
+    await reopen()
+    await expect(auto).not.toBeChecked()
     await expect(contextLength).toHaveValue('8192')
     await expect(temperature).toHaveValue(summaryTemperature)
+
+    await auto.click()
+    await save.click()
+    await expect(page.getByText('Saved')).toBeVisible()
+    await reopen()
+    await expect(auto).toBeChecked()
+    await expect(contextLength).toHaveValue('4096')
   })
 })
 

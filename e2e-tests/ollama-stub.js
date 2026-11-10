@@ -44,12 +44,19 @@ export function startOllamaStub(port) {
 }
 
 /**
- * A categorization chat (it asks for a JSON `format`) always fits the
- * category; any other chat is a summary.
+ * A categorization chat (it asks for a JSON `format`, one property per
+ * category) fits the video into every category; any other chat is a summary.
  */
 function chatReply({ format }) {
   const content = format
-    ? JSON.stringify({ reason: 'The stub says every video fits.', belongs: true })
+    ? JSON.stringify(
+        Object.fromEntries(
+          Object.keys(format.properties ?? {}).map((name) => [
+            name,
+            { reason: 'The stub says every video fits.', belongs: true },
+          ]),
+        ),
+      )
     : STUB_SUMMARY
   return { message: { role: 'assistant', content }, prompt_eval_count: 100, done_reason: 'stop' }
 }
