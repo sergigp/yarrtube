@@ -131,6 +131,51 @@ mod tests {
     }
 
     #[test]
+    fn it_should_fail_the_summary_after_the_eleventh_failed_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![Ok(LlmReply::refused("request too long"))]);
+        let video = Video {
+            summary: retrying_summary(10),
+            ..subtitled_video()
+        };
+        video_repository.insert(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm,
+            files_with(SHORT_SRT),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                summary: StepState {
+                    status: StepStatus::Failed,
+                    attempts: RetryAttempts {
+                        failed: 11,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video
+            })
+        );
+    }
+
+    #[test]
     fn it_should_send_the_shipped_prompt_filled_with_the_videos_data() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1948,6 +1993,18 @@ mod tests {
     }
 
     /// A downloaded, subtitled, 30-minute video.
+    /// A summary that failed `failed` times, the last long enough ago for
+    /// its next attempt to be due.
+    fn retrying_summary(failed: u32) -> StepState {
+        StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed,
+                last_failed_at: Some(later() - Duration::days(30)),
+            },
+        }
+    }
+
     fn subtitled_video() -> Video {
         let video = Video::create(
             YoutubeVideoId::new("yt1").unwrap(),
