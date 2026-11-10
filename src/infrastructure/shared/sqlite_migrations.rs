@@ -1173,6 +1173,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_map_subtitle_states_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 27);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, subtitle_state, subtitles_failed_attempts) VALUES
+             ('fetched', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'FETCHED', 1),
+             ('gave_up', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'UNAVAILABLE', 3),
+             ('no_captions', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'UNAVAILABLE', 0),
+             ('failing', 'yt4', 'D', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'MISSING', 2),
+             ('missing', 'yt5', 'E', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'MISSING', 0);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(
+            step_columns(&conn, "subtitles_status", "subtitles_failed_attempts"),
+            Ok(vec![
+                ("fetched".to_string(), "DONE".to_string(), 0),
+                ("gave_up".to_string(), "FAILED".to_string(), 11),
+                ("no_captions".to_string(), "UNAVAILABLE".to_string(), 0),
+                ("failing".to_string(), "RETRYING".to_string(), 2),
+                ("missing".to_string(), "PENDING".to_string(), 0),
+            ])
+        );
+    }
+
+    /// Each video's id with a step's status and failed attempts, in
+    /// insertion order.
+    fn step_columns(
+        conn: &Connection,
+        status: &str,
+        failed_attempts: &str,
+    ) -> rusqlite::Result<Vec<(String, String, u32)>> {
+        conn.prepare(&format!(
+            "SELECT id, {status}, {failed_attempts} FROM videos ORDER BY rowid"
+        ))?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect()
+    }
+
     /// Applies the first `count` migrations only.
     fn migrate_to(conn: &mut Connection, count: usize) {
         Migrations::new(migrations().into_iter().take(count).collect())
