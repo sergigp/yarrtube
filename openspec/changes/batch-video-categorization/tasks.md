@@ -19,7 +19,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_ask_about_every_pending_category_in_one_call`: 3 pending categories go into one chat listing all three, and 3 verdicts are stored. Rewrite the existing categorize tests to the batch answer shape in the refactor step. Verify with `cargo test categorize_video_task`.
-- [ ] 2.2 `it_should_send_the_video_details_and_category_prompts_with_the_categorization_settings`: the exact `LlmChat`, with the user message per the spec, the schema keyed by name and a 4,095-token cap for 3 categories.
+- [x] 2.2 `it_should_send_the_video_details_and_category_prompts_with_the_categorization_settings`: the exact `LlmChat`, with the user message per the spec, the schema keyed by name and a 4,095-token cap for 3 categories.
 - [ ] 2.3 `it_should_cap_the_output_at_3072_for_one_category`.
 - [ ] 2.4 `it_should_cap_the_output_at_the_context_length`: an 8192 override with 9 categories gives a cap of 8192.
 - [ ] 2.5 `it_should_wait_longer_for_a_call_about_more_categories`: 9 categories give a 2,458 s timeout; 1 category gives 30 min.

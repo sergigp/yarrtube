@@ -254,9 +254,13 @@ mod tests {
     }
 
     #[test]
-    fn it_should_send_the_video_details_and_category_prompt_with_the_categorization_settings() {
+    fn it_should_send_the_video_details_and_category_prompts_with_the_categorization_settings() {
         let db = TestDatabase::new();
-        let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
+        let llm = llm_replying(vec![reply(&answers(&[
+            ("Chess", YES),
+            ("Sicilian", YES),
+            ("Tech", NO),
+        ]))]);
         let video = Video {
             chapters: Some(vec![VideoChapter {
                 start_seconds: 0,
@@ -265,11 +269,27 @@ mod tests {
             }]),
             ..summarized_video()
         };
-        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        seed(
+            &db,
+            &video,
+            &[
+                &prompted_category("Chess"),
+                &prompted_category("Sicilian"),
+                &prompted_category("Tech"),
+            ],
+        );
         let task = categorize_video_task(&db, llm.clone());
 
         run(&task, &video).unwrap();
 
+        let entry = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "reason": {"type": "string"},
+                "belongs": {"type": "boolean"},
+            },
+            "required": ["reason", "belongs"],
+        });
         assert_eq!(
             llm.chats(),
             vec![LlmChat {
@@ -284,23 +304,26 @@ mod tests {
                        \n\
                        Categories:\n\
                        \n\
+                       ### Chess\n\
+                       The video is about Chess.\n\
+                       \n\
                        ### Sicilian\n\
                        The video is about Sicilian.\n\
+                       \n\
+                       ### Tech\n\
+                       The video is about Tech.\n\
                        \n\
                        Answer in JSON with one entry per category, keyed by its name: \"reason\", one sentence on what the video covers and how it fits that category, then \"belongs\", true or false."
                     .to_string(),
                 context_length: 4096,
                 temperature: 0.0,
                 thinking: true,
-                max_output_tokens: 3072,
+                max_output_tokens: 4095,
                 timeout: MIN_CHAT_TIMEOUT,
                 format: Some(serde_json::json!({
                     "type": "object",
-                    "properties": {
-                        "reason": {"type": "string"},
-                        "belongs": {"type": "boolean"},
-                    },
-                    "required": ["reason", "belongs"],
+                    "properties": {"Chess": entry, "Sicilian": entry, "Tech": entry},
+                    "required": ["Chess", "Sicilian", "Tech"],
                 })),
             }]
         );

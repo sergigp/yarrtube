@@ -74,14 +74,18 @@ impl CategorizationQuestion {
             temperature: settings.temperature.value(),
             thinking,
             max_output_tokens: self.max_output_tokens(context_length),
-            format: Some(answer_schema()),
+            format: Some(self.answer_schema()),
             timeout: self.timeout(context_length),
         }
     }
 
     /// 1,365 per category, at least 3,072, at most `context_length`.
     pub fn max_output_tokens(&self, context_length: ContextLength) -> u32 {
-        MIN_OUTPUT_TOKENS.min(context_length.value())
+        let asked = u32::try_from(self.categories.len()).unwrap_or(u32::MAX);
+        OUTPUT_TOKENS_PER_CATEGORY
+            .saturating_mul(asked)
+            .max(MIN_OUTPUT_TOKENS)
+            .min(context_length.value())
     }
 
     /// The output cap at 5 tokens a second, at least 30 minutes.
@@ -99,6 +103,32 @@ impl CategorizationQuestion {
                 (category, answer)
             })
             .collect()
+    }
+
+    /// The answer's JSON schema, sent as Ollama's `format`: a
+    /// `CategorizationAnswer` under each category's name, all required.
+    fn answer_schema(&self) -> serde_json::Value {
+        let entry = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "reason": {"type": "string"},
+                "belongs": {"type": "boolean"},
+            },
+            "required": ["reason", "belongs"],
+        });
+        let names = self
+            .categories
+            .iter()
+            .map(|category| category.name.as_str())
+            .collect::<Vec<_>>();
+        serde_json::json!({
+            "type": "object",
+            "properties": names
+                .iter()
+                .map(|name| (name.to_string(), entry.clone()))
+                .collect::<serde_json::Map<_, _>>(),
+            "required": names,
+        })
     }
 
     /// Each category as `### <name>` then its AI prompt.
@@ -131,18 +161,6 @@ impl CategorizationQuestion {
                 .join("\n"),
         }
     }
-}
-
-/// The JSON schema of a `CategorizationAnswer`, sent as Ollama's `format`.
-fn answer_schema() -> serde_json::Value {
-    serde_json::json!({
-        "type": "object",
-        "properties": {
-            "reason": {"type": "string"},
-            "belongs": {"type": "boolean"},
-        },
-        "required": ["reason", "belongs"],
-    })
 }
 
 /// The model's usable answer to a `CategorizationQuestion`.
