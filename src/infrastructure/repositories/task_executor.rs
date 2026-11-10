@@ -400,6 +400,50 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_requeue_a_task_its_handler_asks_to_run_again() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::completing_with(TaskOutcome::RunAgainAt {
+            run_at: now() + chrono::Duration::minutes(10),
+            reason: "HTTP Error 503".to_string(),
+        }));
+        task_repository.schedule(&task(), now()).unwrap();
+        task_repository
+            .update(&ScheduledTask {
+                retries: 2,
+                ..pending_task(0)
+            })
+            .unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        ));
+
+        let result = run_pass(&executor).await;
+
+        assert!(result.is_ok());
+        assert_eq!(*handler.handled.lock().unwrap(), 1);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                run_at: now() + chrono::Duration::minutes(10),
+                last_error: Some("HTTP Error 503".to_string()),
+                ..pending_task(0)
+            }]
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredTask>::new()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn it_should_retry_a_task_whose_handler_fails() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -1491,6 +1535,7 @@ mod tests {
     struct FakeHandler {
         fails: bool,
         fails_with_cause_chain: bool,
+        outcome: TaskOutcome,
         handled: Mutex<u32>,
     }
 
@@ -1499,6 +1544,7 @@ mod tests {
             Self {
                 fails: false,
                 fails_with_cause_chain: false,
+                outcome: TaskOutcome::Done,
                 handled: Mutex::new(0),
             }
         }
@@ -1507,6 +1553,7 @@ mod tests {
             Self {
                 fails: true,
                 fails_with_cause_chain: false,
+                outcome: TaskOutcome::Done,
                 handled: Mutex::new(0),
             }
         }
@@ -1515,7 +1562,16 @@ mod tests {
             Self {
                 fails: true,
                 fails_with_cause_chain: true,
+                outcome: TaskOutcome::Done,
                 handled: Mutex::new(0),
+            }
+        }
+
+        /// Completes every task asking for it to run again with `outcome`.
+        fn completing_with(outcome: TaskOutcome) -> Self {
+            Self {
+                outcome,
+                ..Self::succeeding()
             }
         }
     }
@@ -1531,7 +1587,7 @@ mod tests {
             if self.fails {
                 anyhow::bail!("handler failed");
             }
-            Ok(TaskOutcome::Done)
+            Ok(self.outcome.clone())
         }
     }
 }
