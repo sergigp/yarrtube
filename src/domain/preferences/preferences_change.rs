@@ -25,7 +25,8 @@ pub struct PreferencesChange {
     pub summaries_prompt: Option<Option<SummaryPrompt>>,
     pub categorization_enabled: Option<bool>,
     pub categorization_model: Option<CategorizationModel>,
-    pub categorization_context_length: Option<ContextLength>,
+    /// `Some(None)` goes back to Auto.
+    pub categorization_context_length: Option<Option<ContextLength>>,
     pub categorization_temperature: Option<Temperature>,
     pub categorization_thinking: Option<bool>,
     /// `Some(None)` goes back to the shipped prompt.

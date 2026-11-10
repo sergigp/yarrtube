@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures), wired end to end. The pieces:
+- [x] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures), wired end to end. The pieces:
   - `CategorizationQuestion` over `&[Category]`, with `answers`, `max_output_tokens` and `timeout`.
   - `LlmChat.timeout`, set by the summarizer to 30 min and used by the Ollama adapter instead of `CHAT_TIMEOUT`.
   - `LlmReply.output_tokens`.

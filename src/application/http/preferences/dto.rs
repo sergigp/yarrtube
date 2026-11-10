@@ -1,4 +1,4 @@
-use crate::domain::preferences::Preferences;
+use crate::domain::preferences::ResolvedPreferences;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// A partial update: every field left out keeps its stored value.
@@ -38,8 +38,9 @@ pub struct UpdatePreferencesRequest {
     pub categorization_enabled: Option<bool>,
     #[serde(default)]
     pub categorization_model: Option<String>,
-    #[serde(default)]
-    pub categorization_context_length: Option<i64>,
+    /// Left out keeps the length, `null` goes back to Auto.
+    #[serde(default, deserialize_with = "present")]
+    pub categorization_context_length: Option<Option<i64>>,
     #[serde(default)]
     pub categorization_temperature: Option<f64>,
     #[serde(default)]
@@ -69,14 +70,16 @@ pub struct PreferencesResponse {
     pub categorization_enabled: bool,
     pub categorization_model: String,
     pub categorization_context_length: u32,
+    pub categorization_context_length_is_auto: bool,
     pub categorization_temperature: f64,
     pub categorization_thinking: bool,
     pub categorization_prompt: String,
     pub categorization_prompt_is_default: bool,
 }
 
-impl From<Preferences> for PreferencesResponse {
-    fn from(preferences: Preferences) -> Self {
+impl From<ResolvedPreferences> for PreferencesResponse {
+    fn from(resolved: ResolvedPreferences) -> Self {
+        let preferences = resolved.preferences;
         let summaries = &preferences.summaries;
         let categorization = &preferences.categorization;
         Self {
@@ -97,7 +100,8 @@ impl From<Preferences> for PreferencesResponse {
             summaries_prompt_is_default: summaries.prompt.is_none(),
             categorization_enabled: categorization.enabled,
             categorization_model: categorization.model.as_str().to_string(),
-            categorization_context_length: categorization.context_length.value(),
+            categorization_context_length: resolved.categorization_context_length.value(),
+            categorization_context_length_is_auto: categorization.context_length.is_none(),
             categorization_temperature: categorization.temperature.value(),
             categorization_thinking: categorization.thinking,
             categorization_prompt: categorization.effective_prompt().as_str().to_string(),

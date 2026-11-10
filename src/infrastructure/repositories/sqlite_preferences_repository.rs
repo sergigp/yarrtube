@@ -112,9 +112,10 @@ impl From<&Preferences> for StoredPreferences {
                 .map(|prompt| prompt.as_str().to_string()),
             categorization_enabled: Some(preferences.categorization.enabled),
             categorization_model: Some(preferences.categorization.model.as_str().to_string()),
-            categorization_context_length: Some(
-                preferences.categorization.context_length.value().into(),
-            ),
+            categorization_context_length: preferences
+                .categorization
+                .context_length
+                .map(|length| length.value().into()),
             categorization_temperature: Some(preferences.categorization.temperature.value()),
             categorization_thinking: Some(preferences.categorization.thinking),
             categorization_prompt: preferences
@@ -186,8 +187,7 @@ impl From<StoredPreferences> for Preferences {
                     .unwrap_or(defaults.categorization.model),
                 context_length: stored
                     .categorization_context_length
-                    .and_then(|length| ContextLength::new(length).ok())
-                    .unwrap_or(defaults.categorization.context_length),
+                    .and_then(|length| ContextLength::new(length).ok()),
                 temperature: stored
                     .categorization_temperature
                     .and_then(|temperature| Temperature::new(temperature).ok())
@@ -286,7 +286,6 @@ mod tests {
             repository.find().unwrap().map(|found| found.categorization),
             Some(CategorizationSettings {
                 model: CategorizationModel::new("gemma3:4b").unwrap(),
-                context_length: ContextLength::new(4096).unwrap(),
                 temperature: Temperature::new(0.0).unwrap(),
                 thinking: true,
                 ..CategorizationSettings::default()
@@ -308,7 +307,6 @@ mod tests {
         assert_eq!(
             repository.find().unwrap().map(|found| found.categorization),
             Some(CategorizationSettings {
-                context_length: ContextLength::new(4096).unwrap(),
                 temperature: Temperature::new(0.0).unwrap(),
                 ..CategorizationSettings::default()
             })

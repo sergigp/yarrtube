@@ -47,7 +47,9 @@ mod tests {
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
-    use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
+    use crate::domain::llm_server::{
+        LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    };
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::SummaryModel;
     use crate::domain::preferences::{
@@ -185,7 +187,7 @@ mod tests {
         SqlitePreferencesRepository::new(db.database())
             .save(&Preferences {
                 categorization: CategorizationSettings {
-                    context_length: ContextLength::new(2048).unwrap(),
+                    context_length: Some(ContextLength::new(2048).unwrap()),
                     temperature: Temperature::new(0.7).unwrap(),
                     thinking: false,
                     ..categorization_on().categorization
@@ -250,6 +252,7 @@ mod tests {
                 temperature: 0.0,
                 thinking: true,
                 max_output_tokens: 3072,
+                timeout: MIN_CHAT_TIMEOUT,
                 format: Some(serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -1054,6 +1057,7 @@ Sure: {"reason": "A Sicilian game.", "belongs": true}"#;
         Ok(LlmReply {
             content: content.to_string(),
             input_tokens: 100,
+            output_tokens: 0,
             stopped_at_limit: false,
             refusal: None,
         })

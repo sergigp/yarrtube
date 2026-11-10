@@ -343,6 +343,7 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     categorization_enabled: false,
     categorization_model: 'qwen3:4b',
     categorization_context_length: 4096,
+    categorization_context_length_is_auto: true,
     categorization_temperature: 0,
     categorization_thinking: true,
     categorization_prompt: SHIPPED_CATEGORIZATION_PROMPT,

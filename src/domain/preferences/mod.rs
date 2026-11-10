@@ -6,6 +6,7 @@ pub mod errors;
 #[allow(clippy::module_inception)]
 pub mod preferences;
 pub mod preferences_change;
+pub mod resolved_preferences;
 pub mod summary_model;
 pub mod summary_prompt;
 pub mod summary_prompt_section;
@@ -20,6 +21,7 @@ pub use context_length::ContextLength;
 pub use errors::{ReadPreferencesError, UpdatePreferencesError};
 pub use preferences::Preferences;
 pub use preferences_change::PreferencesChange;
+pub use resolved_preferences::ResolvedPreferences;
 pub use summary_model::SummaryModel;
 pub use summary_prompt::SummaryPrompt;
 pub use summary_prompt_section::SummaryPromptSection;

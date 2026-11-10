@@ -3,7 +3,7 @@ use crate::domain::shared::ValidationError;
 const MIN: u32 = 1024;
 const MAX: u32 = 131072;
 const DEFAULT: u32 = 12288;
-const CATEGORIZATION_DEFAULT: u32 = 4096;
+const AUTO_MIN: u32 = 4096;
 const INPUT_BUDGET_OF_DEFAULT: u32 = 9000;
 
 /// How many tokens the model reads at once (Ollama's `num_ctx`).
@@ -20,9 +20,10 @@ impl ContextLength {
         }
     }
 
-    /// What `evals/categories` runs with.
-    pub fn categorization_default() -> Self {
-        Self(CATEGORIZATION_DEFAULT)
+    /// The categorization context length for `prompted_categories`
+    /// categories with an AI prompt, when the user hasn't set one.
+    pub fn auto(_prompted_categories: usize) -> Self {
+        Self(AUTO_MIN)
     }
 
     pub fn value(&self) -> u32 {

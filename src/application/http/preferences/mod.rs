@@ -67,7 +67,7 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
             .transpose()?,
         categorization_context_length: request
             .categorization_context_length
-            .map(ContextLength::new)
+            .map(|length| length.map(ContextLength::new).transpose())
             .transpose()?,
         categorization_temperature: request
             .categorization_temperature
@@ -101,9 +101,12 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 mod tests {
     use super::*;
     use crate::domain::category::CategoryId;
-    use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
+    use crate::domain::preferences::{
+        CategorizationSettings, Preferences, ResolvedPreferences, SummarySettings,
+    };
     use crate::domain::video::{SummaryState, Video, VideoId, YoutubeVideoId};
     use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
+    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
     };
@@ -124,7 +127,10 @@ mod tests {
     async fn it_should_return_the_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -135,7 +141,10 @@ mod tests {
     async fn it_should_return_the_ai_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -273,6 +282,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
                 verdict_repository.clone(),
                 Arc::new(CategoryLock::default()),
+                Arc::new(SqliteCategoryRepository::new(db.database())),
             );
 
             update(preferences_updater, request).await.unwrap();
@@ -314,6 +324,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
                 verdict_repository.clone(),
                 Arc::new(CategoryLock::default()),
+                Arc::new(SqliteCategoryRepository::new(db.database())),
             );
 
             update(preferences_updater, request).await.unwrap();
@@ -329,7 +340,10 @@ mod tests {
     async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -350,7 +364,10 @@ mod tests {
     async fn it_should_ship_the_categorization_prompt_v2() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -370,7 +387,10 @@ mod tests {
     async fn it_should_return_the_categorization_generation_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -428,7 +448,7 @@ mod tests {
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
-            categorization_context_length: Some(8192),
+            categorization_context_length: Some(Some(8192)),
             categorization_temperature: Some(0.5),
             categorization_thinking: Some(false),
             ..UpdatePreferencesRequest::default()
@@ -441,6 +461,7 @@ mod tests {
             Ok(PreferencesResponse {
                 categorization_enabled: false,
                 categorization_context_length: 8192,
+                categorization_context_length_is_auto: false,
                 categorization_temperature: 0.5,
                 categorization_thinking: false,
                 ..all_on_response()
@@ -450,7 +471,7 @@ mod tests {
             repository.find().unwrap(),
             Some(Preferences {
                 categorization: CategorizationSettings {
-                    context_length: ContextLength::new(8192).unwrap(),
+                    context_length: Some(ContextLength::new(8192).unwrap()),
                     temperature: Temperature::new(0.5).unwrap(),
                     thinking: false,
                     ..CategorizationSettings::default()
@@ -463,7 +484,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_if_the_categorization_context_length_is_out_of_range() {
         let request = UpdatePreferencesRequest {
-            categorization_context_length: Some(512),
+            categorization_context_length: Some(Some(512)),
             ..UpdatePreferencesRequest::default()
         };
 
@@ -1052,7 +1073,10 @@ mod tests {
                 ..Preferences::default()
             })
             .unwrap();
-        let preferences_searcher = PreferencesSearcher::new(repository);
+        let preferences_searcher = PreferencesSearcher::new(
+            repository,
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+        );
 
         let response = get(preferences_searcher).await;
 
@@ -1093,6 +1117,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
             Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(database())),
         )
     }
 
@@ -1106,6 +1131,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
         )
     }
 
@@ -1159,7 +1185,10 @@ mod tests {
             home_show_quick_watches: true,
             home_show_latest: true,
             theme: "light".to_string(),
-            ..PreferencesResponse::from(Preferences::default())
+            ..PreferencesResponse::from(ResolvedPreferences {
+                preferences: Preferences::default(),
+                categorization_context_length: ContextLength::auto(0),
+            })
         }
     }
 }

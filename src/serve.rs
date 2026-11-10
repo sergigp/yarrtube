@@ -528,6 +528,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         running_version: RunningVersion(AppVersion::current()),
         preferences_searcher: PreferencesSearcher::new(
             infrastructure.preferences_repository.clone(),
+            infrastructure.category_repository.clone(),
         ),
         preferences_updater: PreferencesUpdater::new(
             infrastructure.preferences_repository.clone(),
@@ -535,6 +536,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.clock.clone(),
             infrastructure.video_category_verdict_repository.clone(),
             infrastructure.category_lock.clone(),
+            infrastructure.category_repository.clone(),
         ),
         llm_server_searcher: LlmServerSearcher::new(infrastructure.llm_server_repository.clone()),
         video_category_choice_searcher: VideoCategoryChoiceSearcher::new(

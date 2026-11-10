@@ -79,7 +79,6 @@ pub const MIN_OUTPUT_TOKENS: u32 = 3072;
 pub struct CategorizationQuestion { /* video details */ categories: Vec<Category> }
 impl CategorizationQuestion {
     pub fn new(video: &Video, source_name: &str, summary: &SummaryText, categories: &[Category]) -> Self;
-    pub fn categories(&self) -> &[Category];
     /// Every category as `### <name>\n<prompt>`, then the JSON keyed by name.
     pub fn user_message(&self) -> String;
     pub fn chat(&self, settings: &CategorizationSettings, context_length: ContextLength, thinking: bool) -> LlmChat;

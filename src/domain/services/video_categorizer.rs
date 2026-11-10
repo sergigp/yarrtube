@@ -1,11 +1,10 @@
 use crate::domain::category::Category;
 use crate::domain::llm_server::OllamaUrl;
-use crate::domain::preferences::{CategorizationSettings, Preferences};
+use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
 use crate::domain::video::{Video, VideoOwner};
-use crate::domain::video_category::categorization_question::MAX_OUTPUT_TOKENS;
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -35,12 +34,13 @@ impl From<anyhow::Error> for Skip {
     }
 }
 
-/// How one call ended, when it didn't stop the categorization.
-enum Outcome {
-    /// Its verdict was applied.
-    Answered,
-    /// The model didn't answer usably, for this reason: retrying may.
-    Rejected(String),
+/// Which call of a categorization: the one about every pending category,
+/// or one about a category it left without an answer.
+#[derive(Clone, Copy)]
+enum Call {
+    First,
+    #[allow(dead_code)]
+    Fallback,
 }
 
 /// Why the categorization stops before trying every category.
@@ -63,6 +63,7 @@ struct CategorizationJob {
     url: OllamaUrl,
     settings: CategorizationSettings,
     thinking: bool,
+    context_length: ContextLength,
     owner: VideoOwner,
     summary: SummaryText,
     pending: Vec<Category>,
@@ -182,11 +183,13 @@ impl VideoCategorizer {
                 .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?
                 .thinking;
         let pending = self.pending(video, &owner)?;
+        let context_length = settings.effective_context_length(0);
         Ok(CategorizationJob {
             preferences,
             url,
             settings,
             thinking,
+            context_length,
             owner,
             summary: summary.text,
             pending,
@@ -222,51 +225,83 @@ impl VideoCategorizer {
         video: &Video,
         job: &'a CategorizationJob,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
-        job.pending
+        let rejected = job
+            .pending
             .iter()
-            .filter_map(|category| match self.evaluate(video, job, category) {
-                Ok(Outcome::Answered) => None,
-                Ok(Outcome::Rejected(reason)) => {
-                    error!(
-                        video_id = %video.id,
-                        category = %category.name.as_str(),
-                        %reason,
-                        "the model couldn't answer for a category"
-                    );
-                    Some(Ok((category, reason)))
+            .map(|category| self.ask(video, job, std::slice::from_ref(category), Call::First))
+            .collect::<Result<Vec<_>, Stop>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        self.fall_back(video, job, rejected)
+    }
+
+    /// One call about `categories`, storing each usable verdict; the ones
+    /// rejected, with why.
+    fn ask<'a>(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        categories: &'a [Category],
+        _call: Call,
+    ) -> Result<Vec<(&'a Category, String)>, Stop> {
+        let started = Instant::now();
+        let question =
+            CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, categories);
+        let reply = self
+            .llm_server_repository
+            .chat(
+                &job.url,
+                &question.chat(&job.settings, job.context_length, job.thinking),
+            )
+            .map_err(Stop::Server)?;
+        let rejection = match (&reply.refusal, reply.stopped_at_limit) {
+            (Some(refusal), _) => Some(format!("Ollama refused the call: {refusal}")),
+            (None, true) => Some(format!(
+                "it hit the {}-token output limit",
+                question.max_output_tokens(job.context_length)
+            )),
+            (None, false) => None,
+        };
+        if let Some(reason) = rejection {
+            return Ok(Self::rejected_all(video, categories, &reason));
+        }
+        categories
+            .iter()
+            .zip(question.answers(&reply.content))
+            .filter_map(|(category, (_, answer))| match answer {
+                Some(answer) => self
+                    .store(video, job, category, answer, reply.input_tokens, started)
+                    .err()
+                    .map(|error| Err(Stop::Failed(error))),
+                None => {
+                    Self::log_rejected(video, category, "its answer isn't usable");
+                    Some(Ok((category, "its answer isn't usable".to_string())))
                 }
-                Err(stop) => Some(Err(stop)),
             })
             .collect()
     }
 
-    /// Asks the model whether `video` fits `category` and applies its verdict.
-    fn evaluate(
+    /// `rejected` of a call about several categories, each asked again alone.
+    fn fall_back<'a>(
+        &self,
+        _video: &Video,
+        _job: &CategorizationJob,
+        rejected: Vec<(&'a Category, String)>,
+    ) -> Result<Vec<(&'a Category, String)>, Stop> {
+        Ok(rejected)
+    }
+
+    /// Applies `category`'s verdict, unless the pair changed during the call.
+    fn store(
         &self,
         video: &Video,
         job: &CategorizationJob,
         category: &Category,
-    ) -> Result<Outcome, Stop> {
-        let started = Instant::now();
-        let question =
-            CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, category);
-        let reply = self
-            .llm_server_repository
-            .chat(&job.url, &question.chat(&job.settings, job.thinking))
-            .map_err(Stop::Server)?;
-        if let Some(refusal) = reply.refusal {
-            return Ok(Outcome::Rejected(format!(
-                "Ollama refused the call: {refusal}"
-            )));
-        }
-        if reply.stopped_at_limit {
-            return Ok(Outcome::Rejected(format!(
-                "it hit the {MAX_OUTPUT_TOKENS}-token output limit"
-            )));
-        }
-        let Some(answer) = CategorizationAnswer::parse(&reply.content) else {
-            return Ok(Outcome::Rejected("its answer isn't usable".to_string()));
-        };
+        answer: CategorizationAnswer,
+        input_tokens: u32,
+        started: Instant,
+    ) -> anyhow::Result<()> {
         let verdict = VideoCategoryVerdict::answered(
             video.id.clone(),
             category.id.clone(),
@@ -285,18 +320,42 @@ impl VideoCategorizer {
                 category = %category.name.as_str(),
                 "dropped a verdict: the pair was decided or changed during its call"
             );
-            return Ok(Outcome::Answered);
+            return Ok(());
         }
         info!(
             video_id = %video.id,
             category = %category.name.as_str(),
             verdict = %verdict.verdict.as_str(),
             reason = %verdict.reason.as_deref().unwrap_or_default(),
-            input_tokens = reply.input_tokens,
+            input_tokens,
             duration_seconds = started.elapsed().as_secs_f64(),
             "video categorized"
         );
-        Ok(Outcome::Answered)
+        Ok(())
+    }
+
+    /// Every one of `categories`, rejected for `reason`, logged.
+    fn rejected_all<'a>(
+        video: &Video,
+        categories: &'a [Category],
+        reason: &str,
+    ) -> Vec<(&'a Category, String)> {
+        categories
+            .iter()
+            .map(|category| {
+                Self::log_rejected(video, category, reason);
+                (category, reason.to_string())
+            })
+            .collect()
+    }
+
+    fn log_rejected(video: &Video, category: &Category, reason: &str) {
+        error!(
+            video_id = %video.id,
+            category = %category.name.as_str(),
+            %reason,
+            "the model couldn't answer for a category"
+        );
     }
 
     /// Gives each of `rejected` an unavailable verdict, unless it is no

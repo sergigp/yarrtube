@@ -82,6 +82,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
         Ok(LlmReply {
             content: response.message.content,
             input_tokens: response.prompt_eval_count,
+            output_tokens: 0,
             stopped_at_limit: response.done_reason.as_deref() == Some("length"),
             refusal: None,
         })
@@ -285,7 +286,7 @@ impl LlmServerRepository for FakeLlmServerRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::llm_server::LlmModel;
+    use crate::domain::llm_server::{LlmModel, MIN_CHAT_TIMEOUT};
 
     #[test]
     fn it_should_post_the_chat_with_its_options() {
@@ -353,6 +354,7 @@ mod tests {
             LlmReply {
                 content: "Three games.".to_string(),
                 input_tokens: 120,
+                output_tokens: 0,
                 stopped_at_limit: false,
                 refusal: None,
             }
@@ -596,6 +598,7 @@ mod tests {
             thinking: true,
             max_output_tokens: 3288,
             format: None,
+            timeout: MIN_CHAT_TIMEOUT,
         }
     }
 }
