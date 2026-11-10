@@ -1082,6 +1082,60 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_map_download_statuses_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 27);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, last_errored_at) VALUES
+             ('retrying', 'yt1', 'A', 'ERRORED_RETRYING', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00', NULL),
+             ('errored', 'yt2', 'B', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-05T00:00:00+00:00', '2026-01-03T00:00:00+00:00'),
+             ('errored_untimed', 'yt3', 'C', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-04T00:00:00+00:00', NULL),
+             ('excluded', 'yt4', 'D', 'EXCLUDED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL),
+             ('downloaded', 'yt5', 'E', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let downloads = conn
+            .prepare("SELECT id, status, download_failed_attempts, last_errored_at FROM videos ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u32>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        let row = |id: &str, status: &str, attempts: u32, errored_at: Option<&str>| {
+            (
+                id.to_string(),
+                status.to_string(),
+                attempts,
+                errored_at.map(str::to_string),
+            )
+        };
+        assert_eq!(
+            downloads,
+            Ok(vec![
+                row("retrying", "RETRYING", 1, Some("2026-01-02T00:00:00+00:00")),
+                row("errored", "RETRYING", 4, Some("2026-01-03T00:00:00+00:00")),
+                row(
+                    "errored_untimed",
+                    "RETRYING",
+                    4,
+                    Some("2026-01-04T00:00:00+00:00")
+                ),
+                row("excluded", "UNAVAILABLE", 0, None),
+                row("downloaded", "DOWNLOADED", 0, None),
+            ])
+        );
+    }
+
     /// Applies the first `count` migrations only.
     fn migrate_to(conn: &mut Connection, count: usize) {
         Migrations::new(migrations().into_iter().take(count).collect())
