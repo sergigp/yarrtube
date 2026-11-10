@@ -39,8 +39,8 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{
-        DownloadedVideo, EpisodeNumber, LateDataChecks, PlaybackPosition, QualityProbe, Video,
-        VideoDownloaded, YoutubeVideoId,
+        DownloadedVideo, EpisodeNumber, LateDataChecks, PlaybackPosition, QualityProbe,
+        RetryAttempts, StepState, StepStatus, Video, VideoDownloaded, YoutubeVideoId,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -386,6 +386,77 @@ mod tests {
             vec![Video {
                 version: 1,
                 quality_checks: LateDataChecks::checked(Some(now()), 1),
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
+        assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_fail_the_quality_after_the_eleventh_failed_check() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::new(true)
+                .with_quality_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+        );
+        let video = Video {
+            quality_checks: LateDataChecks::checked(Some(now() - Duration::days(2)), 10),
+            ..sd_video()
+        };
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                now(),
+            ))
+            .unwrap();
+        let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            video_downloader_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+        )));
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                quality_checks: LateDataChecks {
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(now()),
+                        },
+                    },
+                    last_checked_at: Some(now()),
+                },
                 updated_at: now(),
                 ..video.clone()
             }]
