@@ -19,7 +19,7 @@
 
 - [x] 2.1 `it_should_schedule_the_next_attempt_if_the_download_fails`
 - [x] 2.2 `it_should_wait_longer_after_each_failed_attempt`
-- [ ] 2.3 `it_should_retry_daily_from_the_fourth_failure`
+- [x] 2.3 `it_should_retry_daily_from_the_fourth_failure`
 - [ ] 2.4 `it_should_give_up_after_the_eleventh_failed_attempt`
 - [ ] 2.5 `it_should_record_the_failure_if_yt_dlp_cannot_run`
 - [ ] 2.6 `it_should_record_the_failure_if_the_download_cannot_be_placed`
