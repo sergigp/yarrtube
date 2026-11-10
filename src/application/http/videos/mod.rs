@@ -6917,6 +6917,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_retry_an_unknown_video() {
+        let db = TestDatabase::new();
+
+        let response = retry_video(State(video_retrier(&db)), Path("rec1".to_string())).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found"))
+        );
+        assert_eq!(
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+                .list_non_completed()
+                .unwrap(),
+            vec![]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_rerun_a_videos_ai_categorization() {
         let db = TestDatabase::new();
         SqliteChannelRepository::new(db.database())
