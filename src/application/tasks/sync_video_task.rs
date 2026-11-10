@@ -53,6 +53,7 @@ mod tests {
     use crate::domain::video::Chapters;
     use crate::domain::video::DownloadedQuality;
     use crate::domain::video::Subtitles;
+    use crate::domain::video::Thumbnail;
     use crate::domain::video::{
         EpisodeNumber, StepState, Video, VideoChapter, VideoStatus, YoutubeVideoId,
     };
@@ -1052,7 +1053,10 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+            thumbnail: Thumbnail {
+                filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                ..Thumbnail::pending()
+            },
             ..my_video()
                 .mark_errored("HTTP Error 503", fixed_timestamp() - Duration::days(2))
                 .mark_errored("HTTP Error 503", fixed_timestamp() - Duration::days(2))
@@ -1115,14 +1119,16 @@ mod tests {
         ));
         let long_ago = fixed_timestamp() - Duration::days(30);
         let video = Video {
-            thumbnail_filename: None,
-            thumbnail: (0..11).fold(StepState::pending(), |state, _| state.fail(long_ago)),
             subtitles: Subtitles::checked(Some(long_ago), 11),
             chapters: Chapters {
                 found: Some(vec![]),
                 ..Chapters::checked(Some(long_ago), 11)
             },
             downloaded_quality: DownloadedQuality::checked(Some(long_ago), 11),
+            thumbnail: Thumbnail {
+                filename: None,
+                state: (0..11).fold(StepState::pending(), |state, _| state.fail(long_ago)),
+            },
             ..downloaded_video()
         };
         seed_channel_video(&db, &video_repository, &video);
@@ -1144,9 +1150,11 @@ mod tests {
         ));
         let ten_minutes_ago = fixed_timestamp() - Duration::minutes(10);
         let video = Video {
-            thumbnail_filename: None,
-            thumbnail: StepState::pending().fail(ten_minutes_ago),
             subtitles: Subtitles::checked(Some(ten_minutes_ago), 1),
+            thumbnail: Thumbnail {
+                filename: None,
+                state: StepState::pending().fail(ten_minutes_ago),
+            },
             ..downloaded_video()
         };
         seed_channel_video(&db, &video_repository, &video);
@@ -1773,8 +1781,6 @@ mod tests {
                 status: VideoStatus::Pending,
                 quality: None,
                 filename: None,
-                thumbnail_filename: None,
-                thumbnail: StepState::pending(),
                 duration_seconds: None,
                 synced_at: None,
                 updated_at: fixed_timestamp(),
@@ -1784,6 +1790,7 @@ mod tests {
                     ..Chapters::pending()
                 },
                 downloaded_quality: DownloadedQuality::pending(),
+                thumbnail: Thumbnail::pending(),
                 ..video.clone()
             }]
         );

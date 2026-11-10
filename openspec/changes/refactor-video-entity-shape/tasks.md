@@ -21,9 +21,9 @@ passes with no assertion changed in acceptance tests. One PR for all.
 
 ## 3. Thumbnail, summary and categorization reads
 
-- [ ] 3.1 Add `Thumbnail`, replacing `thumbnail` + `thumbnail_filename`; move `thumbnail_basename`; `mark_downloaded`/`relocate_to_episode`/`reset_for_redownload` delegate; verify green
-- [ ] 3.2 Delete `is_categorizable`, `is_categorization_pending`, `is_categorization_failed`, `next_categorization_at`; callers read `video.summary` / `video.categorization`; verify green
-- [ ] 3.3 Commit "Give the thumbnail its own type"
+- [x] 3.1 Add `Thumbnail`, replacing `thumbnail` + `thumbnail_filename`; move `thumbnail_basename`; `mark_downloaded`/`relocate_to_episode`/`reset_for_redownload` delegate; verify green
+- [x] 3.2 Delete `is_categorizable`, `is_categorization_pending`, `is_categorization_failed`, `next_categorization_at`; callers read `video.summary` / `video.categorization`; verify green
+- [x] 3.3 Commit "Give the thumbnail its own type"
 
 ## 4. Download
 

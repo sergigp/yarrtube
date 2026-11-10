@@ -5,7 +5,7 @@ use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
     VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
+use crate::domain::video::{StepStatus, Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -163,7 +163,7 @@ impl VideoCategorizer {
         if !preferences.categorization_available() {
             return Err(Skip::NotWanted("AI categorization is off"));
         }
-        if !video.is_categorizable() {
+        if video.summary.status != StepStatus::Done {
             return Err(Skip::NotWanted("the video has no summary"));
         }
         let url = preferences
@@ -469,12 +469,12 @@ impl VideoCategorizer {
         let recorded = self.record_attempt_failure(video)?;
         if recorded
             .as_ref()
-            .is_some_and(|video| video.is_categorization_failed())
+            .is_some_and(|video| video.categorization.status == StepStatus::Failed)
         {
             self.give_up(video, job, rejected)?;
         }
         Ok(VideoStepOutcome::retry_at_or_settled(
-            recorded.and_then(|video| video.next_categorization_at()),
+            recorded.and_then(|video| video.categorization.next_attempt_at()),
             reason,
         ))
     }

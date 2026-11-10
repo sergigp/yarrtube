@@ -72,7 +72,7 @@ impl From<&Video> for VideoStepsResponse {
     fn from(video: &Video) -> Self {
         Self {
             download: StepResponse::download(video),
-            thumbnail: StepResponse::from(video.thumbnail),
+            thumbnail: StepResponse::from(video.thumbnail.state),
             subtitles: StepResponse::from(video.subtitles.state),
             chapters: StepResponse::from(video.chapters.state),
             quality: StepResponse::from(video.downloaded_quality.state),
@@ -148,7 +148,7 @@ impl From<VideoView> for VideoResponse {
             status: video.status.as_str().to_string(),
             quality: video.quality.map(|q| q.as_str().to_string()),
             filename: video.filename,
-            thumbnail_filename: video.thumbnail_filename,
+            thumbnail_filename: video.thumbnail.filename,
             duration_seconds: video.duration_seconds,
             created_at: video.created_at,
             updated_at: video.updated_at,

@@ -30,6 +30,7 @@ mod tests {
     use crate::domain::video::Chapters;
     use crate::domain::video::DownloadedQuality;
     use crate::domain::video::Subtitles;
+    use crate::domain::video::Thumbnail;
     use crate::domain::video::WatchState;
     use crate::domain::video::{PlaybackPosition, RetryAttempts, StepState, Video, VideoStatus};
     use crate::domain::video::{VideoId, YoutubeVideoId};
@@ -1096,8 +1097,6 @@ mod tests {
             download_failure: None,
             quality: None,
             filename: None,
-            thumbnail_filename: None,
-            thumbnail: StepState::pending(),
             duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
@@ -1114,6 +1113,7 @@ mod tests {
             subtitles: Subtitles::pending(),
             chapters: Chapters::pending(),
             downloaded_quality: DownloadedQuality::pending(),
+            thumbnail: Thumbnail::pending(),
         }
     }
 

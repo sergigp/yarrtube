@@ -5,7 +5,7 @@ use crate::domain::services::{
     VideoRelocator, VideoRelocatorApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
-    Video, VideoId, VideoOwner, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
+    StepStatus, Video, VideoId, VideoOwner, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -156,7 +156,7 @@ impl VideoReconciler {
         else {
             return;
         };
-        let metadata = metadata.with_thumb(video.thumbnail_basename());
+        let metadata = metadata.with_thumb(video.thumbnail.basename());
         let nfo_path = owner.target.output_dir.join(nfo_path_for(filename));
         if let Err(e) = self
             .video_metadata_repository
@@ -235,7 +235,7 @@ impl VideoReconciler {
     fn categorization_wanted(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<bool> {
         Ok(owner.categorization_enabled
             && self.preferences()?.categorization_available()
-            && video.is_categorizable()
+            && video.summary.status == StepStatus::Done
             && !self.video_categorizer.pending(video, owner)?.is_empty())
     }
 

@@ -261,7 +261,7 @@ impl VideoDownloader {
             &number,
             &video.title,
             &downloaded,
-            video.thumbnail_basename(),
+            video.thumbnail.basename(),
             output_dir,
         );
         let metadata = metadata.map(|metadata| metadata.with_thumb(files.thumb.clone()));

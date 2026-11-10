@@ -25,6 +25,7 @@ pub mod sourced_video;
 pub mod step_state;
 pub mod step_status;
 pub mod subtitles;
+pub mod thumbnail;
 pub mod thumbnail_fetch;
 #[allow(clippy::module_inception)]
 pub mod video;
@@ -75,6 +76,7 @@ pub use sourced_video::{SourcedVideo, VideoSource};
 pub use step_state::StepState;
 pub use step_status::StepStatus;
 pub use subtitles::Subtitles;
+pub use thumbnail::Thumbnail;
 pub use thumbnail_fetch::ThumbnailFetch;
 pub use video::Video;
 pub use video_chapter::VideoChapter;

@@ -1,8 +1,8 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     ChannelEpisodeNumber, Chapters, DownloadedQuality, EpisodeNumber, PlaybackPosition,
-    RetryAttempts, StaleVideo, StepState, StepStatus, Subtitles, Video, VideoChapter, VideoStatus,
-    WatchState,
+    RetryAttempts, StaleVideo, StepState, StepStatus, Subtitles, Thumbnail, Video, VideoChapter,
+    VideoStatus, WatchState,
 };
 use crate::domain::video::{VideoId, YoutubeVideoId};
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -151,7 +151,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
-                video.thumbnail_filename,
+                video.thumbnail.filename,
                 video.duration_seconds,
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
@@ -178,9 +178,9 @@ impl VideoRepository for SqliteVideoRepository {
                 video.version,
                 video.download_attempts.failed,
                 video.download_failure,
-                video.thumbnail.status.as_str(),
-                video.thumbnail.attempts.failed,
-                Self::encode_timestamp(video.thumbnail.attempts.last_failed_at),
+                video.thumbnail.state.status.as_str(),
+                video.thumbnail.state.attempts.failed,
+                Self::encode_timestamp(video.thumbnail.state.attempts.last_failed_at),
                 video.summary.attempts.failed,
                 Self::encode_timestamp(video.summary.attempts.last_failed_at),
                 video.categorization.status.as_str(),
@@ -246,7 +246,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
-                video.thumbnail_filename,
+                video.thumbnail.filename,
                 video.duration_seconds,
                 video.updated_at.to_rfc3339(),
                 video.watch.watched_at.map(|w| w.to_rfc3339()),
@@ -271,9 +271,9 @@ impl VideoRepository for SqliteVideoRepository {
                 video.summary.status.as_str(),
                 video.download_attempts.failed,
                 video.download_failure,
-                video.thumbnail.status.as_str(),
-                video.thumbnail.attempts.failed,
-                Self::encode_timestamp(video.thumbnail.attempts.last_failed_at),
+                video.thumbnail.state.status.as_str(),
+                video.thumbnail.state.attempts.failed,
+                Self::encode_timestamp(video.thumbnail.state.attempts.last_failed_at),
                 video.summary.attempts.failed,
                 Self::encode_timestamp(video.summary.attempts.last_failed_at),
                 video.categorization.status.as_str(),
@@ -562,13 +562,6 @@ impl SqliteVideoRepository {
             download_failure: row.download_failure,
             quality: row.quality.map(Quality::new).transpose()?,
             filename: row.filename,
-            thumbnail_filename: row.thumbnail_filename,
-            thumbnail: Self::decode_step(
-                &row.thumbnail_status,
-                row.thumbnail_failed_attempts,
-                row.thumbnail_last_failed_at,
-                "thumbnail_last_failed_at",
-            )?,
             duration_seconds: row.duration_seconds,
             created_at: Self::parse_timestamp(&row.created_at, "created_at")?,
             updated_at: Self::parse_timestamp(&row.updated_at, "updated_at")?,
@@ -621,6 +614,15 @@ impl SqliteVideoRepository {
                 watched_at: Self::decode_timestamp(row.watched_at, "watched_at")?,
                 position: PlaybackPosition::new(row.playback_position_seconds)?,
                 last_played_at: Self::decode_timestamp(row.last_played_at, "last_played_at")?,
+            },
+            thumbnail: Thumbnail {
+                filename: row.thumbnail_filename,
+                state: Self::decode_step(
+                    &row.thumbnail_status,
+                    row.thumbnail_failed_attempts,
+                    row.thumbnail_last_failed_at,
+                    "thumbnail_last_failed_at",
+                )?,
             },
         })
     }
@@ -712,6 +714,7 @@ mod tests {
     use crate::domain::video::Chapters;
     use crate::domain::video::DownloadedQuality;
     use crate::domain::video::PlaylistEpisodeNumber;
+    use crate::domain::video::Thumbnail;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
@@ -743,7 +746,10 @@ mod tests {
             status: VideoStatus::Retrying,
             download_attempts: attempts(3),
             download_failure: Some("HTTP Error 503".to_string()),
-            thumbnail: step(StepStatus::Failed, 11),
+            thumbnail: Thumbnail {
+                state: step(StepStatus::Failed, 11),
+                filename: None,
+            },
             subtitles: Subtitles {
                 state: step(StepStatus::Retrying, 2),
                 last_checked_at: Some(failed_at),
@@ -1037,7 +1043,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.thumbnail_filename, Some("First.jpg".to_string()));
+        assert_eq!(found.thumbnail.filename, Some("First.jpg".to_string()));
     }
 
     #[test]

@@ -31,7 +31,7 @@ impl From<SourcedVideo> for HomeVideoView {
             id: video.id,
             youtube_id: video.youtube_id,
             title: video.title,
-            thumbnail_filename: video.thumbnail_filename,
+            thumbnail_filename: video.thumbnail.filename,
             duration_seconds: video.duration_seconds,
             published_at: None,
             source: sourced.source,

@@ -193,7 +193,7 @@ impl VideoRelocator {
         files: &RelocatedFiles,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
-        let from = video.filename.iter().chain(&video.thumbnail_filename);
+        let from = video.filename.iter().chain(&video.thumbnail.filename);
         let to = std::iter::once(&files.filename).chain(&files.thumbnail_filename);
         from.zip(to)
             .filter(|(from, to)| !self.already_moved(from, to, output_dir))
@@ -315,7 +315,7 @@ impl RelocatedFiles {
             .and_then(|ext| ext.to_str())
             .unwrap_or("mp4");
         let paths = EpisodePaths::new(number, &video.title);
-        let has_thumbnail = video.thumbnail_filename.is_some();
+        let has_thumbnail = video.thumbnail.filename.is_some();
         Self {
             filename: paths.media(extension),
             thumbnail_filename: has_thumbnail.then(|| paths.thumbnail()),

@@ -68,7 +68,7 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
             debug!(video_id = %video_id, "video no longer exists, skipping thumbnail fetch");
             return Ok(VideoStepOutcome::Settled);
         };
-        if video.thumbnail_filename.is_some() || !video.is_thumbnail_fetchable() {
+        if video.thumbnail.filename.is_some() || !video.is_thumbnail_fetchable() {
             return Ok(VideoStepOutcome::Settled);
         }
         let Some(owner) = self.video_owner_finder.find(&video)? else {
@@ -116,11 +116,11 @@ impl ThumbnailFetcher {
     fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
         let now = self.clock.now();
         let recorded = self.video_updater.update(&video.id, |video| {
-            (video.thumbnail_filename.is_none() && video.is_thumbnail_fetchable())
+            (video.thumbnail.filename.is_none() && video.is_thumbnail_fetchable())
                 .then(|| video.record_thumbnail_failure(now))
         })?;
         Ok(VideoStepOutcome::retry_at_or_settled(
-            recorded.and_then(|video| video.thumbnail.next_attempt_at()),
+            recorded.and_then(|video| video.thumbnail.state.next_attempt_at()),
             reason,
         ))
     }
@@ -168,7 +168,7 @@ impl ThumbnailFetcher {
     /// errored), and hasn't been given a thumbnail by a download meanwhile.
     fn still_placeable(&self, video: &Video) -> anyhow::Result<Option<Video>> {
         Ok(self.video_repository.find(&video.id)?.filter(|stored| {
-            stored.is_thumbnail_fetchable() && stored.thumbnail_filename.is_none()
+            stored.is_thumbnail_fetchable() && stored.thumbnail.filename.is_none()
         }))
     }
 }

@@ -48,6 +48,7 @@ mod tests {
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::RetryAttempts;
     use crate::domain::video::StepState;
+    use crate::domain::video::Thumbnail;
     use crate::domain::video::Video;
     use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
@@ -1701,14 +1702,16 @@ mod tests {
                 download_failure: None,
                 quality: Some(Quality::High),
                 filename: Some("Season 2026/S2026E031501 - My Video.mp4".to_string()),
-                thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
-                thumbnail: StepState::pending().succeed(),
                 episode_number: Some(published_episode()),
                 synced_at: Some(fixed_timestamp()),
                 updated_at: fixed_timestamp(),
                 downloaded_quality: DownloadedQuality {
                     height: Some(720),
                     ..DownloadedQuality::checked(Some(fixed_timestamp()), 0)
+                },
+                thumbnail: Thumbnail {
+                    filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                    state: StepState::pending().succeed()
                 },
                 ..video
             }]

@@ -1,6 +1,6 @@
 use crate::domain::category::{Category, CategoryMember};
 use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
-use crate::domain::video::{Video, VideoId};
+use crate::domain::video::{StepStatus, Video, VideoId};
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -61,7 +61,8 @@ impl CategorizationResetterApi for CategorizationResetter {
         let now = self.clock.now();
         self.video_ids_outside(category)?.iter().try_for_each(|id| {
             self.reset_one(id, |video| {
-                (!video.is_categorization_pending()).then(|| video.reset_categorization(now))
+                (video.categorization.status != StepStatus::Pending)
+                    .then(|| video.reset_categorization(now))
             })
         })
     }

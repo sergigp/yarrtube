@@ -283,6 +283,7 @@ mod tests {
     use crate::domain::video::Chapters;
     use crate::domain::video::DownloadedQuality;
     use crate::domain::video::Subtitles;
+    use crate::domain::video::Thumbnail;
     use crate::domain::video::WatchState;
     use crate::domain::video::{
         EpisodeNumber, RetryAttempts, StepState, Video, VideoChapter, VideoId, VideoStatus,
@@ -7091,7 +7092,6 @@ mod tests {
             video_repository.find(&video.id).unwrap(),
             Some(Video {
                 version: 1,
-                thumbnail: StepState::pending(),
                 summary: StepState::pending(),
                 categorization: StepState::pending(),
                 updated_at: fixed_timestamp(),
@@ -7106,6 +7106,10 @@ mod tests {
                 downloaded_quality: DownloadedQuality {
                     height: video.downloaded_quality.height,
                     ..DownloadedQuality::pending()
+                },
+                thumbnail: Thumbnail {
+                    state: StepState::pending(),
+                    ..video.thumbnail.clone()
                 },
                 ..video.clone()
             })

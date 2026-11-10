@@ -38,6 +38,7 @@ mod tests {
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::Thumbnail;
     use crate::domain::video::{
         EpisodeNumber, FetchedThumbnail, RetryAttempts, StepState, StepStatus, Video,
         YoutubeVideoId,
@@ -521,14 +522,17 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                thumbnail: StepState {
-                    status: StepStatus::Retrying,
-                    attempts: RetryAttempts {
-                        failed: 1,
-                        last_failed_at: Some(later()),
-                    },
-                },
                 updated_at: later(),
+                thumbnail: Thumbnail {
+                    state: StepState {
+                        status: StepStatus::Retrying,
+                        attempts: RetryAttempts {
+                            failed: 1,
+                            last_failed_at: Some(later()),
+                        },
+                    },
+                    ..video.thumbnail.clone()
+                },
                 ..video.clone()
             }]
         );
@@ -612,12 +616,15 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video = Video {
-            thumbnail: StepState {
-                status: StepStatus::Retrying,
-                attempts: RetryAttempts {
-                    failed: 10,
-                    last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+            thumbnail: Thumbnail {
+                state: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 10,
+                        last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+                    },
                 },
+                ..Thumbnail::pending()
             },
             ..my_video()
         };
@@ -637,14 +644,17 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                thumbnail: StepState {
-                    status: StepStatus::Failed,
-                    attempts: RetryAttempts {
-                        failed: 11,
-                        last_failed_at: Some(later()),
-                    },
-                },
                 updated_at: later(),
+                thumbnail: Thumbnail {
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(later()),
+                        },
+                    },
+                    ..video.thumbnail
+                },
                 ..video
             }]
         );
@@ -655,12 +665,15 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = Video {
-            thumbnail: StepState {
-                status: StepStatus::Retrying,
-                attempts: RetryAttempts {
-                    failed: 2,
-                    last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+            thumbnail: Thumbnail {
+                state: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 2,
+                        last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+                    },
                 },
+                ..Thumbnail::pending()
             },
             ..my_video()
         };
@@ -685,13 +698,15 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
-                thumbnail: StepState {
-                    status: StepStatus::Done,
-                    attempts: RetryAttempts::default(),
-                },
                 episode_number: Some(EpisodeNumber::from_columns(2026, 31501).unwrap()),
                 updated_at: later(),
+                thumbnail: Thumbnail {
+                    filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                    state: StepState {
+                        status: StepStatus::Done,
+                        attempts: RetryAttempts::default(),
+                    },
+                },
                 ..video
             }]
         );

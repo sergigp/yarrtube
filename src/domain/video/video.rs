@@ -7,6 +7,7 @@ use super::retry_attempts::RetryAttempts;
 use super::step_state::StepState;
 use super::step_status::StepStatus;
 use super::subtitles::Subtitles;
+use super::thumbnail::Thumbnail;
 use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
@@ -38,9 +39,7 @@ pub struct Video {
     pub download_failure: Option<String>,
     pub quality: Option<Quality>,
     pub filename: Option<String>,
-    pub thumbnail_filename: Option<String>,
-    /// The thumbnail fetch's step state.
-    pub thumbnail: StepState,
+    pub thumbnail: Thumbnail,
     pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -76,8 +75,7 @@ impl Video {
             download_failure: None,
             quality: None,
             filename: None,
-            thumbnail_filename: None,
-            thumbnail: StepState::pending(),
+            thumbnail: Thumbnail::pending(),
             duration_seconds: None,
             created_at: now,
             updated_at: now,
@@ -112,18 +110,13 @@ impl Video {
         duration_seconds: Option<i64>,
         now: DateTime<Utc>,
     ) -> Self {
-        let thumbnail_filename = thumbnail_filename.or(self.thumbnail_filename);
         Self {
             status: VideoStatus::Downloaded,
             download_attempts: RetryAttempts::default(),
             download_failure: None,
             quality: Some(quality),
             filename: Some(filename.into()),
-            thumbnail: match thumbnail_filename {
-                Some(_) => self.thumbnail.succeed(),
-                None => self.thumbnail,
-            },
-            thumbnail_filename,
+            thumbnail: self.thumbnail.record_download(thumbnail_filename),
             duration_seconds,
             updated_at: now,
             synced_at: Some(now),
@@ -225,12 +218,11 @@ impl Video {
 
     /// Records a thumbnail fetched independently of, and ahead of, the
     /// video's full download — see the `video-thumbnails` capability.
-    /// Touches only `thumbnail_filename`/`updated_at`, leaving `status`,
-    /// `filename`, and `quality` exactly as they were.
+    /// Touches only the thumbnail and `updated_at`, leaving the download
+    /// exactly as it was.
     pub fn with_thumbnail(self, thumbnail_filename: impl Into<String>, now: DateTime<Utc>) -> Self {
         Self {
-            thumbnail_filename: Some(thumbnail_filename.into()),
-            thumbnail: self.thumbnail.succeed(),
+            thumbnail: self.thumbnail.succeed(thumbnail_filename),
             updated_at: now,
             ..self
         }
@@ -247,19 +239,10 @@ impl Video {
 
     /// Whether a thumbnail fetch should run at `now`.
     pub fn is_thumbnail_due(&self, now: DateTime<Utc>) -> bool {
-        self.thumbnail_filename.is_none()
+        self.thumbnail.filename.is_none()
             && self.is_thumbnail_fetchable()
             && self.status != VideoStatus::InProgress
-            && self.thumbnail.is_due(now)
-    }
-
-    /// The thumbnail's file name as an NFO references it, next to the episode.
-    pub fn thumbnail_basename(&self) -> Option<String> {
-        self.thumbnail_filename
-            .as_deref()
-            .and_then(|f| std::path::Path::new(f).file_name())
-            .and_then(|f| f.to_str())
-            .map(str::to_string)
+            && self.thumbnail.state.is_due(now)
     }
 
     /// Resets a video back to `Pending`, clearing its recorded filename,
@@ -274,8 +257,7 @@ impl Video {
             download_failure: None,
             quality: None,
             filename: None,
-            thumbnail_filename: None,
-            thumbnail: StepState::pending(),
+            thumbnail: Thumbnail::pending(),
             duration_seconds: None,
             updated_at: now,
             synced_at: None,
@@ -379,11 +361,6 @@ impl Video {
             )
     }
 
-    /// Summary Done: a video is categorized from its summary.
-    pub fn is_categorizable(&self) -> bool {
-        self.summary.status == StepStatus::Done
-    }
-
     /// Whether a categorization should run at `now`: Pending or Done (a
     /// category may be pending since), or Retrying with its next attempt due.
     pub fn is_categorization_due(&self, now: DateTime<Utc>) -> bool {
@@ -415,21 +392,6 @@ impl Video {
             updated_at: now,
             ..self
         }
-    }
-
-    /// Whether the categorization is Pending.
-    pub fn is_categorization_pending(&self) -> bool {
-        self.categorization.status == StepStatus::Pending
-    }
-
-    /// Whether the categorization gave up: Failed.
-    pub fn is_categorization_failed(&self) -> bool {
-        self.categorization.status == StepStatus::Failed
-    }
-
-    /// When a Retrying categorization's next attempt is due.
-    pub fn next_categorization_at(&self) -> Option<DateTime<Utc>> {
-        self.categorization.next_attempt_at()
     }
 
     /// Records a failed categorization attempt: Retrying, or Failed on the
@@ -557,7 +519,7 @@ impl Video {
     ) -> Self {
         Self {
             filename: Some(filename.into()),
-            thumbnail_filename,
+            thumbnail: self.thumbnail.with_filename(thumbnail_filename),
             episode_number: Some(number),
             updated_at: now,
             ..self
@@ -598,7 +560,7 @@ mod tests {
         assert_eq!(video.title, "My Video");
         assert_eq!(video.quality, None);
         assert_eq!(video.filename, None);
-        assert_eq!(video.thumbnail_filename, None);
+        assert_eq!(video.thumbnail.filename, None);
         assert_eq!(video.duration_seconds, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
@@ -648,7 +610,7 @@ mod tests {
         assert_eq!(video.status, VideoStatus::Downloaded);
         assert_eq!(video.quality, Some(Quality::High));
         assert_eq!(video.filename, Some("My Video.mp4".to_string()));
-        assert_eq!(video.thumbnail_filename, Some("My Video.jpg".to_string()));
+        assert_eq!(video.thumbnail.filename, Some("My Video.jpg".to_string()));
         assert_eq!(video.duration_seconds, Some(223));
         assert_eq!(video.updated_at, now);
     }
@@ -659,7 +621,7 @@ mod tests {
 
         let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now);
 
-        assert_eq!(video.thumbnail_filename, None);
+        assert_eq!(video.thumbnail.filename, None);
     }
 
     #[test]
@@ -678,7 +640,7 @@ mod tests {
         let video = video().with_thumbnail("My Video/My Video.jpg", now);
 
         assert_eq!(
-            video.thumbnail_filename,
+            video.thumbnail.filename,
             Some("My Video/My Video.jpg".to_string())
         );
         assert_eq!(video.updated_at, now);
@@ -704,7 +666,7 @@ mod tests {
         assert_eq!(reset.status, VideoStatus::Pending);
         assert_eq!(reset.quality, None);
         assert_eq!(reset.filename, None);
-        assert_eq!(reset.thumbnail_filename, None);
+        assert_eq!(reset.thumbnail.filename, None);
         assert_eq!(reset.duration_seconds, None);
         assert_eq!(reset.updated_at, later);
     }
@@ -783,7 +745,10 @@ mod tests {
             relocated,
             Video {
                 filename: Some("Season 1/S01E003 - My Video.mp4".to_string()),
-                thumbnail_filename: Some("Season 1/S01E003 - My Video.jpg".to_string()),
+                thumbnail: Thumbnail {
+                    filename: Some("Season 1/S01E003 - My Video.jpg".to_string()),
+                    ..video.thumbnail.clone()
+                },
                 episode_number: Some(number),
                 updated_at: now,
                 ..video

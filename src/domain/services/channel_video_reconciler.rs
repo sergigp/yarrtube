@@ -372,7 +372,7 @@ impl ChannelVideoReconciler {
                             video_id: video.id.as_str().to_string(),
                             title: video.title.clone(),
                             filename: video.filename.clone(),
-                            thumbnail_filename: video.thumbnail_filename.clone(),
+                            thumbnail_filename: video.thumbnail.filename.clone(),
                             subtitle_filename: video.subtitles.filename.clone(),
                             was_downloaded: video.status == VideoStatus::Downloaded,
                         },
