@@ -266,6 +266,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_parse_an_answer_without_the_categorys_entry() {
+        assert_eq!(
+            sicilian(r#"{"Tech": {"reason": "A Sicilian game.", "belongs": true}}"#),
+            None
+        );
+    }
+
     /// The answer for "Sicilian" in `content`.
     fn sicilian(content: &str) -> Option<CategorizationAnswer> {
         CategorizationAnswer::parse(content, "Sicilian")

@@ -39,7 +39,6 @@ impl From<anyhow::Error> for Skip {
 #[derive(Clone, Copy)]
 enum Call {
     First,
-    #[allow(dead_code)]
     Fallback,
 }
 
@@ -286,14 +285,24 @@ impl VideoCategorizer {
             .collect()
     }
 
-    /// `rejected` of a call about several categories, each asked again alone.
+    /// `rejected` of the call about every pending category, each asked
+    /// again alone when that call was about several; the ones rejected again.
     fn fall_back<'a>(
         &self,
-        _video: &Video,
-        _job: &CategorizationJob,
+        video: &Video,
+        job: &CategorizationJob,
         rejected: Vec<(&'a Category, String)>,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
-        Ok(rejected)
+        if job.pending.len() < 2 {
+            return Ok(rejected);
+        }
+        rejected
+            .into_iter()
+            .map(|(category, _)| {
+                self.ask(video, job, std::slice::from_ref(category), Call::Fallback)
+            })
+            .collect::<Result<Vec<_>, Stop>>()
+            .map(|rejected| rejected.into_iter().flatten().collect())
     }
 
     /// Applies `category`'s verdict, unless the pair changed during the call.

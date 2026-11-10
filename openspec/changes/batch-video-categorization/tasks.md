@@ -24,7 +24,7 @@
 - [x] 2.4 `it_should_cap_the_output_at_the_context_length`: an 8192 override with 9 categories gives a cap of 8192.
 - [x] 2.5 `it_should_wait_longer_for_a_call_about_more_categories`: 9 categories give a 2,457 s timeout; 1 category gives 30 min.
 - [x] 2.6 `it_should_ask_with_the_auto_context_length`: 9 categories with a prompt give `context_length` 16384 (drives `ContextLength::auto`; add its inline value-object test for 0, 2, 3, 9, 10 and 80 categories).
-- [ ] 2.7 `it_should_store_the_usable_answers_of_a_partly_usable_call`: "Sicilian" is stored and "Tech" is asked alone (drives `CategorizationQuestion::answers`; add its inline tests for leaked thinking, an entry without `belongs`, a missing entry and no JSON).
+- [x] 2.7 `it_should_store_the_usable_answers_of_a_partly_usable_call`: "Sicilian" is stored and "Tech" is asked alone (drives `CategorizationQuestion::answers`; add its inline tests for leaked thinking, an entry without `belongs`, a missing entry and no JSON).
 - [ ] 2.8 `it_should_ask_each_category_alone_when_the_call_hits_the_output_limit`: 1 batch call plus N single calls, all stored.
 - [ ] 2.9 `it_should_ask_each_category_alone_when_the_call_is_refused`.
 - [ ] 2.10 `it_should_not_fall_back_for_a_single_category`: one rejected call, then the task fails.

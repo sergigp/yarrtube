@@ -199,7 +199,8 @@ mod tests {
         let video = summarized_video();
         let tech = prompted_category("Tech");
         seed(&db, &video, &[&tech]);
-        let task = categorize_video_task(&db, llm_replying(vec![reply(&answers(&[("Tech", NO)]))]));
+        let llm = llm_replying(vec![reply(&answers(&[("Tech", NO)]))]);
+        let task = categorize_video_task(&db, llm);
 
         let result = run(&task, &video);
 
@@ -425,6 +426,40 @@ mod tests {
                 .map(|chat| (chat.context_length, chat.max_output_tokens))
                 .collect::<Vec<_>>(),
             vec![(16384, 12285)]
+        );
+    }
+
+    #[test]
+    fn it_should_store_the_usable_answers_of_a_partly_usable_call() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        seed(&db, &video, &[&sicilian, &tech]);
+        let llm = llm_replying(vec![
+            reply(&answers(&[
+                ("Sicilian", YES),
+                ("Tech", r#"{"reason": "A chess game."}"#),
+            ])),
+            reply(&answers(&[("Tech", NO)])),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![vec!["Sicilian", "Tech"], vec!["Tech"]]
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+            ])
         );
     }
 
@@ -764,7 +799,13 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         let video = summarized_video();
         let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
         seed(&db, &video, &[&sicilian, &tech]);
-        let task = categorize_video_task(&db, llm_replying(vec![reply(&answers(&[("Tech", NO)]))]));
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![
+                reply(&answers(&[("Tech", NO)])),
+                reply("It might belong."),
+            ]),
+        );
 
         let result = run(&task, &video);
 
@@ -791,7 +832,10 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         );
         let first = categorize_video_task(
             &db,
-            llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]),
+            llm_replying(vec![
+                reply(&answers(&[("Sicilian", YES)])),
+                reply("It might belong."),
+            ]),
         );
         run(&first, &video).unwrap_err();
         let llm = llm_replying(vec![reply(&answers(&[("Tech", NO)]))]);
@@ -815,9 +859,18 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             prompted_category("Tech"),
         );
         seed(&db, &video, &[&food, &sicilian, &tech]);
+        let stopped_at_limit = Ok(LlmReply {
+            stopped_at_limit: true,
+            ..reply("").unwrap()
+        });
         let task = categorize_video_task(
             &db,
-            llm_replying(vec![Ok(LlmReply::refused("model is too large"))]),
+            llm_replying(vec![
+                Ok(LlmReply::refused("model is too large")),
+                stopped_at_limit,
+                Ok(LlmReply::refused("model is too large")),
+                reply("It might belong."),
+            ]),
         );
 
         let result = run_last_attempt(&task, &video);
@@ -825,9 +878,9 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         assert_eq!(
             result,
             Err(
-                "the model couldn't answer for Food (Ollama refused the call: model is too large), \
+                "the model couldn't answer for Food (it hit the 3072-token output limit), \
                  Sicilian (Ollama refused the call: model is too large), \
-                 Tech (Ollama refused the call: model is too large)"
+                 Tech (its answer isn't usable)"
                     .to_string()
             )
         );
@@ -939,7 +992,10 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         );
         let task = categorize_video_task(
             &db,
-            llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]),
+            llm_replying(vec![
+                reply(&answers(&[("Sicilian", YES)])),
+                reply("It might belong."),
+            ]),
         );
 
         let lines = captured_log_lines(|| {
