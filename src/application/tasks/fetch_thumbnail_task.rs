@@ -587,6 +587,53 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_mark_the_thumbnail_done_once_fetched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = Video {
+            thumbnail: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 2,
+                    last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+                },
+            },
+            ..my_video()
+        };
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = thumbnail_task(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeThumbnailRepository::with_result(Some(
+                FetchedThumbnail {
+                    path: PathBuf::from("yt1.jpg"),
+                    published_at: Some(published_at()),
+                },
+            ))),
+            Arc::new(FakeVideoFileRepository::default()),
+        );
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                thumbnail: StepState {
+                    status: StepStatus::Done,
+                    attempts: RetryAttempts::default(),
+                },
+                episode_number: Some(EpisodeNumber::from_columns(2026, 31501).unwrap()),
+                updated_at: later(),
+                ..video
+            }]
+        );
+    }
+
     /// A thumbnail a download placed while the fetch was in flight.
     const DOWNLOADED_THUMBNAIL: &str = "Season 2026/S2026E031501 - My Video.jpg";
 
