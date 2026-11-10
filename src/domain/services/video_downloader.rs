@@ -197,9 +197,7 @@ impl VideoDownloader {
                 Self::log_sabr(&started, sabr_notice.as_deref());
                 self.record_failed(started, failure)
             }
-            Err(e) => self
-                .record_errored(started, e)
-                .map(|_| VideoStepOutcome::Settled),
+            Err(e) => self.record_errored(started, e),
         }
     }
 
@@ -423,12 +421,17 @@ impl VideoDownloader {
         }
     }
 
-    /// A systemic download error: marks the video errored and propagates
-    /// the error so the task queue retries/dead-letters it.
-    fn record_errored(&self, started: Video, error: anyhow::Error) -> anyhow::Result<()> {
-        let video_id = started.id.clone();
-        self.mark_errored(started, &error.to_string())?;
-        Self::fail_errored(&video_id, error)
+    /// The download couldn't run at all (e.g. `yt-dlp` failed to start):
+    /// a failed attempt like any other, with that error as its reason.
+    fn record_errored(
+        &self,
+        started: Video,
+        error: anyhow::Error,
+    ) -> anyhow::Result<VideoStepOutcome> {
+        error!(video_id = %started.id, error = %error, "video download errored");
+        let reason = error.to_string();
+        let errored = self.mark_errored(started, &reason)?;
+        Ok(Self::next_attempt(errored, reason))
     }
 
     /// Placing a successful download failed (numbering, moving or recording
@@ -437,7 +440,9 @@ impl VideoDownloader {
     /// stored, so a number assigned before the failure is kept; a video
     /// deleted meanwhile gets nothing recorded.
     fn record_placement_errored(&self, started: Video, error: anyhow::Error) -> anyhow::Result<()> {
-        self.record_errored(started, error)
+        let video_id = started.id.clone();
+        self.mark_errored(started, &error.to_string())?;
+        Self::fail_errored(&video_id, error)
     }
 
     fn mark_errored(&self, started: Video, reason: &str) -> anyhow::Result<Option<Video>> {

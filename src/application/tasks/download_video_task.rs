@@ -1699,22 +1699,12 @@ mod tests {
     }
 
     #[test]
-    fn it_should_retry_a_download_that_errored() {
+    fn it_should_record_the_failure_if_yt_dlp_cannot_run() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.insert(&video).unwrap();
-        SqliteChannelRepository::new(db.database())
-            .insert(&my_channel())
-            .unwrap();
-        SqliteChannelVideoRepository::new(db.database())
-            .save(&ChannelVideo::create(
-                my_channel_id(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
+        seed_channel_video(&db, &video);
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             Path::new("/videos"),
@@ -1729,14 +1719,25 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("yt-dlp could not be run".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "yt-dlp could not be run".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
+                status: VideoStatus::Retrying,
+                download_attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                download_failure: Some("yt-dlp could not be run".to_string()),
+                updated_at: fixed_timestamp(),
                 ..video
-                    .start_download(fixed_timestamp())
-                    .mark_errored("yt-dlp could not be run", fixed_timestamp())
             }]
         );
     }
