@@ -1,13 +1,13 @@
-import { useState } from "react";
-import { RotateCcw } from "lucide-react";
-import { useRetryVideo } from "@/api/queries";
-import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errorMessage";
+import { useState } from 'react'
+import { RotateCcw } from 'lucide-react'
+import { useRetryVideo } from '@/api/queries'
+import { Button } from '@/components/ui/button'
+import { errorMessage } from '@/lib/errorMessage'
 
 interface RetryVideoButtonProps {
-  videoId: string;
+  videoId: string
   /** Names the video in the failure alert. */
-  title: string;
+  title: string
 }
 
 /**
@@ -15,8 +15,8 @@ interface RetryVideoButtonProps {
  * failed step of the video at once, then shows the video as refetched.
  */
 export function RetryVideoButton({ videoId, title }: RetryVideoButtonProps) {
-  const retryVideo = useRetryVideo();
-  const [retrying, setRetrying] = useState(false);
+  const retryVideo = useRetryVideo()
+  const [retrying, setRetrying] = useState(false)
 
   return (
     <Button
@@ -25,18 +25,18 @@ export function RetryVideoButton({ videoId, title }: RetryVideoButtonProps) {
       className="mb-2"
       disabled={retrying}
       onClick={async () => {
-        setRetrying(true);
+        setRetrying(true)
         try {
-          await retryVideo(videoId);
+          await retryVideo(videoId)
         } catch (err) {
-          window.alert(`Failed to retry "${title}": ${errorMessage(err)}`);
+          window.alert(`Failed to retry "${title}": ${errorMessage(err)}`)
         } finally {
-          setRetrying(false);
+          setRetrying(false)
         }
       }}
     >
       <RotateCcw />
       Retry now
     </Button>
-  );
+  )
 }

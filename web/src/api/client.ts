@@ -22,14 +22,14 @@ import type {
   Video,
   VideoCategories,
   VideoProgress,
-} from "./types";
-import { parseAnnouncements } from "@/lib/announcements";
+} from './types'
+import { parseAnnouncements } from '@/lib/announcements'
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
-  body?: unknown;
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+  body?: unknown
   /** Names the request in the fallback error message; defaults to the path. */
-  label?: string;
+  label?: string
 }
 
 /**
@@ -37,77 +37,66 @@ interface RequestOptions {
  * it gives one. Returns the raw `Response`, leaving body parsing to the
  * typed wrappers below (DELETE and action endpoints respond with no body).
  */
-async function send(
-  path: string,
-  { method = "GET", body, label }: RequestOptions = {},
-): Promise<Response> {
+async function send(path: string, { method = 'GET', body, label }: RequestOptions = {}): Promise<Response> {
   const response = await fetch(`/api${path}`, {
     method,
     ...(body !== undefined && {
-      headers: { "content-type": "application/json" },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }),
-  });
+  })
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
+    const errorBody = (await response.json().catch(() => null)) as { error?: string } | null
     throw new Error(
-      errorBody?.error ??
-        `request to ${label ?? path} failed with status ${response.status}`,
-    );
+      errorBody?.error ?? `request to ${label ?? path} failed with status ${response.status}`,
+    )
   }
-  return response;
+  return response
 }
 
-async function request<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<T> {
-  const response = await send(path, options);
-  return response.json() as Promise<T>;
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options)
+  return response.json() as Promise<T>
 }
 
 export function fetchPlaylists(): Promise<PlaylistListItem[]> {
-  return request("/playlists");
+  return request('/playlists')
 }
 
 export function fetchVideos(playlistId: string): Promise<Video[]> {
-  return request(`/playlists/${encodeURIComponent(playlistId)}/videos`);
+  return request(`/playlists/${encodeURIComponent(playlistId)}/videos`)
 }
 
 export function fetchHomeVideos(): Promise<HomeVideos> {
-  return request("/videos/home");
+  return request('/videos/home')
 }
 
 /** Downloaded videos whose title contains `text` (at least 2 characters once trimmed). */
 export function searchVideos(text: string): Promise<VideoSearchResults> {
-  return request(`/videos/search?q=${encodeURIComponent(text)}`);
+  return request(`/videos/search?q=${encodeURIComponent(text)}`)
 }
 
 export function fetchTasks(): Promise<Task[]> {
-  return request("/tasks");
+  return request('/tasks')
 }
 
 /** The version the running daemon was built for (`dev` for local builds). */
 export function fetchVersion(): Promise<AppVersion> {
-  return request("/version");
+  return request('/version')
 }
 
 export function fetchPreferences(): Promise<Preferences> {
-  return request("/preferences");
+  return request('/preferences')
 }
 
 /** Changes only the preferences in `patch`; resolves with every preference. */
-export function patchPreferences(
-  patch: PreferencesPatch,
-): Promise<Preferences> {
-  return request("/preferences", { method: "PATCH", body: patch });
+export function patchPreferences(patch: PreferencesPatch): Promise<Preferences> {
+  return request('/preferences', { method: 'PATCH', body: patch })
 }
 
 /** Checks the Ollama server at `url` (saved or not) and lists its models. */
 export function fetchOllama(url: string): Promise<OllamaServer> {
-  return request(`/ollama?url=${encodeURIComponent(url)}`);
+  return request(`/ollama?url=${encodeURIComponent(url)}`)
 }
 
 /**
@@ -117,39 +106,37 @@ export function fetchOllama(url: string): Promise<OllamaServer> {
  * preview is built from.
  */
 export function fetchDirectories(path?: string): Promise<DirectoryListing> {
-  const query = path ? `?path=${encodeURIComponent(path)}` : "";
-  return request(`/directories${query}`);
+  const query = path ? `?path=${encodeURIComponent(path)}` : ''
+  return request(`/directories${query}`)
 }
 
 export function videoMediaUrl(playlistPath: string, filename: string): string {
-  const encodedPath = playlistPath.split("/").map(encodeURIComponent).join("/");
-  const encodedFilename = filename.split("/").map(encodeURIComponent).join("/");
-  return `/media/${encodedPath}/${encodedFilename}`;
+  const encodedPath = playlistPath.split('/').map(encodeURIComponent).join('/')
+  const encodedFilename = filename.split('/').map(encodeURIComponent).join('/')
+  return `/media/${encodedPath}/${encodedFilename}`
 }
 
 /** The WebVTT subtitles of the stored video `videoId`. */
 export function videoSubtitlesUrl(videoId: string): string {
-  return `/api/videos/${encodeURIComponent(videoId)}/subtitles.vtt`;
+  return `/api/videos/${encodeURIComponent(videoId)}/subtitles.vtt`
 }
 
 export function avatarMediaUrl(filename: string): string {
-  return `/avatars/${encodeURIComponent(filename)}`;
+  return `/avatars/${encodeURIComponent(filename)}`
 }
 
 export interface CreatePlaylistRequest {
-  playlist: string;
-  path: string;
-  quality: string;
-  exclude_from_home: boolean;
-  reconcile_interval_minutes: number;
-  summaries_enabled: boolean;
-  categorization_enabled: boolean;
+  playlist: string
+  path: string
+  quality: string
+  exclude_from_home: boolean
+  reconcile_interval_minutes: number
+  summaries_enabled: boolean
+  categorization_enabled: boolean
 }
 
-export function createPlaylist(
-  body: CreatePlaylistRequest,
-): Promise<PlaylistListItem> {
-  return request("/playlists", { method: "POST", body, label: "/playlists" });
+export function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistListItem> {
+  return request('/playlists', { method: 'POST', body, label: '/playlists' })
 }
 
 /**
@@ -157,153 +144,139 @@ export function createPlaylist(
  * the server's error message.
  */
 export function previewPlaylist(playlist: string): Promise<PlaylistPreview> {
-  return request(`/playlists/preview?playlist=${encodeURIComponent(playlist)}`);
+  return request(`/playlists/preview?playlist=${encodeURIComponent(playlist)}`)
 }
 
 export function previewChannel(channel: string): Promise<ChannelPreview> {
-  return request(`/channels/preview?channel=${encodeURIComponent(channel)}`);
+  return request(`/channels/preview?channel=${encodeURIComponent(channel)}`)
 }
 
 /** Only the settings to change; an absent one keeps its stored value. */
 export interface UpdatePlaylistRequest {
-  exclude_from_home?: boolean;
-  hide_unwatched_count?: boolean;
-  reconcile_interval_minutes?: number;
-  summaries_enabled?: boolean;
-  categorization_enabled?: boolean;
+  exclude_from_home?: boolean
+  hide_unwatched_count?: boolean
+  reconcile_interval_minutes?: number
+  summaries_enabled?: boolean
+  categorization_enabled?: boolean
 }
 
 /**
  * Changes whether a playlist's videos are left out of the home view, whether
  * its unwatched count is hidden and/or its reconcile interval.
  */
-export function updatePlaylist(
-  id: string,
-  body: UpdatePlaylistRequest,
-): Promise<PlaylistListItem> {
+export function updatePlaylist(id: string, body: UpdatePlaylistRequest): Promise<PlaylistListItem> {
   return request(`/playlists/${encodeURIComponent(id)}`, {
-    method: "PATCH",
+    method: 'PATCH',
     body,
     label: `update playlist ${id}`,
-  });
+  })
 }
 
 /** Moves a playlist's show folder to `path`, relative to the videos root. */
-export function movePlaylist(
-  id: string,
-  path: string,
-): Promise<PlaylistListItem> {
+export function movePlaylist(id: string, path: string): Promise<PlaylistListItem> {
   return request(`/playlists/${encodeURIComponent(id)}/move`, {
-    method: "POST",
+    method: 'POST',
     body: { path },
     label: `move playlist ${id}`,
-  });
+  })
 }
 
 export async function deletePlaylist(id: string): Promise<void> {
   await send(`/playlists/${encodeURIComponent(id)}`, {
-    method: "DELETE",
+    method: 'DELETE',
     label: `delete playlist ${id}`,
-  });
+  })
 }
 
 export async function reconcilePlaylist(id: string): Promise<void> {
   await send(`/playlists/${encodeURIComponent(id)}/reconcile`, {
-    method: "POST",
+    method: 'POST',
     label: `reconcile playlist ${id}`,
-  });
+  })
 }
 
 export function fetchChannels(): Promise<ChannelListItem[]> {
-  return request("/channels");
+  return request('/channels')
 }
 
 export function fetchChannelVideos(handle: string): Promise<Video[]> {
-  return request(`/channels/${encodeURIComponent(handle)}/videos`);
+  return request(`/channels/${encodeURIComponent(handle)}/videos`)
 }
 
 export async function reconcileChannel(handle: string): Promise<void> {
   await send(`/channels/${encodeURIComponent(handle)}/reconcile`, {
-    method: "POST",
+    method: 'POST',
     label: `reconcile channel ${handle}`,
-  });
+  })
 }
 
 export interface CreateChannelRequest {
-  channel: string;
-  quality: string;
-  video_limit: number;
-  path: string;
-  reconcile_interval_minutes: number;
-  summaries_enabled: boolean;
-  categorization_enabled: boolean;
+  channel: string
+  quality: string
+  video_limit: number
+  path: string
+  reconcile_interval_minutes: number
+  summaries_enabled: boolean
+  categorization_enabled: boolean
 }
 
-export function createChannel(
-  body: CreateChannelRequest,
-): Promise<CreatedChannel> {
-  return request("/channels", { method: "POST", body, label: "/channels" });
+export function createChannel(body: CreateChannelRequest): Promise<CreatedChannel> {
+  return request('/channels', { method: 'POST', body, label: '/channels' })
 }
 
 /** Only the settings to change; an absent one keeps its stored value. */
 export interface UpdateChannelRequest {
-  quality?: string;
-  video_limit?: number;
-  reconcile_interval_minutes?: number;
-  summaries_enabled?: boolean;
-  categorization_enabled?: boolean;
+  quality?: string
+  video_limit?: number
+  reconcile_interval_minutes?: number
+  summaries_enabled?: boolean
+  categorization_enabled?: boolean
 }
 
 /** Changes a channel's quality, video limit and/or reconcile interval. */
-export function updateChannel(
-  handle: string,
-  body: UpdateChannelRequest,
-): Promise<CreatedChannel> {
+export function updateChannel(handle: string, body: UpdateChannelRequest): Promise<CreatedChannel> {
   return request(`/channels/${encodeURIComponent(handle)}`, {
-    method: "PATCH",
+    method: 'PATCH',
     body,
     label: `update channel ${handle}`,
-  });
+  })
 }
 
 /** Moves a channel's show folder to `path`, relative to the videos root. */
-export function moveChannel(
-  handle: string,
-  path: string,
-): Promise<CreatedChannel> {
+export function moveChannel(handle: string, path: string): Promise<CreatedChannel> {
   return request(`/channels/${encodeURIComponent(handle)}/move`, {
-    method: "POST",
+    method: 'POST',
     body: { path },
     label: `move channel ${handle}`,
-  });
+  })
 }
 
 export async function deleteChannel(id: string): Promise<void> {
   await send(`/channels/${encodeURIComponent(id)}`, {
-    method: "DELETE",
+    method: 'DELETE',
     label: `delete channel ${id}`,
-  });
+  })
 }
 
 export async function markChannelWatched(handle: string): Promise<void> {
   await send(`/channels/${encodeURIComponent(handle)}/watched`, {
-    method: "POST",
+    method: 'POST',
     label: `mark channel ${handle} watched`,
-  });
+  })
 }
 
 export async function markPlaylistWatched(id: string): Promise<void> {
   await send(`/playlists/${encodeURIComponent(id)}/watched`, {
-    method: "POST",
+    method: 'POST',
     label: `mark playlist ${id} watched`,
-  });
+  })
 }
 
 export async function markVideoWatched(videoId: string): Promise<void> {
   await send(`/videos/${encodeURIComponent(videoId)}/watched`, {
-    method: "POST",
+    method: 'POST',
     label: `mark video ${videoId} watched`,
-  });
+  })
 }
 
 export function recordVideoProgress(
@@ -311,42 +284,30 @@ export function recordVideoProgress(
   progress: VideoProgress,
 ): Promise<RecordProgressResponse> {
   return request(`/videos/${encodeURIComponent(videoId)}/progress`, {
-    method: "POST",
+    method: 'POST',
     body: progress,
     label: `record progress of video ${videoId}`,
-  });
+  })
 }
 
 /**
  * Records progress with `navigator.sendBeacon`, which the browser still
  * delivers while the page is being closed or hidden.
  */
-export function beaconVideoProgress(
-  videoId: string,
-  progress: VideoProgress,
-): void {
-  const body = new Blob([JSON.stringify(progress)], {
-    type: "application/json",
-  });
-  navigator.sendBeacon(
-    `/api/videos/${encodeURIComponent(videoId)}/progress`,
-    body,
-  );
+export function beaconVideoProgress(videoId: string, progress: VideoProgress): void {
+  const body = new Blob([JSON.stringify(progress)], { type: 'application/json' })
+  navigator.sendBeacon(`/api/videos/${encodeURIComponent(videoId)}/progress`, body)
 }
 
 export function listCategories(): Promise<CategoryList> {
-  return request("/categories");
+  return request('/categories')
 }
 
 /** Without a color, the daemon picks the least used palette color. */
 export function createCategory(
-  category: Pick<NewCategory, "name"> & Partial<NewCategory>,
+  category: Pick<NewCategory, 'name'> & Partial<NewCategory>,
 ): Promise<CreatedCategory> {
-  return request("/categories", {
-    method: "POST",
-    body: category,
-    label: "/categories",
-  });
+  return request('/categories', { method: 'POST', body: category, label: '/categories' })
 }
 
 /** Renames, recolors and/or sets the AI prompt; absent fields are kept. */
@@ -355,45 +316,42 @@ export async function updateCategory(
   update: { name?: string; color?: string; ai_prompt?: string },
 ): Promise<void> {
   await send(`/categories/${encodeURIComponent(id)}`, {
-    method: "PATCH",
+    method: 'PATCH',
     body: update,
     label: `update category ${id}`,
-  });
+  })
 }
 
 export async function deleteCategory(id: string): Promise<void> {
   await send(`/categories/${encodeURIComponent(id)}`, {
-    method: "DELETE",
+    method: 'DELETE',
     label: `delete category ${id}`,
-  });
+  })
 }
 
 /** Replaces the category's members with exactly `members`. */
-export async function setCategoryMembers(
-  id: string,
-  members: CategoryMembers,
-): Promise<void> {
+export async function setCategoryMembers(id: string, members: CategoryMembers): Promise<void> {
   await send(`/categories/${encodeURIComponent(id)}/members`, {
-    method: "PUT",
+    method: 'PUT',
     body: members,
     label: `set members of category ${id}`,
-  });
+  })
 }
 
 export function listCategoryVideos(id: string): Promise<CategoryVideo[]> {
-  return request(`/categories/${encodeURIComponent(id)}/videos`);
+  return request(`/categories/${encodeURIComponent(id)}/videos`)
 }
 
 export async function markCategoryWatched(id: string): Promise<void> {
   await send(`/categories/${encodeURIComponent(id)}/watched`, {
-    method: "POST",
+    method: 'POST',
     label: `mark category ${id} watched`,
-  });
+  })
 }
 
 /** A stored video's categories, `videoId` being its `id`, never its YouTube id. */
 export function getVideoCategories(videoId: string): Promise<VideoCategories> {
-  return request(`/videos/${encodeURIComponent(videoId)}/categories`);
+  return request(`/videos/${encodeURIComponent(videoId)}/categories`)
 }
 
 /** Sets a video copy's category by hand; responds with its categories as they are now. */
@@ -404,62 +362,54 @@ export function setVideoCategory(
 ): Promise<VideoCategories> {
   return request(
     `/videos/${encodeURIComponent(videoId)}/categories/${encodeURIComponent(categoryId)}`,
-    {
-      method: "PUT",
-      body: { belongs },
-      label: `set category ${categoryId} of video ${videoId}`,
-    },
-  );
+    { method: 'PUT', body: { belongs }, label: `set category ${categoryId} of video ${videoId}` },
+  )
 }
 
 /** Deletes a video copy's AI verdicts so the AI is asked again. */
 /** Retries a video's retrying and failed steps at once. */
 export async function retryVideo(videoId: string): Promise<void> {
   await send(`/videos/${encodeURIComponent(videoId)}/retry`, {
-    method: "POST",
+    method: 'POST',
     label: `retry video ${videoId}`,
-  });
+  })
 }
 
 export async function deleteVideoAiVerdicts(videoId: string): Promise<void> {
   await send(`/videos/${encodeURIComponent(videoId)}/ai-verdicts`, {
-    method: "DELETE",
+    method: 'DELETE',
     label: `re-run AI for video ${videoId}`,
-  });
+  })
 }
 
 /** Deletes the AI verdicts of every video of a channel or playlist. */
 export async function deleteSourceAiVerdicts(source: {
-  kind: "channel" | "playlist";
-  id: string;
+  kind: 'channel' | 'playlist'
+  id: string
 }): Promise<void> {
-  const collection = source.kind === "channel" ? "channels" : "playlists";
+  const collection = source.kind === 'channel' ? 'channels' : 'playlists'
   await send(`/${collection}/${encodeURIComponent(source.id)}/ai-verdicts`, {
-    method: "DELETE",
+    method: 'DELETE',
     label: `delete AI verdicts of ${source.kind} ${source.id}`,
-  });
+  })
 }
 
 /** Deletes a category's AI verdicts so its videos are evaluated again. */
-export async function deleteCategoryAiVerdicts(
-  categoryId: string,
-): Promise<void> {
+export async function deleteCategoryAiVerdicts(categoryId: string): Promise<void> {
   await send(`/categories/${encodeURIComponent(categoryId)}/ai-verdicts`, {
-    method: "DELETE",
+    method: 'DELETE',
     label: `re-evaluate category ${categoryId}`,
-  });
+  })
 }
 
 /** Published on the public repository's `main`, so it can be edited without a release. */
 export const ANNOUNCEMENTS_URL =
-  "https://raw.githubusercontent.com/sergigp/yarrtube/main/announcements/announcements.json";
+  'https://raw.githubusercontent.com/sergigp/yarrtube/main/announcements/announcements.json'
 
 export async function fetchAnnouncements(): Promise<Announcement[]> {
-  const response = await fetch(ANNOUNCEMENTS_URL);
+  const response = await fetch(ANNOUNCEMENTS_URL)
   if (!response.ok) {
-    throw new Error(
-      `announcements request failed with status ${response.status}`,
-    );
+    throw new Error(`announcements request failed with status ${response.status}`)
   }
-  return parseAnnouncements(await response.json());
+  return parseAnnouncements(await response.json())
 }

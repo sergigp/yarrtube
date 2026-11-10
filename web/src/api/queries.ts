@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback } from 'react'
 import {
   hashKey,
   useQuery,
@@ -7,7 +7,7 @@ import {
   type QueryFunctionContext,
   type QueryKey,
   type UseQueryResult,
-} from "@tanstack/react-query";
+} from '@tanstack/react-query'
 import {
   fetchAnnouncements,
   fetchChannels,
@@ -35,7 +35,7 @@ import {
   retryVideo,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
-} from "./client";
+} from './client'
 import type {
   Announcement,
   AppVersion,
@@ -53,65 +53,60 @@ import type {
   Task,
   Video,
   VideoCategories,
-} from "./types";
-import { anyWorkInProgress } from "@/lib/libraryPolling";
+} from './types'
+import { anyWorkInProgress } from '@/lib/libraryPolling'
 import {
   aiEnabled,
   categoriesShown,
   categorizationAvailable,
   summariesAvailable,
-} from "@/lib/preferences";
+} from '@/lib/preferences'
 
 // The sidebar lists change rarely and are refetched right after the user's
 // own actions; views showing live download progress poll quickly.
-const LIBRARY_INTERVAL_MS = 60_000;
-const LIVE_INTERVAL_MS = 3_000;
+const LIBRARY_INTERVAL_MS = 60_000
+const LIVE_INTERVAL_MS = 3_000
 // Slower than the live views: each list reads every video and queued task.
-const BUSY_SOURCES_INTERVAL_MS = 5_000;
+const BUSY_SOURCES_INTERVAL_MS = 5_000
 
 /**
  * The channel and playlist lists poll faster while a source has work in
  * progress, so its "Move…" enables within seconds of it settling.
  */
-function sourcesInterval(
-  items: { work_in_progress: boolean }[] | undefined,
-): number {
-  return anyWorkInProgress(items)
-    ? BUSY_SOURCES_INTERVAL_MS
-    : LIBRARY_INTERVAL_MS;
+function sourcesInterval(items: { work_in_progress: boolean }[] | undefined): number {
+  return anyWorkInProgress(items) ? BUSY_SOURCES_INTERVAL_MS : LIBRARY_INTERVAL_MS
 }
 
 export const queryKeys = {
-  channels: ["channels"] as const,
-  playlists: ["playlists"] as const,
-  categories: ["categories"] as const,
-  categoryVideos: (id: string) => ["categories", id, "videos"] as const,
-  channelVideos: (handle: string) => ["channels", handle, "videos"] as const,
-  playlistVideos: (id: string) => ["playlists", id, "videos"] as const,
-  recentVideos: ["videos", "recent"] as const,
-  tasks: ["tasks"] as const,
-  announcements: ["announcements"] as const,
-  version: ["version"] as const,
-  preferences: ["preferences"] as const,
-  ollama: (url: string) => ["ollama", url] as const,
+  channels: ['channels'] as const,
+  playlists: ['playlists'] as const,
+  categories: ['categories'] as const,
+  categoryVideos: (id: string) => ['categories', id, 'videos'] as const,
+  channelVideos: (handle: string) => ['channels', handle, 'videos'] as const,
+  playlistVideos: (id: string) => ['playlists', id, 'videos'] as const,
+  recentVideos: ['videos', 'recent'] as const,
+  tasks: ['tasks'] as const,
+  announcements: ['announcements'] as const,
+  version: ['version'] as const,
+  preferences: ['preferences'] as const,
+  ollama: (url: string) => ['ollama', url] as const,
   // Outside the `['playlists']` and `['channels']` prefixes so refetching the
   // library leaves them be.
-  playlistPreview: (value: string) => ["playlist-preview", value] as const,
-  channelPreview: (value: string) => ["channel-preview", value] as const,
-  videoSearch: (text: string) => ["video-search", text] as const,
-  videoCategories: (videoId: string) =>
-    ["videos", videoId, "categories"] as const,
-};
+  playlistPreview: (value: string) => ['playlist-preview', value] as const,
+  channelPreview: (value: string) => ['channel-preview', value] as const,
+  videoSearch: (text: string) => ['video-search', text] as const,
+  videoCategories: (videoId: string) => ['videos', videoId, 'categories'] as const,
+}
 
 /** Shortest trimmed text the daemon searches video titles for. */
-export const VIDEO_SEARCH_MIN_LENGTH = 2;
+export const VIDEO_SEARCH_MIN_LENGTH = 2
 
 export function useChannels(): UseQueryResult<ChannelListItem[], Error> {
   return useQuery({
     queryKey: queryKeys.channels,
     queryFn: fetchChannels,
     refetchInterval: (query) => sourcesInterval(query.state.data),
-  });
+  })
 }
 
 export function usePlaylists(): UseQueryResult<PlaylistListItem[], Error> {
@@ -119,7 +114,7 @@ export function usePlaylists(): UseQueryResult<PlaylistListItem[], Error> {
     queryKey: queryKeys.playlists,
     queryFn: fetchPlaylists,
     refetchInterval: (query) => sourcesInterval(query.state.data),
-  });
+  })
 }
 
 export function useCategories(): UseQueryResult<CategoryList, Error> {
@@ -127,17 +122,15 @@ export function useCategories(): UseQueryResult<CategoryList, Error> {
     queryKey: queryKeys.categories,
     queryFn: listCategories,
     refetchInterval: LIBRARY_INTERVAL_MS,
-  });
+  })
 }
 
-export function useCategoryVideos(
-  id: string,
-): UseQueryResult<CategoryVideo[], Error> {
+export function useCategoryVideos(id: string): UseQueryResult<CategoryVideo[], Error> {
   return useQuery({
     queryKey: queryKeys.categoryVideos(id),
     queryFn: () => listCategoryVideos(id),
     refetchInterval: LIVE_INTERVAL_MS,
-  });
+  })
 }
 
 /** A video copy's categories with where each comes from; idle until `enabled`. */
@@ -149,49 +142,43 @@ export function useVideoCategories(
     queryKey: queryKeys.videoCategories(videoId),
     queryFn: () => getVideoCategories(videoId),
     enabled,
-  });
+  })
 }
 
 /**
  * Looks the entered playlist ID or URL up on YouTube. Keyed by the value, so
  * a response never shows for input the field no longer holds.
  */
-export function usePlaylistPreview(
-  value: string,
-): UseQueryResult<PlaylistPreview, Error> {
+export function usePlaylistPreview(value: string): UseQueryResult<PlaylistPreview, Error> {
   return useQuery({
     queryKey: queryKeys.playlistPreview(value),
     queryFn: () => previewPlaylist(value),
     enabled: Boolean(value),
     retry: false,
     staleTime: Infinity,
-  });
+  })
 }
 
 /**
  * Looks the entered channel handle or URL up on YouTube. Keyed by the value,
  * so a response never shows for input the field no longer holds.
  */
-export function useChannelPreview(
-  value: string,
-): UseQueryResult<ChannelPreview, Error> {
+export function useChannelPreview(value: string): UseQueryResult<ChannelPreview, Error> {
   return useQuery({
     queryKey: queryKeys.channelPreview(value),
     queryFn: () => previewChannel(value),
     enabled: Boolean(value),
     retry: false,
     staleTime: Infinity,
-  });
+  })
 }
 
-export function useChannelVideos(
-  handle: string,
-): UseQueryResult<Video[], Error> {
+export function useChannelVideos(handle: string): UseQueryResult<Video[], Error> {
   return useQuery({
     queryKey: queryKeys.channelVideos(handle),
     queryFn: liveVideos(() => fetchChannelVideos(handle)),
     refetchInterval: LIVE_INTERVAL_MS,
-  });
+  })
 }
 
 export function usePlaylistVideos(id: string): UseQueryResult<Video[], Error> {
@@ -199,7 +186,7 @@ export function usePlaylistVideos(id: string): UseQueryResult<Video[], Error> {
     queryKey: queryKeys.playlistVideos(id),
     queryFn: liveVideos(() => fetchVideos(id)),
     refetchInterval: LIVE_INTERVAL_MS,
-  });
+  })
 }
 
 export function useRecentVideos(): UseQueryResult<HomeVideos, Error> {
@@ -207,24 +194,22 @@ export function useRecentVideos(): UseQueryResult<HomeVideos, Error> {
     queryKey: queryKeys.recentVideos,
     queryFn: fetchHomeVideos,
     refetchInterval: LIVE_INTERVAL_MS,
-  });
+  })
 }
 
 /**
  * Searches downloaded video titles for `text`, the caller's debounced input.
  * Idle below `VIDEO_SEARCH_MIN_LENGTH` trimmed characters.
  */
-export function useVideoSearch(
-  text: string,
-): UseQueryResult<VideoSearchResults, Error> {
-  const trimmed = text.trim();
+export function useVideoSearch(text: string): UseQueryResult<VideoSearchResults, Error> {
+  const trimmed = text.trim()
   return useQuery({
     queryKey: queryKeys.videoSearch(trimmed),
     queryFn: () => searchVideos(trimmed),
     enabled: trimmed.length >= VIDEO_SEARCH_MIN_LENGTH,
     retry: false,
     staleTime: 30_000,
-  });
+  })
 }
 
 export function useTasks(): UseQueryResult<Task[], Error> {
@@ -232,7 +217,7 @@ export function useTasks(): UseQueryResult<Task[], Error> {
     queryKey: queryKeys.tasks,
     queryFn: fetchTasks,
     refetchInterval: LIVE_INTERVAL_MS,
-  });
+  })
 }
 
 /** Fetched once per page load: announcements change rarely and a stale one is harmless. */
@@ -243,7 +228,7 @@ export function useAnnouncements(): UseQueryResult<Announcement[], Error> {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     retry: false,
-  });
+  })
 }
 
 /** Fetched once per page load: the running version only changes on a restart. */
@@ -254,31 +239,29 @@ export function useVersion(): UseQueryResult<AppVersion, Error> {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     retry: false,
-  });
+  })
 }
 
 export function usePreferences(): UseQueryResult<Preferences, Error> {
   return useQuery({
     queryKey: queryKeys.preferences,
     queryFn: fetchPreferences,
-  });
+  })
 }
 
 /**
  * The Ollama server at `url` (none while `url` is null), checked once: a
  * failed check isn't retried, the user tests the connection again instead.
  */
-export function useOllama(
-  url: string | null,
-): UseQueryResult<OllamaServer, Error> {
+export function useOllama(url: string | null): UseQueryResult<OllamaServer, Error> {
   return useQuery({
-    queryKey: queryKeys.ollama(url ?? ""),
-    queryFn: () => fetchOllama(url ?? ""),
+    queryKey: queryKeys.ollama(url ?? ''),
+    queryFn: () => fetchOllama(url ?? ''),
     enabled: url !== null,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     retry: false,
-  });
+  })
 }
 
 /**
@@ -286,36 +269,36 @@ export function useOllama(
  * answer as that URL's `useOllama` data.
  */
 export function useCheckOllama(): (url: string) => Promise<OllamaServer> {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
   return useCallback(
     async (url: string) => {
-      const server = await fetchOllama(url);
-      queryClient.setQueryData(queryKeys.ollama(url), server);
-      return server;
+      const server = await fetchOllama(url)
+      queryClient.setQueryData(queryKeys.ollama(url), server)
+      return server
     },
     [queryClient],
-  );
+  )
 }
 
 /** Whether category UI shows, as decided by `categoriesShown`. */
 export function useCategoriesShown(): boolean {
-  const { data, isError } = usePreferences();
-  return categoriesShown(data, isError);
+  const { data, isError } = usePreferences()
+  return categoriesShown(data, isError)
 }
 
 /** Whether AI is on, per the preferences. */
 export function useAiEnabled(): boolean {
-  return aiEnabled(usePreferences().data);
+  return aiEnabled(usePreferences().data)
 }
 
 /** Whether sources can have their videos summarized, per the preferences. */
 export function useSummariesAvailable(): boolean {
-  return summariesAvailable(usePreferences().data);
+  return summariesAvailable(usePreferences().data)
 }
 
 /** Whether sources can have their videos categorized, per the preferences. */
 export function useCategorizationAvailable(): boolean {
-  return categorizationAvailable(usePreferences().data);
+  return categorizationAvailable(usePreferences().data)
 }
 
 /**
@@ -324,14 +307,12 @@ export function useCategorizationAvailable(): boolean {
  * them, and the library with its video lists, whose summaries do. Resolves
  * with every preference as saved.
  */
-export function useSavePreferences(): (
-  patch: PreferencesPatch,
-) => Promise<Preferences> {
-  const queryClient = useQueryClient();
+export function useSavePreferences(): (patch: PreferencesPatch) => Promise<Preferences> {
+  const queryClient = useQueryClient()
   return useCallback(
     async (patch: PreferencesPatch) => {
-      const saved = await patchPreferences(patch);
-      queryClient.setQueryData(queryKeys.preferences, saved);
+      const saved = await patchPreferences(patch)
+      queryClient.setQueryData(queryKeys.preferences, saved)
       // Refetched even while they aren't shown, so going back to one doesn't
       // first show sections or summaries from before the change.
       await Promise.all(
@@ -340,14 +321,12 @@ export function useSavePreferences(): (
           queryKeys.channels,
           queryKeys.playlists,
           queryKeys.categories,
-        ].map((queryKey) =>
-          queryClient.invalidateQueries({ queryKey, refetchType: "all" }),
-        ),
-      );
-      return saved;
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'all' })),
+      )
+      return saved
     },
     [queryClient],
-  );
+  )
 }
 
 /**
@@ -355,15 +334,15 @@ export function useSavePreferences(): (
  * everywhere. Unlike `useSavePreferences`, home videos aren't refetched: the
  * theme doesn't change them.
  */
-export function useSaveTheme(): (theme: Preferences["theme"]) => Promise<void> {
-  const queryClient = useQueryClient();
+export function useSaveTheme(): (theme: Preferences['theme']) => Promise<void> {
+  const queryClient = useQueryClient()
   return useCallback(
-    async (theme: Preferences["theme"]) => {
-      const saved = await patchPreferences({ theme });
-      queryClient.setQueryData(queryKeys.preferences, saved);
+    async (theme: Preferences['theme']) => {
+      const saved = await patchPreferences({ theme })
+      queryClient.setQueryData(queryKeys.preferences, saved)
     },
     [queryClient],
-  );
+  )
 }
 
 /**
@@ -371,7 +350,7 @@ export function useSaveTheme(): (theme: Preferences["theme"]) => Promise<void> {
  * (and, by prefix, their video lists) after an action that changed them.
  */
 export function useInvalidateLibrary(): () => Promise<unknown> {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
   return useCallback(
     () =>
       Promise.all([
@@ -380,16 +359,16 @@ export function useInvalidateLibrary(): () => Promise<unknown> {
         queryClient.invalidateQueries({ queryKey: queryKeys.categories }),
       ]),
     [queryClient],
-  );
+  )
 }
 
 /** Returns a function that refetches the task list, e.g. after a sync run on demand. */
 export function useInvalidateTasks(): () => Promise<unknown> {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
   return useCallback(
     () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks }),
     [queryClient],
-  );
+  )
 }
 
 /**
@@ -397,15 +376,15 @@ export function useInvalidateTasks(): () => Promise<unknown> {
  * lists refetch once it succeeds.
  */
 export function useLibraryAction() {
-  const invalidateLibrary = useInvalidateLibrary();
+  const invalidateLibrary = useInvalidateLibrary()
   return useCallback(
     <Args extends unknown[]>(action: (...args: Args) => Promise<unknown>) =>
       async (...args: Args) => {
-        await action(...args);
-        invalidateLibrary();
+        await action(...args)
+        invalidateLibrary()
       },
     [invalidateLibrary],
-  );
+  )
 }
 
 /**
@@ -413,14 +392,14 @@ export function useLibraryAction() {
  * and playlist lists (and their video lists) and the home videos.
  */
 export function useMarkVideoWatched(): (videoId: string) => Promise<void> {
-  const invalidateLibraryAndHome = useInvalidateLibraryAndHome();
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
     async (videoId: string) => {
-      await markVideoWatched(videoId);
-      await invalidateLibraryAndHome();
+      await markVideoWatched(videoId)
+      await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],
-  );
+  )
 }
 
 /**
@@ -428,47 +407,41 @@ export function useMarkVideoWatched(): (videoId: string) => Promise<void> {
  * then refetches the library (category videos included) and the home videos.
  */
 export function useMarkCategoryWatched(): (id: string) => Promise<void> {
-  const invalidateLibraryAndHome = useInvalidateLibraryAndHome();
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
     async (id: string) => {
-      await markCategoryWatched(id);
-      await invalidateLibraryAndHome();
+      await markCategoryWatched(id)
+      await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],
-  );
+  )
 }
 
 /**
  * Returns a function that sets whether a playlist is excluded from home, then
  * refetches the channel and playlist lists and the home videos.
  */
-export function useSetPlaylistExcludedFromHome(): (
-  id: string,
-  excluded: boolean,
-) => Promise<void> {
-  const invalidateLibraryAndHome = useInvalidateLibraryAndHome();
+export function useSetPlaylistExcludedFromHome(): (id: string, excluded: boolean) => Promise<void> {
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
     async (id: string, excluded: boolean) => {
-      await updatePlaylist(id, { exclude_from_home: excluded });
-      await invalidateLibraryAndHome();
+      await updatePlaylist(id, { exclude_from_home: excluded })
+      await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],
-  );
+  )
 }
 
 /** Sets whether a playlist's unwatched count is hidden, then refetches the library. */
-export function useSetPlaylistUnwatchedCountHidden(): (
-  id: string,
-  hidden: boolean,
-) => Promise<void> {
-  const invalidateLibrary = useInvalidateLibrary();
+export function useSetPlaylistUnwatchedCountHidden(): (id: string, hidden: boolean) => Promise<void> {
+  const invalidateLibrary = useInvalidateLibrary()
   return useCallback(
     async (id: string, hidden: boolean) => {
-      await updatePlaylist(id, { hide_unwatched_count: hidden });
-      await invalidateLibrary();
+      await updatePlaylist(id, { hide_unwatched_count: hidden })
+      await invalidateLibrary()
     },
     [invalidateLibrary],
-  );
+  )
 }
 
 /**
@@ -479,14 +452,14 @@ export function useUpdateChannelSettings(): (
   handle: string,
   changes: UpdateChannelRequest,
 ) => Promise<void> {
-  const invalidateLibrary = useInvalidateLibrary();
+  const invalidateLibrary = useInvalidateLibrary()
   return useCallback(
     async (handle: string, changes: UpdateChannelRequest) => {
-      await updateChannel(handle, changes);
-      await invalidateLibrary();
+      await updateChannel(handle, changes)
+      await invalidateLibrary()
     },
     [invalidateLibrary],
-  );
+  )
 }
 
 /**
@@ -497,14 +470,14 @@ export function useUpdatePlaylistSettings(): (
   id: string,
   changes: UpdatePlaylistRequest,
 ) => Promise<void> {
-  const invalidateLibrary = useInvalidateLibrary();
+  const invalidateLibrary = useInvalidateLibrary()
   return useCallback(
     async (id: string, changes: UpdatePlaylistRequest) => {
-      await updatePlaylist(id, changes);
-      await invalidateLibrary();
+      await updatePlaylist(id, changes)
+      await invalidateLibrary()
     },
     [invalidateLibrary],
-  );
+  )
 }
 
 /**
@@ -516,16 +489,16 @@ export function useSetVideoCategory(): (
   categoryId: string,
   belongs: boolean,
 ) => Promise<void> {
-  const queryClient = useQueryClient();
-  const invalidateLibraryAndHome = useInvalidateLibraryAndHome();
+  const queryClient = useQueryClient()
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
     async (videoId: string, categoryId: string, belongs: boolean) => {
-      const categories = await setVideoCategory(videoId, categoryId, belongs);
-      queryClient.setQueryData(queryKeys.videoCategories(videoId), categories);
-      await invalidateLibraryAndHome();
+      const categories = await setVideoCategory(videoId, categoryId, belongs)
+      queryClient.setQueryData(queryKeys.videoCategories(videoId), categories)
+      await invalidateLibraryAndHome()
     },
     [queryClient, invalidateLibraryAndHome],
-  );
+  )
 }
 
 /**
@@ -533,20 +506,18 @@ export function useSetVideoCategory(): (
  * its categories, the library and the home videos.
  */
 export function useRerunVideoAi(): (videoId: string) => Promise<void> {
-  const queryClient = useQueryClient();
-  const invalidateLibraryAndHome = useInvalidateLibraryAndHome();
+  const queryClient = useQueryClient()
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
     async (videoId: string) => {
-      await deleteVideoAiVerdicts(videoId);
+      await deleteVideoAiVerdicts(videoId)
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.videoCategories(videoId),
-        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.videoCategories(videoId) }),
         invalidateLibraryAndHome(),
-      ]);
+      ])
     },
     [queryClient, invalidateLibraryAndHome],
-  );
+  )
 }
 
 /**
@@ -554,20 +525,20 @@ export function useRerunVideoAi(): (videoId: string) => Promise<void> {
  * refetches the library (its video lists included) and the home videos.
  */
 export function useRetryVideo(): (videoId: string) => Promise<void> {
-  const invalidateLibraryAndHome = useInvalidateLibraryAndHome();
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
     async (videoId: string) => {
-      await retryVideo(videoId);
-      await invalidateLibraryAndHome();
+      await retryVideo(videoId)
+      await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],
-  );
+  )
 }
 
 /** Refetches the channel and playlist lists (and their video lists) and the home videos. */
 function useInvalidateLibraryAndHome(): () => Promise<unknown> {
-  const queryClient = useQueryClient();
-  const invalidateLibrary = useInvalidateLibrary();
+  const queryClient = useQueryClient()
+  const invalidateLibrary = useInvalidateLibrary()
   return useCallback(
     () =>
       Promise.all([
@@ -575,7 +546,7 @@ function useInvalidateLibraryAndHome(): () => Promise<unknown> {
         queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos }),
       ]),
     [queryClient, invalidateLibrary],
-  );
+  )
 }
 
 /**
@@ -588,39 +559,39 @@ export function useDeleteSource(): (
   videosKey: QueryKey,
   remove: () => Promise<unknown>,
 ) => Promise<void> {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
   return useCallback(
     async (videosKey: QueryKey, remove: () => Promise<unknown>) => {
-      const deleting = videoListsBeingDeleted(queryClient);
-      const hash = hashKey(videosKey);
-      deleting.add(hash);
+      const deleting = videoListsBeingDeleted(queryClient)
+      const hash = hashKey(videosKey)
+      deleting.add(hash)
       try {
-        await queryClient.cancelQueries({ queryKey: videosKey, exact: true });
-        await remove();
+        await queryClient.cancelQueries({ queryKey: videosKey, exact: true })
+        await remove()
       } catch (error) {
-        deleting.delete(hash);
-        throw error;
+        deleting.delete(hash)
+        throw error
       }
       whenUnobserved(queryClient, videosKey, () => {
-        queryClient.removeQueries({ queryKey: videosKey, exact: true });
-        deleting.delete(hash);
-      });
+        queryClient.removeQueries({ queryKey: videosKey, exact: true })
+        deleting.delete(hash)
+      })
     },
     [queryClient],
-  );
+  )
 }
 
 // The video lists of the sources being deleted, per client (see
 // `useDeleteSource`).
-const beingDeleted = new WeakMap<QueryClient, Set<string>>();
+const beingDeleted = new WeakMap<QueryClient, Set<string>>()
 
 function videoListsBeingDeleted(client: QueryClient): Set<string> {
-  let hashes = beingDeleted.get(client);
+  let hashes = beingDeleted.get(client)
   if (!hashes) {
-    hashes = new Set();
-    beingDeleted.set(client, hashes);
+    hashes = new Set()
+    beingDeleted.set(client, hashes)
   }
-  return hashes;
+  return hashes
 }
 
 /** A video list's query function: it keeps what it has while its source is being deleted. */
@@ -630,29 +601,21 @@ function liveVideos(
   return ({ client, queryKey }) =>
     videoListsBeingDeleted(client).has(hashKey(queryKey))
       ? Promise.resolve(client.getQueryData<Video[]>(queryKey) ?? [])
-      : fetch();
+      : fetch()
 }
 
 /** Runs `then` once no observer (a mounted page) is subscribed to the query. */
-function whenUnobserved(
-  client: QueryClient,
-  queryKey: QueryKey,
-  then: () => void,
-): void {
-  const cache = client.getQueryCache();
-  const query = cache.find({ queryKey, exact: true });
+function whenUnobserved(client: QueryClient, queryKey: QueryKey, then: () => void): void {
+  const cache = client.getQueryCache()
+  const query = cache.find({ queryKey, exact: true })
   if (!query || query.getObserversCount() === 0) {
-    then();
-    return;
+    then()
+    return
   }
   const unsubscribe = cache.subscribe((event) => {
-    if (
-      event.query === query &&
-      event.type === "observerRemoved" &&
-      query.getObserversCount() === 0
-    ) {
-      unsubscribe();
-      then();
+    if (event.query === query && event.type === 'observerRemoved' && query.getObserversCount() === 0) {
+      unsubscribe()
+      then()
     }
-  });
+  })
 }

@@ -1,56 +1,49 @@
-import { TriangleAlert } from "lucide-react";
-import { videoMediaUrl } from "@/api/client";
-import type { Video, VideoStatus } from "@/api/types";
-import { Thumbnail } from "./Thumbnail";
-import { ThumbnailOverlay } from "./ThumbnailOverlay";
-import { Beacon } from "./Beacon";
-import { VideoActionsMenu } from "./VideoActionsMenu";
-import { VideoRowsSkeleton } from "./VideoSkeletons";
-import { formatAge } from "@/lib/relativeAge";
-import { cn } from "@/lib/utils";
+import { TriangleAlert } from 'lucide-react'
+import { videoMediaUrl } from '@/api/client'
+import type { Video, VideoStatus } from '@/api/types'
+import { Thumbnail } from './Thumbnail'
+import { ThumbnailOverlay } from './ThumbnailOverlay'
+import { Beacon } from './Beacon'
+import { VideoActionsMenu } from './VideoActionsMenu'
+import { VideoRowsSkeleton } from './VideoSkeletons'
+import { formatAge } from '@/lib/relativeAge'
+import { cn } from '@/lib/utils'
 
-const STATUS_MESSAGES: Record<
-  Exclude<VideoStatus, "DOWNLOADED" | "IN_PROGRESS">,
-  string
-> = {
-  PENDING: "This video is pending.",
-  RETRYING: "This video failed to download and will be retried.",
-  FAILED: "This video failed to download.",
-  UNAVAILABLE: "This video is unavailable on YouTube.",
-};
+const STATUS_MESSAGES: Record<Exclude<VideoStatus, 'DOWNLOADED' | 'IN_PROGRESS'>, string> = {
+  PENDING: 'This video is pending.',
+  RETRYING: 'This video failed to download and will be retried.',
+  FAILED: 'This video failed to download.',
+  UNAVAILABLE: 'This video is unavailable on YouTube.',
+}
 
 function VideoStatusIndicator({ status }: { status: VideoStatus }) {
-  if (status === "DOWNLOADED") {
-    return null;
+  if (status === 'DOWNLOADED') {
+    return null
   }
 
-  if (status === "IN_PROGRESS") {
-    return <Beacon variant="live" label="Downloading" className="shrink-0" />;
+  if (status === 'IN_PROGRESS') {
+    return <Beacon variant="live" label="Downloading" className="shrink-0" />
   }
 
-  const message = STATUS_MESSAGES[status];
+  const message = STATUS_MESSAGES[status]
   return (
-    <TriangleAlert
-      className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
-      role="img"
-      aria-label={message}
-    >
+    <TriangleAlert className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" role="img" aria-label={message}>
       <title>{message}</title>
     </TriangleAlert>
-  );
+  )
 }
 
 interface VideoListPaneProps<T extends Video> {
   /** Names the container in the empty message ("channel", "playlist" or "category"). */
-  noun: string;
+  noun: string
   /** The channel/playlist path a video's thumbnail is served under. */
-  basePathOf: (video: T) => string;
+  basePathOf: (video: T) => string
   /** The name of the channel or playlist a video comes from. */
-  sourceNameOf: (video: T) => string;
-  videos: T[] | undefined;
-  error: Error | null;
-  selectedVideoId: string | null;
-  onSelect: (id: string) => void;
+  sourceNameOf: (video: T) => string
+  videos: T[] | undefined
+  error: Error | null
+  selectedVideoId: string | null
+  onSelect: (id: string) => void
 }
 
 /**
@@ -70,30 +63,24 @@ export function VideoListPane<T extends Video>({
 }: VideoListPaneProps<T>) {
   return (
     <div className="md:h-full md:min-h-0 md:overflow-y-auto">
-      {error && (
-        <p className="text-sm text-destructive">
-          Failed to load videos: {error.message}
-        </p>
-      )}
+      {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
       {!error && !videos && <VideoRowsSkeleton count={8} />}
       {!error && videos && videos.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No videos recorded for this {noun} yet.
-        </p>
+        <p className="text-sm text-muted-foreground">No videos recorded for this {noun} yet.</p>
       )}
       {!error && videos && videos.length > 0 && (
         <ul className="flex flex-col">
           {videos.map((video) => {
-            const active = selectedVideoId === video.id;
-            const age = formatAge(video.published_at);
+            const active = selectedVideoId === video.id
+            const age = formatAge(video.published_at)
             return (
               <li
                 key={video.id}
                 className={cn(
                   // The separator is a straight line, not a border: a border
                   // on the rounded row would curl up at its corners.
-                  "relative flex items-start gap-1 rounded-md pr-1 transition-colors not-last:after:absolute not-last:after:inset-x-2 not-last:after:bottom-0 not-last:after:h-px not-last:after:bg-border hover:bg-accent",
-                  active && "bg-accent",
+                  'relative flex items-start gap-1 rounded-md pr-1 transition-colors not-last:after:absolute not-last:after:inset-x-2 not-last:after:bottom-0 not-last:after:h-px not-last:after:bg-border hover:bg-accent',
+                  active && 'bg-accent',
                 )}
               >
                 <button
@@ -104,15 +91,12 @@ export function VideoListPane<T extends Video>({
                     <Thumbnail
                       src={
                         video.thumbnail_filename
-                          ? videoMediaUrl(
-                              basePathOf(video),
-                              video.thumbnail_filename,
-                            )
+                          ? videoMediaUrl(basePathOf(video), video.thumbnail_filename)
                           : null
                       }
                       className={cn(
-                        "aspect-video w-24 rounded-md object-cover",
-                        video.watched && "opacity-60",
+                        'aspect-video w-24 rounded-md object-cover',
+                        video.watched && 'opacity-60',
                       )}
                     />
                     <ThumbnailOverlay
@@ -125,21 +109,17 @@ export function VideoListPane<T extends Video>({
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span
                       className={cn(
-                        "text-sm leading-snug",
+                        'text-sm leading-snug',
                         active
-                          ? "font-medium text-primary"
+                          ? 'font-medium text-primary'
                           : video.watched
-                            ? "text-muted-foreground"
-                            : "text-foreground",
+                            ? 'text-muted-foreground'
+                            : 'text-foreground',
                       )}
                     >
                       {video.title}
                     </span>
-                    {age && (
-                      <span className="text-xs text-muted-foreground">
-                        {age}
-                      </span>
-                    )}
+                    {age && <span className="text-xs text-muted-foreground">{age}</span>}
                   </span>
                   <VideoStatusIndicator status={video.status} />
                 </button>
@@ -147,14 +127,14 @@ export function VideoListPane<T extends Video>({
                   videoId={video.id}
                   title={video.title}
                   sourceName={sourceNameOf(video)}
-                  markable={!video.watched && video.status === "DOWNLOADED"}
+                  markable={!video.watched && video.status === 'DOWNLOADED'}
                   className="mt-2"
                 />
               </li>
-            );
+            )
           })}
         </ul>
       )}
     </div>
-  );
+  )
 }
