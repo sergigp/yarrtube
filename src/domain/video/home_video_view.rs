@@ -26,8 +26,8 @@ impl From<SourcedVideo> for HomeVideoView {
     fn from(sourced: SourcedVideo) -> Self {
         let video = sourced.video;
         Self {
-            watched: video.is_watched(),
-            position_seconds: video.playback_position.seconds(),
+            watched: video.watch.is_watched(),
+            position_seconds: video.watch.position.seconds(),
             id: video.id,
             youtube_id: video.youtube_id,
             title: video.title,

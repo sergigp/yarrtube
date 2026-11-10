@@ -146,8 +146,8 @@ impl From<VideoView> for VideoResponse {
         Self {
             steps: VideoStepsResponse::from(&video),
             subtitle_language: video.subtitle_language(),
-            watched: video.is_watched(),
-            position_seconds: video.playback_position.seconds(),
+            watched: video.watch.is_watched(),
+            position_seconds: video.watch.position.seconds(),
             id: video.id.as_str().to_string(),
             youtube_id: video.youtube_id.as_str().to_string(),
             title: video.title,

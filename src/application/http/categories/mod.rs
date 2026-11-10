@@ -180,7 +180,7 @@ mod tests {
     use crate::domain::services::{CategoryVideoCollector, VideoCategoryAssigner};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::{StepState, Video, VideoId, YoutubeVideoId};
+    use crate::domain::video::{StepState, Video, VideoId, YoutubeVideoId, video_fixtures};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -3549,11 +3549,9 @@ mod tests {
     }
 
     fn downloaded_video(youtube_id: &str) -> Video {
-        pending_video(youtube_id).mark_downloaded(
-            Quality::High,
-            format!("{youtube_id}.mp4"),
-            None,
-            None,
+        video_fixtures::downloaded_video(
+            youtube_id,
+            &format!("{youtube_id}.mp4"),
             fixed_timestamp(),
         )
     }

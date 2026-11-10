@@ -51,6 +51,7 @@ mod tests {
     use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
     use crate::domain::video::VideoStatus;
+    use crate::domain::video::WatchState;
     use crate::domain::video::YoutubeVideoId;
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
@@ -3549,9 +3550,11 @@ mod tests {
 
     fn with_watch_state_recorded_meanwhile(video: Video) -> Video {
         Video {
-            watched_at: Some(watched_timestamp()),
-            playback_position: PlaybackPosition::new(42).unwrap(),
-            last_played_at: Some(watched_timestamp()),
+            watch: WatchState {
+                watched_at: Some(watched_timestamp()),
+                position: PlaybackPosition::new(42).unwrap(),
+                last_played_at: Some(watched_timestamp()),
+            },
             ..video
         }
     }

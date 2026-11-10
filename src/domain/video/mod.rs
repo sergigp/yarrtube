@@ -28,6 +28,8 @@ pub mod video;
 pub mod video_chapter;
 pub mod video_duration;
 pub mod video_filename;
+#[cfg(test)]
+pub mod video_fixtures;
 pub mod video_id;
 pub mod video_output_entry;
 pub mod video_owner;
@@ -38,6 +40,7 @@ pub mod video_sync_plan;
 pub mod video_sync_step;
 pub mod video_target;
 pub mod video_view;
+pub mod watch_state;
 pub mod web_vtt;
 pub mod youtube_video_id;
 
@@ -85,5 +88,6 @@ pub use video_sync_plan::VideoSyncPlan;
 pub use video_sync_step::VideoSyncStep;
 pub use video_target::VideoTarget;
 pub use video_view::VideoView;
+pub use watch_state::WatchState;
 pub use web_vtt::WebVtt;
 pub use youtube_video_id::YoutubeVideoId;

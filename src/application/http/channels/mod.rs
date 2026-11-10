@@ -226,6 +226,7 @@ mod tests {
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
+    use crate::domain::video::WatchState;
 
     use crate::domain::services::ShowFileWriter;
 
@@ -2962,8 +2963,11 @@ mod tests {
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let played_at = DateTime::<Utc>::from_timestamp(1_750_000_000, 0).unwrap();
         let video = Video {
-            playback_position: PlaybackPosition::new(40).unwrap(),
-            last_played_at: Some(played_at),
+            watch: WatchState {
+                position: PlaybackPosition::new(40).unwrap(),
+                last_played_at: Some(played_at),
+                ..WatchState::unwatched()
+            },
             ..downloaded_video("vid1")
         };
         video_repository.insert(&video).unwrap();
@@ -2993,9 +2997,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: Some(watched_timestamp()),
-                playback_position: PlaybackPosition::start(),
-                last_played_at: Some(played_at),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    position: PlaybackPosition::start(),
+                    last_played_at: Some(played_at)
+                },
                 ..video
             }]
         );

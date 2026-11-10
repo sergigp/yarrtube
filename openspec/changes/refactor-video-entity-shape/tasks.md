@@ -7,9 +7,9 @@ passes with no assertion changed in acceptance tests. One PR for all.
 
 ## 1. Test fixtures and WatchState
 
-- [ ] 1.1 Create `video_fixtures.rs` (`#[cfg(test)]`): move `mark_download_failed`, `mark_summary_failed`, `mark_categorization_failed`, `with_chapters`, `mark_subtitles_unavailable` out of `video.rs`; add `downloaded_video(youtube_id, filename, now)`; verify `cargo test --locked` passes
-- [ ] 1.2 Add `WatchState` (`watch_state.rs`), replace `watched_at`/`playback_position`/`last_played_at` with `watch`; move `is_watched`/`is_in_progress` reads to `watch`; repository maps the same three columns; verify green
-- [ ] 1.3 Commit "Group the watch state"
+- [x] 1.1 Create `video_fixtures.rs` (`#[cfg(test)]`): move `mark_download_failed`, `mark_summary_failed`, `mark_categorization_failed`, `with_chapters`, `mark_subtitles_unavailable` out of `video.rs`; add `downloaded_video(youtube_id, filename, now)`; verify `cargo test --locked` passes
+- [x] 1.2 Add `WatchState` (`watch_state.rs`), replace `watched_at`/`playback_position`/`last_played_at` with `watch`; move `is_watched`/`is_in_progress` reads to `watch`; repository maps the same three columns; verify green
+- [x] 1.3 Commit "Group the watch state"
 
 ## 2. Subtitles, Chapters, DownloadedQuality
 

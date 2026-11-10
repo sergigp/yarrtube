@@ -10,17 +10,10 @@ use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_output_entry::is_episode_path;
 use super::video_status::VideoStatus;
+use super::watch_state::WatchState;
 use super::youtube_video_id::YoutubeVideoId;
 use crate::domain::shared::Quality;
-use chrono::{DateTime, Duration, Utc};
-
-/// How long after it was last played a started video is still offered to
-/// continue watching.
-const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
-
-/// How far past the start playback must have got for a video to count as
-/// started rather than just opened.
-const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
+use chrono::{DateTime, Utc};
 
 /// A video shorter than this (15 minutes) counts as a quick watch.
 const QUICK_WATCH_MAX_DURATION_SECONDS: i64 = 900;
@@ -49,10 +42,7 @@ pub struct Video {
     pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub watched_at: Option<DateTime<Utc>>,
-    pub playback_position: PlaybackPosition,
     pub synced_at: Option<DateTime<Utc>>,
-    pub last_played_at: Option<DateTime<Utc>>,
     /// The video's episode number within its show, assigned once by the
     /// first thumbnail fetch, download or relocation that places a file.
     pub episode_number: Option<EpisodeNumber>,
@@ -76,13 +66,11 @@ pub struct Video {
     /// The AI categorization's step state — see the `video-categorization`
     /// capability.
     pub categorization: StepState,
+    pub watch: WatchState,
     /// Bumped by every stored update; an update only applies on top of the
     /// version it was read at — see the `video-write-consistency` capability.
     pub version: u32,
 }
-
-const WATCHED_THRESHOLD: f64 = 0.9;
-const REWATCH_RESET_THRESHOLD: f64 = 0.1;
 
 impl Video {
     pub fn create(
@@ -104,10 +92,7 @@ impl Video {
             duration_seconds: None,
             created_at: now,
             updated_at: now,
-            watched_at: None,
-            playback_position: PlaybackPosition::start(),
             synced_at: None,
-            last_played_at: None,
             episode_number: None,
             subtitles: LateDataChecks::default(),
             subtitle_filename: None,
@@ -117,6 +102,7 @@ impl Video {
             quality_checks: LateDataChecks::default(),
             summary: StepState::pending(),
             categorization: StepState::pending(),
+            watch: WatchState::unwatched(),
             version: 0,
         }
     }
@@ -318,13 +304,7 @@ impl Video {
 
     /// Updates the watch state from how far playback got, against the
     /// recorded duration or, when none is recorded, the one the player
-    /// reported. An unwatched video becomes watched at 90%; a watched one
-    /// becomes unwatched again once a rewatch passes 10%, as long as it is
-    /// still below 90%. With no known duration an unwatched video only keeps
-    /// the position. Whatever the outcome, the video counts as played `now`.
-    /// A report is stale when its playback began with the video unwatched
-    /// (`was_watched` false) but the video is now watched: it was marked
-    /// watched since, so the video is returned unchanged, not even played.
+    /// reported — see `WatchState::record_playback`.
     pub fn update_watch_state(
         self,
         position: PlaybackPosition,
@@ -332,45 +312,20 @@ impl Video {
         was_watched: bool,
         now: DateTime<Utc>,
     ) -> Self {
-        if !was_watched && self.is_watched() {
-            return self;
-        }
-        let progress = self
-            .known_duration_seconds(reported_duration)
-            .map(|duration| position.seconds() as f64 / duration as f64);
-        let updated = match (self.is_watched(), progress) {
-            (true, Some(progress))
-                if progress > REWATCH_RESET_THRESHOLD && progress < WATCHED_THRESHOLD =>
-            {
-                Self {
-                    watched_at: None,
-                    playback_position: position,
-                    ..self
-                }
-            }
-            (true, _) => self,
-            (false, Some(progress)) if progress >= WATCHED_THRESHOLD => self.mark_watched(now),
-            (false, _) => Self {
-                playback_position: position,
-                ..self
-            },
-        };
+        let duration_seconds = self.known_duration_seconds(reported_duration);
         Self {
-            last_played_at: Some(now),
-            ..updated
+            watch: self
+                .watch
+                .record_playback(position, duration_seconds, was_watched, now),
+            ..self
         }
     }
 
     pub fn mark_watched(self, now: DateTime<Utc>) -> Self {
         Self {
-            watched_at: Some(now),
-            playback_position: PlaybackPosition::start(),
+            watch: self.watch.mark_watched(now),
             ..self
         }
-    }
-
-    pub fn is_watched(&self) -> bool {
-        self.watched_at.is_some()
     }
 
     pub fn is_downloaded(&self) -> bool {
@@ -379,22 +334,12 @@ impl Video {
 
     /// Downloaded and not yet watched: counted in unwatched badges.
     pub fn is_downloaded_and_unwatched(&self) -> bool {
-        self.is_downloaded() && !self.is_watched()
-    }
-
-    /// Downloaded, unwatched, position over 30s and last played within the
-    /// past 7 days of `now`: worth offering to continue watching.
-    pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {
-        !self.is_watched()
-            && self.playback_position.seconds() > IN_PROGRESS_MIN_POSITION_SECONDS
-            && self
-                .last_played_at
-                .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
+        self.is_downloaded() && !self.watch.is_watched()
     }
 
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.
     pub fn is_quick_watch(&self) -> bool {
-        !self.is_watched()
+        !self.watch.is_watched()
             && self
                 .duration_seconds
                 .is_some_and(|duration| duration < QUICK_WATCH_MAX_DURATION_SECONDS)
@@ -527,41 +472,6 @@ impl Video {
         }
     }
 
-    /// Test fixture: a download that gave up, after every allowed attempt
-    /// failed `now` with `reason`.
-    #[cfg(test)]
-    pub fn mark_download_failed(self, reason: &str, now: DateTime<Utc>) -> Self {
-        (0..super::retry_attempts::MAX_ATTEMPTS)
-            .fold(self, |video, _| video.mark_errored(reason, now))
-    }
-
-    /// Test fixture: a summary that gave up, after every allowed attempt
-    /// failed `now`.
-    #[cfg(test)]
-    pub fn mark_summary_failed(self, now: DateTime<Utc>) -> Self {
-        (0..super::retry_attempts::MAX_ATTEMPTS)
-            .fold(self, |video, _| video.record_summary_failure(now))
-    }
-
-    /// Test fixture: a categorization that gave up, after every allowed
-    /// attempt failed `now`.
-    #[cfg(test)]
-    pub fn mark_categorization_failed(self, now: DateTime<Utc>) -> Self {
-        (0..super::retry_attempts::MAX_ATTEMPTS)
-            .fold(self, |video, _| video.record_categorization_failure(now))
-    }
-
-    /// Test fixture: sets the chapters alone, without recording a check
-    /// (`record_chapters_check` is the production transition).
-    #[cfg(test)]
-    pub fn with_chapters(self, chapters: Vec<VideoChapter>, now: DateTime<Utc>) -> Self {
-        Self {
-            chapters: Some(chapters),
-            updated_at: now,
-            ..self
-        }
-    }
-
     /// The language code the fetched subtitle file is named with (`en` for
     /// `… .en.srt`); `None` unless the subtitles are Done.
     pub fn subtitle_language(&self) -> Option<String> {
@@ -571,20 +481,6 @@ impl Video {
             .and_then(|filename| filename.strip_suffix(".srt"))
             .and_then(|stem| stem.rsplit_once('.'))
             .map(|(_, language)| language.to_string())
-    }
-
-    /// Test fixture: subtitles Unavailable without recording a check
-    /// (`record_subtitles_check` is the production transition).
-    #[cfg(test)]
-    pub fn mark_subtitles_unavailable(self, now: DateTime<Utc>) -> Self {
-        Self {
-            subtitles: LateDataChecks {
-                state: self.subtitles.state.unavailable(),
-                ..self.subtitles
-            },
-            updated_at: now,
-            ..self
-        }
     }
 
     /// Records a subtitle check that found no subtitles (`Incomplete`) or

@@ -1,7 +1,7 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, RetryAttempts,
-    StaleVideo, StepState, StepStatus, Video, VideoChapter, VideoStatus,
+    StaleVideo, StepState, StepStatus, Video, VideoChapter, VideoStatus, WatchState,
 };
 use crate::domain::video::{VideoId, YoutubeVideoId};
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -154,11 +154,11 @@ impl VideoRepository for SqliteVideoRepository {
                 video.duration_seconds,
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
-                video.watched_at.map(|w| w.to_rfc3339()),
-                video.playback_position.seconds(),
+                video.watch.watched_at.map(|w| w.to_rfc3339()),
+                video.watch.position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
                 Self::encode_timestamp(video.download_attempts.last_failed_at),
-                video.last_played_at.map(|p| p.to_rfc3339()),
+                video.watch.last_played_at.map(|p| p.to_rfc3339()),
                 video.episode_number.map(|n| n.season()),
                 video.episode_number.map(|n| n.episode()),
                 video.subtitles.state.status.as_str(),
@@ -248,11 +248,11 @@ impl VideoRepository for SqliteVideoRepository {
                 video.thumbnail_filename,
                 video.duration_seconds,
                 video.updated_at.to_rfc3339(),
-                video.watched_at.map(|w| w.to_rfc3339()),
-                video.playback_position.seconds(),
+                video.watch.watched_at.map(|w| w.to_rfc3339()),
+                video.watch.position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
                 Self::encode_timestamp(video.download_attempts.last_failed_at),
-                video.last_played_at.map(|p| p.to_rfc3339()),
+                video.watch.last_played_at.map(|p| p.to_rfc3339()),
                 video.episode_number.map(|n| n.season()),
                 video.episode_number.map(|n| n.episode()),
                 video.subtitles.state.status.as_str(),
@@ -565,10 +565,7 @@ impl SqliteVideoRepository {
             duration_seconds: row.duration_seconds,
             created_at: Self::parse_timestamp(&row.created_at, "created_at")?,
             updated_at: Self::parse_timestamp(&row.updated_at, "updated_at")?,
-            watched_at: Self::decode_timestamp(row.watched_at, "watched_at")?,
-            playback_position: PlaybackPosition::new(row.playback_position_seconds)?,
             synced_at: Self::decode_timestamp(row.synced_at, "synced_at")?,
-            last_played_at: Self::decode_timestamp(row.last_played_at, "last_played_at")?,
             episode_number: Self::decode_episode_number(row.season, row.episode)?,
             subtitles: Self::decode_checks(
                 &row.subtitles_status,
@@ -607,6 +604,11 @@ impl SqliteVideoRepository {
                 "categorization_last_failed_at",
             )?,
             version: row.version,
+            watch: WatchState {
+                watched_at: Self::decode_timestamp(row.watched_at, "watched_at")?,
+                position: PlaybackPosition::new(row.playback_position_seconds)?,
+                last_played_at: Self::decode_timestamp(row.last_played_at, "last_played_at")?,
+            },
         })
     }
 
@@ -1180,8 +1182,12 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let watched_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let video = Video {
-            playback_position: PlaybackPosition::new(42).unwrap(),
-            ..video("First", now).mark_watched(watched_at)
+            watch: WatchState {
+                watched_at: Some(watched_at),
+                position: PlaybackPosition::new(42).unwrap(),
+                last_played_at: None,
+            },
+            ..video("First", now)
         };
 
         repo.insert(&video).unwrap();
@@ -1206,12 +1212,18 @@ mod tests {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let video = Video {
-            last_played_at: Some(DateTime::<Utc>::from_timestamp(100, 0).unwrap()),
+            watch: WatchState {
+                last_played_at: Some(DateTime::<Utc>::from_timestamp(100, 0).unwrap()),
+                ..WatchState::unwatched()
+            },
             ..video("First", now)
         };
         repo.insert(&video).unwrap();
         let replayed = Video {
-            last_played_at: Some(DateTime::<Utc>::from_timestamp(200, 0).unwrap()),
+            watch: WatchState {
+                last_played_at: Some(DateTime::<Utc>::from_timestamp(200, 0).unwrap()),
+                ..video.watch
+            },
             ..video.clone()
         };
 
@@ -1231,7 +1243,10 @@ mod tests {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let video = Video {
-            last_played_at: None,
+            watch: WatchState {
+                last_played_at: None,
+                ..WatchState::unwatched()
+            },
             ..video("First", now)
         };
 

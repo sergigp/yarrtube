@@ -465,8 +465,8 @@ impl VideoSearcher {
     ) -> Vec<SourcedVideo> {
         Self::pick_once(
             videos,
-            |video| video.is_in_progress(now),
-            |video| video.last_played_at,
+            |video| video.watch.is_in_progress(now),
+            |video| video.watch.last_played_at,
             limit,
         )
     }
