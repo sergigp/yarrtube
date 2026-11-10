@@ -306,7 +306,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", "My Playlist"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -359,7 +359,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", "My Playlist"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -412,7 +412,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", "My Playlist"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -465,7 +465,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", "My Playlist"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -518,7 +518,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", "My Playlist"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -571,7 +571,7 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", "Some Channel"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
@@ -653,7 +653,7 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", "Some Channel"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
@@ -706,7 +706,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", "My Playlist"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -759,7 +759,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", "My Playlist"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -807,7 +807,7 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", "Some Channel"))
             .unwrap();
-        video_repository.save(&video("rec1", "My Video")).unwrap();
+        video_repository.insert(&video("rec1", "My Video")).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
@@ -1110,6 +1110,7 @@ mod tests {
             quality_checks: LateDataChecks::default(),
             quality_settled: false,
             summary_state: SummaryState::Missing,
+            version: 0,
         }
     }
 

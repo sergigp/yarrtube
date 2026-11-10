@@ -2,7 +2,9 @@ use crate::domain::category::Category;
 use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
+use crate::domain::services::{
+    CategoryVideoCollector, CategoryVideoCollectorApi, VideoUpdater, VideoUpdaterApi,
+};
 use crate::domain::video::{
     PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId, YoutubeVideoId,
 };
@@ -30,6 +32,7 @@ pub struct VideoWatchStateUpdater {
     clock: Arc<dyn Clock>,
     category_repository: Arc<dyn CategoryRepository>,
     category_video_collector: CategoryVideoCollector,
+    video_updater: VideoUpdater,
 }
 
 impl VideoWatchStateUpdater {
@@ -45,6 +48,7 @@ impl VideoWatchStateUpdater {
         category_video_collector: CategoryVideoCollector,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             channel_repository,
             channel_video_repository,
@@ -95,12 +99,18 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         let copies = self.find_copies(id)?;
         let now = self.clock.now();
         copies
-            .into_iter()
-            .map(|video| video.update_watch_state(position, reported_duration, was_watched, now))
-            .try_fold(false, |watched, video| {
-                self.video_repository
-                    .update(&video)
-                    .map(|()| watched || video.is_watched())
+            .iter()
+            .try_fold(false, |watched, copy| {
+                self.video_updater
+                    .update(&copy.id, |video| {
+                        Some(video.update_watch_state(
+                            position,
+                            reported_duration,
+                            was_watched,
+                            now,
+                        ))
+                    })
+                    .map(|stored| watched || stored.is_some_and(|video| video.is_watched()))
             })
             .map_err(UpdateWatchStateError::Repository)
     }
@@ -109,10 +119,14 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         let copies = self.find_downloaded_copies(id)?;
         let now = self.clock.now();
         copies
-            .into_iter()
-            .filter(|video| !video.is_watched())
-            .map(|video| video.mark_watched(now))
-            .try_for_each(|video| self.video_repository.update(&video))
+            .iter()
+            .try_for_each(|copy| {
+                self.video_updater
+                    .update(&copy.id, |video| {
+                        (!video.is_watched()).then(|| video.mark_watched(now))
+                    })
+                    .map(|_| ())
+            })
             .map_err(UpdateWatchStateError::Repository)
     }
 
@@ -239,9 +253,12 @@ impl VideoWatchStateUpdater {
         self.video_repository
             .find_by_youtube_id(youtube_id)
             .map_err(UpdateWatchStateError::Repository)?
-            .into_iter()
-            .map(|video| video.mark_watched(now))
-            .try_for_each(|video| self.video_repository.update(&video))
+            .iter()
+            .try_for_each(|copy| {
+                self.video_updater
+                    .update(&copy.id, |video| Some(video.mark_watched(now)))
+                    .map(|_| ())
+            })
             .map_err(UpdateWatchStateError::Repository)
     }
 

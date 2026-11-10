@@ -69,7 +69,7 @@ mod tests {
             },
         )));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -101,12 +101,13 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .clone()
                     .with_episode_number(EpisodeNumber::from_columns(2026, 31501).unwrap(), later())
                     .with_thumbnail("Season 2026/S2026E031501 - My Video.jpg", later())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -136,7 +137,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let thumbnail_repository = Arc::new(FakeThumbnailRepository::default());
         let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -184,7 +185,7 @@ mod tests {
             },
         )));
         let video = my_video().mark_excluded(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -232,7 +233,7 @@ mod tests {
             },
         )));
         let video = my_video().mark_errored(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -311,7 +312,7 @@ mod tests {
             },
         )));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchThumbnailTask::new(Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(VideoOwnerFinder::new(
@@ -341,7 +342,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -401,7 +402,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -421,8 +422,9 @@ mod tests {
                 published_at: Some(published_at()),
             }))
             .with_on_fetch(move || {
+                let stored = video_repository.find(&video_id).unwrap().unwrap();
                 video_repository
-                    .update_thumbnail(&video_id, DOWNLOADED_THUMBNAIL, later())
+                    .update(&stored.with_thumbnail(DOWNLOADED_THUMBNAIL, later()))
                     .unwrap()
             })
         });
@@ -446,7 +448,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().with_thumbnail(DOWNLOADED_THUMBNAIL, later())]
+            vec![Video {
+                version: 1,
+                ..video.clone().with_thumbnail(DOWNLOADED_THUMBNAIL, later())
+            }]
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
@@ -469,7 +474,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let thumbnail_repository = Arc::new(FakeThumbnailRepository::failing());
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();

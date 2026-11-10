@@ -99,7 +99,7 @@ mod tests {
         let videos_dir = tempfile::tempdir().unwrap();
         let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -130,8 +130,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .clone()
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -143,7 +144,7 @@ mod tests {
                     )
                     .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -200,7 +201,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -235,6 +236,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 downloaded_height: Some(720),
                 quality_checks: LateDataChecks {
                     last_checked_at: Some(fixed_timestamp()),
@@ -261,7 +263,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -296,6 +298,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 downloaded_height: Some(1080),
                 quality_settled: true,
                 quality_checks: LateDataChecks {
@@ -323,7 +326,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -359,6 +362,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 downloaded_height: Some(1080),
                 quality_settled: true,
                 quality_checks: LateDataChecks {
@@ -389,7 +393,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -428,6 +432,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 downloaded_height: Some(360),
                 quality_checks: LateDataChecks {
                     last_checked_at: Some(fixed_timestamp()),
@@ -457,7 +462,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel().with_quality(Quality::Mid))
             .unwrap();
@@ -492,6 +497,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 downloaded_height: Some(360),
                 quality_checks: LateDataChecks {
                     last_checked_at: Some(fixed_timestamp()),
@@ -518,7 +524,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel().with_quality(Quality::Mid))
             .unwrap();
@@ -553,6 +559,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 downloaded_height: Some(720),
                 quality_settled: true,
                 quality_checks: LateDataChecks {
@@ -580,7 +587,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -615,6 +622,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 chapters: Some(game_chapters()),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(fixed_timestamp()),
@@ -643,7 +651,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -678,6 +686,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 chapters: Some(vec![]),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(fixed_timestamp()),
@@ -705,7 +714,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -740,6 +749,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 chapters: None,
                 ..video
                     .clone()
@@ -777,7 +787,7 @@ mod tests {
             },
         ));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -835,9 +845,9 @@ mod tests {
         )
         .with_episode_number(published_episode(), fixed_timestamp());
         let video = my_video();
-        video_repository.save(&first).unwrap();
+        video_repository.insert(&first).unwrap();
         video_repository.update(&first).unwrap();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -875,21 +885,27 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
-                first,
-                video
-                    .start_download(fixed_timestamp())
-                    .mark_downloaded(
-                        Quality::High,
-                        "Season 2026/S2026E031502 - My Video.mp4",
-                        Some("Season 2026/S2026E031502 - My Video.jpg".to_string()),
-                        None,
-                        fixed_timestamp(),
-                    )
-                    .quality_checked_at(fixed_timestamp())
-                    .with_episode_number(
-                        EpisodeNumber::from_columns(2026, 31502).unwrap(),
-                        fixed_timestamp()
-                    )
+                Video {
+                    version: 1,
+                    ..first
+                },
+                Video {
+                    version: 3,
+                    ..video
+                        .start_download(fixed_timestamp())
+                        .mark_downloaded(
+                            Quality::High,
+                            "Season 2026/S2026E031502 - My Video.mp4",
+                            Some("Season 2026/S2026E031502 - My Video.jpg".to_string()),
+                            None,
+                            fixed_timestamp(),
+                        )
+                        .quality_checked_at(fixed_timestamp())
+                        .with_episode_number(
+                            EpisodeNumber::from_columns(2026, 31502).unwrap(),
+                            fixed_timestamp()
+                        )
+                }
             ]
         );
     }
@@ -905,7 +921,7 @@ mod tests {
         let video = my_video()
             .with_thumbnail("Season 2026/S2026E031503 - My Video.jpg", fixed_timestamp())
             .with_episode_number(prefetched_number, fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         video_repository.update(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
@@ -935,8 +951,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .clone()
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -947,7 +964,7 @@ mod tests {
                         fixed_timestamp(),
                     )
                     .quality_checked_at(fixed_timestamp())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -979,7 +996,7 @@ mod tests {
             PlaylistEpisodeNumber::new(7).unwrap().into(),
             fixed_timestamp(),
         );
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqlitePlaylistRepository::new(db.database())
             .insert(&my_playlist())
             .unwrap();
@@ -1016,6 +1033,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 2,
                 quality_settled: true,
                 ..video
                     .clone()
@@ -1051,7 +1069,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1087,8 +1105,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
                         Quality::High,
@@ -1102,7 +1121,7 @@ mod tests {
                         EpisodeNumber::from_columns(2026, 31601).unwrap(),
                         fixed_timestamp()
                     )
-            ]
+            }]
         );
     }
 
@@ -1115,7 +1134,7 @@ mod tests {
         let videos_dir = tempfile::tempdir().unwrap();
         let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1144,8 +1163,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .clone()
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -1157,7 +1177,7 @@ mod tests {
                     )
                     .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -1188,7 +1208,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1241,7 +1261,7 @@ mod tests {
             PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_failing_move(staged_media.clone()));
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1273,13 +1293,14 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .clone()
                     .start_download(fixed_timestamp())
                     .mark_errored(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
@@ -1297,7 +1318,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1327,11 +1348,12 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_errored_retrying(fixed_timestamp())
-            ]
+            }]
         );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
@@ -1341,7 +1363,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1370,11 +1392,12 @@ mod tests {
         assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_errored_retrying(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1384,7 +1407,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1418,6 +1441,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 3,
                 quality_checks: LateDataChecks {
                     last_checked_at: Some(fixed_timestamp()),
                     failed_attempts: 1,
@@ -1441,7 +1465,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1471,11 +1495,12 @@ mod tests {
         assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_errored_retrying(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1484,7 +1509,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1524,7 +1549,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1565,7 +1590,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1603,7 +1628,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1633,11 +1658,12 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_errored(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1646,7 +1672,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1675,11 +1701,12 @@ mod tests {
         assert_eq!(result, Err("yt-dlp could not be run".to_string()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_errored_retrying(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1689,7 +1716,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1718,11 +1745,12 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_excluded(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1731,7 +1759,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1760,11 +1788,12 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_excluded(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1773,7 +1802,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1802,11 +1831,12 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_excluded(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1815,7 +1845,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1844,11 +1874,12 @@ mod tests {
         assert_eq!(result, Err("Video unavailable".to_string()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 2,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_errored_retrying(fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -1884,7 +1915,7 @@ mod tests {
         ));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(
                 &my_channel()
@@ -1917,8 +1948,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .clone()
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -1930,7 +1962,7 @@ mod tests {
                     )
                     .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
         assert_eq!(
             *downloader.calls.lock().unwrap(),
@@ -1964,7 +1996,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             Path::new("/videos"),
@@ -1995,7 +2027,7 @@ mod tests {
             None,
             fixed_timestamp(),
         );
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
@@ -2030,7 +2062,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video().mark_excluded(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
@@ -2065,7 +2097,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video().mark_errored(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
@@ -2103,7 +2135,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let deleting_repository = video_repository.clone();
         let deleted_id = video.id.clone();
         SqliteChannelRepository::new(db.database())
@@ -2157,7 +2189,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2190,19 +2222,22 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![with_watch_state_recorded_meanwhile(
-                video
-                    .start_download(fixed_timestamp())
-                    .mark_downloaded(
-                        Quality::High,
-                        "Season 2026/S2026E031501 - My Video.mp4",
-                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
-                        None,
-                        fixed_timestamp(),
-                    )
-                    .quality_checked_at(fixed_timestamp())
-                    .with_episode_number(published_episode(), fixed_timestamp())
-            )]
+            vec![Video {
+                version: 4,
+                ..with_watch_state_recorded_meanwhile(
+                    video
+                        .start_download(fixed_timestamp())
+                        .mark_downloaded(
+                            Quality::High,
+                            "Season 2026/S2026E031501 - My Video.mp4",
+                            Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                            None,
+                            fixed_timestamp(),
+                        )
+                        .quality_checked_at(fixed_timestamp())
+                        .with_episode_number(published_episode(), fixed_timestamp())
+                )
+            }]
         );
     }
 
@@ -2211,7 +2246,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let watching_repository = video_repository.clone();
         let watched_id = video.id.clone();
         SqliteChannelRepository::new(db.database())
@@ -2247,11 +2282,14 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![with_watch_state_recorded_meanwhile(
-                video
-                    .start_download(fixed_timestamp())
-                    .mark_errored_retrying(fixed_timestamp())
-            )]
+            vec![Video {
+                version: 3,
+                ..with_watch_state_recorded_meanwhile(
+                    video
+                        .start_download(fixed_timestamp())
+                        .mark_errored_retrying(fixed_timestamp())
+                )
+            }]
         );
     }
 
@@ -2260,7 +2298,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let watching_repository = video_repository.clone();
         let watched_id = video.id.clone();
         SqliteChannelRepository::new(db.database())
@@ -2296,11 +2334,14 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![with_watch_state_recorded_meanwhile(
-                video
-                    .start_download(fixed_timestamp())
-                    .mark_excluded(fixed_timestamp())
-            )]
+            vec![Video {
+                version: 3,
+                ..with_watch_state_recorded_meanwhile(
+                    video
+                        .start_download(fixed_timestamp())
+                        .mark_excluded(fixed_timestamp())
+                )
+            }]
         );
     }
 
@@ -2312,7 +2353,7 @@ mod tests {
         let video = my_video();
         let staged_media =
             PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
                 my_channel_id(),
@@ -2348,12 +2389,15 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![with_watch_state_recorded_meanwhile(
-                video
-                    .start_download(fixed_timestamp())
-                    .mark_errored(fixed_timestamp())
-                    .with_episode_number(published_episode(), fixed_timestamp())
-            )]
+            vec![Video {
+                version: 4,
+                ..with_watch_state_recorded_meanwhile(
+                    video
+                        .start_download(fixed_timestamp())
+                        .mark_errored(fixed_timestamp())
+                        .with_episode_number(published_episode(), fixed_timestamp())
+                )
+            }]
         );
     }
 
@@ -2367,7 +2411,7 @@ mod tests {
             "My: Messy / Title?",
             fixed_timestamp(),
         );
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2396,8 +2440,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
                         Quality::High,
@@ -2408,7 +2453,7 @@ mod tests {
                     )
                     .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -2444,7 +2489,7 @@ mod tests {
         let videos_dir = tempfile::tempdir().unwrap();
         let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2476,8 +2521,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .clone()
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -2489,7 +2535,7 @@ mod tests {
                     )
                     .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -2508,7 +2554,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2540,8 +2586,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
                         Quality::High,
@@ -2552,7 +2599,7 @@ mod tests {
                     )
                     .quality_checked_at(fixed_timestamp())
                     .with_episode_number(published_episode(), fixed_timestamp())
-            ]
+            }]
         );
     }
 
@@ -2564,7 +2611,7 @@ mod tests {
         let videos_dir = tempfile::tempdir().unwrap();
         let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2632,7 +2679,7 @@ mod tests {
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2674,7 +2721,7 @@ mod tests {
         let videos_dir = tempfile::tempdir().unwrap();
         let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2725,7 +2772,7 @@ mod tests {
         let videos_dir = tempfile::tempdir().unwrap();
         let output_dir = videos_dir.path().join("creators/somechannel");
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2778,7 +2825,7 @@ mod tests {
         let videos_root = unique_temp_dir("download-video-task-thumbnail-e2e");
         let fake_yt_dlp = FakeYtDlp::with_downloaded_files("yt1.mp4", &["yt1.mp4", "yt1.jpg"]);
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -2825,8 +2872,9 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 3,
+                ..video
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
                         Quality::High,
@@ -2841,7 +2889,7 @@ mod tests {
                         fixed_timestamp()
                     )
                     .record_chapters_check(Some(vec![]), fixed_timestamp(), fixed_timestamp())
-            ]
+            }]
         );
         std::fs::remove_dir_all(&videos_root).unwrap();
     }

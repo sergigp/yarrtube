@@ -1,4 +1,6 @@
-use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::services::{
+    VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
+};
 use crate::domain::video::EpisodePaths;
 use crate::domain::video::{FetchedThumbnail, ThumbnailFetch};
 use crate::domain::video::{Video, VideoId};
@@ -22,6 +24,7 @@ pub struct ThumbnailFetcher {
     video_file_repository: Arc<dyn VideoFileRepository>,
     clock: Arc<dyn Clock>,
     staging_area: Arc<StagingArea>,
+    video_updater: VideoUpdater,
 }
 
 impl ThumbnailFetcher {
@@ -34,6 +37,7 @@ impl ThumbnailFetcher {
         staging_area: Arc<StagingArea>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_owner_finder,
             thumbnail_repository,
@@ -100,8 +104,8 @@ impl ThumbnailFetcher {
     }
 
     /// Assigns the episode number, moves the staged jpg to the episode's
-    /// image path and writes only the thumbnail: a download of the same
-    /// video may have changed its status since `video` was read.
+    /// image path and records the thumbnail on the video as stored now: a
+    /// download of the same video may have changed it since `video` was read.
     ///
     /// The fetch can take a while, and the video (or its whole
     /// playlist/channel) may have been deleted, excluded, errored or already
@@ -124,8 +128,12 @@ impl ThumbnailFetcher {
         let thumbnail_filename = EpisodePaths::new(&number, &stored.title).thumbnail();
         self.video_file_repository
             .move_file(&fetched.path, &output_dir.join(&thumbnail_filename))?;
-        self.video_repository
-            .update_thumbnail(&stored.id, &thumbnail_filename, self.clock.now())
+        let now = self.clock.now();
+        self.video_updater
+            .update(&stored.id, |video| {
+                Some(video.with_thumbnail(thumbnail_filename.clone(), now))
+            })
+            .map(|_| ())
     }
 
     /// The stored video when a fetched thumbnail can still be placed for it:

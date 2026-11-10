@@ -342,7 +342,7 @@ mod tests {
             let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let video_repository = SqliteVideoRepository::new(db.database());
             let video = unavailable_video();
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             let preferences_updater = preferences_updater(&db, repository.clone());
 
             update(preferences_updater, request).await.unwrap();
@@ -350,6 +350,7 @@ mod tests {
             assert_eq!(
                 video_repository.find(&video.id).unwrap(),
                 Some(Video {
+                    version: 1,
                     summary_state: SummaryState::Missing,
                     updated_at: fixed_timestamp(),
                     ..video
@@ -380,7 +381,7 @@ mod tests {
             let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let video_repository = SqliteVideoRepository::new(db.database());
             let video = unavailable_video();
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             let preferences_updater = preferences_updater(&db, repository.clone());
 
             update(preferences_updater, request).await.unwrap();
@@ -724,7 +725,7 @@ mod tests {
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let video_repository = SqliteVideoRepository::new(db.database());
         let video = unavailable_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
             categorization_model: Some("gemma3:4b".to_string()),

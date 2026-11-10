@@ -5,7 +5,7 @@ use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, ShowFileWriter,
-    ShowFileWriterApi,
+    ShowFileWriterApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -37,6 +37,7 @@ use tracing::{debug, info, info_span, warn};
 pub struct PlaylistVideoReconciler {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    video_updater: VideoUpdater,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
@@ -71,6 +72,7 @@ impl PlaylistVideoReconciler {
     ) -> Self {
         Self {
             playlist_repository,
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_transcript_repository,
             video_summary_repository,
@@ -300,7 +302,7 @@ impl PlaylistVideoReconciler {
         let number = playlist.next_episode_number()?;
         let video = Video::create(youtube_id, current.title.clone(), now)
             .with_episode_number(number.into(), now);
-        self.video_repository.save(&video)?;
+        self.video_repository.insert(&video)?;
         let playlist_video =
             PlaylistVideo::create(playlist.id.clone(), video.id.clone(), current.position, now);
         self.playlist_video_repository.save(&playlist_video)?;
@@ -332,8 +334,9 @@ impl PlaylistVideoReconciler {
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         if video.title != current.title {
-            self.video_repository
-                .update_title(&video.id, &current.title, now)?;
+            self.video_updater.update(&video.id, |video| {
+                Some(video.with_title(current.title.clone(), now))
+            })?;
         }
         if existing.position != current.position {
             self.playlist_video_repository.save(&PlaylistVideo {

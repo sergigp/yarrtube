@@ -1,16 +1,18 @@
 use crate::domain::playlist::PlaylistPath;
-use crate::domain::services::{VideoReconciler, VideoReconcilerApi};
+use crate::domain::task::Task;
 use crate::domain::video::VideoId;
 use crate::domain::video::{
     EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, SubtitleState, Video, VideoStatus,
     is_episode_path, is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 /// The extensions of the files a download or thumbnail fetch moves into
 /// place under an episode's base name, see `EpisodePaths`.
@@ -34,7 +36,8 @@ pub struct DesiredState {
 pub struct InternalVideoReconciler {
     video_repository: Arc<dyn VideoRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
-    video_reconciler: VideoReconciler,
+    task_repository: Arc<dyn TaskRepository>,
+    clock: Arc<dyn Clock>,
     videos_path: String,
 }
 
@@ -42,29 +45,30 @@ impl InternalVideoReconciler {
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
-        video_reconciler: VideoReconciler,
+        task_repository: Arc<dyn TaskRepository>,
+        clock: Arc<dyn Clock>,
         videos_path: impl Into<String>,
     ) -> Self {
         Self {
             video_repository,
             video_file_repository,
-            video_reconciler,
+            task_repository,
+            clock,
             videos_path: videos_path.into(),
         }
     }
 }
 
 pub trait InternalVideoReconcilerApi: Send + Sync {
-    /// Reconciles every video of `desired` (`VideoReconciler::reconcile`,
-    /// a failing video is logged and skipped), then deletes orphaned files
-    /// from a snapshot read after those reconciles, so the stale file of a
-    /// video they reset is swept by the same pass.
+    /// Schedules the video sync of every video of `desired` (a `sync_video`
+    /// task, run under the video's task key), then deletes orphaned files.
+    /// The stale file of a video its sync resets is swept by the next pass.
     fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()>;
 }
 
 impl InternalVideoReconcilerApi for InternalVideoReconciler {
     fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()> {
-        self.sync_videos(desired);
+        self.schedule_syncs(desired)?;
         let actual = self.read_actual_state(desired)?;
         self.delete_orphaned_files(&actual)
     }
@@ -87,16 +91,18 @@ impl InternalVideoReconciler {
         })
     }
 
-    /// Syncs every video of `desired`, including those the same pass just
-    /// added: the safety net for a step lost on a crash or never scheduled.
-    /// A video whose sync fails is logged and skipped, so the others are
-    /// still synced.
-    fn sync_videos(&self, desired: &DesiredState) {
-        desired.video_ids.iter().for_each(|id| {
-            if let Err(e) = self.video_reconciler.reconcile(id) {
-                warn!(video_id = %id, error = %e, "failed to sync video during reconcile");
-            }
-        });
+    /// Schedules the sync of every video of `desired`, including those the
+    /// same pass just added: the safety net for a step lost on a crash or
+    /// never scheduled. A sync already pending is not scheduled twice.
+    fn schedule_syncs(&self, desired: &DesiredState) -> anyhow::Result<()> {
+        desired.video_ids.iter().try_for_each(|id| {
+            self.task_repository.schedule(
+                &Task::SyncVideo {
+                    video_id: id.as_str().to_string(),
+                },
+                self.clock.now(),
+            )
+        })
     }
 
     /// Deletes every entry of the output folder that is neither a show file,
@@ -218,36 +224,21 @@ fn subtitle_pending_paths(videos: &[Video]) -> HashSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::services::MetadataGenerator;
-    use crate::domain::services::VideoCategorizer;
-    use crate::domain::services::VideoCategoryAssigner;
-    use crate::domain::services::VideoOwnerFinder;
-    use crate::domain::services::VideoRelocator;
+
     use crate::domain::shared::Quality;
+    use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::YoutubeVideoId;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
-    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
-    use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
+
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
-    use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::SqliteVideoCategoryVerdictRepository;
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
+
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
-    use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
-    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-    use crate::infrastructure::shared::category_lock::CategoryLock;
-    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
-    use crate::infrastructure::shared::sqlite_connection::Database;
+
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use crate::infrastructure::shared::video_lock::VideoLock;
+
     use chrono::{DateTime, Utc};
     use std::sync::Mutex;
 
@@ -263,7 +254,6 @@ mod tests {
             "orphan.mp4".to_string(),
         ]));
         let reconciler = internal_video_reconciler(
-            &db,
             video_repository.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -293,9 +283,8 @@ mod tests {
             "My Video.mp4".to_string(),
         ]));
         let video = downloaded_video("My Video.mp4", None);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let reconciler = internal_video_reconciler(
-            &db,
             video_repository.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -307,7 +296,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![sync_video_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -323,9 +315,8 @@ mod tests {
             "My Video.jpg".to_string(),
         ]));
         let video = downloaded_video("My Video.mp4", Some("My Video.jpg"));
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let reconciler = internal_video_reconciler(
-            &db,
             video_repository.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -337,7 +328,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![sync_video_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -353,9 +347,8 @@ mod tests {
             "stray.jpg".to_string(),
         ]));
         let video = downloaded_video("My Video.mp4", None);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let reconciler = internal_video_reconciler(
-            &db,
             video_repository.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -370,7 +363,10 @@ mod tests {
             vec![deleted("stray.jpg")]
         );
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![sync_video_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -387,9 +383,8 @@ mod tests {
             ..Default::default()
         });
         let video = downloaded_video("My Video/My Video.mp4", None);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let reconciler = internal_video_reconciler(
-            &db,
             video_repository.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -401,7 +396,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![sync_video_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -416,9 +414,8 @@ mod tests {
             "My Video".to_string(),
         ]));
         let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let reconciler = internal_video_reconciler(
-            &db,
             video_repository.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -430,13 +427,14 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![sync_video_task(1, &video.id)]
+        );
     }
 
-    /// Builds the reconciler around the ports these tests observe; the
-    /// metadata and thumbnail ports are filled in with inert fakes.
+    /// Builds the reconciler around the ports these tests observe.
     fn internal_video_reconciler(
-        db: &TestDatabase,
         video_repository: Arc<SqliteVideoRepository>,
         task_repository: Arc<SqliteTaskRepository>,
         video_file_repository: Arc<FakeVideoFileRepository>,
@@ -444,34 +442,8 @@ mod tests {
         InternalVideoReconciler::new(
             video_repository.clone(),
             video_file_repository.clone(),
-            VideoReconciler::new(
-                video_repository.clone(),
-                Arc::new(VideoOwnerFinder::new(
-                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
-                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                    Arc::new(SqliteChannelRepository::new(db.database())),
-                    Arc::new(SqlitePlaylistRepository::new(db.database())),
-                    "/videos",
-                )),
-                task_repository.clone(),
-                video_file_repository.clone(),
-                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(MetadataGenerator::new(
-                    Arc::new(FakeYoutubeMetadataRepository::default()),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(VideoRelocator::new(
-                    Arc::new(SqliteVideoRepository::new(db.database())),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(VideoLock::default()),
-                Arc::new(FixedClock(fixed_timestamp())),
-                video_category_assigner(db.database()),
-                Arc::new(SqlitePreferencesRepository::new(db.database())),
-                video_categorizer(db.database()),
-            ),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
         )
     }
@@ -509,6 +481,21 @@ mod tests {
         (PathBuf::from("/videos/my-playlist"), entry.to_string())
     }
 
+    fn sync_video_task(id: i64, video_id: &VideoId) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task: Task::SyncVideo {
+                video_id: video_id.as_str().to_string(),
+            },
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at: fixed_timestamp(),
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
+
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
@@ -518,40 +505,5 @@ mod tests {
         desired: &DesiredState,
     ) -> Result<(), String> {
         reconciler.reconcile(desired).map_err(|e| e.to_string())
-    }
-
-    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
-        VideoCategoryAssigner::new(
-            Arc::new(SqliteVideoRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
-            Arc::new(SqliteCategoryRepository::new(database.clone())),
-            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-            Arc::new(SqliteEventPublisher::new(
-                database,
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(CategoryLock::default()),
-        )
-    }
-
-    fn video_categorizer(database: Database) -> Arc<VideoCategorizer> {
-        Arc::new(VideoCategorizer::new(
-            Arc::new(SqlitePreferencesRepository::new(database.clone())),
-            Arc::new(VideoOwnerFinder::new(
-                Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-                Arc::new(SqliteChannelRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistRepository::new(database.clone())),
-                "/videos",
-            )),
-            Arc::new(SqliteCategoryRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
-            Arc::new(SqliteVideoSummaryRepository::new(database.clone())),
-            Arc::new(FakeLlmServerRepository::failing()),
-            video_category_assigner(database),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ))
     }
 }

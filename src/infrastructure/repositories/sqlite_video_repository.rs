@@ -1,7 +1,7 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, SubtitleState,
-    SummaryState, Video, VideoChapter, VideoStatus,
+    ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, StaleVideo,
+    SubtitleState, SummaryState, Video, VideoChapter, VideoStatus,
 };
 use crate::domain::video::{VideoId, YoutubeVideoId};
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled, summary_state";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled, summary_state, version";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -44,50 +44,23 @@ struct VideoRow {
     quality_failed_attempts: u32,
     quality_settled: bool,
     summary_state: String,
+    version: u32,
 }
 
 pub trait VideoRepository: Send + Sync {
-    /// Plain insert-or-full-replace of every column — no conflict-merge
-    /// policy. Callers decide what `Video` value to persist.
-    fn save(&self, video: &Video) -> anyhow::Result<()>;
+    /// Inserts a new video; fails if a video with its id is already stored.
+    fn insert(&self, video: &Video) -> anyhow::Result<()>;
     fn find(&self, id: &VideoId) -> anyhow::Result<Option<Video>>;
     /// The stored videos among `ids`, in the order given, skipping ids with
     /// no stored video. One query however many ids.
     fn find_many(&self, ids: &[VideoId]) -> anyhow::Result<Vec<Video>>;
-    /// Writes every mutable column, including `status` — unlike `save`,
-    /// which is a plain insert-or-replace, `update` only touches a row that
-    /// still exists.
+    /// Writes every mutable column and bumps `version`, only if the stored
+    /// version is still `video.version`; otherwise fails with `StaleVideo`.
+    /// A video no longer stored is left absent.
     fn update(&self, video: &Video) -> anyhow::Result<()>;
-    /// Writes only `title` (and `updated_at`), leaving the download's fields
-    /// untouched even if they changed since the caller read the video.
-    fn update_title(&self, id: &VideoId, title: &str, now: DateTime<Utc>) -> anyhow::Result<()>;
-    /// Writes only `subtitle_state`, `subtitle_filename`, the subtitle
-    /// checks and `updated_at`,
-    /// leaving the download's fields untouched even if they changed since
-    /// the caller read the video.
-    fn update_subtitles(&self, video: &Video) -> anyhow::Result<()>;
-    /// Writes only `summary_state` and `updated_at`, leaving everything else
-    /// untouched even if it changed since the caller read the video.
-    fn update_summary(&self, video: &Video) -> anyhow::Result<()>;
-    /// Puts every Unavailable summary back to Missing.
+    /// Puts every Unavailable summary back to Missing, bumping each
+    /// changed video's `version`.
     fn reset_unavailable_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()>;
-    /// Writes only `thumbnail_filename` (and `updated_at`), leaving the
-    /// download's fields untouched even if they changed since the caller
-    /// read the video.
-    fn update_thumbnail(
-        &self,
-        id: &VideoId,
-        thumbnail_filename: &str,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<()>;
-    /// Writes only `chapters`, the chapters checks and settlement (and
-    /// `updated_at`), leaving every other field untouched even if it changed
-    /// since the caller read the video.
-    fn update_chapters(&self, video: &Video) -> anyhow::Result<()>;
-    /// Writes only `quality`, `downloaded_height`, the quality checks and
-    /// settlement (and `updated_at`), leaving every other field untouched
-    /// even if it changed since the caller read the video.
-    fn update_quality(&self, video: &Video) -> anyhow::Result<()>;
     fn delete(&self, id: &VideoId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &YoutubeVideoId) -> anyhow::Result<Vec<Video>>;
@@ -95,7 +68,8 @@ pub trait VideoRepository: Send + Sync {
     /// next free same-day index among the videos of the same channel
     /// published on `published_at`'s day, recorded in one write. Fails for an
     /// unnumbered video in no channel: a playlist video is numbered when it is
-    /// added to its playlist, never by publish date.
+    /// added to its playlist, never by publish date. Recording a number bumps
+    /// the video's `version`.
     ///
     /// Reading the day's last episode and recording the next one happen under
     /// the one write connection's lock, deliberately not as `find` + compute +
@@ -149,41 +123,11 @@ impl SqliteVideoRepository {
 }
 
 impl VideoRepository for SqliteVideoRepository {
-    fn save(&self, video: &Video) -> anyhow::Result<()> {
+    fn insert(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled, summary_state)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30)
-             ON CONFLICT (id) DO UPDATE SET
-                youtube_id = excluded.youtube_id,
-                title = excluded.title,
-                status = excluded.status,
-                quality = excluded.quality,
-                filename = excluded.filename,
-                thumbnail_filename = excluded.thumbnail_filename,
-                duration_seconds = excluded.duration_seconds,
-                created_at = excluded.created_at,
-                updated_at = excluded.updated_at,
-                watched_at = excluded.watched_at,
-                playback_position_seconds = excluded.playback_position_seconds,
-                synced_at = excluded.synced_at,
-                last_errored_at = excluded.last_errored_at,
-                last_played_at = excluded.last_played_at,
-                season = excluded.season,
-                episode = excluded.episode,
-                subtitle_state = excluded.subtitle_state,
-                subtitle_filename = excluded.subtitle_filename,
-                subtitles_last_checked_at = excluded.subtitles_last_checked_at,
-                subtitles_failed_attempts = excluded.subtitles_failed_attempts,
-                chapters = excluded.chapters,
-                chapters_last_checked_at = excluded.chapters_last_checked_at,
-                chapters_failed_attempts = excluded.chapters_failed_attempts,
-                chapters_settled = excluded.chapters_settled,
-                downloaded_height = excluded.downloaded_height,
-                quality_last_checked_at = excluded.quality_last_checked_at,
-                quality_failed_attempts = excluded.quality_failed_attempts,
-                quality_settled = excluded.quality_settled,
-                summary_state = excluded.summary_state",
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_settled, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_settled, summary_state, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31)",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -215,12 +159,13 @@ impl VideoRepository for SqliteVideoRepository {
                 video.quality_checks.failed_attempts,
                 video.quality_settled,
                 video.summary_state.as_str(),
+                video.version,
             ],
         )
         .inspect_err(|e| {
-            tracing::error!(video_id = %video.id, error = %e, "failed to save video")
+            tracing::error!(video_id = %video.id, error = %e, "failed to insert video")
         })
-        .context("failed to save video")?;
+        .context("failed to insert video")?;
         Ok(())
     }
 
@@ -265,9 +210,9 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_settled = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_settled = ?28, summary_state = ?29
-             WHERE id = ?1",
+        let updated = conn.execute(
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_settled = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_settled = ?28, summary_state = ?29, version = version + 1
+             WHERE id = ?1 AND version = ?30",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -298,32 +243,23 @@ impl VideoRepository for SqliteVideoRepository {
                 video.quality_checks.failed_attempts,
                 video.quality_settled,
                 video.summary_state.as_str(),
+                video.version,
             ],
         )
         .inspect_err(|e| {
             tracing::error!(video_id = %video.id, error = %e, "failed to update video")
         })
         .context("failed to update video")?;
-        Ok(())
-    }
-
-    fn update_title(&self, id: &VideoId, title: &str, now: DateTime<Utc>) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET title = ?2, updated_at = ?3 WHERE id = ?1",
-            params![id.as_str(), title, now.to_rfc3339()],
-        )
-        .inspect_err(
-            |e| tracing::error!(video_id = %id, error = %e, "failed to update video title"),
-        )
-        .context("failed to update video title")?;
+        if updated == 0 && Self::exists(&conn, &video.id)? {
+            return Err(StaleVideo(video.id.clone()).into());
+        }
         Ok(())
     }
 
     fn reset_unavailable_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE videos SET summary_state = ?1, updated_at = ?2 WHERE summary_state = ?3",
+            "UPDATE videos SET summary_state = ?1, updated_at = ?2, version = version + 1 WHERE summary_state = ?3",
             params![
                 SummaryState::Missing.as_str(),
                 now.to_rfc3339(),
@@ -331,102 +267,6 @@ impl VideoRepository for SqliteVideoRepository {
             ],
         )
         .inspect_err(|e| tracing::error!(error = %e, "failed to reset unavailable summaries"))?;
-        Ok(())
-    }
-
-    fn update_summary(&self, video: &Video) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET summary_state = ?2, updated_at = ?3 WHERE id = ?1",
-            params![
-                video.id.as_str(),
-                video.summary_state.as_str(),
-                video.updated_at.to_rfc3339(),
-            ],
-        )
-        .inspect_err(|e| {
-            tracing::error!(video_id = %video.id, error = %e, "failed to update video summary state")
-        })
-        .context("failed to update video summary state")?;
-        Ok(())
-    }
-
-    fn update_subtitles(&self, video: &Video) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET subtitle_state = ?2, subtitle_filename = ?3, subtitles_last_checked_at = ?4, subtitles_failed_attempts = ?5, updated_at = ?6 WHERE id = ?1",
-            params![
-                video.id.as_str(),
-                video.subtitle_state.as_str(),
-                video.subtitle_filename,
-                video.subtitle_checks.last_checked_at.map(|t| t.to_rfc3339()),
-                video.subtitle_checks.failed_attempts,
-                video.updated_at.to_rfc3339(),
-            ],
-        )
-        .inspect_err(|e| {
-            tracing::error!(video_id = %video.id, error = %e, "failed to update video subtitles")
-        })
-        .context("failed to update video subtitles")?;
-        Ok(())
-    }
-
-    fn update_thumbnail(
-        &self,
-        id: &VideoId,
-        thumbnail_filename: &str,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET thumbnail_filename = ?2, updated_at = ?3 WHERE id = ?1",
-            params![id.as_str(), thumbnail_filename, now.to_rfc3339()],
-        )
-        .inspect_err(
-            |e| tracing::error!(video_id = %id, error = %e, "failed to update video thumbnail"),
-        )
-        .context("failed to update video thumbnail")?;
-        Ok(())
-    }
-
-    fn update_chapters(&self, video: &Video) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET chapters = ?2, chapters_last_checked_at = ?3, chapters_failed_attempts = ?4, chapters_settled = ?5, updated_at = ?6 WHERE id = ?1",
-            params![
-                video.id.as_str(),
-                Self::encode_chapters(&video.chapters)?,
-                video.chapters_checks.last_checked_at.map(|t| t.to_rfc3339()),
-                video.chapters_checks.failed_attempts,
-                video.chapters_settled,
-                video.updated_at.to_rfc3339(),
-            ],
-        )
-        .inspect_err(|e| {
-            tracing::error!(video_id = %video.id, error = %e, "failed to update video chapters")
-        })
-        .context("failed to update video chapters")?;
-        Ok(())
-    }
-
-    fn update_quality(&self, video: &Video) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET quality = ?2, downloaded_height = ?3, quality_last_checked_at = ?4, quality_failed_attempts = ?5, quality_settled = ?6, updated_at = ?7 WHERE id = ?1",
-            params![
-                video.id.as_str(),
-                video.quality.map(|q| q.as_str()),
-                video.downloaded_height,
-                video.quality_checks.last_checked_at.map(|t| t.to_rfc3339()),
-                video.quality_checks.failed_attempts,
-                video.quality_settled,
-                video.updated_at.to_rfc3339(),
-            ],
-        )
-        .inspect_err(|e| {
-            tracing::error!(video_id = %video.id, error = %e, "failed to update video quality")
-        })
-        .context("failed to update video quality")?;
         Ok(())
     }
 
@@ -467,7 +307,7 @@ impl VideoRepository for SqliteVideoRepository {
         }
         let number = Self::next_free_episode_number(&conn, id, published_at)?;
         conn.execute(
-            "UPDATE videos SET season = ?2, episode = ?3 WHERE id = ?1",
+            "UPDATE videos SET season = ?2, episode = ?3, version = version + 1 WHERE id = ?1",
             params![id.as_str(), number.season(), number.episode()],
         )
         .inspect_err(
@@ -532,6 +372,17 @@ impl VideoRepository for SqliteVideoRepository {
 }
 
 impl SqliteVideoRepository {
+    fn exists(conn: &Connection, id: &VideoId) -> anyhow::Result<bool> {
+        conn.query_row(
+            "SELECT 1 FROM videos WHERE id = ?1",
+            params![id.as_str()],
+            |_| Ok(()),
+        )
+        .optional()
+        .context("failed to check whether the video exists")
+        .map(|found| found.is_some())
+    }
+
     /// `text` with LIKE's wildcards and escape character escaped, so they
     /// match literally.
     fn escape_like(text: &str) -> String {
@@ -642,6 +493,7 @@ impl SqliteVideoRepository {
             quality_failed_attempts: row.get(27)?,
             quality_settled: row.get(28)?,
             summary_state: row.get(29)?,
+            version: row.get(30)?,
         })
     }
 
@@ -700,6 +552,7 @@ impl SqliteVideoRepository {
             )?,
             quality_settled: row.quality_settled,
             summary_state: SummaryState::parse(&row.summary_state)?,
+            version: row.version,
         })
     }
 
@@ -780,7 +633,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let video = video("New", now);
 
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
 
         let stored = repo.find(&video.id).unwrap().unwrap();
         assert_eq!(stored.summary_state, SummaryState::Missing);
@@ -795,8 +648,8 @@ mod tests {
         let unavailable = video("Unavailable", now).mark_summary_unavailable(now);
         let generated = Video::create(YoutubeVideoId::new("yt2").unwrap(), "Generated", now)
             .mark_summary_generated(now);
-        repo.save(&unavailable).unwrap();
-        repo.save(&generated).unwrap();
+        repo.insert(&unavailable).unwrap();
+        repo.insert(&generated).unwrap();
 
         repo.reset_unavailable_summaries(later).unwrap();
 
@@ -809,6 +662,7 @@ mod tests {
                 Some(Video {
                     summary_state: SummaryState::Missing,
                     updated_at: later,
+                    version: 1,
                     ..unavailable
                 }),
                 Some(generated)
@@ -817,26 +671,117 @@ mod tests {
     }
 
     #[test]
-    fn it_should_update_only_the_summary_fields() {
-        let db = TestDatabase::new();
-        let repo = SqliteVideoRepository::new(db.database());
-        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
-        let read = video("Summarized", now);
-        repo.save(&read).unwrap();
-        repo.update_title(&read.id, "Renamed while summarizing", now)
+    fn it_should_bump_the_version_on_update() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let video = video("First", now);
+        repo.insert(&video).unwrap();
+        let renamed = video.with_title("Renamed", now);
+
+        repo.update(&renamed).unwrap();
+
+        assert_eq!(
+            repo.find(&renamed.id).unwrap(),
+            Some(Video {
+                version: 1,
+                ..renamed
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_fail_to_update_a_stale_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let read = video("First", now);
+        repo.insert(&read).unwrap();
+        repo.update(&read.clone().with_title("Renamed", now))
             .unwrap();
 
-        repo.update_summary(&read.clone().mark_summary_generated(later))
-            .unwrap();
+        let result = repo.update(&read.clone().mark_watched(now));
 
+        assert_eq!(
+            result.map_err(|e| e.downcast::<StaleVideo>().ok()),
+            Err(Some(StaleVideo(read.id.clone())))
+        );
         assert_eq!(
             repo.find(&read.id).unwrap(),
             Some(Video {
-                title: "Renamed while summarizing".to_string(),
-                ..read.mark_summary_generated(later)
+                version: 1,
+                ..read.with_title("Renamed", now)
             })
         );
+    }
+
+    #[test]
+    fn it_should_ignore_update_of_a_deleted_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let video = video("First", now);
+        repo.insert(&video).unwrap();
+        repo.delete(&video.id).unwrap();
+
+        let result = repo.update(&video.clone().mark_watched(now));
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(repo.find(&video.id).unwrap(), None);
+    }
+
+    #[test]
+    fn it_should_bump_the_version_when_resetting_unavailable_summaries() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
+        let unavailable = video("Unavailable", now).mark_summary_unavailable(now);
+        repo.insert(&unavailable).unwrap();
+
+        repo.reset_unavailable_summaries(later).unwrap();
+
+        assert_eq!(
+            repo.find(&unavailable.id).unwrap(),
+            Some(Video {
+                summary_state: SummaryState::Missing,
+                updated_at: later,
+                version: 1,
+                ..unavailable
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_insert_a_new_video_at_version_zero() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let video = video("First", now);
+
+        repo.insert(&video).unwrap();
+
+        assert_eq!(
+            repo.find(&video.id).unwrap(),
+            Some(Video {
+                version: 0,
+                ..video
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_fail_to_insert_an_existing_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let video = video("First", now);
+        repo.insert(&video).unwrap();
+
+        let result = repo.insert(&Video {
+            title: "Second".to_string(),
+            ..video.clone()
+        });
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err("failed to insert video".to_string())
+        );
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
 
     fn video(title: &str, now: DateTime<Utc>) -> Video {
@@ -849,7 +794,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let video = video("First", now);
 
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
 
         let found = repo.find(&video.id).unwrap().unwrap();
         assert_eq!(found.title, "First");
@@ -865,9 +810,9 @@ mod tests {
         let first = video("First", now);
         let second = video("Second", now);
         let unrequested = video("Unrequested", now);
-        repo.save(&first).unwrap();
-        repo.save(&second).unwrap();
-        repo.save(&unrequested).unwrap();
+        repo.insert(&first).unwrap();
+        repo.insert(&second).unwrap();
+        repo.insert(&unrequested).unwrap();
 
         let found = repo.find_many(&[
             second.id.clone(),
@@ -882,7 +827,7 @@ mod tests {
     fn it_should_find_many_of_no_ids() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("First", now)).unwrap();
+        repo.insert(&video("First", now)).unwrap();
 
         let found = repo.find_many(&[]);
 
@@ -896,8 +841,8 @@ mod tests {
         let a = Video::create(YoutubeVideoId::new("shared").unwrap(), "A", now);
         let b = Video::create(YoutubeVideoId::new("shared").unwrap(), "B", now);
 
-        repo.save(&a).unwrap();
-        repo.save(&b).unwrap();
+        repo.insert(&a).unwrap();
+        repo.insert(&b).unwrap();
 
         assert_eq!(repo.find(&a.id).unwrap().unwrap().title, "A");
         assert_eq!(repo.find(&b.id).unwrap().unwrap().title, "B");
@@ -914,7 +859,7 @@ mod tests {
             None,
             now,
         );
-        repo.save(&downloaded).unwrap();
+        repo.insert(&downloaded).unwrap();
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
@@ -933,7 +878,7 @@ mod tests {
             None,
             now,
         );
-        repo.save(&downloaded).unwrap();
+        repo.insert(&downloaded).unwrap();
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
@@ -951,7 +896,7 @@ mod tests {
             Some(223),
             now,
         );
-        repo.save(&downloaded).unwrap();
+        repo.insert(&downloaded).unwrap();
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
@@ -969,33 +914,11 @@ mod tests {
             None,
             now,
         );
-        repo.save(&downloaded).unwrap();
+        repo.insert(&downloaded).unwrap();
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
         assert_eq!(found.duration_seconds, None);
-    }
-
-    #[test]
-    fn it_should_overwrite_every_field_including_status_when_saving_an_existing_video() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let original = video("First", now);
-        repo.save(&original).unwrap();
-
-        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let updated = Video {
-            title: "Renamed".to_string(),
-            updated_at: later,
-            ..original.clone()
-        }
-        .start_download(later);
-        repo.save(&updated).unwrap();
-
-        let found = repo.find(&original.id).unwrap().unwrap();
-        assert_eq!(found.title, "Renamed");
-        assert_eq!(found.status, VideoStatus::InProgress);
-        assert_eq!(found.updated_at, later);
     }
 
     #[test]
@@ -1004,8 +927,8 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let one = video("One", now);
         let two = video("Two", now);
-        repo.save(&one).unwrap();
-        repo.save(&two).unwrap();
+        repo.insert(&one).unwrap();
+        repo.insert(&two).unwrap();
 
         repo.delete(&one.id).unwrap();
 
@@ -1034,7 +957,7 @@ mod tests {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let original = video("First", now);
-        repo.save(&original).unwrap();
+        repo.insert(&original).unwrap();
         let stored = repo.find(&original.id).unwrap().unwrap();
 
         let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
@@ -1043,71 +966,6 @@ mod tests {
         let found = repo.find(&original.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::InProgress);
         assert_eq!(found.updated_at, later);
-    }
-
-    #[test]
-    fn it_should_update_only_the_title() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let original = video("First", now).start_download(now);
-        repo.save(&original).unwrap();
-
-        repo.update_title(&original.id, "Renamed", later).unwrap();
-
-        assert_eq!(
-            repo.find(&original.id).unwrap(),
-            Some(Video {
-                title: "Renamed".to_string(),
-                updated_at: later,
-                ..original
-            })
-        );
-    }
-
-    #[test]
-    fn it_should_update_only_the_thumbnail() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let original = video("First", now).start_download(now);
-        repo.save(&original).unwrap();
-
-        repo.update_thumbnail(&original.id, "First/First.jpg", later)
-            .unwrap();
-
-        assert_eq!(
-            repo.find(&original.id).unwrap(),
-            Some(Video {
-                thumbnail_filename: Some("First/First.jpg".to_string()),
-                updated_at: later,
-                ..original
-            })
-        );
-    }
-
-    #[test]
-    fn it_should_update_only_the_subtitle_columns() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let original = video("First", now).start_download(now);
-        repo.save(&original).unwrap();
-
-        repo.update_subtitles(
-            &Video {
-                title: "Renamed".to_string(),
-                status: VideoStatus::Errored,
-                ..original.clone()
-            }
-            .mark_subtitles_unavailable(later),
-        )
-        .unwrap();
-
-        assert_eq!(
-            repo.find(&original.id).unwrap(),
-            Some(original.mark_subtitles_unavailable(later))
-        );
     }
 
     #[test]
@@ -1134,43 +992,9 @@ mod tests {
         );
         [&unchecked, &without, &with]
             .into_iter()
-            .for_each(|video| repo.save(video).unwrap());
+            .for_each(|video| repo.insert(video).unwrap());
 
         assert_eq!(repo.list().unwrap(), vec![unchecked, without, with]);
-    }
-
-    #[test]
-    fn it_should_update_only_the_chapters() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let later = DateTime::<Utc>::from_timestamp(60, 0).unwrap();
-        let read = video("First", now);
-        repo.save(&read).unwrap();
-        let downloaded = read.clone().start_download(now).mark_downloaded(
-            Quality::High,
-            "First.mp4",
-            None,
-            None,
-            now,
-        );
-        repo.save(&downloaded).unwrap();
-        let chapters = vec![VideoChapter {
-            start_seconds: 0,
-            end_seconds: 60,
-            title: "Intro".to_string(),
-        }];
-
-        repo.update_chapters(&read.with_chapters(chapters.clone(), later))
-            .unwrap();
-
-        assert_eq!(
-            repo.find(&downloaded.id).unwrap(),
-            Some(Video {
-                chapters: Some(chapters),
-                updated_at: later,
-                ..downloaded
-            })
-        );
     }
 
     #[test]
@@ -1193,53 +1017,9 @@ mod tests {
             ..video("Checked", now)
         };
 
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
 
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
-    }
-
-    #[test]
-    fn it_should_update_only_quality_fields() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let original = video("Original", now);
-        repo.save(&original).unwrap();
-        let watched = original.clone().update_watch_state(
-            PlaybackPosition::new(120).unwrap(),
-            None,
-            false,
-            now,
-        );
-        repo.update(&watched).unwrap();
-
-        repo.update_quality(&Video {
-            quality: Some(Quality::Mid),
-            downloaded_height: Some(720),
-            quality_checks: LateDataChecks {
-                last_checked_at: Some(later),
-                failed_attempts: 1,
-            },
-            quality_settled: true,
-            updated_at: later,
-            ..original.mark_subtitles_unavailable(later)
-        })
-        .unwrap();
-
-        assert_eq!(
-            repo.find(&watched.id).unwrap(),
-            Some(Video {
-                quality: Some(Quality::Mid),
-                downloaded_height: Some(720),
-                quality_checks: LateDataChecks {
-                    last_checked_at: Some(later),
-                    failed_attempts: 1,
-                },
-                quality_settled: true,
-                updated_at: later,
-                ..watched
-            })
-        );
     }
 
     #[test]
@@ -1248,7 +1028,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let checked_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let original = video("First", now);
-        repo.save(&original).unwrap();
+        repo.insert(&original).unwrap();
         let checked = Video {
             subtitle_checks: LateDataChecks {
                 last_checked_at: Some(checked_at),
@@ -1258,9 +1038,15 @@ mod tests {
             ..original.clone()
         };
 
-        repo.update_subtitles(&checked).unwrap();
+        repo.update(&checked).unwrap();
 
-        assert_eq!(repo.find(&original.id).unwrap(), Some(checked));
+        assert_eq!(
+            repo.find(&original.id).unwrap(),
+            Some(Video {
+                version: 1,
+                ..checked
+            })
+        );
     }
 
     #[test]
@@ -1273,7 +1059,7 @@ mod tests {
             ..video("First", now).mark_watched(watched_at)
         };
 
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
 
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
@@ -1285,7 +1071,7 @@ mod tests {
         let errored_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let video = video("First", now).mark_errored(errored_at);
 
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
 
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
@@ -1298,7 +1084,7 @@ mod tests {
             last_played_at: Some(DateTime::<Utc>::from_timestamp(100, 0).unwrap()),
             ..video("First", now)
         };
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
         let replayed = Video {
             last_played_at: Some(DateTime::<Utc>::from_timestamp(200, 0).unwrap()),
             ..video.clone()
@@ -1306,7 +1092,13 @@ mod tests {
 
         repo.update(&replayed).unwrap();
 
-        assert_eq!(repo.find(&video.id).unwrap(), Some(replayed));
+        assert_eq!(
+            repo.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                ..replayed
+            })
+        );
     }
 
     #[test]
@@ -1318,7 +1110,7 @@ mod tests {
             ..video("First", now)
         };
 
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
 
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
@@ -1330,9 +1122,9 @@ mod tests {
         let first_copy = Video::create(YoutubeVideoId::new("shared").unwrap(), "A", now);
         let other = Video::create(YoutubeVideoId::new("other").unwrap(), "B", now);
         let second_copy = Video::create(YoutubeVideoId::new("shared").unwrap(), "C", now);
-        repo.save(&first_copy).unwrap();
-        repo.save(&other).unwrap();
-        repo.save(&second_copy).unwrap();
+        repo.insert(&first_copy).unwrap();
+        repo.insert(&other).unwrap();
+        repo.insert(&second_copy).unwrap();
 
         let found = repo.find_by_youtube_id(&YoutubeVideoId::new("shared").unwrap());
 
@@ -1343,7 +1135,7 @@ mod tests {
     fn it_should_find_no_copies_of_an_unknown_youtube_video() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("First", now)).unwrap();
+        repo.insert(&video("First", now)).unwrap();
 
         let found = repo.find_by_youtube_id(&YoutubeVideoId::new("unknown").unwrap());
 
@@ -1351,11 +1143,32 @@ mod tests {
     }
 
     #[test]
+    fn it_should_bump_the_version_when_assigning_an_episode_number() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let video = video("First", fixed_timestamp());
+        repo.insert(&video).unwrap();
+        link_to_channel(&db, &video, "@somechannel");
+
+        repo.assign_episode_number(&video.id, published_at())
+            .unwrap();
+
+        assert_eq!(
+            repo.find(&video.id).unwrap(),
+            Some(Video {
+                episode_number: Some(episode(31501)),
+                version: 1,
+                ..video
+            })
+        );
+    }
+
+    #[test]
     fn it_should_assign_the_first_index_of_the_day() {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
         let video = video("First", fixed_timestamp());
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
         link_to_channel(&db, &video, "@somechannel");
 
         let number = repo.assign_episode_number(&video.id, published_at());
@@ -1364,6 +1177,7 @@ mod tests {
         assert_eq!(
             repo.find(&video.id).unwrap(),
             Some(Video {
+                version: 1,
                 episode_number: Some(episode(31501)),
                 ..video
             })
@@ -1379,7 +1193,7 @@ mod tests {
         let video = video("Video", fixed_timestamp());
         [&sibling, &other_channel_video, &video]
             .into_iter()
-            .for_each(|video| repo.save(video).unwrap());
+            .for_each(|video| repo.insert(video).unwrap());
         let _ = numbered(&repo, sibling.clone(), episode(31503));
         let _ = numbered(&repo, other_channel_video.clone(), episode(31507));
         link_to_channel(&db, &sibling, "@somechannel");
@@ -1396,7 +1210,7 @@ mod tests {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
         let video = video("Playlist video", fixed_timestamp());
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
         link_to_playlist(&db, &video, "PL1");
 
         let number = repo.assign_episode_number(&video.id, published_at());
@@ -1417,8 +1231,8 @@ mod tests {
         let repo = SqliteVideoRepository::new(db.database());
         let first_copy = video("Copy", fixed_timestamp());
         let second_copy = video("Copy", fixed_timestamp());
-        repo.save(&first_copy).unwrap();
-        repo.save(&second_copy).unwrap();
+        repo.insert(&first_copy).unwrap();
+        repo.insert(&second_copy).unwrap();
         link_to_channel(&db, &first_copy, "@somechannel");
         link_to_channel(&db, &second_copy, "@otherchannel");
 
@@ -1435,7 +1249,7 @@ mod tests {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
         let video = video("First", fixed_timestamp());
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
         let video = numbered(&repo, video, episode(31503));
         link_to_playlist(&db, &video, "PL1");
 
@@ -1447,7 +1261,13 @@ mod tests {
         );
 
         assert_eq!(number.unwrap(), episode(31503));
-        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+        assert_eq!(
+            repo.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                ..video
+            })
+        );
     }
 
     #[test]
@@ -1456,8 +1276,8 @@ mod tests {
         let saved = video("Saved", fixed_timestamp())
             .with_episode_number(episode(31501), fixed_timestamp());
         let updated = video("Updated", fixed_timestamp());
-        repo.save(&saved).unwrap();
-        repo.save(&updated).unwrap();
+        repo.insert(&saved).unwrap();
+        repo.insert(&updated).unwrap();
         let updated = updated.with_episode_number(episode(31502), fixed_timestamp());
 
         repo.update(&updated).unwrap();
@@ -1467,7 +1287,13 @@ mod tests {
                 repo.find(&saved.id).unwrap(),
                 repo.find(&updated.id).unwrap()
             ],
-            [Some(saved), Some(updated)]
+            [
+                Some(saved),
+                Some(Video {
+                    version: 1,
+                    ..updated
+                })
+            ]
         );
     }
 
@@ -1479,7 +1305,7 @@ mod tests {
             fixed_timestamp(),
         );
 
-        repo.save(&video).unwrap();
+        repo.insert(&video).unwrap();
 
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
@@ -1500,7 +1326,7 @@ mod tests {
         let errored = video("Errored", fixed_timestamp()).mark_errored(fixed_timestamp());
         [&pending, &downloaded, &errored]
             .into_iter()
-            .for_each(|video| repo.save(video).unwrap());
+            .for_each(|video| repo.insert(video).unwrap());
 
         let listed = repo.list_downloaded();
 
@@ -1515,7 +1341,7 @@ mod tests {
         let accented = downloaded("Víctor Falcón explica", 300);
         [&tactics, &endgame, &accented]
             .into_iter()
-            .for_each(|video| repo.save(video).unwrap());
+            .for_each(|video| repo.insert(video).unwrap());
 
         let found = ["tactics", "TACTICS", "falcon"]
             .map(|text| repo.find_downloaded_by_title(text, 20).unwrap());
@@ -1532,7 +1358,7 @@ mod tests {
         let other = downloaded("1000 Accuracy snakeXcase C:Windows", 400);
         [&percent, &underscore, &backslash, &other]
             .into_iter()
-            .for_each(|video| repo.save(video).unwrap());
+            .for_each(|video| repo.insert(video).unwrap());
 
         let found =
             ["0%", "e_c", ":\\W"].map(|text| repo.find_downloaded_by_title(text, 20).unwrap());
@@ -1547,7 +1373,7 @@ mod tests {
         let downloaded = downloaded("Tactics downloaded", 100);
         [&pending, &downloaded]
             .into_iter()
-            .for_each(|video| repo.save(video).unwrap());
+            .for_each(|video| repo.insert(video).unwrap());
 
         let found = repo.find_downloaded_by_title("tactics", 20);
 
@@ -1560,7 +1386,7 @@ mod tests {
         let videos = (0..5)
             .map(|index| downloaded(&format!("Tactics {index}"), index * 100))
             .collect::<Vec<_>>();
-        videos.iter().for_each(|video| repo.save(video).unwrap());
+        videos.iter().for_each(|video| repo.insert(video).unwrap());
 
         let found = repo.find_downloaded_by_title("tactics", 3);
 
@@ -1576,8 +1402,8 @@ mod tests {
         let repo = SqliteVideoRepository::new(db.database());
         let sibling = video("Sibling", fixed_timestamp());
         let video = video("Next", fixed_timestamp());
-        repo.save(&sibling).unwrap();
-        repo.save(&video).unwrap();
+        repo.insert(&sibling).unwrap();
+        repo.insert(&video).unwrap();
         let _ = numbered(&repo, sibling.clone(), episode(31501));
         link_to_channel(&db, &sibling, "@somechannel");
         link_to_channel(&db, &video, "@somechannel");

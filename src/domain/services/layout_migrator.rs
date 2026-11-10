@@ -375,24 +375,33 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
-                alpha.clone().relocate_to_episode(
-                    playlist_episode(1),
-                    "Season 1/S01E001 - Alpha.mp4",
-                    Some("Season 1/S01E001 - Alpha.jpg".to_string()),
-                    fixed_timestamp(),
-                ),
-                beta.clone().relocate_to_episode(
-                    playlist_episode(2),
-                    "Season 1/S01E002 - Beta.mp4",
-                    None,
-                    fixed_timestamp(),
-                ),
-                gamma.clone().relocate_to_episode(
-                    episode(2025, 120101),
-                    "Season 2025/S2025E120101 - Gamma.mp4",
-                    Some("Season 2025/S2025E120101 - Gamma.jpg".to_string()),
-                    fixed_timestamp(),
-                ),
+                Video {
+                    version: 1,
+                    ..alpha.clone().relocate_to_episode(
+                        playlist_episode(1),
+                        "Season 1/S01E001 - Alpha.mp4",
+                        Some("Season 1/S01E001 - Alpha.jpg".to_string()),
+                        fixed_timestamp(),
+                    )
+                },
+                Video {
+                    version: 1,
+                    ..beta.clone().relocate_to_episode(
+                        playlist_episode(2),
+                        "Season 1/S01E002 - Beta.mp4",
+                        None,
+                        fixed_timestamp(),
+                    )
+                },
+                Video {
+                    version: 2,
+                    ..gamma.clone().relocate_to_episode(
+                        episode(2025, 120101),
+                        "Season 2025/S2025E120101 - Gamma.mp4",
+                        Some("Season 2025/S2025E120101 - Gamma.jpg".to_string()),
+                        fixed_timestamp(),
+                    )
+                },
             ]
         );
         assert_eq!(
@@ -575,18 +584,24 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
-                first.clone().relocate_to_episode(
-                    playlist_episode(1),
-                    "Season 1/S01E001 - First.mp4",
-                    None,
-                    fixed_timestamp(),
-                ),
-                second.clone().relocate_to_episode(
-                    playlist_episode(2),
-                    "Season 1/S01E002 - Second.mp4",
-                    None,
-                    fixed_timestamp(),
-                ),
+                Video {
+                    version: 1,
+                    ..first.clone().relocate_to_episode(
+                        playlist_episode(1),
+                        "Season 1/S01E001 - First.mp4",
+                        None,
+                        fixed_timestamp(),
+                    )
+                },
+                Video {
+                    version: 1,
+                    ..second.clone().relocate_to_episode(
+                        playlist_episode(2),
+                        "Season 1/S01E002 - Second.mp4",
+                        None,
+                        fixed_timestamp(),
+                    )
+                },
             ]
         );
     }
@@ -626,12 +641,15 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().relocate_to_episode(
-                playlist_episode(3),
-                "Season 1/S01E003 - Unpublished.mp4",
-                None,
-                fixed_timestamp(),
-            )]
+            vec![Video {
+                version: 1,
+                ..video.clone().relocate_to_episode(
+                    playlist_episode(3),
+                    "Season 1/S01E003 - Unpublished.mp4",
+                    None,
+                    fixed_timestamp(),
+                )
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -691,12 +709,15 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().relocate_to_episode(
-                playlist_episode(1),
-                "Season 1/S01E001 - First.mp4",
-                Some("Season 1/S01E001 - First.jpg".to_string()),
-                fixed_timestamp(),
-            )]
+            vec![Video {
+                version: 1,
+                ..video.clone().relocate_to_episode(
+                    playlist_episode(1),
+                    "Season 1/S01E001 - First.mp4",
+                    Some("Season 1/S01E001 - First.jpg".to_string()),
+                    fixed_timestamp(),
+                )
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -748,12 +769,15 @@ mod tests {
         );
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().relocate_to_episode(
-                playlist_episode(1),
-                "Season 1/S01E001 - First.mp4",
-                None,
-                fixed_timestamp(),
-            )]
+            vec![Video {
+                version: 1,
+                ..video.clone().relocate_to_episode(
+                    playlist_episode(1),
+                    "Season 1/S01E001 - First.mp4",
+                    None,
+                    fixed_timestamp(),
+                )
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -878,12 +902,15 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
-                present.clone().relocate_to_episode(
-                    playlist_episode(1),
-                    "Season 1/S01E001 - Present.mp4",
-                    None,
-                    fixed_timestamp(),
-                ),
+                Video {
+                    version: 1,
+                    ..present.clone().relocate_to_episode(
+                        playlist_episode(1),
+                        "Season 1/S01E001 - Present.mp4",
+                        None,
+                        fixed_timestamp(),
+                    )
+                },
                 unpublished,
                 missing,
             ]
@@ -929,12 +956,15 @@ mod tests {
         assert_eq!(result.unwrap(), MigrationReport::default());
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![alpha.relocate_to_episode(
-                playlist_episode(1),
-                "Season 1/S01E001 - Alpha.mp4",
-                None,
-                fixed_timestamp(),
-            )]
+            vec![Video {
+                version: 1,
+                ..alpha.relocate_to_episode(
+                    playlist_episode(1),
+                    "Season 1/S01E001 - Alpha.mp4",
+                    None,
+                    fixed_timestamp(),
+                )
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -1027,22 +1057,29 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
-                alpha.relocate_to_episode(
-                    episode(2026, 31501),
-                    "Season 2026/S2026E031501 - Alpha.mp4",
-                    None,
-                    fixed_timestamp(),
-                ),
                 Video {
+                    version: 2,
+                    ..alpha.relocate_to_episode(
+                        episode(2026, 31501),
+                        "Season 2026/S2026E031501 - Alpha.mp4",
+                        None,
+                        fixed_timestamp(),
+                    )
+                },
+                Video {
+                    version: 1,
                     episode_number: Some(episode(2026, 31601)),
                     ..beta
                 },
-                gamma.relocate_to_episode(
-                    episode(2026, 31701),
-                    "Season 2026/S2026E031701 - Gamma.mp4",
-                    None,
-                    fixed_timestamp(),
-                ),
+                Video {
+                    version: 2,
+                    ..gamma.relocate_to_episode(
+                        episode(2026, 31701),
+                        "Season 2026/S2026E031701 - Gamma.mp4",
+                        None,
+                        fixed_timestamp(),
+                    )
+                },
             ]
         );
     }
@@ -1376,7 +1413,7 @@ mod tests {
 
     fn seed_playlist_video(db: &TestDatabase, video: &Video, position: i64) {
         SqliteVideoRepository::new(db.database())
-            .save(video)
+            .insert(video)
             .unwrap();
         SqlitePlaylistVideoRepository::new(db.database())
             .save(&PlaylistVideo::create(
@@ -1390,7 +1427,7 @@ mod tests {
 
     fn seed_channel_video(db: &TestDatabase, video: &Video) {
         SqliteVideoRepository::new(db.database())
-            .save(video)
+            .insert(video)
             .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(

@@ -114,8 +114,7 @@ pub trait VideoCategorizerApi: Send + Sync {
     fn pending(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<Vec<Category>>;
     /// Asks the model about each category pending when it runs, storing
     /// each verdict as it comes. Err when any call was rejected, after
-    /// trying all; on the last attempt those become unavailable. Holds no
-    /// `VideoLock`: calls take minutes.
+    /// trying all; on the last attempt those become unavailable.
     fn categorize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()>;
 }
 

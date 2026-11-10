@@ -210,7 +210,7 @@ pub async fn mark_channel_watched(
 mod tests {
     use super::*;
     use crate::application::http::test_support::{
-        ai_verdict, named_category, user_verdict, video_category_assigner, video_category_editor,
+        ai_verdict, named_category, user_verdict, video_category_editor,
     };
     use crate::domain::category::CategoryId;
     use crate::domain::channel::Channel;
@@ -226,13 +226,9 @@ mod tests {
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
-    use crate::domain::services::MetadataGenerator;
-    use crate::domain::services::ShowFileWriter;
-    use crate::domain::services::VideoCategorizer;
 
-    use crate::domain::services::VideoOwnerFinder;
-    use crate::domain::services::VideoReconciler;
-    use crate::domain::services::VideoRelocator;
+    use crate::domain::services::ShowFileWriter;
+
     use crate::domain::show::ShowMoved;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::YoutubeVideoId;
@@ -247,7 +243,7 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
+
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
@@ -273,7 +269,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
         SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
+
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
@@ -289,16 +285,15 @@ mod tests {
     use crate::infrastructure::repositories::youtube_channel_videos_repository::{
         ChannelVideoListing, FakeChannelVideosRepository,
     };
-    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
 
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
     use crate::infrastructure::shared::show_locks::ShowLocks;
-    use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use crate::infrastructure::shared::video_lock::VideoLock;
+
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
     use std::sync::Arc;
@@ -2709,22 +2704,13 @@ mod tests {
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![
-                pending_task(
-                    1,
-                    &Task::FetchThumbnail {
-                        video_id: video_id.as_str().to_string(),
-                    },
-                    fixed_timestamp(),
-                ),
-                pending_task(
-                    2,
-                    &Task::DownloadVideo {
-                        video_id: video_id.as_str().to_string(),
-                    },
-                    fixed_timestamp(),
-                ),
-            ]
+            vec![pending_task(
+                1,
+                &Task::SyncVideo {
+                    video_id: video_id.as_str().to_string(),
+                },
+                fixed_timestamp(),
+            ),]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -2915,7 +2901,7 @@ mod tests {
             2,
         );
         let playlist_copy = downloaded_video("vid_shared");
-        video_repository.save(&playlist_copy).unwrap();
+        video_repository.insert(&playlist_copy).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -2941,10 +2927,19 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
-                downloaded.mark_watched(watched_timestamp()),
+                Video {
+                    version: 1,
+                    ..downloaded.mark_watched(watched_timestamp())
+                },
                 pending,
-                shared.mark_watched(watched_timestamp()),
-                playlist_copy.mark_watched(watched_timestamp()),
+                Video {
+                    version: 1,
+                    ..shared.mark_watched(watched_timestamp())
+                },
+                Video {
+                    version: 1,
+                    ..playlist_copy.mark_watched(watched_timestamp())
+                },
             ]
         );
     }
@@ -2962,7 +2957,7 @@ mod tests {
             last_played_at: Some(played_at),
             ..downloaded_video("vid1")
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 handle("@somechannel"),
@@ -2988,6 +2983,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 watched_at: Some(watched_timestamp()),
                 playback_position: PlaybackPosition::start(),
                 last_played_at: Some(played_at),
@@ -3157,6 +3153,64 @@ mod tests {
         );
         assert_eq!(video_file_repository.renamed_dirs(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_move_a_channel_whose_video_sync_is_pending() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/creators/somechannel"));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = save_downloaded_channel_video(
+            &video_repository,
+            &channel_video_repository,
+            "@somechannel",
+            "vid_downloaded",
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::SyncVideo {
+                    video_id: video.id.as_str().to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(
+            show_mover,
+            "@somechannel",
+            move_request("science/somechannel"),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                path: "science/somechannel".to_string(),
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![
+                channel("@somechannel")
+                    .with_path(PlaylistPath::new("science/somechannel").unwrap())
+            ]
+        );
+        assert_eq!(
+            video_file_repository.renamed_dirs(),
+            vec![(
+                std::path::PathBuf::from("/videos/creators/somechannel"),
+                std::path::PathBuf::from("/videos/science/somechannel")
+            )]
+        );
     }
 
     #[tokio::test]
@@ -3438,34 +3492,8 @@ mod tests {
             Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                VideoReconciler::new(
-                    video_repository.clone(),
-                    Arc::new(VideoOwnerFinder::new(
-                        Arc::new(SqliteChannelVideoRepository::new(db.database())),
-                        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                        Arc::new(SqliteChannelRepository::new(db.database())),
-                        Arc::new(SqlitePlaylistRepository::new(db.database())),
-                        "/videos",
-                    )),
-                    task_repository.clone(),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                    Arc::new(MetadataGenerator::new(
-                        Arc::new(FakeYoutubeMetadataRepository::default()),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )),
-                    Arc::new(VideoRelocator::new(
-                        Arc::new(SqliteVideoRepository::new(db.database())),
-                        Arc::new(FakeVideoFileRepository::default()),
-                        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )),
-                    Arc::new(VideoLock::default()),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                    video_category_assigner(db.database()),
-                    Arc::new(SqlitePreferencesRepository::new(db.database())),
-                    video_categorizer(db.database()),
-                ),
+                task_repository.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
             )),
             Arc::new(ShowFileWriter::new(
@@ -3503,34 +3531,8 @@ mod tests {
             Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                VideoReconciler::new(
-                    video_repository.clone(),
-                    Arc::new(VideoOwnerFinder::new(
-                        Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
-                        Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
-                        Arc::new(SqliteChannelRepository::new(unused_connection())),
-                        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
-                        "/videos",
-                    )),
-                    task_repository.clone(),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
-                    Arc::new(MetadataGenerator::new(
-                        Arc::new(FakeYoutubeMetadataRepository::default()),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )),
-                    Arc::new(VideoRelocator::new(
-                        Arc::new(SqliteVideoRepository::new(unused_connection())),
-                        Arc::new(FakeVideoFileRepository::default()),
-                        Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )),
-                    Arc::new(VideoLock::default()),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                    video_category_assigner(unused_connection()),
-                    Arc::new(SqlitePreferencesRepository::new(unused_connection())),
-                    video_categorizer(unused_connection()),
-                ),
+                task_repository.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
             )),
             Arc::new(ShowFileWriter::new(
@@ -3767,7 +3769,7 @@ mod tests {
             format!("Video {youtube_id}"),
             fixed_timestamp(),
         );
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 handle(channel_handle),
@@ -3793,7 +3795,7 @@ mod tests {
         position: i64,
     ) -> Video {
         let video = downloaded_video(youtube_id);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 handle(channel_handle),
@@ -4018,24 +4020,5 @@ mod tests {
         channel_handle: &str,
     ) -> Result<StatusCode, ApiError> {
         reconcile_channel(State(reconciler), Path(channel_handle.to_string())).await
-    }
-
-    fn video_categorizer(database: Database) -> Arc<VideoCategorizer> {
-        Arc::new(VideoCategorizer::new(
-            Arc::new(SqlitePreferencesRepository::new(database.clone())),
-            Arc::new(VideoOwnerFinder::new(
-                Arc::new(SqliteChannelVideoRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
-                Arc::new(SqliteChannelRepository::new(database.clone())),
-                Arc::new(SqlitePlaylistRepository::new(database.clone())),
-                "/videos",
-            )),
-            Arc::new(SqliteCategoryRepository::new(database.clone())),
-            Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
-            Arc::new(SqliteVideoSummaryRepository::new(database.clone())),
-            Arc::new(FakeLlmServerRepository::failing()),
-            video_category_assigner(database),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ))
     }
 }

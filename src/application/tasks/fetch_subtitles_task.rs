@@ -38,7 +38,8 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, SubtitleState, Video, VideoSubtitlesFetched, YoutubeVideoId,
+        EpisodeNumber, LateDataChecks, PlaybackPosition, SubtitleState, Video,
+        VideoSubtitlesFetched, YoutubeVideoId,
     };
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionProbe, CaptionSource, CaptionTracks, FetchedSubtitles,
@@ -86,7 +87,7 @@ mod tests {
             .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -124,6 +125,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_state: SubtitleState::Fetched,
                 subtitle_filename: Some("Season 2026/S2026E031501 - Title.en.srt".to_string()),
                 subtitle_checks: LateDataChecks {
@@ -167,7 +169,7 @@ mod tests {
             filename: Some("Season 2026/S2026E031501 - Old Title.mp4".to_string()),
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -204,11 +206,12 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 1,
+                ..video
                     .clone()
                     .mark_subtitles_fetched("Season 2026/S2026E031501 - Old Title.en.srt", now())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -235,7 +238,7 @@ mod tests {
             .with_subtitles(Ok(fetched_subtitles("yt1.es-orig.srt"))),
         );
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -272,11 +275,12 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 1,
+                ..video
                     .clone()
                     .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.es.srt", now())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -313,7 +317,7 @@ mod tests {
             .with_subtitles(Ok(fetched_subtitles("yt1.es-US.srt"))),
         );
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -350,11 +354,12 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                video
+            vec![Video {
+                version: 1,
+                ..video
                     .clone()
                     .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.es.srt", now())
-            ]
+            }]
         );
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
@@ -392,7 +397,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -430,6 +435,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_state: SubtitleState::Unavailable,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
@@ -461,7 +467,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -499,6 +505,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
                     failed_attempts: 0,
@@ -522,7 +529,7 @@ mod tests {
             translations_only(),
         ))));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -560,6 +567,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_state: SubtitleState::Unavailable,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
@@ -591,7 +599,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -629,6 +637,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_state: SubtitleState::Unavailable,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
@@ -653,7 +662,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -691,6 +700,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
                     failed_attempts: 1,
@@ -714,7 +724,7 @@ mod tests {
             "HTTP Error 429: Too Many Requests"
         ))));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -752,6 +762,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
                     failed_attempts: 1,
@@ -776,7 +787,7 @@ mod tests {
                 .with_subtitles(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
         );
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -814,6 +825,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
                     failed_attempts: 1,
@@ -843,7 +855,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -881,6 +893,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_state: SubtitleState::Unavailable,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
@@ -911,7 +924,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -949,6 +962,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
                     failed_attempts: 6,
@@ -1009,7 +1023,7 @@ mod tests {
                 .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
             video_repository.clone(),
             Arc::new(VideoOwnerFinder::new(
@@ -1049,7 +1063,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let event_repository = SqliteEventRepository::new(db.database());
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let deleting_repository = video_repository.clone();
         let deleted_id = video.id.clone();
         let caption_repository = Arc::new(
@@ -1112,7 +1126,7 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let event_repository = SqliteEventRepository::new(db.database());
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let reset = video.clone().reset_for_redownload(now());
         let resetting_repository = video_repository.clone();
         let reset_video = reset.clone();
@@ -1120,7 +1134,7 @@ mod tests {
             FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
                 .with_subtitles(Ok(fetched_subtitles("yt1.en.srt")))
                 .with_on_fetch_subtitles(move || {
-                    resetting_repository.save(&reset_video).unwrap();
+                    resetting_repository.update(&reset_video).unwrap();
                 }),
         );
         SqliteChannelRepository::new(db.database())
@@ -1157,7 +1171,13 @@ mod tests {
         let result = run(&task, &task_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![reset]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..reset
+            }]
+        );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
@@ -1181,8 +1201,8 @@ mod tests {
         let fetched = downloaded_video()
             .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.en.srt", fixed_timestamp());
         let unavailable = downloaded_video().mark_subtitles_unavailable(fixed_timestamp());
-        video_repository.save(&fetched).unwrap();
-        video_repository.save(&unavailable).unwrap();
+        video_repository.insert(&fetched).unwrap();
+        video_repository.insert(&unavailable).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1259,8 +1279,8 @@ mod tests {
             fixed_timestamp(),
         )
         .mark_downloaded(Quality::High, "Old/Old.mp4", None, None, fixed_timestamp());
-        video_repository.save(&pending).unwrap();
-        video_repository.save(&legacy).unwrap();
+        video_repository.insert(&pending).unwrap();
+        video_repository.insert(&legacy).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1341,8 +1361,8 @@ mod tests {
             fixed_timestamp(),
         )
         .mark_downloaded(Quality::High, "Flat.mp4", None, None, fixed_timestamp());
-        video_repository.save(&in_folder).unwrap();
-        video_repository.save(&flat).unwrap();
+        video_repository.insert(&in_folder).unwrap();
+        video_repository.insert(&flat).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1394,29 +1414,28 @@ mod tests {
     }
 
     #[test]
-    fn it_should_keep_download_progress_while_recording_subtitles() {
+    fn it_should_keep_watch_progress_recorded_while_fetching() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video = downloaded_video();
-        let redownloaded = video.clone().mark_downloaded(
-            Quality::Low,
-            "Season 2026/S2026E031501 - Title.mp4",
-            Some("Season 2026/S2026E031501 - Title.jpg".to_string()),
-            Some(120),
-            fixed_timestamp(),
+        let progressed = video.clone().update_watch_state(
+            PlaybackPosition::new(30).unwrap(),
+            None,
+            false,
+            now(),
         );
         let video_file_repository = Arc::new(FakeVideoFileRepository::default().with_on_move({
             let video_repository = video_repository.clone();
-            let redownloaded = redownloaded.clone();
-            move |_, _| video_repository.update(&redownloaded).unwrap()
+            let progressed = progressed.clone();
+            move |_, _| video_repository.update(&progressed).unwrap()
         }));
         let caption_repository = Arc::new(
             FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
                 .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1453,10 +1472,79 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![
-                redownloaded
+            vec![Video {
+                version: 2,
+                ..progressed
                     .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.en.srt", now())
-            ]
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_download_progress_while_recording_subtitles() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video = downloaded_video();
+        let redownloaded = video.clone().mark_downloaded(
+            Quality::Low,
+            "Season 2026/S2026E031501 - Title.mp4",
+            Some("Season 2026/S2026E031501 - Title.jpg".to_string()),
+            Some(120),
+            fixed_timestamp(),
+        );
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default().with_on_move({
+            let video_repository = video_repository.clone();
+            let redownloaded = redownloaded.clone();
+            move |_, _| video_repository.update(&redownloaded).unwrap()
+        }));
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
+        );
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            video_transcript_repository.clone(),
+            caption_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+        )));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                ..redownloaded
+                    .mark_subtitles_fetched("Season 2026/S2026E031501 - Title.en.srt", now())
+            }]
         );
     }
 
@@ -1473,8 +1561,8 @@ mod tests {
         );
         let fetched = downloaded_video();
         let failed = downloaded_video();
-        video_repository.save(&fetched).unwrap();
-        video_repository.save(&failed).unwrap();
+        video_repository.insert(&fetched).unwrap();
+        video_repository.insert(&failed).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1537,7 +1625,7 @@ mod tests {
                 .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
         );
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1605,7 +1693,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1643,6 +1731,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 subtitle_state: SubtitleState::Unavailable,
                 subtitle_checks: LateDataChecks {
                     last_checked_at: Some(now()),
@@ -1671,7 +1760,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
@@ -1722,7 +1811,7 @@ mod tests {
                 .with_subtitles(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
         );
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();

@@ -40,6 +40,7 @@ const VIDEO_CATEGORY_VERDICTS_SQL: &str =
     include_str!("../../../migrations/0025_video_category_verdicts.sql");
 const CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL: &str =
     include_str!("../../../migrations/0026_categorization_context_length_auto.sql");
+const VIDEO_VERSION_SQL: &str = include_str!("../../../migrations/0027_video_version.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -72,6 +73,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(AI_CATEGORIZATION_SQL),
         M::up(VIDEO_CATEGORY_VERDICTS_SQL),
         M::up(CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL),
+        M::up(VIDEO_VERSION_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))

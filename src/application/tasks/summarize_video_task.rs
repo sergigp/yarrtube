@@ -54,7 +54,9 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{SummaryState, Video, VideoChapter, YoutubeVideoId};
+    use crate::domain::video::{
+        PlaybackPosition, SummaryState, Video, VideoChapter, YoutubeVideoId,
+    };
     use crate::domain::video_summary::{SummaryMessages, SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
@@ -96,7 +98,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -118,7 +120,10 @@ mod tests {
         );
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone().mark_summary_generated(later()))
+            Some(Video {
+                version: 1,
+                ..video.clone().mark_summary_generated(later())
+            })
         );
         assert_eq!(llm.chats(), vec![one_call_chat()]);
     }
@@ -131,7 +136,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -166,7 +171,7 @@ mod tests {
             .as_str()
             .replace("You summarize YouTube videos", "You digest YouTube videos");
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository
             .save(&with_summaries(|settings| SummarySettings {
                 prompt: Some(SummaryPrompt::from_stored(saved)),
@@ -203,7 +208,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository
             .save(&with_summaries(|settings| SummarySettings {
                 context_length: ContextLength::new(8192).unwrap(),
@@ -244,7 +249,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = with_chapters(vec![chapter(0, 125, "Intro"), chapter(125, 1800, "Game 1")]);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -276,7 +281,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = with_chapters(vec![]);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -305,7 +310,7 @@ mod tests {
             title: "{transcript} explained".to_string(),
             ..subtitled_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -337,7 +342,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "xh");
@@ -366,7 +371,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("<think>a </think> b</think>\n\nThree games.\n")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -404,7 +409,7 @@ mod tests {
                     .with_replies(vec![reply("Three games.")]),
                 );
                 let video = subtitled_video();
-                video_repository.save(&video).unwrap();
+                video_repository.insert(&video).unwrap();
                 preferences_repository
                     .save(&with_summaries(|settings| SummarySettings {
                         thinking: setting,
@@ -454,7 +459,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("First."), reply("Second."), reply("All of it.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -503,7 +508,7 @@ mod tests {
             reply("All of it."),
         ]);
         let video = with_chapters(vec![chapter(0, 2700, "Game 1")]);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository
             .save(&with_summaries(|settings| SummarySettings {
                 context_length: ContextLength::new(8192).unwrap(),
@@ -562,7 +567,7 @@ mod tests {
             reply("All of it."),
         ]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository
             .save(&with_summaries(|settings| SummarySettings {
                 context_length: ContextLength::new(8192).unwrap(),
@@ -617,7 +622,7 @@ mod tests {
             chapter(1740, 1800, "Short"),
             chapter(1800, 2700, "Game 2"),
         ]);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -658,7 +663,7 @@ mod tests {
             chapter(1500, 2100, "Game 3"),
             chapter(2100, 2700, "Game 4"),
         ]);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -711,7 +716,7 @@ mod tests {
             reply("All."),
         ]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -754,7 +759,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("A."), reply("B."), reply("C."), reply("All.")]);
         let video = with_chapters(vec![chapter(0, 300, "Short"), chapter(300, 2700, "Long")]);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -796,7 +801,7 @@ mod tests {
             let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
             let llm = llm_replying(replies);
             let video = subtitled_video();
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             preferences_repository
                 .save(&with_summaries(|settings| SummarySettings {
                     context_length: ContextLength::new(context_length).unwrap(),
@@ -844,7 +849,7 @@ mod tests {
             let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
             let llm = llm_replying(vec![reply("A."), reply("B."), reply("All.")]);
             let video = subtitled_video();
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             preferences_repository.save(&summaries_on()).unwrap();
             seed_channel(&db, &video, true);
             seed_transcript(&db, &video, language);
@@ -899,7 +904,7 @@ mod tests {
             let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
             let llm = llm_replying(vec![reply("Three games.")]);
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             preferences_repository.save(&preferences).unwrap();
             seed_channel(&db, &video, true);
             seed_transcript(&db, &video, "es");
@@ -932,7 +937,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, false);
         seed_transcript(&db, &video, "es");
@@ -965,7 +970,7 @@ mod tests {
             summary_state: SummaryState::Generated,
             ..subtitled_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -992,7 +997,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1020,7 +1025,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository
             .save(&with_summaries(|settings| SummarySettings {
                 prompt: Some(SummaryPrompt::from_stored("## system\n\nBe brief.\n")),
@@ -1056,7 +1061,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = Arc::new(FakeLlmServerRepository::failing());
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1093,7 +1098,7 @@ mod tests {
             .with_replies(vec![reply("Three games.")]),
         );
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1124,7 +1129,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![Err(anyhow::anyhow!("model crashed"))]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1158,7 +1163,7 @@ mod tests {
             ..reply("Three games and").unwrap()
         })]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1195,7 +1200,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![Ok(LlmReply::refused("request too long"))]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1229,7 +1234,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("<think>hmm</think>\n")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1264,7 +1269,7 @@ mod tests {
             reply("C."),
         ]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1298,7 +1303,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1317,7 +1322,10 @@ mod tests {
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone().mark_summary_unavailable(later()))
+            Some(Video {
+                version: 1,
+                ..video.clone().mark_summary_unavailable(later())
+            })
         );
     }
 
@@ -1329,7 +1337,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![Ok(LlmReply::refused("request too long"))]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1350,7 +1358,56 @@ mod tests {
         );
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone().mark_summary_unavailable(later()))
+            Some(Video {
+                version: 1,
+                ..video.clone().mark_summary_unavailable(later())
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_keep_watch_progress_recorded_while_summarizing() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let video = subtitled_video();
+        let progressed = video.clone().update_watch_state(
+            PlaybackPosition::new(30).unwrap(),
+            None,
+            false,
+            later(),
+        );
+        let llm = {
+            let video_repository = video_repository.clone();
+            let progressed = progressed.clone();
+            Arc::new(
+                FakeLlmServerRepository::new(server_with(thinking_model()))
+                    .with_replies(vec![reply("Three games.")])
+                    .with_on_chat(move || video_repository.update(&progressed).unwrap()),
+            )
+        };
+        video_repository.insert(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm,
+            files_with(SHORT_SRT),
+        );
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                ..progressed.mark_summary_generated(later())
+            }]
         );
     }
 
@@ -1370,7 +1427,7 @@ mod tests {
                     .with_on_chat(move || video_repository.delete(&video_id).unwrap()),
             )
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1411,7 +1468,7 @@ mod tests {
                     }),
             )
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1453,7 +1510,7 @@ mod tests {
                     }),
             )
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1484,7 +1541,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1515,7 +1572,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1556,7 +1613,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&db, &video, true);
         seed_transcript(&db, &video, "es");
@@ -1597,7 +1654,7 @@ mod tests {
         let skipped_preferences_repository =
             Arc::new(SqlitePreferencesRepository::new(skipped_db.database()));
         let video = subtitled_video();
-        skipped_video_repository.save(&video).unwrap();
+        skipped_video_repository.insert(&video).unwrap();
         skipped_preferences_repository
             .save(&summaries_on())
             .unwrap();
@@ -1615,7 +1672,7 @@ mod tests {
         let failed_video_repository = Arc::new(SqliteVideoRepository::new(failed_db.database()));
         let failed_preferences_repository =
             Arc::new(SqlitePreferencesRepository::new(failed_db.database()));
-        failed_video_repository.save(&video).unwrap();
+        failed_video_repository.insert(&video).unwrap();
         failed_preferences_repository.save(&summaries_on()).unwrap();
         seed_channel(&failed_db, &video, true);
         seed_transcript(&failed_db, &video, "es");

@@ -45,6 +45,7 @@ pub mod video_reconciler;
 pub mod video_relocator;
 pub mod video_searcher;
 pub mod video_summarizer;
+pub mod video_updater;
 pub mod video_watch_state_updater;
 
 pub use category_creator::{CategoryCreator, CategoryCreatorApi, NewCategory};
@@ -98,4 +99,5 @@ pub use video_reconciler::{VideoReconciler, VideoReconcilerApi};
 pub use video_relocator::{Relocation, SkipReason, VideoRelocator, VideoRelocatorApi};
 pub use video_searcher::{VideoSearcher, VideoSearcherApi};
 pub use video_summarizer::{VideoSummarizer, VideoSummarizerApi};
+pub use video_updater::{VideoUpdater, VideoUpdaterApi};
 pub use video_watch_state_updater::{VideoWatchStateUpdater, VideoWatchStateUpdaterApi};

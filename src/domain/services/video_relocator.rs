@@ -1,3 +1,4 @@
+use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
 use crate::domain::video::{
     ChannelEpisodeNumber, EpisodeNumber, EpisodePaths, MOVIE_NFO_FILENAME, Video, top_level_entry,
 };
@@ -42,6 +43,7 @@ pub struct VideoRelocator {
     video_file_repository: Arc<dyn VideoFileRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     clock: Arc<dyn Clock>,
+    video_updater: VideoUpdater,
 }
 
 impl VideoRelocator {
@@ -52,6 +54,7 @@ impl VideoRelocator {
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_file_repository,
             video_metadata_repository,
@@ -247,13 +250,17 @@ impl VideoRelocator {
         files: &RelocatedFiles,
         number: EpisodeNumber,
     ) -> anyhow::Result<()> {
-        let relocated = video.clone().relocate_to_episode(
-            number,
-            files.filename.clone(),
-            files.thumbnail_filename.clone(),
-            self.clock.now(),
-        );
-        self.video_repository.update(&relocated)
+        let now = self.clock.now();
+        self.video_updater
+            .update(&video.id, |video| {
+                Some(video.relocate_to_episode(
+                    number,
+                    files.filename.clone(),
+                    files.thumbnail_filename.clone(),
+                    now,
+                ))
+            })
+            .map(|_| ())
     }
 }
 

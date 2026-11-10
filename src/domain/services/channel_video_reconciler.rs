@@ -4,7 +4,7 @@ use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel}
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
-    InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi,
+    InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -37,6 +37,7 @@ use tracing::{info, info_span, warn};
 pub struct ChannelVideoReconciler {
     channel_repository: Arc<dyn ChannelRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    video_updater: VideoUpdater,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
@@ -73,6 +74,7 @@ impl ChannelVideoReconciler {
     ) -> Self {
         Self {
             channel_repository,
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_transcript_repository,
             video_summary_repository,
@@ -294,7 +296,7 @@ impl ChannelVideoReconciler {
         now: DateTime<Utc>,
     ) -> anyhow::Result<(ChannelVideo, Video)> {
         let video = Video::create(youtube_id, current.title.clone(), now);
-        self.video_repository.save(&video)?;
+        self.video_repository.insert(&video)?;
         let channel_video =
             ChannelVideo::create(channel.id.clone(), video.id.clone(), current.position, now);
         self.channel_video_repository.save(&channel_video)?;
@@ -322,8 +324,9 @@ impl ChannelVideoReconciler {
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         if video.title != current.title {
-            self.video_repository
-                .update_title(&video.id, &current.title, now)?;
+            self.video_updater.update(&video.id, |video| {
+                Some(video.with_title(current.title.clone(), now))
+            })?;
         }
         if existing.position != current.position {
             self.channel_video_repository.save(&ChannelVideo {

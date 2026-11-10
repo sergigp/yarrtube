@@ -1,5 +1,7 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::services::{
+    VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
+};
 use crate::domain::video::{EpisodePaths, LateDataOutcome, Video, VideoId, VideoSubtitlesFetched};
 use crate::domain::video_transcript::{
     CaptionProbe, CaptionTrack, TranscriptText, VideoTranscript,
@@ -30,6 +32,7 @@ pub struct SubtitleFetcher {
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     staging_area: Arc<StagingArea>,
+    video_updater: VideoUpdater,
 }
 
 impl SubtitleFetcher {
@@ -45,6 +48,7 @@ impl SubtitleFetcher {
         staging_area: Arc<StagingArea>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_owner_finder,
             video_transcript_repository,
@@ -139,12 +143,13 @@ impl SubtitleFetcher {
         outcome: LateDataOutcome,
         published_at: Option<DateTime<Utc>>,
     ) -> anyhow::Result<()> {
-        self.video_repository
-            .update_subtitles(&video.clone().record_subtitles_check(
-                outcome,
-                published_at.unwrap_or(video.created_at),
-                self.clock.now(),
-            ))
+        let now = self.clock.now();
+        self.video_updater
+            .update(&video.id, |video| {
+                let published_at = published_at.unwrap_or(video.created_at);
+                Some(video.record_subtitles_check(outcome, published_at, now))
+            })
+            .map(|_| ())
     }
 
     /// Best effort, like the fetch itself: a failure to record the failed
@@ -156,8 +161,9 @@ impl SubtitleFetcher {
     }
 
     /// Downloads `track`, moves it next to the episode, stores its
-    /// transcript, then records only the subtitle fields: a download of the
-    /// same video may have changed it since `video` was read. The video (or
+    /// transcript, then records the subtitles on the video as stored now: a
+    /// download of the same video may have changed it since `video` was
+    /// read. The video (or
     /// its whole playlist/channel) may have been deleted, reset for
     /// redownload or redownloaded under another name while the track
     /// downloaded: then nothing is placed, `fetch` discards the staging dir.
@@ -187,8 +193,9 @@ impl SubtitleFetcher {
                 TranscriptText::from_srt(&fetched.srt),
                 now,
             ))?;
-        self.video_repository
-            .update_subtitles(&video.clone().mark_subtitles_fetched(subtitle_filename, now))?;
+        self.video_updater.update(&video.id, |video| {
+            Some(video.mark_subtitles_fetched(subtitle_filename.clone(), now))
+        })?;
         self.publish_fetched(video, output_dir);
         Ok(())
     }

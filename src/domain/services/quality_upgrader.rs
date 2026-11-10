@@ -1,5 +1,7 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::services::{
+    VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
+};
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId, VideoTarget,
@@ -28,6 +30,7 @@ pub struct QualityUpgrader {
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     staging_area: Arc<StagingArea>,
+    video_updater: VideoUpdater,
 }
 
 impl QualityUpgrader {
@@ -41,6 +44,7 @@ impl QualityUpgrader {
         staging_area: Arc<StagingArea>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_owner_finder,
             video_downloader_repository,
@@ -176,15 +180,19 @@ impl QualityUpgrader {
         }
         self.video_file_repository
             .move_file(&downloaded.media_path, &output_dir.join(filename))?;
-        let upgraded = video.clone().record_downloaded_quality(
-            quality,
-            downloaded.height,
-            downloaded.sabr_notice.is_some(),
-            published_at,
-            self.clock.now(),
-        );
-        self.video_repository.update_quality(&upgraded)?;
-        self.publish_downloaded(&upgraded, output_dir);
+        let now = self.clock.now();
+        let upgraded = self.video_updater.update(&video.id, |video| {
+            Some(video.record_downloaded_quality(
+                quality,
+                downloaded.height,
+                downloaded.sabr_notice.is_some(),
+                published_at,
+                now,
+            ))
+        })?;
+        if let Some(upgraded) = upgraded {
+            self.publish_downloaded(&upgraded, output_dir);
+        }
         Ok(())
     }
 
@@ -206,12 +214,12 @@ impl QualityUpgrader {
         probed_height: Option<u32>,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<()> {
-        self.video_repository
-            .update_quality(&video.clone().record_quality_check(
-                probed_height,
-                published_at,
-                self.clock.now(),
-            ))
+        let now = self.clock.now();
+        self.video_updater
+            .update(&video.id, |video| {
+                Some(video.record_quality_check(probed_height, published_at, now))
+            })
+            .map(|_| ())
     }
 
     /// Best effort, like the check itself: a failure to record the failed

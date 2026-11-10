@@ -2818,10 +2818,19 @@ mod tests {
             [&channel_video, &pending, &playlist_video, &copy_outside]
                 .map(|video| video_repository.find(&video.id).unwrap()),
             [
-                Some(channel_video.clone().mark_watched(watched_timestamp())),
+                Some(Video {
+                    version: 1,
+                    ..channel_video.clone().mark_watched(watched_timestamp())
+                }),
                 Some(pending.clone()),
-                Some(playlist_video.clone().mark_watched(watched_timestamp())),
-                Some(copy_outside.clone().mark_watched(watched_timestamp())),
+                Some(Video {
+                    version: 1,
+                    ..playlist_video.clone().mark_watched(watched_timestamp())
+                }),
+                Some(Video {
+                    version: 1,
+                    ..copy_outside.clone().mark_watched(watched_timestamp())
+                }),
             ]
         );
     }
@@ -2971,7 +2980,7 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         [&first, &second, &third]
             .into_iter()
-            .for_each(|video| video_repository.save(video).unwrap());
+            .for_each(|video| video_repository.insert(video).unwrap());
         let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
         [
             yes_verdict(&first, &sicilian),
@@ -3146,7 +3155,7 @@ mod tests {
         handle: &str,
         video: &Video,
     ) {
-        video_repository.save(video).unwrap();
+        video_repository.insert(video).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new(handle).unwrap(),
@@ -3163,7 +3172,7 @@ mod tests {
         playlist_id: &str,
         video: &Video,
     ) {
-        video_repository.save(video).unwrap();
+        video_repository.insert(video).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new(playlist_id).unwrap(),

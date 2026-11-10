@@ -1307,7 +1307,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     /// as its owner, `categories`, and AI categorization on.
     fn seed(db: &TestDatabase, video: &Video, categories: &[&Category]) {
         SqliteVideoRepository::new(db.database())
-            .save(video)
+            .insert(video)
             .unwrap();
         seed_channel(db, video, true);
         SqliteVideoSummaryRepository::new(db.database())

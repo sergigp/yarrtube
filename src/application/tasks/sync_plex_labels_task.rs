@@ -1144,7 +1144,7 @@ mod tests {
             channel_repository.insert(&my_channel()).unwrap();
         }
         SqliteVideoRepository::new(db.database())
-            .save(&video)
+            .insert(&video)
             .unwrap();
         SqliteChannelVideoRepository::new(db.database())
             .save(&ChannelVideo::create(
