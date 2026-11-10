@@ -67,7 +67,7 @@
 - [x] 3.1 task_executor: `it_should_requeue_a_task_its_handler_asks_to_run_again`
 - [x] 3.2 task_executor: `it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt` (regression, new signature)
 - [x] 3.3 sqlite_migrations: `it_should_map_download_statuses_when_migrating`
-- [ ] 3.4 sqlite_migrations: `it_should_backfill_the_download_failure_from_the_download_task_when_migrating`
+- [x] 3.4 sqlite_migrations: `it_should_backfill_the_download_failure_from_the_download_task_when_migrating`
 - [ ] 3.5 sqlite_migrations: `it_should_map_subtitle_states_when_migrating`
 - [ ] 3.6 sqlite_migrations: `it_should_map_settled_chapters_and_quality_when_migrating`
 - [ ] 3.7 sqlite_migrations: `it_should_map_summary_states_and_verdicts_when_migrating`

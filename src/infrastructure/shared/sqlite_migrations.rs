@@ -1136,6 +1136,43 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_backfill_the_download_failure_from_the_download_task_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 27);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at) VALUES
+             ('queued', 'yt1', 'A', 'ERRORED_RETRYING', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'),
+             ('dead', 'yt2', 'B', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'),
+             ('unknown', 'yt3', 'C', 'ERRORED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00');
+             INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error) VALUES
+             ('download_video', '{\"video_id\":\"queued\"}', 'pending', 2, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'HTTP Error 503');
+             INSERT INTO tasks_dead_letter (original_task_id, task_type, payload, retries, last_error, created_at, failed_at) VALUES
+             (7, 'download_video', '{\"video_id\":\"dead\"}', 5, 'HTTP Error 403: Forbidden', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00'),
+             (8, 'download_video', '{\"video_id\":\"dead\"}', 5, 'HTTP Error 429', '2026-01-01T00:00:00+00:00', '2026-01-03T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let failures = conn
+            .prepare("SELECT id, download_failure FROM videos ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>();
+        assert_eq!(
+            failures,
+            Ok(vec![
+                ("queued".to_string(), Some("HTTP Error 503".to_string())),
+                ("dead".to_string(), Some("HTTP Error 429".to_string())),
+                ("unknown".to_string(), None),
+            ])
+        );
+    }
+
     /// Applies the first `count` migrations only.
     fn migrate_to(conn: &mut Connection, count: usize) {
         Migrations::new(migrations().into_iter().take(count).collect())
