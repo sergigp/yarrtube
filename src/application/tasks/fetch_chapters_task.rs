@@ -44,7 +44,8 @@ mod tests {
     use super::*;
     use crate::domain::shared::Quality;
     use crate::domain::video::{
-        ChaptersProbe, LateDataChecks, PlaybackPosition, Video, VideoChapter, YoutubeVideoId,
+        ChaptersProbe, LateDataChecks, PlaybackPosition, RetryAttempts, StepState, StepStatus,
+        Video, VideoChapter, YoutubeVideoId,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_chapter_repository::FakeChapterRepository;
@@ -231,6 +232,53 @@ mod tests {
         assert_eq!(
             *chapter_repository.calls.lock().unwrap(),
             vec![YT1_URL.to_string()]
+        );
+    }
+
+    #[test]
+    fn it_should_fail_the_chapters_after_the_eleventh_failed_fetch() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Err(
+            anyhow::anyhow!("Video unavailable"),
+        )));
+        let video = Video {
+            chapters_checks: LateDataChecks::checked(
+                Some(fixed_timestamp() - Duration::days(2)),
+                10,
+            ),
+            ..downloaded_video()
+        };
+        video_repository.insert(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                chapter_repository,
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                chapters_checks: LateDataChecks {
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(later()),
+                        },
+                    },
+                    last_checked_at: Some(later()),
+                },
+                updated_at: later(),
+                ..video
+            }]
         );
     }
 
