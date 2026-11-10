@@ -225,11 +225,12 @@ impl VideoSearcherApi for VideoSearcher {
     }
 }
 
-/// Whether a looked-up video is excluded, so the video-list read paths can
-/// omit it (see the `video-listing` capability). An `Err` is never excluded,
+/// Whether a looked-up video's download is Unavailable, so the video-list
+/// read paths can omit it (see the `video-listing` capability). An `Err` is
+/// never excluded,
 /// so a lookup failure still propagates rather than being silently dropped.
 fn is_excluded(video: &anyhow::Result<Video>) -> bool {
-    matches!(video, Ok(video) if video.status == VideoStatus::Excluded)
+    matches!(video, Ok(video) if video.status == VideoStatus::Unavailable)
 }
 
 impl VideoSearcher {

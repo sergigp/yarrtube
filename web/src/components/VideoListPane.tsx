@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES: Record<string, string> = {
   PENDING: 'This video is pending.',
-  ERRORED_RETRYING: 'This video failed to download and will be retried.',
-  ERRORED: 'This video failed to download.',
+  RETRYING: 'This video failed to download and will be retried.',
+  FAILED: 'This video failed to download.',
 }
 
 function VideoStatusIndicator({ status }: { status: VideoStatus }) {

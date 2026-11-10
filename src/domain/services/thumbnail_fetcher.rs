@@ -2,7 +2,7 @@ use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::EpisodePaths;
-use crate::domain::video::{FetchedThumbnail, ThumbnailFetch};
+use crate::domain::video::{FetchedThumbnail, ThumbnailFetch, VideoStepOutcome};
 use crate::domain::video::{Video, VideoId};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -58,25 +58,25 @@ pub trait ThumbnailFetcherApi: Send + Sync {
     /// failure (a clean "no thumbnail available" outcome, or a systemic
     /// error) is logged and swallowed, the staging dir discarded, leaving the
     /// video untouched. Fails only when the video or its owner can't be read.
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()>;
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl ThumbnailFetcherApi for ThumbnailFetcher {
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()> {
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome> {
         let Some(video) = self.video_repository.find(video_id)? else {
             debug!(video_id = %video_id, "video no longer exists, skipping thumbnail fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         if video.thumbnail_filename.is_some() || !video.is_thumbnail_fetchable() {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         }
         let Some(owner) = self.video_owner_finder.find(&video)? else {
             info!(video_id = %video_id, "video has no playlist or channel any more, skipping thumbnail fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         let staged = self.staging_area.for_video(&video.id);
         self.fetch_and_place(&video, staged.path(), &owner.target.output_dir);
-        Ok(())
+        Ok(VideoStepOutcome::Settled)
     }
 }
 

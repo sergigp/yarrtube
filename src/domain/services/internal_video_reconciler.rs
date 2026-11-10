@@ -2,8 +2,8 @@ use crate::domain::playlist::PlaylistPath;
 use crate::domain::task::Task;
 use crate::domain::video::VideoId;
 use crate::domain::video::{
-    EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, SubtitleState, Video, VideoStatus,
-    is_episode_path, is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
+    EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, Video, VideoStatus, is_episode_path,
+    is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -212,9 +212,7 @@ fn subtitle_pending_paths(videos: &[Video]) -> HashSet<String> {
     videos
         .iter()
         .filter(|v| {
-            v.subtitle_state == SubtitleState::Missing
-                && v.episode_number.is_some()
-                && !v.is_in_legacy_layout()
+            v.subtitles.is_unsettled() && v.episode_number.is_some() && !v.is_in_legacy_layout()
         })
         .filter_map(|v| v.filename.as_deref())
         .map(|filename| EpisodePaths::from_media(filename).stem())

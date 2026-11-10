@@ -5,8 +5,33 @@ export type VideoStatus =
   | 'PENDING'
   | 'IN_PROGRESS'
   | 'DOWNLOADED'
-  | 'ERRORED_RETRYING'
-  | 'ERRORED'
+  | 'RETRYING'
+  | 'FAILED'
+  | 'UNAVAILABLE'
+
+/** A video step's status; only the download is ever `IN_PROGRESS`. */
+export type StepStatus = 'PENDING' | 'IN_PROGRESS' | 'RETRYING' | 'DONE' | 'UNAVAILABLE' | 'FAILED'
+
+export type VideoStepName =
+  | 'download'
+  | 'thumbnail'
+  | 'subtitles'
+  | 'chapters'
+  | 'quality'
+  | 'summary'
+  | 'categorization'
+
+/** Where one of a video's steps stands. */
+export interface Step {
+  status: StepStatus
+  failed_attempts: number
+  /** When the next attempt is due, only while retrying. */
+  next_attempt_at: string | null
+  /** Why the step last failed, while retrying or failed (download only). */
+  failure: string | null
+}
+
+export type VideoSteps = Record<VideoStepName, Step>
 
 export type VideoQuality = 'high' | 'mid' | 'low'
 
@@ -67,6 +92,7 @@ export interface Video {
   youtube_id: string
   title: string
   status: VideoStatus
+  steps: VideoSteps
   quality: string | null
   filename: string | null
   thumbnail_filename: string | null
@@ -346,7 +372,7 @@ export interface OllamaModel {
 /** Where a video's membership of a category comes from. */
 export type CategoryOrigin = 'source' | 'ai' | 'user'
 
-export type Verdict = 'yes' | 'no' | 'unavailable'
+export type Verdict = 'yes' | 'no' | 'failed'
 
 /** One category as offered for one video copy. */
 export interface VideoCategoryChoice {

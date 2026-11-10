@@ -1,6 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Recursively deletes a deleted channel's output directory, scheduled by
@@ -17,15 +17,16 @@ impl DeleteChannelFilesTask {
 }
 
 impl TaskHandler for DeleteChannelFilesTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::DeleteChannelFiles { channel_id, path } = task else {
             return Err(unexpected_task(task));
         };
         let Ok(channel_id) = ChannelHandle::new(channel_id.clone()) else {
-            return Ok(());
+            return Ok(TaskOutcome::Done);
         };
         self.video_file_deleter
             .delete_channel_video_files(channel_id, path.clone())
+            .map(|()| TaskOutcome::Done)
     }
 }
 
@@ -46,7 +47,7 @@ mod tests {
 
         let result = run(&task, &task_for("@somechannel", "creators/somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![PathBuf::from("/videos/creators/somechannel")]
@@ -63,7 +64,7 @@ mod tests {
 
         let result = run(&task, &task_for("", "creators/somechannel"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             Vec::<PathBuf>::new()
@@ -97,7 +98,7 @@ mod tests {
         }
     }
 
-    fn run(task: &DeleteChannelFilesTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &DeleteChannelFilesTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

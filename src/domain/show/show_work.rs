@@ -1,10 +1,12 @@
 use crate::domain::event::ScheduledEvent;
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-use crate::domain::video::Video;
+use crate::domain::video::{Video, VideoStatus};
+use chrono::{DateTime, Utc};
 use std::path::Path;
 
 /// Whether anything still writes into a show directory on its own: one of
-/// its `videos` not Downloaded, Errored or Excluded, one of `tasks` (the
+/// its `videos` Pending, In Progress or Retrying with its retry due at
+/// `now`, one of `tasks` (the
 /// non-completed ones) a task writing into the show folder of one of
 /// `videos` (`Task::show_writing_video_id`; a `sync_video` only while
 /// running, as it may already have read `show_dir` while a pending one reads
@@ -17,12 +19,17 @@ pub fn has_work_in_progress(
     tasks: &[ScheduledTask],
     events: &[ScheduledEvent],
     show_dir: &Path,
+    now: DateTime<Utc>,
 ) -> bool {
     let show_dir = show_dir.to_string_lossy();
-    videos.iter().any(|video| !video.is_download_settled())
-        || tasks
-            .iter()
-            .any(|task| task.task.output_dir().is_some_and(|dir| dir == show_dir))
+    videos.iter().any(|video| {
+        !matches!(
+            video.status,
+            VideoStatus::Downloaded | VideoStatus::Failed | VideoStatus::Unavailable
+        ) || (video.status == VideoStatus::Retrying && video.is_download_due(now))
+    }) || tasks
+        .iter()
+        .any(|task| task.task.output_dir().is_some_and(|dir| dir == show_dir))
         || tasks.iter().any(|task| {
             (task.status == TaskStatus::Running || !matches!(task.task, Task::SyncVideo { .. }))
                 && task.task.show_writing_video_id().is_some_and(|video_id| {

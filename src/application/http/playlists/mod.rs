@@ -1777,6 +1777,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1804,6 +1805,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1840,6 +1842,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1873,6 +1876,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1903,6 +1907,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1936,6 +1941,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1975,6 +1981,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -2046,6 +2053,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -2096,6 +2104,7 @@ mod tests {
             task_repository(&db),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -2147,6 +2156,7 @@ mod tests {
             task_repository,
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -2187,6 +2197,7 @@ mod tests {
             task_repository(&db),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -2227,6 +2238,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(playlist_view_searcher).await;
@@ -3400,14 +3412,15 @@ mod tests {
             &video_repository,
             &playlist_video_repository,
             "PL1",
-            playlist_episode("vid_errored", "Errored", 2).mark_errored(fixed_timestamp()),
+            playlist_episode("vid_errored", "Errored", 2)
+                .mark_download_failed("HTTP Error 503", fixed_timestamp()),
             1,
         );
         save_playlist_video_as(
             &video_repository,
             &playlist_video_repository,
             "PL1",
-            playlist_episode("vid_excluded", "Excluded", 3).mark_excluded(fixed_timestamp()),
+            playlist_episode("vid_excluded", "Excluded", 3).mark_unavailable(fixed_timestamp()),
             2,
         );
         let show_mover = show_mover(&db, video_file_repository);
@@ -4023,6 +4036,7 @@ mod tests {
             event_publisher(&db),
             show_locks.clone(),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
         let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL1")));
 
@@ -4096,6 +4110,7 @@ mod tests {
             event_publisher(&db),
             Arc::new(ShowLocks::default()),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
@@ -4148,7 +4163,7 @@ mod tests {
         let user_no = user_verdict(&with_user, &funny, Verdict::No);
         [
             ai_verdict(&ai_only, &politics, Verdict::Yes),
-            ai_verdict(&with_user, &politics, Verdict::Unavailable),
+            ai_verdict(&with_user, &politics, Verdict::Failed),
             user_no.clone(),
         ]
         .iter()
@@ -4804,6 +4819,7 @@ mod tests {
             event_publisher(db),
             Arc::new(ShowLocks::default()),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         )
     }
 
@@ -4858,6 +4874,7 @@ mod tests {
             unused_event_publisher(),
             Arc::new(ShowLocks::default()),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         )
     }
 

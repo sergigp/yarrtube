@@ -4,7 +4,8 @@ use crate::domain::services::{
 };
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId, VideoTarget,
+    DownloadAttempt, DownloadedVideo, Video, VideoDownloaded, VideoId, VideoStepOutcome,
+    VideoTarget,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -65,13 +66,13 @@ pub trait QualityUpgraderApi: Send + Sync {
     /// and publishes `VideoDownloaded`. Every check is recorded under the
     /// `late-video-data` policy. Best effort: a failed probe or re-download
     /// is recorded as a failed check, never returned.
-    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<()>;
+    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl QualityUpgraderApi for QualityUpgrader {
-    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<()> {
+    fn upgrade(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome> {
         let Some((video, target)) = self.find_checkable(video_id)? else {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         let staged = self.staging_area.for_video(&video.id);
         if let Err(e) =
@@ -80,7 +81,7 @@ impl QualityUpgraderApi for QualityUpgrader {
             warn!(video_id = %video.id, error = %e, "failed to check the video's quality");
             self.record_failed_check(&video);
         }
-        Ok(())
+        Ok(VideoStepOutcome::Settled)
     }
 }
 

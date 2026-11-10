@@ -9,12 +9,12 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     SubtitleReader, SubtitleReaderApi, VideoCategoryChoiceSearcher, VideoCategoryChoiceSearcherApi,
-    VideoCategoryEditor, VideoCategoryEditorApi, VideoSearcher, VideoSearcherApi,
-    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    VideoCategoryEditor, VideoCategoryEditorApi, VideoRetrier, VideoRetrierApi, VideoSearcher,
+    VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
-    HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, UpdateWatchStateError,
-    VideoDuration, VideoId, VideoSearchText, WebVtt,
+    HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, RetryVideoError,
+    UpdateWatchStateError, VideoDuration, VideoId, VideoSearchText, WebVtt,
 };
 use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
@@ -203,6 +203,22 @@ pub async fn delete_video_ai_verdicts(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn retry_video(
+    State(video_retrier): State<VideoRetrier>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = VideoId::new(id)?;
+
+    run_blocking(move || video_retrier.retry(&id))
+        .await?
+        .map_err(|error| match error {
+            e @ RetryVideoError::VideoNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+            e @ RetryVideoError::Repository(_) => ApiError::internal(e),
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Maps a failed read or edit of a video's categories, the same for every
 /// route touching them.
 pub fn edit_video_categories_error(error: EditVideoCategoriesError) -> ApiError {
@@ -316,6 +332,7 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use dto::{
         ChapterResponse, HomeCategorySectionResponse, HomeVideoResponse, HomeVideoSourceResponse,
+        StepResponse, VideoStepsResponse,
     };
     use rusqlite::Connection;
     use std::ops::Range;
@@ -841,6 +858,10 @@ mod tests {
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 thumbnail_filename: Some("My Video.jpg".to_string()),
+                steps: VideoStepsResponse {
+                    thumbnail: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 duration_seconds: Some(223),
                 synced_at: Some(fixed_timestamp()),
                 ..pending_video_response("vid1", "My Video")
@@ -889,6 +910,7 @@ mod tests {
             response,
             Ok(vec![VideoResponse {
                 status: "DOWNLOADED".to_string(),
+                steps: steps_with_download("DONE"),
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 updated_at: synced_at,
@@ -948,6 +970,7 @@ mod tests {
             response,
             Ok(vec![VideoResponse {
                 status: "DOWNLOADED".to_string(),
+                steps: steps_with_download("DONE"),
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 synced_at: Some(fixed_timestamp()),
@@ -1214,7 +1237,7 @@ mod tests {
             fixed_timestamp(),
         )
         .start_download(fixed_timestamp())
-        .mark_excluded(fixed_timestamp());
+        .mark_unavailable(fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -1448,6 +1471,7 @@ mod tests {
             response,
             Ok(vec![VideoResponse {
                 status: "DOWNLOADED".to_string(),
+                steps: steps_with_download("DONE"),
                 quality: Some("high".to_string()),
                 filename: Some("My Video.mp4".to_string()),
                 synced_at: Some(fixed_timestamp()),
@@ -1571,7 +1595,7 @@ mod tests {
             fixed_timestamp(),
         )
         .start_download(fixed_timestamp())
-        .mark_excluded(fixed_timestamp());
+        .mark_unavailable(fixed_timestamp());
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -2666,7 +2690,7 @@ mod tests {
                 fixed_timestamp(),
             )
             .start_download(fixed_timestamp())
-            .mark_excluded(fixed_timestamp()),
+            .mark_unavailable(fixed_timestamp()),
         );
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -4651,6 +4675,10 @@ mod tests {
             Ok(vec![
                 VideoResponse {
                     subtitle_language: Some("en".to_string()),
+                    steps: VideoStepsResponse {
+                        subtitles: step("DONE"),
+                        ..steps_with_download("DONE")
+                    },
                     ..downloaded_video_response("vid1", "My Video")
                 },
                 downloaded_video_response("vid2", "Other Video"),
@@ -5434,6 +5462,10 @@ mod tests {
             Ok(vec![
                 CategoryVideoResponse {
                     thumbnail_filename: Some("vid3.jpg".to_string()),
+                    steps: VideoStepsResponse {
+                        thumbnail: step("DONE"),
+                        ..steps_with_download("DONE")
+                    },
                     ..category_video_in(
                         category_video_response(
                             "vid3",
@@ -5781,8 +5813,8 @@ mod tests {
             downloaded_video("vid1", "Downloaded", None, 10),
             pending("pending"),
             pending("downloading").start_download(fixed_timestamp()),
-            pending("failed").mark_errored(fixed_timestamp()),
-            pending("excluded").mark_excluded(fixed_timestamp()),
+            pending("failed").mark_download_failed("HTTP Error 503", fixed_timestamp()),
+            pending("excluded").mark_unavailable(fixed_timestamp()),
         ]
         .iter()
         .for_each(|video| {
@@ -6112,6 +6144,10 @@ mod tests {
             response,
             Ok(vec![CategoryVideoResponse {
                 subtitle_language: Some("en".to_string()),
+                steps: VideoStepsResponse {
+                    subtitles: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 ..category_video_in(
                     category_video_response(
                         "vid1",
@@ -6165,6 +6201,10 @@ mod tests {
             response,
             Ok(vec![CategoryVideoResponse {
                 subtitle_language: Some("en".to_string()),
+                steps: VideoStepsResponse {
+                    subtitles: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 chapters: game_chapter_responses(),
                 ..category_video_in(
                     category_video_response(
@@ -6279,6 +6319,10 @@ mod tests {
             response,
             Ok(vec![CategoryVideoResponse {
                 thumbnail_filename: Some("vid1.jpg".to_string()),
+                steps: VideoStepsResponse {
+                    thumbnail: step("DONE"),
+                    ..steps_with_download("DONE")
+                },
                 published_at: None,
                 channel_name: None,
                 ..category_video_in(
@@ -6761,7 +6805,7 @@ mod tests {
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         [
             ai_verdict(&video, &politics, Verdict::Yes),
-            ai_verdict(&video, &tech, Verdict::Unavailable),
+            ai_verdict(&video, &tech, Verdict::Failed),
             user_verdict(&video, &funny, Verdict::Yes),
         ]
         .iter()
@@ -7242,6 +7286,7 @@ mod tests {
             youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             status: "PENDING".to_string(),
+            steps: steps_with_download("PENDING"),
             quality: None,
             filename: None,
             thumbnail_filename: None,
@@ -7262,10 +7307,33 @@ mod tests {
     fn downloaded_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         VideoResponse {
             status: "DOWNLOADED".to_string(),
+            steps: steps_with_download("DONE"),
             quality: Some("high".to_string()),
             filename: Some(format!("{title}.mp4")),
             synced_at: Some(fixed_timestamp()),
             ..pending_video_response(youtube_id, title)
+        }
+    }
+
+    /// Every step Pending but the download, `download_status`.
+    fn steps_with_download(download_status: &str) -> VideoStepsResponse {
+        VideoStepsResponse {
+            download: step(download_status),
+            thumbnail: step("PENDING"),
+            subtitles: step("PENDING"),
+            chapters: step("PENDING"),
+            quality: step("PENDING"),
+            summary: step("PENDING"),
+            categorization: step("PENDING"),
+        }
+    }
+
+    fn step(status: &str) -> StepResponse {
+        StepResponse {
+            status: status.to_string(),
+            failed_attempts: 0,
+            next_attempt_at: None,
+            failure: None,
         }
     }
 
@@ -7300,6 +7368,7 @@ mod tests {
             youtube_id: youtube_id.to_string(),
             title: title.to_string(),
             status: "DOWNLOADED".to_string(),
+            steps: steps_with_download("DONE"),
             quality: Some("high".to_string()),
             filename: Some(format!("{title}.mp4")),
             thumbnail_filename: None,

@@ -3,7 +3,7 @@ use crate::domain::preferences::{SummaryPrompt, SummarySettings};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{Video, VideoOwner};
+use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_summary::{
     PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
 };
@@ -100,22 +100,22 @@ impl VideoSummarizer {
 }
 
 pub trait VideoSummarizerApi: Send + Sync {
-    /// See the `video-summaries` capability. An error fails the task, for the
-    /// queue to retry.
-    fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()>;
+    /// See the `video-summaries` capability. A failed attempt is recorded on
+    /// the video under the `video-retries` policy.
+    fn summarize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl VideoSummarizerApi for VideoSummarizer {
-    fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn summarize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         match self.prepare(video) {
-            Ok(job) => self.generate(video, &job, is_last_attempt),
+            Ok(job) => self.generate(video, &job),
             Err(Skip::NotWanted(reason)) => {
                 info!(video_id = %video.id, reason, "skipped video summary");
-                Ok(())
+                Ok(VideoStepOutcome::Settled)
             }
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't summarize video");
-                Ok(())
+                Ok(VideoStepOutcome::Settled)
             }
         }
     }
@@ -158,40 +158,16 @@ impl VideoSummarizer {
         })
     }
 
-    fn generate(
-        &self,
-        video: &Video,
-        job: &SummaryJob,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
-        self.try_generate(video, job).map_err(|failure| {
-            let (cause, gives_up) = match failure {
-                Failure::Server(cause) => (cause, false),
-                Failure::Rejected(cause) => (cause, is_last_attempt),
-            };
-            error!(
-                video_id = %video.id,
-                error = format!("{cause:#}"),
-                is_last_attempt,
-                gives_up,
-                "failed to summarize video"
-            );
-            if gives_up {
-                self.give_up(video);
-            }
-            cause
-        })
-    }
-
-    /// Best effort: the error being reported matters more than this one.
-    fn give_up(&self, video: &Video) {
-        let now = self.clock.now();
-        if let Err(e) = self
-            .video_updater
-            .update(&video.id, |video| Some(video.mark_summary_unavailable(now)))
-        {
-            error!(video_id = %video.id, error = %e, "failed to give up on a summary");
-        }
+    fn generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<VideoStepOutcome> {
+        self.try_generate(video, job)
+            .map(|_| VideoStepOutcome::Settled)
+            .map_err(|failure| {
+                let cause = match failure {
+                    Failure::Server(cause) | Failure::Rejected(cause) => cause,
+                };
+                error!(video_id = %video.id, error = format!("{cause:#}"), "failed to summarize video");
+                cause
+            })
     }
 
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> Result<(), Failure> {

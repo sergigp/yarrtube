@@ -1,62 +1,123 @@
 use super::LateDataOutcome;
+use super::step_state::StepState;
+use super::step_status::StepStatus;
 use chrono::{DateTime, Duration, Utc};
 
 /// How long after its publish time a video counts as young: its late data
 /// may still show up.
 pub const YOUNG_FOR: Duration = Duration::days(7);
-/// How long unsettled data waits after a check before it is due again.
+/// How long Pending data waits after a conclusive check before it is due
+/// again.
 pub const RECHECK_AFTER: Duration = Duration::hours(24);
-/// How many failed checks settle an old video's data.
-pub const MAX_FAILED_ATTEMPTS: u32 = 3;
 
-/// The checks of one piece of late YouTube data (subtitles, chapters,
-/// downloaded quality) — see the `late-video-data` capability: when it was
-/// last checked and how many checks failed.
+/// One piece of late YouTube data (subtitles, chapters, downloaded quality)
+/// — see the `late-video-data` capability: its step state and when it was
+/// last checked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LateDataChecks {
+    pub state: StepState,
     pub last_checked_at: Option<DateTime<Utc>>,
-    pub failed_attempts: u32,
 }
 
 impl LateDataChecks {
-    /// Whether unsettled data is due for another check: never checked, or
-    /// last checked at least `RECHECK_AFTER` ago.
-    pub fn is_due(&self, now: DateTime<Utc>) -> bool {
-        self.last_checked_at
-            .is_none_or(|checked_at| now - checked_at >= RECHECK_AFTER)
-    }
-
-    /// Whether the data has failed as many checks as it is allowed.
-    pub fn failures_exhausted(&self) -> bool {
-        self.failed_attempts >= MAX_FAILED_ATTEMPTS
-    }
-
-    /// Records a check that ran `now`, counting a failed attempt for a
-    /// `Failed` outcome.
-    pub fn record(self, outcome: LateDataOutcome, now: DateTime<Utc>) -> Self {
-        Self {
-            last_checked_at: Some(now),
-            failed_attempts: match outcome {
-                LateDataOutcome::Failed => self.failed_attempts + 1,
-                _ => self.failed_attempts,
-            },
-        }
-    }
-
-    /// Whether the data is final after a check with `outcome` (already
-    /// `record`ed): found, or missing/failed on an old video (failures only
-    /// once `MAX_FAILED_ATTEMPTS` are reached).
-    pub fn settles(
-        &self,
+    /// Records a check that ran `now`: `Complete` makes the data Done;
+    /// `Incomplete` Unavailable when the video is old, else Pending; `Failed`
+    /// one more failed attempt (Retrying, or Failed on the last one).
+    pub fn record(
+        self,
         outcome: LateDataOutcome,
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
-    ) -> bool {
-        let is_old = now - published_at >= YOUNG_FOR;
-        match outcome {
-            LateDataOutcome::Complete => true,
-            LateDataOutcome::Incomplete => is_old,
-            LateDataOutcome::Failed => is_old && self.failures_exhausted(),
+    ) -> Self {
+        let state = match outcome {
+            LateDataOutcome::Complete => self.state.succeed(),
+            LateDataOutcome::Incomplete if now - published_at >= YOUNG_FOR => {
+                self.state.unavailable()
+            }
+            LateDataOutcome::Incomplete => StepState::pending(),
+            LateDataOutcome::Failed => self.state.fail(now),
+        };
+        Self {
+            state,
+            last_checked_at: Some(now),
+        }
+    }
+
+    /// Whether the data is due for another check: Pending and never checked
+    /// or checked at least `RECHECK_AFTER` ago, or Retrying with its next
+    /// attempt due.
+    pub fn is_due(&self, now: DateTime<Utc>) -> bool {
+        match self.state.status {
+            StepStatus::Pending => self
+                .last_checked_at
+                .is_none_or(|checked_at| now - checked_at >= RECHECK_AFTER),
+            StepStatus::Retrying => self.state.is_due(now),
+            _ => false,
+        }
+    }
+
+    /// Whether the data is still to be obtained: Pending or Retrying.
+    pub fn is_unsettled(&self) -> bool {
+        matches!(
+            self.state.status,
+            StepStatus::Pending | StepStatus::Retrying
+        )
+    }
+
+    /// Test fixture: data last checked at `last_checked_at` with `failed`
+    /// consecutive failed checks — Pending without failures, else Retrying
+    /// (Failed from `MAX_ATTEMPTS`), the last failed at the last check.
+    #[cfg(test)]
+    pub fn checked(last_checked_at: Option<DateTime<Utc>>, failed: u32) -> Self {
+        use super::retry_attempts::{MAX_ATTEMPTS, RetryAttempts};
+        let status = match failed {
+            0 => StepStatus::Pending,
+            f if f >= MAX_ATTEMPTS => StepStatus::Failed,
+            _ => StepStatus::Retrying,
+        };
+        Self {
+            state: StepState {
+                status,
+                attempts: RetryAttempts {
+                    failed,
+                    last_failed_at: last_checked_at.filter(|_| failed > 0),
+                },
+            },
+            last_checked_at,
+        }
+    }
+
+    /// Test fixture: data found (Done), never checked again.
+    #[cfg(test)]
+    pub fn done() -> Self {
+        Self::done_at(None)
+    }
+
+    /// Test fixture: data found (Done) by the check at `last_checked_at`.
+    #[cfg(test)]
+    pub fn done_at(last_checked_at: Option<DateTime<Utc>>) -> Self {
+        Self {
+            state: StepState::pending().succeed(),
+            last_checked_at,
+        }
+    }
+
+    /// Test fixture: data found missing on an old video (Unavailable) by the
+    /// check at `last_checked_at`.
+    #[cfg(test)]
+    pub fn unavailable_at(last_checked_at: Option<DateTime<Utc>>) -> Self {
+        Self {
+            state: StepState::pending().unavailable(),
+            last_checked_at,
+        }
+    }
+
+    /// Any Retrying or Failed data back to Pending, never checked.
+    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
+    pub fn retry(self) -> Self {
+        match self.state.status {
+            StepStatus::Retrying | StepStatus::Failed => Self::default(),
+            _ => self,
         }
     }
 }
@@ -83,84 +144,28 @@ mod tests {
     }
 
     #[test]
-    fn it_should_settle_missing_data_once_the_video_is_a_week_old() {
-        let checks = LateDataChecks::default().record(LateDataOutcome::Incomplete, now());
-
-        assert_eq!(
-            (
-                checks.settles(
-                    LateDataOutcome::Incomplete,
-                    now() - Duration::days(7),
-                    now()
-                ),
-                checks.settles(
-                    LateDataOutcome::Incomplete,
-                    now() - Duration::days(7) + Duration::seconds(1),
-                    now()
-                ),
-            ),
-            (true, false)
-        );
-    }
-
-    #[test]
-    fn it_should_settle_failed_checks_of_an_old_video_on_the_third_failure() {
-        let published_at = now() - Duration::days(30);
-        let third = LateDataChecks {
-            last_checked_at: None,
-            failed_attempts: 2,
-        }
-        .record(LateDataOutcome::Failed, now());
-        let second = LateDataChecks {
-            last_checked_at: None,
-            failed_attempts: 1,
-        }
-        .record(LateDataOutcome::Failed, now());
-
-        assert_eq!(
-            (
-                third.settles(LateDataOutcome::Failed, published_at, now()),
-                second.settles(LateDataOutcome::Failed, published_at, now()),
-            ),
-            (true, false)
-        );
-    }
-
-    #[test]
-    fn it_should_settle_found_data_even_on_a_young_video() {
-        let checks = LateDataChecks::default().record(LateDataOutcome::Complete, now());
-
-        assert!(checks.settles(LateDataOutcome::Complete, now(), now()));
-    }
-
-    #[test]
-    fn it_should_count_a_failed_attempt_only_for_a_failed_check() {
-        let checks = LateDataChecks {
-            last_checked_at: None,
-            failed_attempts: 1,
+    fn it_should_make_missing_data_unavailable_once_the_video_is_a_week_old() {
+        let record = |published_at| {
+            LateDataChecks::default()
+                .record(LateDataOutcome::Incomplete, published_at, now())
+                .state
+                .status
         };
 
         assert_eq!(
-            [
-                checks.record(LateDataOutcome::Complete, now()),
-                checks.record(LateDataOutcome::Incomplete, now()),
-                checks.record(LateDataOutcome::Failed, now()),
-            ],
-            [
-                LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
-                LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 1,
-                },
-                LateDataChecks {
-                    last_checked_at: Some(now()),
-                    failed_attempts: 2,
-                },
-            ]
+            (
+                record(now() - Duration::days(7)),
+                record(now() - Duration::days(7) + Duration::seconds(1)),
+            ),
+            (StepStatus::Unavailable, StepStatus::Pending)
         );
+    }
+
+    #[test]
+    fn it_should_make_found_data_done_even_on_a_young_video() {
+        let checks = LateDataChecks::default().record(LateDataOutcome::Complete, now(), now());
+
+        assert_eq!(checks.state.status, StepStatus::Done);
     }
 
     fn now() -> DateTime<Utc> {
@@ -169,8 +174,8 @@ mod tests {
 
     fn checked_at(at: DateTime<Utc>) -> LateDataChecks {
         LateDataChecks {
+            state: StepState::pending(),
             last_checked_at: Some(at),
-            failed_attempts: 0,
         }
     }
 }

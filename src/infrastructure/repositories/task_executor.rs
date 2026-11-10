@@ -1,4 +1,4 @@
-use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane};
+use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane, TaskOutcome};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::error_report;
@@ -259,8 +259,9 @@ impl TaskExecutor {
         })
     }
 
-    /// Dispatches a claimed task and records its outcome: deleted on
-    /// success, retried or dead-lettered on failure.
+    /// Dispatches a claimed task and records its outcome: deleted when done,
+    /// pending again when its handler asks to run it again later, retried or
+    /// dead-lettered on failure.
     fn execute(&self, running: ScheduledTask) -> anyhow::Result<()> {
         let id = running.id;
         info!(
@@ -269,10 +270,15 @@ impl TaskExecutor {
             "dispatching task"
         );
         match self.dispatch(&running) {
-            Ok(()) => {
+            Ok(TaskOutcome::Done) => {
                 self.repository.delete(id)?;
                 info!(task_id = id, "task done");
                 Ok(())
+            }
+            Ok(TaskOutcome::RunAgainAt { run_at, reason }) => {
+                info!(task_id = id, run_at = %run_at, reason, "task re-queued");
+                self.repository
+                    .update(&running.run_again_at(run_at, reason, self.clock.now()))
             }
             Err(e) => self.record_failure(running, e),
         }
@@ -281,7 +287,7 @@ impl TaskExecutor {
     /// A handler that panics counts as a failed attempt, like one that
     /// returns an error, so its task is retried or dead-lettered. So does an
     /// unreadable task: it is never dropped, it ends up dead-lettered.
-    fn dispatch(&self, running: &ScheduledTask) -> anyhow::Result<()> {
+    fn dispatch(&self, running: &ScheduledTask) -> anyhow::Result<TaskOutcome> {
         if let Task::Unreadable {
             task_type, error, ..
         } = &running.task
@@ -294,15 +300,14 @@ impl TaskExecutor {
                 running.task.task_type()
             );
         };
-        panic::catch_unwind(AssertUnwindSafe(|| {
-            handler.handle(&running.task, running.is_last_attempt())
-        }))
-        .unwrap_or_else(|payload| {
-            Err(anyhow::anyhow!(
-                "handler panicked: {}",
-                panic_message(payload.as_ref())
-            ))
-        })
+        panic::catch_unwind(AssertUnwindSafe(|| handler.handle(&running.task))).unwrap_or_else(
+            |payload| {
+                Err(anyhow::anyhow!(
+                    "handler panicked: {}",
+                    panic_message(payload.as_ref())
+                ))
+            },
+        )
     }
 
     fn record_failure(&self, running: ScheduledTask, error: anyhow::Error) -> anyhow::Result<()> {
@@ -383,10 +388,7 @@ mod tests {
         let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![false]
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 1);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             Vec::<ScheduledTask>::new()
@@ -417,10 +419,7 @@ mod tests {
         let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![false]
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 1);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![ScheduledTask {
@@ -496,10 +495,7 @@ mod tests {
         let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![true]
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 1);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             Vec::<ScheduledTask>::new()
@@ -531,10 +527,7 @@ mod tests {
         let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![false]
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 1);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             Vec::<ScheduledTask>::new()
@@ -562,10 +555,7 @@ mod tests {
         let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![true]
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 1);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             Vec::<ScheduledTask>::new()
@@ -595,10 +585,7 @@ mod tests {
         let result = executor.recover_stuck_tasks();
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            Vec::<bool>::new()
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 0);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![ScheduledTask {
@@ -639,10 +626,7 @@ mod tests {
         let result = executor.recover_stuck_tasks();
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            Vec::<bool>::new()
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 0);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             Vec::<ScheduledTask>::new()
@@ -1209,10 +1193,7 @@ mod tests {
         running.abort();
 
         assert_eq!(remaining, Vec::<ScheduledTask>::new());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![false, false]
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 2);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1238,10 +1219,7 @@ mod tests {
         let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            Vec::<bool>::new()
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 0);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![ScheduledTask {
@@ -1276,10 +1254,7 @@ mod tests {
         let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            Vec::<bool>::new()
-        );
+        assert_eq!(*handler.handled.lock().unwrap(), 0);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![ScheduledTask {
@@ -1489,13 +1464,13 @@ mod tests {
     }
 
     impl TaskHandler for BlockingHandler {
-        fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
             self.started.lock().unwrap().push(task.clone());
             let gate = self.gates.lock().unwrap().remove(task);
             if let Some(gate) = gate {
                 let _ = gate.recv();
             }
-            Ok(())
+            Ok(TaskOutcome::Done)
         }
     }
 
@@ -1505,18 +1480,18 @@ mod tests {
     }
 
     impl TaskHandler for PanickingHandler {
-        fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+        fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
             if *task == self.panics_on {
                 panic!("boom");
             }
-            Ok(())
+            Ok(TaskOutcome::Done)
         }
     }
 
     struct FakeHandler {
         fails: bool,
         fails_with_cause_chain: bool,
-        received_is_last_attempt: Mutex<Vec<bool>>,
+        handled: Mutex<u32>,
     }
 
     impl FakeHandler {
@@ -1524,7 +1499,7 @@ mod tests {
             Self {
                 fails: false,
                 fails_with_cause_chain: false,
-                received_is_last_attempt: Mutex::new(Vec::new()),
+                handled: Mutex::new(0),
             }
         }
 
@@ -1532,7 +1507,7 @@ mod tests {
             Self {
                 fails: true,
                 fails_with_cause_chain: false,
-                received_is_last_attempt: Mutex::new(Vec::new()),
+                handled: Mutex::new(0),
             }
         }
 
@@ -1540,17 +1515,14 @@ mod tests {
             Self {
                 fails: true,
                 fails_with_cause_chain: true,
-                received_is_last_attempt: Mutex::new(Vec::new()),
+                handled: Mutex::new(0),
             }
         }
     }
 
     impl TaskHandler for FakeHandler {
-        fn handle(&self, _task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
-            self.received_is_last_attempt
-                .lock()
-                .unwrap()
-                .push(is_last_attempt);
+        fn handle(&self, _task: &Task) -> anyhow::Result<TaskOutcome> {
+            *self.handled.lock().unwrap() += 1;
             if self.fails_with_cause_chain {
                 return Err(anyhow::anyhow!("Connection refused (os error 111)")
                     .context("error sending request for url (https://youtube/api)")
@@ -1559,7 +1531,7 @@ mod tests {
             if self.fails {
                 anyhow::bail!("handler failed");
             }
-            Ok(())
+            Ok(TaskOutcome::Done)
         }
     }
 }

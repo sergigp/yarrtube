@@ -19,9 +19,11 @@ import type {
   OllamaServer,
   PlaylistListItem,
   Preferences,
+  Step,
   Task,
   Video,
   VideoCategoryChoice,
+  VideoSteps,
 } from '@/api/types'
 
 /**
@@ -162,6 +164,7 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
     youtube_id: `youtube-${uniqueId}`,
     title: `Video ${uniqueId}`,
     status: 'DOWNLOADED',
+    steps: someSteps({ download: aStep({ status: 'DONE' }) }),
     quality: 'high',
     filename: `video-${uniqueId}.mp4`,
     thumbnail_filename: null,
@@ -176,6 +179,30 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
     subtitle_language: null,
     chapters: [],
     summary: null,
+    ...overrides,
+  }
+}
+
+export function aStep(overrides: Partial<Step> = {}): Step {
+  return {
+    status: 'PENDING',
+    failed_attempts: 0,
+    next_attempt_at: null,
+    failure: null,
+    ...overrides,
+  }
+}
+
+/** Every step Pending, but the ones overridden. */
+export function someSteps(overrides: Partial<VideoSteps> = {}): VideoSteps {
+  return {
+    download: aStep(),
+    thumbnail: aStep(),
+    subtitles: aStep(),
+    chapters: aStep(),
+    quality: aStep(),
+    summary: aStep(),
+    categorization: aStep(),
     ...overrides,
   }
 }

@@ -92,3 +92,21 @@ impl fmt::Display for ReadSubtitlesError {
 }
 
 impl std::error::Error for ReadSubtitlesError {}
+
+#[derive(Debug)]
+#[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
+pub enum RetryVideoError {
+    VideoNotFound(VideoId),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for RetryVideoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::VideoNotFound(id) => write!(f, "video {id} not found"),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for RetryVideoError {}

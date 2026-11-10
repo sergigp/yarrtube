@@ -2,7 +2,9 @@ use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{EpisodePaths, LateDataOutcome, Video, VideoId, VideoSubtitlesFetched};
+use crate::domain::video::{
+    EpisodePaths, LateDataOutcome, Video, VideoId, VideoStepOutcome, VideoSubtitlesFetched,
+};
 use crate::domain::video_transcript::{
     CaptionProbe, CaptionTrack, TranscriptText, VideoTranscript,
 };
@@ -72,28 +74,28 @@ pub trait SubtitleFetcherApi: Send + Sync {
     /// settled, Missing otherwise. Best effort: failures are logged, counted
     /// and swallowed. Publishes `VideoSubtitlesFetched` once Fetched. Fails
     /// only when the video or its owner can't be read.
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()>;
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl SubtitleFetcherApi for SubtitleFetcher {
-    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<()> {
+    fn fetch(&self, video_id: &VideoId) -> anyhow::Result<VideoStepOutcome> {
         let Some(video) = self.video_repository.find(video_id)? else {
             debug!(video_id = %video_id, "video no longer exists, skipping subtitles fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         if !video.is_subtitle_fetchable() {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         }
         let Some(owner) = self.video_owner_finder.find(&video)? else {
             info!(video_id = %video_id, "video has no playlist or channel any more, skipping subtitles fetch");
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         let staged = self.staging_area.for_subtitles(&video.id);
         if let Err(e) = self.fetch_and_place(&video, staged.path(), &owner.target.output_dir) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video subtitles");
             self.record_failed_fetch(&video);
         }
-        Ok(())
+        Ok(VideoStepOutcome::Settled)
     }
 }
 

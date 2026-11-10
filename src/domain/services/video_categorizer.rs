@@ -4,7 +4,7 @@ use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferen
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
 };
-use crate::domain::video::{Video, VideoOwner};
+use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -113,9 +113,9 @@ pub trait VideoCategorizerApi: Send + Sync {
     /// by `owner`'s source, without a verdict for it.
     fn pending(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<Vec<Category>>;
     /// Asks the model about each category pending when it runs, storing
-    /// each verdict as it comes. Err when any call was rejected, after
-    /// trying all; on the last attempt those become unavailable.
-    fn categorize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()>;
+    /// each verdict as it comes. A run with any category rejected is a
+    /// failed attempt under the `video-retries` policy.
+    fn categorize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl VideoCategorizerApi for VideoCategorizer {
@@ -130,16 +130,16 @@ impl VideoCategorizerApi for VideoCategorizer {
         ))
     }
 
-    fn categorize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn categorize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         match self.prepare(video) {
-            Ok(job) => self.ask_each(video, &job, is_last_attempt),
+            Ok(job) => self.ask_each(video, &job),
             Err(Skip::NotWanted(reason)) => {
                 info!(video_id = %video.id, reason, "skipped video categorization");
-                Ok(())
+                Ok(VideoStepOutcome::Settled)
             }
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
-                Ok(())
+                Ok(VideoStepOutcome::Settled)
             }
         }
     }
@@ -206,26 +206,17 @@ impl VideoCategorizer {
     }
 
     /// Asks about every pending category, then fails naming the rejected
-    /// ones, after giving them up on the last attempt. A server fault stops
-    /// it quietly.
-    fn ask_each(
-        &self,
-        video: &Video,
-        job: &CategorizationJob,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
+    /// ones. A server fault stops it quietly.
+    fn ask_each(&self, video: &Video, job: &CategorizationJob) -> anyhow::Result<VideoStepOutcome> {
         let rejected = match self.rejected_categories(video, job) {
             Ok(rejected) => rejected,
             Err(Stop::Server(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
-                return Ok(());
+                return Ok(VideoStepOutcome::Settled);
             }
             Err(Stop::Failed(error)) => return Err(error),
         };
-        if is_last_attempt {
-            self.give_up(video, job, &rejected)?;
-        }
-        Self::fail_if_rejected(&rejected)
+        Self::fail_if_rejected(&rejected).map(|_| VideoStepOutcome::Settled)
     }
 
     /// Asks about each pending category in turn; the ones rejected, with why.
@@ -394,29 +385,6 @@ impl VideoCategorizer {
             %reason,
             "the model couldn't answer for a category"
         );
-    }
-
-    /// Gives each of `rejected` an unavailable verdict, unless it is no
-    /// longer pending as the job started (see `still_pending`).
-    fn give_up(
-        &self,
-        video: &Video,
-        job: &CategorizationJob,
-        rejected: &[(&Category, String)],
-    ) -> anyhow::Result<()> {
-        rejected.iter().try_for_each(|(category, _)| {
-            let verdict = VideoCategoryVerdict::unavailable(
-                video.id.clone(),
-                category.id.clone(),
-                job.settings.model.as_str(),
-                self.clock.now(),
-            );
-            self.video_category_assigner
-                .apply_verdict_if(&verdict, &job.owner.source, &|| {
-                    self.still_pending(video, job, category)
-                })
-                .map(|_| ())
-        })
     }
 
     /// Whether `video`'s pair with `category` is still as the job found it:

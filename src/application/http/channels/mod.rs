@@ -2312,6 +2312,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2343,6 +2344,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2377,6 +2379,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2417,6 +2420,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2451,6 +2455,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2486,6 +2491,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2529,6 +2535,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2568,6 +2575,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -2637,6 +2645,7 @@ mod tests {
             )),
             Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -4006,6 +4015,7 @@ mod tests {
             event_publisher(db),
             Arc::new(ShowLocks::default()),
             "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
         )
     }
 

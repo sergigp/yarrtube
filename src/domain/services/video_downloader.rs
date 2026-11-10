@@ -6,7 +6,7 @@ use crate::domain::services::{
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     DownloadAttempt, DownloadFailure, DownloadedVideo, EpisodeNumber, EpisodePaths, Video,
-    VideoDownloaded, VideoId, VideoTarget,
+    VideoDownloaded, VideoId, VideoStatus, VideoStepOutcome, VideoTarget,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -107,23 +107,24 @@ pub trait VideoDownloaderApi: Send + Sync {
     /// longer needs to happen. Downloads at the owner's quality into the
     /// video's staging dir, then places the files as an episode in the
     /// owner's show directory's season folder. A video deleted while its download ran
-    /// gets nothing recorded, and its staging dir is discarded. Returns
-    /// `Err` on a failed download so the task queue retries/dead-letters it.
-    fn download(&self, video_id: VideoId, is_last_attempt: bool) -> anyhow::Result<()>;
+    /// gets nothing recorded, and its staging dir is discarded. A failed
+    /// download is recorded on the video under the `video-retries` policy.
+    fn download(&self, video_id: VideoId) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl VideoDownloaderApi for VideoDownloader {
-    fn download(&self, video_id: VideoId, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn download(&self, video_id: VideoId) -> anyhow::Result<VideoStepOutcome> {
         let Some((video, target)) = self.find_downloadable(&video_id)? else {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         let Some(started) = self.start_download(&video.id)? else {
-            return Ok(());
+            return Ok(VideoStepOutcome::Settled);
         };
         let metadata = self.fetch_metadata(&started);
         let staged = self.staging_area.for_video(&started.id);
         let attempt = self.run_download(&started, target.quality, staged.path());
-        self.record_attempt(started, attempt, &target, metadata, is_last_attempt)
+        self.record_attempt(started, attempt, &target, metadata)
+            .map(|_| VideoStepOutcome::Settled)
     }
 }
 
@@ -139,7 +140,7 @@ impl VideoDownloader {
             debug!(video_id = %video_id, "video no longer exists, skipping download");
             return Ok(None);
         };
-        if video.is_download_settled() {
+        if Self::is_settled(&video) {
             debug!(video_id = %video_id, status = video.status.as_str(), "video already settled, skipping download");
             return Ok(None);
         }
@@ -155,7 +156,7 @@ impl VideoDownloader {
     fn start_download(&self, video_id: &VideoId) -> anyhow::Result<Option<Video>> {
         let now = self.clock.now();
         let started = self.video_updater.update(video_id, |video| {
-            (!video.is_download_settled()).then(|| video.start_download(now))
+            (!Self::is_settled(&video)).then(|| video.start_download(now))
         })?;
         if started.is_none() {
             debug!(video_id = %video_id, "video gone or already settled, skipping download");
@@ -182,22 +183,21 @@ impl VideoDownloader {
         attempt: anyhow::Result<DownloadAttempt>,
         target: &VideoTarget,
         metadata: Option<VideoMetadata>,
-        is_last_attempt: bool,
     ) -> anyhow::Result<()> {
         match attempt {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
                 Self::log_sabr(&started, downloaded.sabr_notice.as_deref());
                 self.record_unless_deleted(started.clone(), downloaded, target, metadata)
-                    .or_else(|e| self.record_placement_errored(started, e, is_last_attempt))
+                    .or_else(|e| self.record_placement_errored(started, e))
             }
             Ok(DownloadAttempt::Failed {
                 failure,
                 sabr_notice,
             }) => {
                 Self::log_sabr(&started, sabr_notice.as_deref());
-                self.record_failed(started, failure, is_last_attempt)
+                self.record_failed(started, failure)
             }
-            Err(e) => self.record_errored(started, e, is_last_attempt),
+            Err(e) => self.record_errored(started, e),
         }
     }
 
@@ -373,59 +373,41 @@ impl VideoDownloader {
         }
     }
 
-    /// A clean `yt-dlp` failure: either excludes a permanently-unavailable
-    /// video (settling the task with `Ok(())`, so it is neither retried nor
-    /// dead-lettered) or keeps the errored/retry behavior and returns `Err`.
-    fn record_failed(
-        &self,
-        started: Video,
-        failure: DownloadFailure,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
+    /// A clean `yt-dlp` failure: either makes a permanently-unavailable
+    /// video Unavailable (settling the task) or records a failed attempt.
+    fn record_failed(&self, started: Video, failure: DownloadFailure) -> anyhow::Result<()> {
         if failure.is_permanent() {
-            self.exclude(started, &failure)
+            self.mark_unavailable(started, &failure)
         } else {
-            self.fail_retryably(started, &failure, is_last_attempt)
+            self.fail_retryably(started, &failure)
         }
     }
 
-    /// Marks a permanently-unavailable video excluded and settles the task
-    /// without error, so no retry is scheduled and it is not dead-lettered.
-    fn exclude(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
+    /// Marks a permanently-unavailable video Unavailable and settles the
+    /// task without error, so no retry is scheduled.
+    fn mark_unavailable(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
         let video_id = started.id.clone();
         let now = self.clock.now();
         self.video_updater
-            .update(&video_id, |video| Some(video.mark_excluded(now)))?;
-        info!(video_id = %video_id, reason = %failure.reason(), "excluding permanently-unavailable video");
+            .update(&video_id, |video| Some(video.mark_unavailable(now)))?;
+        info!(video_id = %video_id, reason = %failure.reason(), "marking permanently-unavailable video unavailable");
         Ok(())
     }
 
-    /// Marks the video errored (retrying, or permanently on the last attempt)
-    /// and returns the precise reason so the task queue retries/dead-letters
-    /// it.
-    fn fail_retryably(
-        &self,
-        started: Video,
-        failure: &DownloadFailure,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
+    /// Records a failed attempt with `yt-dlp`'s reason.
+    fn fail_retryably(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
         let video_id = started.id.clone();
-        self.mark_errored(started, is_last_attempt)?;
         let error_message = failure.message_for(&video_id);
+        self.mark_errored(started, &error_message)?;
         warn!(video_id = %video_id, error = %error_message, "yt-dlp reported a failed download");
         Err(anyhow::anyhow!(error_message))
     }
 
     /// A systemic download error: marks the video errored and propagates
     /// the error so the task queue retries/dead-letters it.
-    fn record_errored(
-        &self,
-        started: Video,
-        error: anyhow::Error,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
+    fn record_errored(&self, started: Video, error: anyhow::Error) -> anyhow::Result<()> {
         let video_id = started.id.clone();
-        self.mark_errored(started, is_last_attempt)?;
+        self.mark_errored(started, &error.to_string())?;
         Self::fail_errored(&video_id, error)
     }
 
@@ -434,26 +416,24 @@ impl VideoDownloader {
     /// errored instead of staying in progress. Applied to the video as
     /// stored, so a number assigned before the failure is kept; a video
     /// deleted meanwhile gets nothing recorded.
-    fn record_placement_errored(
-        &self,
-        started: Video,
-        error: anyhow::Error,
-        is_last_attempt: bool,
-    ) -> anyhow::Result<()> {
-        self.record_errored(started, error, is_last_attempt)
+    fn record_placement_errored(&self, started: Video, error: anyhow::Error) -> anyhow::Result<()> {
+        self.record_errored(started, error)
     }
 
-    fn mark_errored(&self, started: Video, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn mark_errored(&self, started: Video, reason: &str) -> anyhow::Result<()> {
         let now = self.clock.now();
         self.video_updater
-            .update(&started.id, |video| {
-                Some(if is_last_attempt {
-                    video.mark_errored(now)
-                } else {
-                    video.mark_errored_retrying(now)
-                })
-            })
+            .update(&started.id, |video| Some(video.mark_errored(reason, now)))
             .map(|_| ())
+    }
+
+    /// Whether the video's download has nothing left to do: Downloaded,
+    /// Failed or Unavailable.
+    fn is_settled(video: &Video) -> bool {
+        matches!(
+            video.status,
+            VideoStatus::Downloaded | VideoStatus::Failed | VideoStatus::Unavailable
+        )
     }
 
     /// Logs a systemic download error and returns it, so the task queue

@@ -15,8 +15,8 @@ import { channelPath } from '@/lib/sourcePath'
 const STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: 'Downloading',
   PENDING: 'Pending',
-  ERRORED_RETRYING: 'Retrying',
-  ERRORED: 'Errored',
+  RETRYING: 'Retrying',
+  FAILED: 'Failed',
 }
 
 interface VideoDetailProps {

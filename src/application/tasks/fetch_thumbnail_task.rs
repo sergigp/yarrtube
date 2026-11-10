@@ -1,5 +1,5 @@
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
@@ -20,12 +20,13 @@ impl FetchThumbnailTask {
 }
 
 impl TaskHandler for FetchThumbnailTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::FetchThumbnail { video_id } = task else {
             return Err(unexpected_task(task));
         };
         self.thumbnail_fetcher
             .fetch(&VideoId::new(video_id.clone())?)
+            .map(TaskOutcome::from)
     }
 }
 
@@ -98,7 +99,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -169,7 +170,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
@@ -184,7 +185,7 @@ mod tests {
                 published_at: None,
             },
         )));
-        let video = my_video().mark_excluded(fixed_timestamp());
+        let video = my_video().mark_unavailable(fixed_timestamp());
         video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
@@ -217,7 +218,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
@@ -232,7 +233,7 @@ mod tests {
                 published_at: None,
             },
         )));
-        let video = my_video().mark_errored(fixed_timestamp());
+        let video = my_video().mark_download_failed("HTTP Error 503", fixed_timestamp());
         video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
@@ -265,7 +266,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
@@ -295,7 +296,7 @@ mod tests {
 
         let result = run(&task, &task_for("missing"));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
     }
@@ -330,7 +331,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*thumbnail_repository.calls.lock().unwrap(), vec![]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
@@ -380,7 +381,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
@@ -445,7 +446,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -503,7 +504,7 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
@@ -580,7 +581,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap()
     }
 
-    fn run(task: &FetchThumbnailTask, queued: &Task) -> Result<(), String> {
-        task.handle(queued, false).map_err(|e| e.to_string())
+    fn run(task: &FetchThumbnailTask, queued: &Task) -> Result<TaskOutcome, String> {
+        task.handle(queued).map_err(|e| e.to_string())
     }
 }

@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoSummarizer, VideoSummarizerApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
@@ -27,15 +27,17 @@ impl SummarizeVideoTask {
 }
 
 impl TaskHandler for SummarizeVideoTask {
-    fn handle(&self, task: &Task, is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::SummarizeVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
         let video_id = VideoId::new(video_id.clone())?;
         let Some(video) = self.video_repository.find(&video_id)? else {
-            return Ok(());
+            return Ok(TaskOutcome::Done);
         };
-        self.video_summarizer.summarize(&video, is_last_attempt)
+        self.video_summarizer
+            .summarize(&video)
+            .map(TaskOutcome::from)
     }
 }
 
@@ -54,9 +56,7 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{
-        PlaybackPosition, SummaryState, Video, VideoChapter, YoutubeVideoId,
-    };
+    use crate::domain::video::{PlaybackPosition, StepState, Video, VideoChapter, YoutubeVideoId};
     use crate::domain::video_summary::{SummaryMessages, SummaryText, VideoSummary};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
@@ -113,7 +113,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             summary_repository.find(&video.id).unwrap(),
             Some(stored_summary(&video, "Three games."))
@@ -967,7 +967,7 @@ mod tests {
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
         let llm = llm_replying(vec![reply("Three games.")]);
         let video = Video {
-            summary_state: SummaryState::Generated,
+            summary: StepState::pending().succeed(),
             ..subtitled_video()
         };
         video_repository.insert(&video).unwrap();
@@ -1013,7 +1013,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(llm.chats(), vec![]);
     }
 
@@ -1045,7 +1045,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
@@ -1076,7 +1076,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
@@ -1113,7 +1113,7 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
@@ -1142,7 +1142,7 @@ mod tests {
             files_with(SHORT_SRT),
         );
 
-        let result = run_last_attempt(&task, &video);
+        let result = run(&task, &video);
 
         assert_eq!(result, Err("model crashed".to_string()));
         assert_eq!(summary_repository.find(&video.id).unwrap(), None);
@@ -1316,53 +1316,11 @@ mod tests {
             Arc::new(FakeVideoFileRepository::default()),
         );
 
-        let result = run_last_attempt(&task, &video);
+        let result = run(&task, &video);
 
         assert_eq!(result, Err("video's subtitle file is gone".to_string()));
         assert_eq!(llm.chats(), vec![]);
-        assert_eq!(
-            video_repository.find(&video.id).unwrap(),
-            Some(Video {
-                version: 1,
-                ..video.clone().mark_summary_unavailable(later())
-            })
-        );
-    }
-
-    #[test]
-    fn it_should_become_unavailable_when_rejected_on_the_last_attempt() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
-        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
-        let llm = llm_replying(vec![Ok(LlmReply::refused("request too long"))]);
-        let video = subtitled_video();
-        video_repository.insert(&video).unwrap();
-        preferences_repository.save(&summaries_on()).unwrap();
-        seed_channel(&db, &video, true);
-        seed_transcript(&db, &video, "es");
-        let task = summarize_video_task(
-            &db,
-            video_repository.clone(),
-            preferences_repository,
-            summary_repository,
-            llm,
-            files_with(SHORT_SRT),
-        );
-
-        let result = run_last_attempt(&task, &video);
-
-        assert_eq!(
-            result,
-            Err("Ollama refused the call: request too long".to_string())
-        );
-        assert_eq!(
-            video_repository.find(&video.id).unwrap(),
-            Some(Video {
-                version: 1,
-                ..video.clone().mark_summary_unavailable(later())
-            })
-        );
+        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
     }
 
     #[test]
@@ -1585,7 +1543,9 @@ mod tests {
             files_with(SHORT_SRT),
         );
 
-        let lines = captured_log_lines(|| run(&task, &video).unwrap());
+        let lines = captured_log_lines(|| {
+            run(&task, &video).unwrap();
+        });
 
         let sent = lines
             .iter()
@@ -1626,7 +1586,9 @@ mod tests {
             files_with(SHORT_SRT),
         );
 
-        let lines = captured_log_lines(|| run(&task, &video).unwrap());
+        let lines = captured_log_lines(|| {
+            run(&task, &video).unwrap();
+        });
 
         let started = lines
             .iter()
@@ -1685,7 +1647,9 @@ mod tests {
             files_with(SHORT_SRT),
         );
 
-        let skipped = captured_log_lines(|| run(&opted_out, &video).unwrap());
+        let skipped = captured_log_lines(|| {
+            run(&opted_out, &video).unwrap();
+        });
         let failed = captured_log_lines(|| {
             run(&failing, &video).unwrap_err();
         });
@@ -1733,13 +1697,8 @@ mod tests {
         )
     }
 
-    fn run(task: &SummarizeVideoTask, video: &Video) -> Result<(), String> {
-        task.handle(&task_for(video), false)
-            .map_err(|error| error.to_string())
-    }
-
-    fn run_last_attempt(task: &SummarizeVideoTask, video: &Video) -> Result<(), String> {
-        task.handle(&task_for(video), true)
+    fn run(task: &SummarizeVideoTask, video: &Video) -> Result<TaskOutcome, String> {
+        task.handle(&task_for(video))
             .map_err(|error| error.to_string())
     }
 

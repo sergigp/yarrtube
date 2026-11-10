@@ -193,7 +193,7 @@ impl CategoryUpdater {
     fn reset_unavailable_verdicts(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
         let _guard = self.video_category_assigner.lock();
         self.video_category_verdict_repository
-            .delete_unavailable_for_category(id)
+            .delete_failed_for_category(id)
             .map_err(UpdateCategoryError::Repository)
     }
 

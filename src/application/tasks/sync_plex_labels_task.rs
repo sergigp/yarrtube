@@ -1,5 +1,5 @@
 use crate::domain::services::{PlexLabelSyncer, PlexLabelSyncerApi};
-use crate::domain::task::Task;
+use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs one Plex label sync (`PlexLabelSyncer::sync`), which requests the
@@ -15,11 +15,11 @@ impl SyncPlexLabelsTask {
 }
 
 impl TaskHandler for SyncPlexLabelsTask {
-    fn handle(&self, task: &Task, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, task: &Task) -> anyhow::Result<TaskOutcome> {
         let Task::SyncPlexLabels = task else {
             return Err(unexpected_task(task));
         };
-        self.plex_label_syncer.sync()
+        self.plex_label_syncer.sync().map(|()| TaskOutcome::Done)
     }
 }
 
@@ -96,7 +96,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
@@ -131,7 +131,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             plex.labels("101"),
             vec!["Chess".to_string(), "Funny".to_string()]
@@ -167,7 +167,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.labels("101"), Vec::<String>::new());
         assert_eq!(plex.label_edits(), vec!["labels:101::-Chess".to_string()]);
         assert_eq!(
@@ -202,7 +202,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
@@ -239,7 +239,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.labels("101"), vec!["Humor".to_string()]);
         assert_eq!(
             plex.label_edits(),
@@ -275,7 +275,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
@@ -312,7 +312,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
@@ -343,7 +343,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             episode_labels_repository.find_many(&[deleted]).unwrap(),
             vec![]
@@ -371,7 +371,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
@@ -405,7 +405,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.labels("201"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
@@ -442,7 +442,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.labels("102"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
@@ -472,7 +472,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             episode_labels_repository
                 .find_many(std::slice::from_ref(&video.id))
@@ -501,7 +501,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_sync(1, now() + Duration::minutes(15))]
@@ -532,7 +532,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_sync(1, now())]
@@ -573,7 +573,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_sync(1, now() + Duration::minutes(15))]
@@ -626,7 +626,7 @@ mod tests {
 
         let results = [run(&task), run(&task)];
 
-        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(results, [Ok(TaskOutcome::Done), Ok(TaskOutcome::Done)]);
         assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
@@ -658,7 +658,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             plex.playlists(),
             vec![FakePlaylist {
@@ -697,7 +697,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.mutations(), first_sync_mutations);
         assert_eq!(
             plex.playlists(),
@@ -740,7 +740,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             plex.playlists(),
             vec![
@@ -788,7 +788,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.playlists(), vec![]);
         assert_eq!(category_playlist_repository.list().unwrap(), vec![]);
     }
@@ -826,7 +826,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             plex.playlists(),
             vec![FakePlaylist {
@@ -870,7 +870,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(plex.playlists(), vec![]);
         assert_eq!(category_playlist_repository.list().unwrap(), vec![]);
     }
@@ -914,7 +914,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             plex.playlists(),
             vec![FakePlaylist {
@@ -958,7 +958,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             plex.playlists(),
             vec![FakePlaylist {
@@ -995,7 +995,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             plex.playlists(),
             vec![
@@ -1053,7 +1053,7 @@ mod tests {
 
         let result = run(&task);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Ok(TaskOutcome::Done));
         assert_eq!(
             category_playlist_repository.list().unwrap(),
             vec![
@@ -1253,8 +1253,8 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn run(task: &SyncPlexLabelsTask) -> Result<(), String> {
-        task.handle(&Task::SyncPlexLabels, false)
+    fn run(task: &SyncPlexLabelsTask) -> Result<TaskOutcome, String> {
+        task.handle(&Task::SyncPlexLabels)
             .map_err(|e| e.to_string())
     }
 }

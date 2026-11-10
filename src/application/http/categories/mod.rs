@@ -3372,7 +3372,7 @@ mod tests {
 
     fn unavailable_verdict(video: &Video, category: &Category) -> VideoCategoryVerdict {
         VideoCategoryVerdict {
-            verdict: Verdict::Unavailable,
+            verdict: Verdict::Failed,
             reason: None,
             ..yes_verdict(video, category)
         }

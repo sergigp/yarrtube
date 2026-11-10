@@ -106,7 +106,7 @@ mod tests {
     use crate::domain::preferences::{
         CategorizationSettings, Preferences, ResolvedPreferences, SummarySettings,
     };
-    use crate::domain::video::{SummaryState, Video, VideoId, YoutubeVideoId};
+    use crate::domain::video::{StepState, Video, VideoId, YoutubeVideoId};
     use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
@@ -309,7 +309,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_reset_unavailable_summaries_when_the_summary_settings_change() {
+    async fn it_should_reset_failed_summaries_when_the_summary_settings_change() {
         let requests = [
             UpdatePreferencesRequest {
                 ollama_url: Some("http://other.local:11434".to_string()),
@@ -341,7 +341,7 @@ mod tests {
             let db = TestDatabase::new();
             let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let video_repository = SqliteVideoRepository::new(db.database());
-            let video = unavailable_video();
+            let video = failed_summary_video();
             video_repository.insert(&video).unwrap();
             let preferences_updater = preferences_updater(&db, repository.clone());
 
@@ -351,7 +351,7 @@ mod tests {
                 video_repository.find(&video.id).unwrap(),
                 Some(Video {
                     version: 1,
-                    summary_state: SummaryState::Missing,
+                    summary: StepState::pending(),
                     updated_at: fixed_timestamp(),
                     ..video
                 })
@@ -380,7 +380,7 @@ mod tests {
             let db = TestDatabase::new();
             let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let video_repository = SqliteVideoRepository::new(db.database());
-            let video = unavailable_video();
+            let video = failed_summary_video();
             video_repository.insert(&video).unwrap();
             let preferences_updater = preferences_updater(&db, repository.clone());
 
@@ -418,7 +418,7 @@ mod tests {
             ];
             decided
                 .iter()
-                .chain(&[verdict("tech", Verdict::Unavailable)])
+                .chain(&[verdict("tech", Verdict::Failed)])
                 .for_each(|verdict| verdict_repository.save(verdict).unwrap());
             let preferences_updater = PreferencesUpdater::new(
                 repository,
@@ -460,7 +460,7 @@ mod tests {
             let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let verdict_repository =
                 Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
-            let unavailable = verdict("tech", Verdict::Unavailable);
+            let unavailable = verdict("tech", Verdict::Failed);
             verdict_repository.save(&unavailable).unwrap();
             let preferences_updater = PreferencesUpdater::new(
                 repository,
@@ -724,7 +724,7 @@ mod tests {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let video_repository = SqliteVideoRepository::new(db.database());
-        let video = unavailable_video();
+        let video = failed_summary_video();
         video_repository.insert(&video).unwrap();
         let preferences_updater = preferences_updater(&db, repository.clone());
         let request = UpdatePreferencesRequest {
@@ -1285,10 +1285,10 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn unavailable_video() -> Video {
+    fn failed_summary_video() -> Video {
         let created = fixed_timestamp() - Duration::days(1);
         Video::create(YoutubeVideoId::new("yt1").unwrap(), "A video", created)
-            .mark_summary_unavailable(created)
+            .mark_summary_failed(created)
     }
 
     /// The shipped prompt with one rule added to its `system` section.

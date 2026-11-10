@@ -13,6 +13,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::domain_events::event_repository::EventRepository;
 use crate::infrastructure::shared::show_locks::{ShowLockGuard, ShowLocks};
+use crate::infrastructure::shared::system_clock::Clock;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -32,6 +33,7 @@ pub struct ShowMover {
     event_publisher: Arc<dyn EventPublisher>,
     show_locks: Arc<ShowLocks>,
     videos_root: PathBuf,
+    clock: Arc<dyn Clock>,
 }
 
 impl ShowMover {
@@ -48,6 +50,7 @@ impl ShowMover {
         event_publisher: Arc<dyn EventPublisher>,
         show_locks: Arc<ShowLocks>,
         videos_root: impl Into<PathBuf>,
+        clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -61,6 +64,7 @@ impl ShowMover {
             event_publisher,
             show_locks,
             videos_root: videos_root.into(),
+            clock,
         }
     }
 }
@@ -212,7 +216,7 @@ impl ShowMover {
             .event_repository
             .list_eligible()
             .map_err(MoveShowError::Repository)?;
-        if has_work_in_progress(&videos, &tasks, &events, show_dir) {
+        if has_work_in_progress(&videos, &tasks, &events, show_dir, self.clock.now()) {
             return Err(MoveShowError::WorkInProgress);
         }
         Ok(())

@@ -10,8 +10,8 @@ use chrono::{DateTime, Utc};
 pub enum Verdict {
     Yes,
     No,
-    /// The model couldn't answer under the current settings.
-    Unavailable,
+    /// The AI gave up on the pair under the current settings.
+    Failed,
 }
 
 impl Verdict {
@@ -19,7 +19,7 @@ impl Verdict {
         match self {
             Self::Yes => "YES",
             Self::No => "NO",
-            Self::Unavailable => "UNAVAILABLE",
+            Self::Failed => "FAILED",
         }
     }
 
@@ -27,7 +27,7 @@ impl Verdict {
         match value {
             "YES" => Ok(Self::Yes),
             "NO" => Ok(Self::No),
-            "UNAVAILABLE" => Ok(Self::Unavailable),
+            "FAILED" => Ok(Self::Failed),
             other => Err(ValidationError(format!("unknown verdict '{other}'"))),
         }
     }
@@ -95,8 +95,9 @@ impl VideoCategoryVerdict {
         }
     }
 
-    /// The AI couldn't answer for this pair under the current settings.
-    pub fn unavailable(
+    /// The AI gave up on this pair under the current settings.
+    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
+    pub fn failed(
         video_id: VideoId,
         category_id: CategoryId,
         model: &str,
@@ -105,7 +106,7 @@ impl VideoCategoryVerdict {
         Self {
             video_id,
             category_id,
-            verdict: Verdict::Unavailable,
+            verdict: Verdict::Failed,
             decided_by: VerdictAuthor::Ai,
             model: Some(model.to_string()),
             reason: None,
@@ -145,7 +146,7 @@ mod tests {
 
     #[test]
     fn it_should_round_trip_every_verdict_through_its_string_representation() {
-        let verdicts = [Verdict::Yes, Verdict::No, Verdict::Unavailable];
+        let verdicts = [Verdict::Yes, Verdict::No, Verdict::Failed];
 
         assert_eq!(
             verdicts.map(|verdict| Verdict::parse(verdict.as_str())),

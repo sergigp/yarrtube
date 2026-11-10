@@ -91,7 +91,6 @@ impl VideoReconcilerApi for VideoReconciler {
         self.video_category_assigner
             .assign_video(&video.id, &owner.source)?;
         let video = self.reset_if_broken(video, &owner.target)?;
-        let video = self.recover_if_due(video)?;
         self.repair_metadata(&video, &owner);
         self.warn_if_stranded(&video)?;
         let summaries_wanted = video.is_summarizable() && self.summaries_wanted(&owner)?;
@@ -134,21 +133,6 @@ impl VideoReconciler {
             .video_updater
             .update(&video.id, |video| Some(video.reset_for_redownload(now)))?;
         Ok(reset.unwrap_or(video))
-    }
-
-    /// Gives an `Errored` video (one that exhausted its download retries)
-    /// another chance once its recovery cooldown is over
-    /// (`Video::is_due_for_recovery`), with no limit on how many times a
-    /// video may be recovered.
-    fn recover_if_due(&self, video: Video) -> anyhow::Result<Video> {
-        if !video.is_due_for_recovery(self.clock.now()) {
-            return Ok(video);
-        }
-        warn!(
-            youtube_id = %video.youtube_id,
-            "permanently errored video is due for recovery, resetting for redownload"
-        );
-        self.reset_for_redownload(video)
     }
 
     /// Regenerates the metadata of a `Downloaded` video that has none, the
@@ -216,18 +200,16 @@ impl VideoReconciler {
             .map_or(true, |metadata| metadata.is_some())
     }
 
-    /// Logs a video whose download started (In Progress or Errored Retrying)
-    /// with no download pending or running: a step lost on a crash, which
+    /// Logs a video whose download started (In Progress) with no download
+    /// pending or running: a step lost on a crash, which
     /// `schedule_steps` then schedules. A Pending video with no download is
     /// not stranded: a new or just reset video is scheduled by this sync.
     fn warn_if_stranded(&self, video: &Video) -> anyhow::Result<()> {
-        if !matches!(
-            video.status,
-            VideoStatus::InProgress | VideoStatus::ErroredRetrying
-        ) || self
-            .task_repository
-            .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
-            .is_some()
+        if video.status != VideoStatus::InProgress
+            || self
+                .task_repository
+                .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
+                .is_some()
         {
             return Ok(());
         }

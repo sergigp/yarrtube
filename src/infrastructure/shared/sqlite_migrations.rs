@@ -41,9 +41,19 @@ const VIDEO_CATEGORY_VERDICTS_SQL: &str =
 const CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL: &str =
     include_str!("../../../migrations/0026_categorization_context_length_auto.sql");
 const VIDEO_VERSION_SQL: &str = include_str!("../../../migrations/0027_video_version.sql");
+const VIDEO_STEP_STATUSES_SQL: &str =
+    include_str!("../../../migrations/0028_video_step_statuses.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
-    Migrations::new(vec![
+    Migrations::new(migrations())
+        .to_latest(conn)
+        .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
+        .context("failed to apply database migrations")
+}
+
+/// Every migration, in order.
+fn migrations() -> Vec<M<'static>> {
+    vec![
         M::up(BASELINE_SQL),
         M::up(WATCH_STATE_SQL),
         M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
@@ -74,10 +84,8 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(VIDEO_CATEGORY_VERDICTS_SQL),
         M::up(CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL),
         M::up(VIDEO_VERSION_SQL),
-    ])
-    .to_latest(conn)
-    .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
-    .context("failed to apply database migrations")
+        M::up(VIDEO_STEP_STATUSES_SQL),
+    ]
 }
 
 /// Rewrites every light category color (OKLCH lightness above 0.85) left after
@@ -540,7 +548,7 @@ mod tests {
         )
         .unwrap();
 
-        apply(&mut conn).unwrap();
+        migrate_to(&mut conn, 27);
 
         let subtitles = conn.query_row(
             "SELECT subtitle_state, subtitle_filename FROM videos WHERE id = 'rec1'",
@@ -1004,7 +1012,7 @@ mod tests {
         )
         .unwrap();
 
-        apply(&mut conn).unwrap();
+        migrate_to(&mut conn, 27);
 
         let summary = conn.query_row("SELECT summary_state FROM videos", [], |row| {
             row.get::<_, String>(0)
@@ -1026,7 +1034,7 @@ mod tests {
         )
         .unwrap();
 
-        apply(&mut conn).unwrap();
+        migrate_to(&mut conn, 27);
 
         let settled = conn
             .prepare("SELECT id, chapters_settled, quality_settled FROM videos ORDER BY id")
@@ -1072,6 +1080,13 @@ mod tests {
             checks,
             Ok((Some("2026-10-31T12:00:00+00:00".to_string()), 0))
         );
+    }
+
+    /// Applies the first `count` migrations only.
+    fn migrate_to(conn: &mut Connection, count: usize) {
+        Migrations::new(migrations().into_iter().take(count).collect())
+            .to_latest(conn)
+            .unwrap();
     }
 
     fn migrate_to_video_chapters(conn: &mut Connection) {

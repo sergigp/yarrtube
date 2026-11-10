@@ -88,7 +88,7 @@ describe('VideoDetail', () => {
   })
 
   it('shows the status of a video that is not downloaded', () => {
-    const video = aVideo({ status: 'ERRORED_RETRYING', filename: null })
+    const video = aVideo({ status: 'RETRYING', filename: null })
     renderWithProviders(
       <VideoDetail
         basePath="playlists/mix"

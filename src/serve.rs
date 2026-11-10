@@ -11,7 +11,7 @@ use crate::domain::services::{
     ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
     VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
     VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
-    VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -450,6 +450,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.task_repository.clone(),
             infrastructure.event_repository.clone(),
             videos_path(),
+            infrastructure.clock.clone(),
         ),
         video_searcher: VideoSearcher::new(
             infrastructure.playlist_repository.clone(),
@@ -506,6 +507,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.task_repository.clone(),
             infrastructure.event_repository.clone(),
             videos_path(),
+            infrastructure.clock.clone(),
         ),
         channel_video_reconciler: channel_video_reconciler(infrastructure),
         directory_searcher: DirectorySearcher::new(infrastructure.directory_repository.clone()),
@@ -544,6 +546,12 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             video_owner_finder(infrastructure),
             infrastructure.category_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
+        ),
+        video_retrier: VideoRetrier::new(
+            infrastructure.video_repository.clone(),
+            infrastructure.video_category_verdict_repository.clone(),
+            infrastructure.task_repository.clone(),
+            infrastructure.clock.clone(),
         ),
         video_category_editor: VideoCategoryEditor::new(
             infrastructure.video_repository.clone(),
@@ -596,6 +604,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.event_publisher.clone(),
             infrastructure.show_locks.clone(),
             videos_path(),
+            infrastructure.clock.clone(),
         ),
     }
 }

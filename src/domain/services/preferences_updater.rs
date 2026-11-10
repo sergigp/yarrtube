@@ -68,7 +68,7 @@ impl PreferencesUpdaterApi for PreferencesUpdater {
             .map_err(UpdatePreferencesError::Repository)?;
         if stored.changes_summaries(&updated) {
             self.video_repository
-                .reset_unavailable_summaries(self.clock.now())
+                .reset_failed_summaries(self.clock.now())
                 .map_err(UpdatePreferencesError::Repository)?;
         }
         if stored.changes_categorization(&updated) {
@@ -105,7 +105,7 @@ impl PreferencesUpdater {
     fn reset_unavailable_verdicts(&self) -> Result<(), UpdatePreferencesError> {
         let _guard = self.category_lock.lock();
         self.video_category_verdict_repository
-            .delete_unavailable()
+            .delete_failed()
             .map_err(UpdatePreferencesError::Repository)
     }
 }

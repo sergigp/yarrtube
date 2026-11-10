@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
-use crate::domain::video::{Video, VideoChapter};
+use crate::domain::video::{Video, VideoChapter, VideoStepOutcome};
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_chapter_repository::ChapterRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -37,18 +37,19 @@ pub trait ChapterFetcherApi: Send + Sync {
     /// video's chapters from YouTube and records the check (chapters,
     /// checks, settled) under the `late-video-data` policy; a failure is
     /// logged, counted as a failed attempt and swallowed.
-    fn fetch(&self, video: &Video);
+    fn fetch(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
 impl ChapterFetcherApi for ChapterFetcher {
-    fn fetch(&self, video: &Video) {
+    fn fetch(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         if !video.is_chapters_fetchable() {
-            return;
+            return Ok(VideoStepOutcome::Settled);
         }
         if let Err(e) = self.fetch_and_record(video) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video chapters");
             self.record_failed_fetch(video);
         }
+        Ok(VideoStepOutcome::Settled)
     }
 }
 
