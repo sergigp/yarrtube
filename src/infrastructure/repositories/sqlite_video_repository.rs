@@ -732,6 +732,56 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_every_step_state() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(1_000, 0).unwrap();
+        let failed_at = DateTime::<Utc>::from_timestamp(900, 0).unwrap();
+        let attempts = |failed| RetryAttempts {
+            failed,
+            last_failed_at: Some(failed_at),
+        };
+        let step = |status, failed| StepState {
+            status,
+            attempts: attempts(failed),
+        };
+        let checked = |status, failed| LateDataChecks {
+            state: step(status, failed),
+            last_checked_at: Some(failed_at),
+        };
+        let video = Video {
+            status: VideoStatus::Retrying,
+            download_attempts: attempts(3),
+            download_failure: Some("HTTP Error 503".to_string()),
+            thumbnail: step(StepStatus::Failed, 11),
+            subtitles: checked(StepStatus::Retrying, 2),
+            chapters_checks: LateDataChecks {
+                state: StepState::pending().unavailable(),
+                last_checked_at: Some(failed_at),
+            },
+            quality_checks: checked(StepStatus::Failed, 11),
+            summary: step(StepStatus::Retrying, 1),
+            categorization: step(StepStatus::Failed, 11),
+            ..video("Every step", now)
+        };
+
+        repo.insert(&video).unwrap();
+        let inserted = repo.find(&video.id).unwrap();
+        let retried = video.clone().retry(now);
+        repo.update(&retried).unwrap();
+
+        assert_eq!(
+            (inserted, repo.find(&video.id).unwrap()),
+            (
+                Some(video),
+                Some(Video {
+                    version: 1,
+                    ..retried
+                })
+            )
+        );
+    }
+
+    #[test]
     fn it_should_read_a_pending_summary_for_a_new_video() {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());

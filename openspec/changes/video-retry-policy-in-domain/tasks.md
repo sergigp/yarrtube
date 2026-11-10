@@ -71,7 +71,7 @@
 - [x] 3.5 sqlite_migrations: `it_should_map_subtitle_states_when_migrating`
 - [x] 3.6 sqlite_migrations: `it_should_map_settled_chapters_and_quality_when_migrating`
 - [x] 3.7 sqlite_migrations: `it_should_map_summary_states_and_verdicts_when_migrating`
-- [ ] 3.8 sqlite_video_repository: `it_should_round_trip_every_step_state`
+- [x] 3.8 sqlite_video_repository: `it_should_round_trip_every_step_state`
 - [ ] 3.9 sqlite_video_category_verdict_repository: `it_should_delete_only_the_failed_verdicts_of_a_video`
 
 ## 4. Verification
