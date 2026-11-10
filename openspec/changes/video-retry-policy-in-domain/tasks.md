@@ -40,7 +40,7 @@
 - [x] 2.21 `it_should_schedule_the_next_check_if_the_quality_check_fails`
 - [x] 2.22 `it_should_fail_the_quality_after_the_eleventh_failed_check`
 - [x] 2.23 `it_should_schedule_the_next_attempt_if_the_summary_is_rejected`
-- [ ] 2.24 `it_should_count_ollama_down_as_a_failed_summary_attempt`
+- [x] 2.24 `it_should_count_ollama_down_as_a_failed_summary_attempt`
 - [ ] 2.25 `it_should_fail_the_summary_after_the_eleventh_failed_attempt`
 - [ ] 2.26 `it_should_mark_the_summary_done_once_generated`
 - [ ] 2.27 `it_should_schedule_the_next_attempt_if_a_category_is_rejected`

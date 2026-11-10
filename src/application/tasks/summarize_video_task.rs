@@ -1056,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_when_ollama_is_unreachable() {
+    fn it_should_count_ollama_down_as_a_failed_summary_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1078,16 +1078,25 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "connection refused".to_string(),
+            })
+        );
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone())
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
         );
     }
 
     #[test]
-    fn it_should_skip_when_the_model_is_not_installed() {
+    fn it_should_count_a_missing_model_as_a_failed_summary_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1115,11 +1124,20 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "qwen3:4b isn't installed on Ollama".to_string(),
+            })
+        );
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(video.clone())
+            Some(Video {
+                version: 1,
+                ..video.clone().record_summary_failure(later())
+            })
         );
     }
 

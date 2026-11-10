@@ -35,6 +35,8 @@ enum Skip {
     NotWanted(&'static str),
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
+    /// Ollama can't be reached or hasn't the saved model: a failed attempt.
+    Unreachable(anyhow::Error),
 }
 
 /// Why a generation failed.
@@ -100,8 +102,10 @@ impl VideoSummarizer {
 }
 
 pub trait VideoSummarizerApi: Send + Sync {
-    /// See the `video-summaries` capability. A failed attempt is recorded on
-    /// the video under the `video-retries` policy.
+    /// See the `video-summaries` capability. A rejected call, a server fault,
+    /// an unreadable transcript, Ollama unreachable or the model missing is a
+    /// failed attempt, recorded on the video and re-queued under the
+    /// `video-retries` policy.
     fn summarize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
@@ -116,6 +120,10 @@ impl VideoSummarizerApi for VideoSummarizer {
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't summarize video");
                 Ok(VideoStepOutcome::Settled)
+            }
+            Err(Skip::Unreachable(reason)) => {
+                warn!(video_id = %video.id, %reason, "couldn't summarize video");
+                self.record_failure(video, reason.to_string())
             }
         }
     }
@@ -140,10 +148,14 @@ impl VideoSummarizer {
         if !owner.summaries_enabled {
             return Err(Skip::NotWanted("its channel or playlist has summaries off"));
         }
-        let server = self.llm_server_repository.find(&url)?;
+        let server = self
+            .llm_server_repository
+            .find(&url)
+            .map_err(Skip::Unreachable)?;
         let model = server
             .model(settings.model.as_str())
-            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?;
+            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))
+            .map_err(Skip::Unreachable)?;
         let thinking = settings.thinking && model.thinking;
         let prompt = settings
             .effective_prompt()
