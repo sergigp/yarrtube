@@ -378,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_mark_an_old_video_without_captions_unavailable() {
+    fn it_should_mark_old_subtitles_unavailable_without_captions() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
