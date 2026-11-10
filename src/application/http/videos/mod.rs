@@ -1065,7 +1065,7 @@ mod tests {
                 title,
                 fixed_timestamp(),
             );
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             playlist_video_repository
                 .save(&PlaylistVideo::create(
                     PlaylistId::new("PL1").unwrap(),
@@ -1130,7 +1130,7 @@ mod tests {
                 1,
             ),
         ] {
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             playlist_video_repository
                 .save(&PlaylistVideo::create(
                     PlaylistId::new("PL1").unwrap(),
@@ -3690,7 +3690,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100));
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3709,6 +3709,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 playback_position: PlaybackPosition::new(30).unwrap(),
                 last_played_at: Some(watched_timestamp()),
                 ..video
@@ -3717,11 +3718,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_record_progress_on_every_copy_keeping_their_download_fields() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let downloaded = video_with_duration("vid1", Some(100));
+        let downloading = Video {
+            id: VideoId::new("rec-vid1-copy").unwrap(),
+            filename: Some("Season 2023/S2023E111401 - My Video.mp4".to_string()),
+            episode_number: Some(EpisodeNumber::from_columns(2023, 111401).unwrap()),
+            ..new_video(
+                YoutubeVideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp())
+        };
+        video_repository.insert(&downloaded).unwrap();
+        video_repository.insert(&downloading).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response =
+            record_progress(video_watch_state_updater, "rec-vid1", progress_request(30)).await;
+
+        assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                Video {
+                    version: 1,
+                    playback_position: PlaybackPosition::new(30).unwrap(),
+                    last_played_at: Some(watched_timestamp()),
+                    ..downloaded
+                },
+                Video {
+                    version: 1,
+                    playback_position: PlaybackPosition::new(30).unwrap(),
+                    last_played_at: Some(watched_timestamp()),
+                    ..downloading
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_respond_watched_when_progress_reaches_the_watched_threshold() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100));
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3740,6 +3793,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 watched_at: Some(watched_timestamp()),
                 last_played_at: Some(watched_timestamp()),
                 ..video
@@ -3755,7 +3809,7 @@ mod tests {
             playback_position: PlaybackPosition::new(60).unwrap(),
             ..video_with_duration("vid1", Some(100))
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3774,6 +3828,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 watched_at: Some(watched_timestamp()),
                 playback_position: PlaybackPosition::start(),
                 last_played_at: Some(watched_timestamp()),
@@ -3787,7 +3842,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", None);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3809,6 +3864,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 watched_at: Some(watched_timestamp()),
                 last_played_at: Some(watched_timestamp()),
                 ..video
@@ -3821,7 +3877,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", None);
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3840,6 +3896,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 playback_position: PlaybackPosition::new(500).unwrap(),
                 last_played_at: Some(watched_timestamp()),
                 ..video
@@ -3852,7 +3909,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3874,6 +3931,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 watched_at: None,
                 playback_position: PlaybackPosition::new(11).unwrap(),
                 last_played_at: Some(watched_timestamp()),
@@ -3887,7 +3945,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3909,6 +3967,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 last_played_at: Some(watched_timestamp()),
                 ..video
             }]
@@ -3964,11 +4023,13 @@ mod tests {
             video_repository.list().unwrap(),
             vec![
                 Video {
+                    version: 1,
                     playback_position: PlaybackPosition::new(40).unwrap(),
                     last_played_at: Some(watched_timestamp()),
                     ..channel_copy
                 },
                 Video {
+                    version: 1,
                     playback_position: PlaybackPosition::new(40).unwrap(),
                     last_played_at: Some(watched_timestamp()),
                     ..playlist_copy
@@ -3982,7 +4043,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4004,6 +4065,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 last_played_at: Some(watched_timestamp()),
                 ..video
             }]
@@ -4015,7 +4077,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4034,7 +4096,13 @@ mod tests {
         let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
 
         assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video
+            }]
+        );
     }
 
     #[tokio::test]
@@ -4042,7 +4110,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100));
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4134,7 +4202,7 @@ mod tests {
             playback_position: PlaybackPosition::new(40).unwrap(),
             ..video_with_duration("vid1", Some(100))
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4152,6 +4220,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 watched_at: Some(watched_timestamp()),
                 playback_position: PlaybackPosition::start(),
                 ..video
@@ -4207,10 +4276,12 @@ mod tests {
             video_repository.list().unwrap(),
             vec![
                 Video {
+                    version: 1,
                     watched_at: Some(watched_timestamp()),
                     ..channel_copy
                 },
                 Video {
+                    version: 1,
                     watched_at: Some(watched_timestamp()),
                     ..playlist_copy
                 },
@@ -4223,7 +4294,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = started_video("vid1", "My Video", 40, fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4241,6 +4312,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 watched_at: Some(watched_timestamp()),
                 playback_position: PlaybackPosition::start(),
                 last_played_at: Some(fixed_timestamp()),
@@ -4254,7 +4326,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4281,7 +4353,7 @@ mod tests {
             "My Video",
             fixed_timestamp(),
         );
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4307,7 +4379,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = video_with_duration("vid1", Some(100));
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -4548,7 +4620,7 @@ mod tests {
         .iter()
         .zip(0..)
         .for_each(|(video, position)| {
-            video_repository.save(video).unwrap();
+            video_repository.insert(video).unwrap();
             playlist_video_repository
                 .save(&PlaylistVideo::create(
                     PlaylistId::new("PL1").unwrap(),
@@ -7016,7 +7088,9 @@ mod tests {
         playlist_id: &str,
         video: &Video,
     ) {
-        video_repository.save(video).unwrap();
+        // A video tracked by two sources is stored once, as last seeded.
+        video_repository.delete(&video.id).unwrap();
+        video_repository.insert(video).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new(playlist_id).unwrap(),
@@ -7034,7 +7108,9 @@ mod tests {
         video: &Video,
         position: i64,
     ) {
-        video_repository.save(video).unwrap();
+        // A video tracked by two sources is stored once, as last seeded.
+        video_repository.delete(&video.id).unwrap();
+        video_repository.insert(video).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new(handle).unwrap(),

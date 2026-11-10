@@ -47,7 +47,7 @@ pub use download_failure::DownloadFailure;
 pub use downloaded_video::DownloadedVideo;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
-pub use errors::{ListVideosError, ReadSubtitlesError, UpdateWatchStateError};
+pub use errors::{ListVideosError, ReadSubtitlesError, StaleVideo, UpdateWatchStateError};
 pub use events::{VideoDownloaded, VideoSubtitlesFetched};
 pub use fetched_thumbnail::FetchedThumbnail;
 pub use home_category_section::HomeCategorySection;

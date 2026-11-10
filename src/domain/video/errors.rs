@@ -15,6 +15,19 @@ impl fmt::Display for VideoError {
 
 impl std::error::Error for VideoError {}
 
+/// An update of a video read at a version another writer has since moved
+/// past: re-read it and apply the change again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaleVideo(pub VideoId);
+
+impl fmt::Display for StaleVideo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "video {} changed since it was read", self.0)
+    }
+}
+
+impl std::error::Error for StaleVideo {}
+
 #[derive(Debug)]
 pub enum ListVideosError {
     PlaylistNotFound(PlaylistId),

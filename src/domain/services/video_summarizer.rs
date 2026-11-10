@@ -1,6 +1,8 @@
 use crate::domain::llm_server::{LlmChat, MIN_CHAT_TIMEOUT, OllamaUrl};
 use crate::domain::preferences::{SummaryPrompt, SummarySettings};
-use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::services::{
+    VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
+};
 use crate::domain::video::{Video, VideoOwner};
 use crate::domain::video_summary::{
     PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
@@ -68,6 +70,7 @@ pub struct VideoSummarizer {
     llm_server_repository: Arc<dyn LlmServerRepository>,
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
     clock: Arc<dyn Clock>,
+    video_updater: VideoUpdater,
 }
 
 impl VideoSummarizer {
@@ -83,6 +86,7 @@ impl VideoSummarizer {
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_owner_finder,
             preferences_repository,
@@ -97,7 +101,7 @@ impl VideoSummarizer {
 
 pub trait VideoSummarizerApi: Send + Sync {
     /// See the `video-summaries` capability. An error fails the task, for the
-    /// queue to retry. Holds no `VideoLock`: generation takes minutes.
+    /// queue to retry.
     fn summarize(&self, video: &Video, is_last_attempt: bool) -> anyhow::Result<()>;
 }
 
@@ -181,8 +185,11 @@ impl VideoSummarizer {
 
     /// Best effort: the error being reported matters more than this one.
     fn give_up(&self, video: &Video) {
-        let unavailable = video.clone().mark_summary_unavailable(self.clock.now());
-        if let Err(e) = self.video_repository.update_summary(&unavailable) {
+        let now = self.clock.now();
+        if let Err(e) = self
+            .video_updater
+            .update(&video.id, |video| Some(video.mark_summary_unavailable(now)))
+        {
             error!(video_id = %video.id, error = %e, "failed to give up on a summary");
         }
     }
@@ -199,10 +206,10 @@ impl VideoSummarizer {
             "generating video summary"
         );
         let text = self.write_summary(video, &input, job)?;
-        let Some(stored) = self.still_wanted(video)? else {
+        if self.still_wanted(video)?.is_none() {
             info!(video_id = %video.id, "video no longer wants a summary, dropping the generated one");
             return Ok(());
-        };
+        }
         let now = self.clock.now();
         self.video_summary_repository.save(&VideoSummary::create(
             video.id.clone(),
@@ -210,8 +217,11 @@ impl VideoSummarizer {
             &job.settings.model,
             now,
         ))?;
-        self.video_repository
-            .update_summary(&stored.mark_summary_generated(now))?;
+        self.video_updater.update(&video.id, |video| {
+            video
+                .is_summarizable()
+                .then(|| video.mark_summary_generated(now))
+        })?;
         info!(
             video_id = %video.id,
             summary = %text.as_str(),

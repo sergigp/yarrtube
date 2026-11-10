@@ -2,7 +2,7 @@ use crate::domain::preferences::Preferences;
 use crate::domain::services::{
     MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategorizer, VideoCategorizerApi,
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
-    VideoRelocator, VideoRelocatorApi,
+    VideoRelocator, VideoRelocatorApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
     Video, VideoId, VideoOwner, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
@@ -14,7 +14,6 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
-use crate::infrastructure::shared::video_lock::VideoLock;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
@@ -27,13 +26,13 @@ const DOWNLOAD_VIDEO_TASK_TYPE: &str = "download_video";
 #[derive(Clone)]
 pub struct VideoReconciler {
     video_repository: Arc<dyn VideoRepository>,
+    video_updater: VideoUpdater,
     video_owner_finder: Arc<VideoOwnerFinder>,
     task_repository: Arc<dyn TaskRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     metadata_generator: Arc<MetadataGenerator>,
     video_relocator: Arc<VideoRelocator>,
-    video_lock: Arc<VideoLock>,
     clock: Arc<dyn Clock>,
     video_category_assigner: VideoCategoryAssigner,
     preferences_repository: Arc<dyn PreferencesRepository>,
@@ -50,13 +49,13 @@ impl VideoReconciler {
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         metadata_generator: Arc<MetadataGenerator>,
         video_relocator: Arc<VideoRelocator>,
-        video_lock: Arc<VideoLock>,
         clock: Arc<dyn Clock>,
         video_category_assigner: VideoCategoryAssigner,
         preferences_repository: Arc<dyn PreferencesRepository>,
         video_categorizer: Arc<VideoCategorizer>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_owner_finder,
             task_repository,
@@ -64,7 +63,6 @@ impl VideoReconciler {
             video_metadata_repository,
             metadata_generator,
             video_relocator,
-            video_lock,
             clock,
             video_category_assigner,
             preferences_repository,
@@ -74,7 +72,8 @@ impl VideoReconciler {
 }
 
 pub trait VideoReconcilerApi: Send + Sync {
-    /// Brings the stored video to its desired state, holding its lock:
+    /// Brings the stored video to its desired state (run by the `sync_video`
+    /// task, so never alongside another task for the same video):
     /// categories, broken-file reset, errored recovery, metadata repair,
     /// stranded warning, then schedules every step still needed. No-op if
     /// the video or its owner is gone. Idempotent.
@@ -83,7 +82,6 @@ pub trait VideoReconcilerApi: Send + Sync {
 
 impl VideoReconcilerApi for VideoReconciler {
     fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<()> {
-        let _guard = self.video_lock.lock(video_id);
         let Some(video) = self.video_repository.find(video_id)? else {
             return Ok(());
         };
@@ -131,9 +129,11 @@ impl VideoReconciler {
     }
 
     fn reset_for_redownload(&self, video: Video) -> anyhow::Result<Video> {
-        let reset = video.reset_for_redownload(self.clock.now());
-        self.video_repository.update(&reset)?;
-        Ok(reset)
+        let now = self.clock.now();
+        let reset = self
+            .video_updater
+            .update(&video.id, |video| Some(video.reset_for_redownload(now)))?;
+        Ok(reset.unwrap_or(video))
     }
 
     /// Gives an `Errored` video (one that exhausted its download retries)

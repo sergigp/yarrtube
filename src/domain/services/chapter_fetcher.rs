@@ -1,3 +1,4 @@
+use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
 use crate::domain::video::{Video, VideoChapter};
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_chapter_repository::ChapterRepository;
@@ -12,7 +13,7 @@ use tracing::warn;
 /// `VideoReconciler` decides when to schedule it.
 #[derive(Clone)]
 pub struct ChapterFetcher {
-    video_repository: Arc<dyn VideoRepository>,
+    video_updater: VideoUpdater,
     chapter_repository: Arc<dyn ChapterRepository>,
     clock: Arc<dyn Clock>,
 }
@@ -24,7 +25,7 @@ impl ChapterFetcher {
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
-            video_repository,
+            video_updater: VideoUpdater::new(video_repository),
             chapter_repository,
             clock,
         }
@@ -78,18 +79,14 @@ impl ChapterFetcher {
         chapters: Option<Vec<VideoChapter>>,
         published_at: Option<DateTime<Utc>>,
     ) -> anyhow::Result<()> {
-        let Some(stored) = self.video_repository.find(&video.id)? else {
-            return Ok(());
-        };
-        if !stored.is_chapters_fetchable() {
-            return Ok(());
-        }
-        let published_at = published_at.unwrap_or(stored.created_at);
-        self.video_repository
-            .update_chapters(&stored.record_chapters_check(
-                chapters,
-                published_at,
-                self.clock.now(),
-            ))
+        let now = self.clock.now();
+        self.video_updater
+            .update(&video.id, |video| {
+                let published_at = published_at.unwrap_or(video.created_at);
+                video
+                    .is_chapters_fetchable()
+                    .then(|| video.record_chapters_check(chapters.clone(), published_at, now))
+            })
+            .map(|_| ())
     }
 }

@@ -59,7 +59,7 @@ mod tests {
         let chapter_repository =
             Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
@@ -75,6 +75,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 chapters: Some(intro_chapters()),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(later()),
@@ -104,7 +105,7 @@ mod tests {
             },
             ..downloaded_video().with_chapters(vec![], fixed_timestamp())
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
@@ -120,6 +121,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 chapters: Some(intro_chapters()),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(later()),
@@ -142,7 +144,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let chapter_repository = Arc::new(FakeChapterRepository::with_chapters(Ok(vec![])));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
@@ -158,6 +160,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 chapters: Some(vec![]),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(later()),
@@ -178,7 +181,7 @@ mod tests {
             published_at: Some(later() - Duration::days(30)),
         })));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
@@ -194,6 +197,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 chapters: Some(vec![]),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(later()),
@@ -214,7 +218,7 @@ mod tests {
             anyhow::anyhow!("Video unavailable"),
         )));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
@@ -230,6 +234,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(later()),
                     failed_attempts: 1,
@@ -259,7 +264,7 @@ mod tests {
             },
             ..downloaded_video()
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
@@ -275,6 +280,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 1,
                 chapters: Some(vec![]),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(later()),
@@ -301,7 +307,7 @@ mod tests {
             chapters_settled: true,
             ..downloaded_video().with_chapters(vec![], fixed_timestamp())
         };
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = FetchChaptersTask::new(
             video_repository.clone(),
             Arc::new(ChapterFetcher::new(
@@ -351,7 +357,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let played = video.clone().update_watch_state(
             PlaybackPosition::new(120).unwrap(),
             None,
@@ -379,6 +385,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 2,
                 chapters: Some(intro_chapters()),
                 chapters_checks: LateDataChecks {
                     last_checked_at: Some(later()),
@@ -396,7 +403,7 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = downloaded_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let chapter_repository = Arc::new({
             let video_repository = video_repository.clone();
             let deleted_id = video.id.clone();

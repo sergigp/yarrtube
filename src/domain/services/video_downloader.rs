@@ -1,6 +1,7 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
-    MetadataGenerator, MetadataGeneratorApi, VideoOwnerFinder, VideoOwnerFinderApi,
+    MetadataGenerator, MetadataGeneratorApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater,
+    VideoUpdaterApi,
 };
 use crate::domain::shared::Quality;
 use crate::domain::video::{
@@ -67,6 +68,7 @@ pub struct VideoDownloader {
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     staging_area: Arc<StagingArea>,
+    video_updater: VideoUpdater,
 }
 
 impl VideoDownloader {
@@ -84,6 +86,7 @@ impl VideoDownloader {
         staging_area: Arc<StagingArea>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_owner_finder,
             video_downloader_repository,
@@ -114,7 +117,9 @@ impl VideoDownloaderApi for VideoDownloader {
         let Some((video, target)) = self.find_downloadable(&video_id)? else {
             return Ok(());
         };
-        let started = self.start_download(video)?;
+        let Some(started) = self.start_download(&video.id)? else {
+            return Ok(());
+        };
         let metadata = self.fetch_metadata(&started);
         let staged = self.staging_area.for_video(&started.id);
         let attempt = self.run_download(&started, target.quality, staged.path());
@@ -145,9 +150,16 @@ impl VideoDownloader {
         Ok(Some((video, owner.target)))
     }
 
-    fn start_download(&self, video: Video) -> anyhow::Result<Video> {
-        let started = video.start_download(self.clock.now());
-        self.video_repository.update(&started)?;
+    /// The video as stored once its download started; `None` (logged) when
+    /// it is gone or its download is already settled.
+    fn start_download(&self, video_id: &VideoId) -> anyhow::Result<Option<Video>> {
+        let now = self.clock.now();
+        let started = self.video_updater.update(video_id, |video| {
+            (!video.is_download_settled()).then(|| video.start_download(now))
+        })?;
+        if started.is_none() {
+            debug!(video_id = %video_id, "video gone or already settled, skipping download");
+        }
         Ok(started)
     }
 
@@ -193,8 +205,8 @@ impl VideoDownloader {
     /// it downloaded: then nothing is placed, and `download` discards its
     /// staging dir like on every other outcome, so nothing outlives it. This
     /// re-read can't reuse `find_downloadable`'s: the download in between
-    /// runs for minutes. `save` reads once more right before writing, so
-    /// watch state recorded while the files were placed isn't lost either.
+    /// runs for minutes. The outcome is then recorded through `VideoUpdater`,
+    /// so watch state recorded while the files were placed isn't lost either.
     fn record_unless_deleted(
         &self,
         started: Video,
@@ -227,8 +239,11 @@ impl VideoDownloader {
             self.write_nfo(&video, metadata, &number, &files.nfo_path);
         }
         self.move_into_place(&downloaded, output_dir, &files)?;
-        let downloaded_video =
-            self.record_downloaded(video, &downloaded, &files, quality, number)?;
+        let Some(downloaded_video) =
+            self.record_downloaded(&video.id, &downloaded, &files, quality, number)?
+        else {
+            return Ok(());
+        };
         self.save_metadata(&downloaded_video, metadata, &number, &files);
         self.publish_downloaded(&downloaded_video, output_dir, &number);
         Ok(())
@@ -246,40 +261,47 @@ impl VideoDownloader {
             .assign_episode_number(&video.id, published_at)
     }
 
+    /// The video as stored once downloaded; `None` if it was deleted while
+    /// its files were placed.
     fn record_downloaded(
         &self,
-        video: Video,
+        video_id: &VideoId,
         downloaded: &DownloadedVideo,
         files: &EpisodeFiles,
         quality: Quality,
         number: EpisodeNumber,
-    ) -> anyhow::Result<Video> {
+    ) -> anyhow::Result<Option<Video>> {
         let now = self.clock.now();
-        let published_at = downloaded.published_at.unwrap_or(video.created_at);
-        let downloaded_video = video
-            .mark_downloaded(
-                quality,
-                files.filename.clone(),
-                files.thumbnail_filename.clone(),
-                downloaded.duration_seconds,
-                now,
-            )
-            .with_episode_number(number, now)
-            .record_downloaded_quality(
-                quality,
-                downloaded.height,
-                downloaded.sabr_notice.is_some(),
-                published_at,
-                now,
-            );
-        let downloaded_video = match &downloaded.chapters {
-            Some(chapters) => {
-                downloaded_video.record_chapters_check(Some(chapters.clone()), published_at, now)
-            }
-            None => downloaded_video,
-        };
-        let downloaded_video = self.save(downloaded_video)?;
-        info!(video_id = %downloaded_video.id, "video downloaded");
+        let downloaded_video = self.video_updater.update(video_id, |video| {
+            let published_at = downloaded.published_at.unwrap_or(video.created_at);
+            let downloaded_video = video
+                .mark_downloaded(
+                    quality,
+                    files.filename.clone(),
+                    files.thumbnail_filename.clone(),
+                    downloaded.duration_seconds,
+                    now,
+                )
+                .with_episode_number(number, now)
+                .record_downloaded_quality(
+                    quality,
+                    downloaded.height,
+                    downloaded.sabr_notice.is_some(),
+                    published_at,
+                    now,
+                );
+            Some(match &downloaded.chapters {
+                Some(chapters) => downloaded_video.record_chapters_check(
+                    Some(chapters.clone()),
+                    published_at,
+                    now,
+                ),
+                None => downloaded_video,
+            })
+        })?;
+        if downloaded_video.is_some() {
+            info!(video_id = %video_id, "video downloaded");
+        }
         Ok(downloaded_video)
     }
 
@@ -371,7 +393,9 @@ impl VideoDownloader {
     /// without error, so no retry is scheduled and it is not dead-lettered.
     fn exclude(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
         let video_id = started.id.clone();
-        self.save(started.mark_excluded(self.clock.now()))?;
+        let now = self.clock.now();
+        self.video_updater
+            .update(&video_id, |video| Some(video.mark_excluded(now)))?;
         info!(video_id = %video_id, reason = %failure.reason(), "excluding permanently-unavailable video");
         Ok(())
     }
@@ -407,37 +431,29 @@ impl VideoDownloader {
 
     /// Placing a successful download failed (numbering, moving or recording
     /// it): errors the video like a failed download, so it settles as
-    /// errored instead of staying in progress. Re-reads the video so a
-    /// number assigned before the failure is kept; that read already holds
-    /// the current watch state, so it is written as is rather than through
-    /// `save`'s second read. A video deleted meanwhile gets nothing recorded.
+    /// errored instead of staying in progress. Applied to the video as
+    /// stored, so a number assigned before the failure is kept; a video
+    /// deleted meanwhile gets nothing recorded.
     fn record_placement_errored(
         &self,
         started: Video,
         error: anyhow::Error,
         is_last_attempt: bool,
     ) -> anyhow::Result<()> {
-        let Some(current) = self.video_repository.find(&started.id)? else {
-            return Err(error);
-        };
-        let video_id = current.id.clone();
-        self.video_repository
-            .update(&self.errored(current, is_last_attempt))?;
-        Self::fail_errored(&video_id, error)
+        self.record_errored(started, error, is_last_attempt)
     }
 
     fn mark_errored(&self, started: Video, is_last_attempt: bool) -> anyhow::Result<()> {
-        self.save(self.errored(started, is_last_attempt))
+        let now = self.clock.now();
+        self.video_updater
+            .update(&started.id, |video| {
+                Some(if is_last_attempt {
+                    video.mark_errored(now)
+                } else {
+                    video.mark_errored_retrying(now)
+                })
+            })
             .map(|_| ())
-    }
-
-    /// The video errored: permanently on the last attempt, else retrying.
-    fn errored(&self, video: Video, is_last_attempt: bool) -> Video {
-        if is_last_attempt {
-            video.mark_errored(self.clock.now())
-        } else {
-            video.mark_errored_retrying(self.clock.now())
-        }
     }
 
     /// Logs a systemic download error and returns it, so the task queue
@@ -445,17 +461,6 @@ impl VideoDownloader {
     fn fail_errored(video_id: &VideoId, error: anyhow::Error) -> anyhow::Result<()> {
         error!(video_id = %video_id, error = %error, "video download errored");
         Err(error)
-    }
-
-    /// Saves `video` with the watch state stored now, not the one read when
-    /// the download started; a video gone meanwhile is saved as given.
-    fn save(&self, video: Video) -> anyhow::Result<Video> {
-        let saved = match self.video_repository.find(&video.id)? {
-            Some(current) => video.with_watch_state_of(&current),
-            None => video,
-        };
-        self.video_repository.update(&saved)?;
-        Ok(saved)
     }
 
     /// Builds `video`'s metadata with its playlist position (no `thumb` yet)

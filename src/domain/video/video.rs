@@ -75,6 +75,9 @@ pub struct Video {
     /// Whether the downloaded quality is final: never checked again.
     pub quality_settled: bool,
     pub summary_state: SummaryState,
+    /// Bumped by every stored update; an update only applies on top of the
+    /// version it was read at — see the `video-write-consistency` capability.
+    pub version: u32,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -113,6 +116,7 @@ impl Video {
             quality_checks: LateDataChecks::default(),
             quality_settled: false,
             summary_state: SummaryState::Missing,
+            version: 0,
         }
     }
 
@@ -174,12 +178,27 @@ impl Video {
         }
     }
 
+    /// This video retitled, as its source now lists it.
+    pub fn with_title(self, title: impl Into<String>, now: DateTime<Utc>) -> Self {
+        Self {
+            title: title.into(),
+            updated_at: now,
+            ..self
+        }
+    }
+
+    /// This video as stored after one more update.
+    pub fn next_version(self) -> Self {
+        Self {
+            version: self.version + 1,
+            ..self
+        }
+    }
+
     /// Records a thumbnail fetched independently of, and ahead of, the
     /// video's full download — see the `video-thumbnails` capability.
     /// Touches only `thumbnail_filename`/`updated_at`, leaving `status`,
-    /// `filename`, and `quality` exactly as they were. Stored through
-    /// `VideoRepository::update_thumbnail`, which writes only that column.
-    #[cfg(test)]
+    /// `filename`, and `quality` exactly as they were.
     pub fn with_thumbnail(self, thumbnail_filename: impl Into<String>, now: DateTime<Utc>) -> Self {
         Self {
             thumbnail_filename: Some(thumbnail_filename.into()),
@@ -270,17 +289,6 @@ impl Video {
         }
     }
 
-    /// This video with `current`'s watch state: `watched_at`,
-    /// `playback_position` and `last_played_at`.
-    pub fn with_watch_state_of(self, current: &Video) -> Self {
-        Self {
-            watched_at: current.watched_at,
-            playback_position: current.playback_position,
-            last_played_at: current.last_played_at,
-            ..self
-        }
-    }
-
     pub fn is_watched(&self) -> bool {
         self.watched_at.is_some()
     }
@@ -352,7 +360,7 @@ impl Video {
 
     /// Records the fetched subtitle file: subtitle state Fetched, its check
     /// recorded as complete. Touches only the subtitle fields and
-    /// `updated_at`, stored through `VideoRepository::update_subtitles` only.
+    /// `updated_at`.
     pub fn mark_subtitles_fetched(
         self,
         subtitle_filename: impl Into<String>,
@@ -1093,5 +1101,22 @@ mod tests {
         let settled: Vec<bool> = videos.iter().map(Video::is_download_settled).collect();
 
         assert_eq!(settled, vec![false, false, true, false, true, true]);
+    }
+
+    #[test]
+    fn it_should_record_the_time_it_was_retitled() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video();
+
+        let retitled = video.clone().with_title("Renamed", now);
+
+        assert_eq!(
+            retitled,
+            Video {
+                title: "Renamed".to_string(),
+                updated_at: now,
+                ..video
+            }
+        );
     }
 }

@@ -102,7 +102,6 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use crate::infrastructure::shared::video_lock::VideoLock;
     use chrono::{DateTime, Duration, Utc};
     use std::sync::Arc;
 
@@ -117,7 +116,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         channel_repository.insert(&my_channel()).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
@@ -149,7 +148,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -189,7 +187,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         playlist_repository.insert(&my_playlist()).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
@@ -221,7 +219,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -291,7 +288,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -359,7 +355,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -427,7 +422,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -485,7 +479,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -555,7 +548,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -624,7 +616,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -693,7 +684,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -755,7 +745,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -817,7 +806,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -878,7 +866,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -911,7 +898,6 @@ mod tests {
             &channel_video_repository,
             &video,
         );
-        video_repository.update_subtitles(&video).unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
             video_repository.clone(),
             Arc::new(VideoOwnerFinder::new(
@@ -936,7 +922,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -991,7 +976,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1052,7 +1036,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1107,7 +1090,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1117,7 +1099,13 @@ mod tests {
         let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
@@ -1164,7 +1152,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             VideoCategoryAssigner::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1260,7 +1247,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             VideoCategoryAssigner::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1346,7 +1332,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             VideoCategoryAssigner::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1387,7 +1372,7 @@ mod tests {
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         SqlitePlaylistRepository::new(db.database())
             .insert(&my_playlist())
             .unwrap();
@@ -1430,7 +1415,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             VideoCategoryAssigner::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1490,7 +1474,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1512,7 +1495,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = my_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
             video_repository.clone(),
             Arc::new(VideoOwnerFinder::new(
@@ -1535,7 +1518,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1587,7 +1569,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1599,7 +1580,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+            vec![Video {
+                version: 2,
+                ..video.clone().reset_for_redownload(fixed_timestamp())
+            }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -1664,7 +1648,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1677,6 +1660,7 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
+                version: 2,
                 status: VideoStatus::Pending,
                 quality: None,
                 filename: None,
@@ -1748,7 +1732,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1760,7 +1743,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+            vec![Video {
+                version: 2,
+                ..video.clone().reset_for_redownload(fixed_timestamp())
+            }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -1812,7 +1798,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1824,7 +1809,10 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+            vec![Video {
+                version: 2,
+                ..video.clone().reset_for_redownload(fixed_timestamp())
+            }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -1876,7 +1864,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1886,7 +1873,13 @@ mod tests {
         let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
@@ -1937,7 +1930,6 @@ mod tests {
                 video_metadata_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -1966,7 +1958,13 @@ mod tests {
                 .with_thumb(Some("S2026E031501 - My Video.jpg".to_string()))
             )
         );
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -2025,7 +2023,6 @@ mod tests {
                 video_metadata_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2054,7 +2051,13 @@ mod tests {
                 .with_thumb(Some("S2026E031501 - My Video.jpg".to_string()))
             )
         );
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
@@ -2134,7 +2137,6 @@ mod tests {
                 video_metadata_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2204,7 +2206,6 @@ mod tests {
                 video_metadata_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2216,12 +2217,15 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().relocate_to_episode(
-                recovered_episode(),
-                "Season 2023/S2023E111401 - My Video.mp4",
-                Some("Season 2023/S2023E111401 - My Video.jpg".to_string()),
-                fixed_timestamp(),
-            )]
+            vec![Video {
+                version: 3,
+                ..video.clone().relocate_to_episode(
+                    recovered_episode(),
+                    "Season 2023/S2023E111401 - My Video.mp4",
+                    Some("Season 2023/S2023E111401 - My Video.jpg".to_string()),
+                    fixed_timestamp(),
+                )
+            }]
         );
         assert_eq!(
             *relocated_files.moved.lock().unwrap(),
@@ -2300,7 +2304,6 @@ mod tests {
                 video_metadata_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2310,7 +2313,13 @@ mod tests {
         let result = run(&task, &task_for(&video));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(*relocated_files.moved.lock().unwrap(), vec![]);
         assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
     }
@@ -2354,7 +2363,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2365,7 +2373,13 @@ mod tests {
         let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(1, &download_video(&video))]
@@ -2414,7 +2428,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2425,7 +2438,13 @@ mod tests {
         let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
@@ -2479,7 +2498,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2490,7 +2508,13 @@ mod tests {
         let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone()
+            }]
+        );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![ScheduledTask {
@@ -2540,7 +2564,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             Arc::new(SqlitePreferencesRepository::new(db.database())),
@@ -2574,7 +2597,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         seed_channel_with_summaries(&db, &video, true);
         preferences_repository.save(&summaries_on()).unwrap();
         let task = sync_task_of_downloaded_video(
@@ -2603,7 +2626,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = subtitled_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         seed_channel_with_summaries(&db, &video, false);
         preferences_repository.save(&summaries_on()).unwrap();
         let task = sync_task_of_downloaded_video(
@@ -2642,7 +2665,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             ));
             let video = subtitled_video();
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             seed_channel_with_summaries(&db, &video, true);
             preferences_repository.save(&preferences).unwrap();
             let task = sync_task_of_downloaded_video(
@@ -2676,7 +2699,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ));
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             seed_channel_with_summaries(&db, &video, true);
             preferences_repository.save(&summaries_on()).unwrap();
             let task = sync_task_of_downloaded_video(
@@ -2711,7 +2734,7 @@ mod tests {
                 summary_state,
                 ..subtitled_video()
             };
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             seed_channel_with_summaries(&db, &video, true);
             preferences_repository.save(&summaries_on()).unwrap();
             let task = sync_task_of_downloaded_video(
@@ -2739,7 +2762,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = summarized_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         seed_channel_with_categorization(&db, &video, true);
         SqliteCategoryRepository::new(db.database())
             .insert(&prompted_category("Sicilian", &[]))
@@ -2776,7 +2799,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ));
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             seed_channel_with_categorization(&db, &video, true);
             SqliteCategoryRepository::new(db.database())
                 .insert(&prompted_category("Sicilian", &[]))
@@ -2807,7 +2830,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = summarized_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         seed_channel_with_categorization(&db, &video, false);
         SqliteCategoryRepository::new(db.database())
             .insert(&prompted_category("Sicilian", &[]))
@@ -2853,7 +2876,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             ));
             let video = summarized_video();
-            video_repository.save(&video).unwrap();
+            video_repository.insert(&video).unwrap();
             seed_channel_with_categorization(&db, &video, true);
             SqliteCategoryRepository::new(db.database())
                 .insert(&prompted_category("Sicilian", &[]))
@@ -2886,7 +2909,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = summarized_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         seed_channel_with_categorization(&db, &video, true);
         [
             (prompted_category("Sicilian", &[]), Verdict::Yes),
@@ -2925,7 +2948,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = summarized_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         seed_channel_with_categorization(&db, &video, true);
         [
             prompted_category("Chess", &[CategoryMember::Channel(my_channel_id())]),
@@ -2957,7 +2980,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = summarized_video();
-        video_repository.save(&video).unwrap();
+        video_repository.insert(&video).unwrap();
         seed_channel_with_categorization(&db, &video, true);
         SqliteCategoryRepository::new(db.database())
             .insert(&prompted_category("Sicilian", &[]))
@@ -3013,7 +3036,6 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             video_category_assigner(db.database()),
             preferences_repository,
@@ -3139,7 +3161,7 @@ mod tests {
         channel_video_repository: &SqliteChannelVideoRepository,
         video: &Video,
     ) {
-        video_repository.save(video).unwrap();
+        video_repository.insert(video).unwrap();
         video_repository.update(video).unwrap();
         channel_repository.insert(&my_channel()).unwrap();
         channel_video_repository
@@ -3159,7 +3181,7 @@ mod tests {
         playlist_video_repository: &SqlitePlaylistVideoRepository,
         video: &Video,
     ) {
-        video_repository.save(video).unwrap();
+        video_repository.insert(video).unwrap();
         video_repository.update(video).unwrap();
         playlist_repository.insert(&my_playlist()).unwrap();
         playlist_video_repository

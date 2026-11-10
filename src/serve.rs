@@ -792,7 +792,8 @@ fn internal_video_reconciler(
     Arc::new(InternalVideoReconciler::new(
         infrastructure.video_repository.clone(),
         infrastructure.video_file_repository.clone(),
-        video_reconciler(infrastructure),
+        infrastructure.task_repository.clone(),
+        infrastructure.clock.clone(),
         videos_path(),
     ))
 }
@@ -819,7 +820,6 @@ fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler
         infrastructure.video_metadata_repository.clone(),
         metadata_generator(infrastructure),
         video_relocator(infrastructure),
-        infrastructure.video_lock.clone(),
         infrastructure.clock.clone(),
         video_category_assigner(infrastructure),
         infrastructure.preferences_repository.clone(),

@@ -113,23 +113,23 @@ Every step a video sync schedules SHALL be decided from the video's stored state
 - **THEN** nothing is scheduled
 
 ### Requirement: Reconcile Passes Sync Stored Videos
-During each playlist or channel reconcile pass, the system SHALL run the video sync of every video stored for the playlist or channel once its membership is up to date, including the videos the same pass newly added. A sync that fails for one video SHALL NOT stop the pass from syncing the others.
+During each playlist or channel reconcile pass, the system SHALL schedule the video sync of every video stored for the playlist or channel once its membership is up to date, including the videos the same pass newly added. Each sync SHALL run as its own task, so a sync that fails for one video SHALL NOT affect the pass or the other videos' syncs. A video whose sync is already pending SHALL NOT get a second one.
 
 #### Scenario: Stored video missing its subtitles
 - **WHEN** a reconcile pass runs for a channel with a Downloaded video whose subtitles are Missing, last checked more than 24 hours ago, and no subtitle fetch is pending
-- **THEN** a subtitle fetch for that video is scheduled
+- **THEN** a video sync of that video is scheduled, and once it runs a subtitle fetch for that video is scheduled
 
 #### Scenario: Video reset for redownload
 - **WHEN** a reconcile pass runs for a channel with a Downloaded video whose file is missing
-- **THEN** the video is reset to Pending and a thumbnail fetch and a download of it are scheduled
+- **THEN** a video sync of that video is scheduled, and once it runs the video is reset to Pending and a thumbnail fetch and a download of it are scheduled
 
 #### Scenario: Video newly added by the same pass
 - **WHEN** a reconcile pass adds a new video to a playlist
-- **THEN** a thumbnail fetch and a download of it are scheduled once, even though the video sync scheduled for its addition also runs
+- **THEN** one video sync of it is pending, even though its addition also asks for one
 
 #### Scenario: One video fails to sync
-- **WHEN** a reconcile pass syncs two videos and the first sync fails
-- **THEN** the second video is still synced and the pass completes
+- **WHEN** a reconcile pass schedules the syncs of two videos and the first sync fails
+- **THEN** the second video's sync still runs, and the failed one is retried like any other failing task
 
 ### Requirement: Sync Resets a Video Whose File Is Broken
 A video sync SHALL reset a Downloaded video whose recorded file is missing from its owner's show directory or is not an mp4 file: back to Pending, keeping its episode number, clearing its recorded filename, thumbnail filename, quality, height, duration and sync time, resetting its subtitle state to Missing with no subtitle filename, and making its subtitles, chapters and quality unsettled and never checked, with no failed attempts. The sync SHALL then schedule the steps that reset video needs.
@@ -204,11 +204,15 @@ A video sync SHALL log a warning for a stranded video: one whose download status
 - **THEN** no warning is logged and no additional download is scheduled
 
 ### Requirement: Concurrent Syncs Of One Video Are Serialized
-Two video syncs of the same video SHALL NOT run at the same time: a sync started while another sync of that video is running SHALL wait for it to finish, then run in full. Syncs of different videos SHALL NOT wait for each other.
+Two video syncs of the same video SHALL NOT run at the same time, nor SHALL a video sync run at the same time as any other task operating on that video (see `task-scheduling`'s "Per-Video Mutual Exclusion"). A sync that becomes eligible while another task of that video runs SHALL start once that task finishes, and decide from the state it left. Syncs of different videos SHALL NOT wait for each other.
 
 #### Scenario: Pass and event sync overlap
-- **WHEN** a reconcile pass syncs a video while a video sync scheduled by its download finishing starts for the same video
+- **WHEN** a reconcile pass schedules a video's sync while a video sync scheduled by its download finishing is running for the same video
 - **THEN** the second sync starts only once the first finished, and decides from the state the first left
+
+#### Scenario: Sync waits for a running subtitle fetch
+- **WHEN** a video's sync becomes eligible while that video's subtitle fetch is running
+- **THEN** the sync starts only once the subtitle fetch finished
 
 ### Requirement: Sync Schedules the Quality Check
 A video sync SHALL schedule a quality check (see `video-download`) for the video when it is Downloaded, its quality is unsettled and due for a check (last checked at least 24 hours earlier; see `late-video-data`), unless a quality check is already pending or running for it. A quality check SHALL run in the download lane and SHALL NOT run at the same time as another download, thumbnail fetch, subtitle fetch, chapters fetch or sync of the same video.
