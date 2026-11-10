@@ -9,10 +9,6 @@ use std::time::Duration;
 /// doesn't answer fails it quickly.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// A summary takes minutes on a small machine, and thinking can loop for an
-/// hour: past this, the call has failed.
-const CHAT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-
 /// Port to an LLM server's HTTP API.
 pub trait LlmServerRepository: Send + Sync {
     /// The server at `url`: its version and installed models, each with
@@ -23,15 +19,11 @@ pub trait LlmServerRepository: Send + Sync {
 }
 
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
-pub struct OllamaLlmServerRepository {
-    chat_timeout: Duration,
-}
+pub struct OllamaLlmServerRepository;
 
 impl OllamaLlmServerRepository {
     pub fn new() -> Self {
-        Self {
-            chat_timeout: CHAT_TIMEOUT,
-        }
+        Self
     }
 }
 
@@ -58,14 +50,14 @@ impl LlmServerRepository for OllamaLlmServerRepository {
     }
 
     fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
-        let client = Self::client(self.chat_timeout)?;
+        let client = Self::client(chat.timeout)?;
         let sent = client
             .post(format!("{url}/api/chat"))
             .json(&Self::chat_body(chat))
             .send();
         let response = match sent {
             Err(e) if e.is_timeout() && !e.is_connect() => {
-                let minutes = self.chat_timeout.as_secs() / 60;
+                let minutes = chat.timeout.as_secs() / 60;
                 return Ok(LlmReply::refused(format!(
                     "no answer within {minutes} minutes"
                 )));
@@ -404,11 +396,12 @@ mod tests {
         // Connections queue in the backlog but nobody ever answers.
         let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = OllamaUrl::new(format!("http://{}", silent.local_addr().unwrap())).unwrap();
-        let repository = OllamaLlmServerRepository {
-            chat_timeout: Duration::from_millis(100),
+        let chat = LlmChat {
+            timeout: Duration::from_millis(100),
+            ..chat()
         };
 
-        let reply = repository.chat(&url, &chat()).unwrap();
+        let reply = OllamaLlmServerRepository::new().chat(&url, &chat).unwrap();
 
         assert_eq!(reply, LlmReply::refused("no answer within 0 minutes"));
     }
