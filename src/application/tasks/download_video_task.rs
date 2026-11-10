@@ -45,6 +45,7 @@ mod tests {
     use crate::domain::video::PlaybackPosition;
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::RetryAttempts;
+    use crate::domain::video::StepState;
     use crate::domain::video::Video;
     use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
@@ -1459,6 +1460,55 @@ mod tests {
         );
         assert_eq!(video_repository.list().unwrap(), vec![video]);
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_download_a_retrying_video_once_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_dir = tempfile::tempdir().unwrap();
+        let video = retrying_video(3);
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            videos_dir.path(),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    height: Some(720),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 3,
+                status: VideoStatus::Downloaded,
+                download_attempts: RetryAttempts::default(),
+                download_failure: None,
+                quality: Some(Quality::High),
+                filename: Some("Season 2026/S2026E031501 - My Video.mp4".to_string()),
+                thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                thumbnail: StepState::pending().succeed(),
+                episode_number: Some(published_episode()),
+                downloaded_height: Some(720),
+                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
+                synced_at: Some(fixed_timestamp()),
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
     }
 
     #[test]
