@@ -70,7 +70,6 @@ export function changedFields(
     summaries_prompt: form.summaries_prompt,
     categorization_enabled: form.categorization_enabled,
     categorization_model: form.categorization_model,
-    categorization_context_length: toNumber(form.categorization_context_length),
     categorization_temperature: toNumber(form.categorization_temperature),
     categorization_thinking: categorizationThinking
       ? form.categorization_thinking
@@ -78,11 +77,31 @@ export function changedFields(
     categorization_prompt: form.categorization_prompt,
   }
   const before: PreferencesPatch = { ...saved, ollama_url: saved.ollama_url ?? '' }
-  return Object.fromEntries(
+  const changed: PreferencesPatch = Object.fromEntries(
     Object.entries(current).filter(
       ([key, value]) => !Object.is(value, before[key as keyof PreferencesPatch]),
     ),
   )
+  const contextLength = changedContextLength(saved, form)
+  return contextLength === undefined
+    ? changed
+    : { ...changed, categorization_context_length: contextLength }
+}
+
+/**
+ * The categorization context length to send: `null` to go back to Auto, the
+ * number shown once Auto is turned off (even unedited, to keep it), or
+ * `undefined` when nothing changed.
+ */
+function changedContextLength(saved: Preferences, form: AiSettingsForm): number | null | undefined {
+  if (form.categorization_context_length_auto) {
+    return saved.categorization_context_length_is_auto ? undefined : null
+  }
+  const typed = toNumber(form.categorization_context_length)
+  return !saved.categorization_context_length_is_auto &&
+    Object.is(typed, saved.categorization_context_length)
+    ? undefined
+    : typed
 }
 
 /** Whether `patch` has a number field that isn't one. */

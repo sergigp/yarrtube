@@ -64,6 +64,7 @@ describe('changedFields', () => {
     expect(
       changedFields(saved, {
         ...formFrom(saved),
+        categorization_context_length_auto: false,
         categorization_context_length: '8192',
         categorization_temperature: '0.5',
         categorization_thinking: false,
@@ -116,6 +117,53 @@ describe('changedFields', () => {
         summaries_temperature: '',
       }),
     ).toEqual({ summaries_context_length: Number.NaN, summaries_temperature: Number.NaN })
+  })
+})
+
+describe('changedFields for the categorization context length', () => {
+  const auto = aPreferences({
+    categorization_context_length: 16384,
+    categorization_context_length_is_auto: true,
+  })
+  const overridden = aPreferences({
+    categorization_context_length: 8192,
+    categorization_context_length_is_auto: false,
+  })
+
+  it('sends nothing while Auto stays on', () => {
+    expect(changedFields(auto, formFrom(auto))).toEqual({})
+  })
+
+  it('sends the number typed once Auto is off', () => {
+    const form = {
+      ...formFrom(auto),
+      categorization_context_length_auto: false,
+      categorization_context_length: '20480',
+    }
+
+    expect(changedFields(auto, form)).toEqual({ categorization_context_length: 20480 })
+  })
+
+  it('sends the shown value when Auto is turned off without editing it', () => {
+    const form = { ...formFrom(auto), categorization_context_length_auto: false }
+
+    expect(changedFields(auto, form)).toEqual({ categorization_context_length: 16384 })
+  })
+
+  it('sends null when Auto is turned back on', () => {
+    const form = { ...formFrom(overridden), categorization_context_length_auto: true }
+
+    expect(changedFields(overridden, form)).toEqual({ categorization_context_length: null })
+  })
+
+  it('sends nothing when Auto is turned off and on again', () => {
+    const form = {
+      ...formFrom(auto),
+      categorization_context_length_auto: true,
+      categorization_context_length: '20480',
+    }
+
+    expect(changedFields(auto, form)).toEqual({})
   })
 })
 
