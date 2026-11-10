@@ -28,9 +28,9 @@
 - [x] 2.8 `it_should_ask_each_category_alone_when_the_call_hits_the_output_limit`: 1 batch call plus N single calls, all stored.
 - [x] 2.9 `it_should_ask_each_category_alone_when_the_call_is_refused`.
 - [x] 2.10 `it_should_not_fall_back_for_a_single_category`: one rejected call, then the task fails.
-- [ ] 2.11 `it_should_mark_unavailable_only_what_its_own_call_rejected_on_the_last_attempt`.
-- [ ] 2.12 `it_should_stop_quietly_if_ollama_is_unreachable_during_the_fallback`.
-- [ ] 2.13 `it_should_keep_the_other_verdicts_of_a_call_when_one_prompt_changed_during_it`.
+- [x] 2.11 `it_should_mark_unavailable_only_what_its_own_call_rejected_on_the_last_attempt`.
+- [x] 2.12 `it_should_stop_quietly_if_ollama_is_unreachable_during_the_fallback`.
+- [x] 2.13 `it_should_keep_the_other_verdicts_of_a_call_when_one_prompt_changed_during_it`.
 - [ ] 2.14 `it_should_log_each_call_and_each_verdict`: the call line has the categories, `fallback`, the input and output tokens and the duration; each verdict gets its own line.
 - [ ] 2.15 `it_should_log_the_fallback`: the warning names the video, the reason and that each category is asked alone.
 - [ ] 2.16 `it_should_return_an_auto_context_length_from_the_categories_with_a_prompt` (preferences handler): 9 categories give 16384 with `is_auto` true.

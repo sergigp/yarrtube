@@ -566,6 +566,78 @@ mod tests {
     }
 
     #[test]
+    fn it_should_stop_quietly_if_ollama_is_unreachable_during_the_fallback() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[&prompted_category("Sicilian"), &prompted_category("Tech")],
+        );
+        let llm = llm_replying(vec![
+            Ok(LlmReply::refused("the prompt is too long")),
+            Err(anyhow::anyhow!("connection reset")),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run_last_attempt(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![vec!["Sicilian", "Tech"], vec!["Sicilian"]]
+        );
+        assert_eq!(
+            SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_the_other_verdicts_of_a_call_when_one_prompt_changed_during_it() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        seed(&db, &video, &[&sicilian, &tech]);
+        let (database, edited) = (
+            db.database(),
+            tech.clone().with_ai_prompt(Some(
+                CategoryPrompt::new("The video is about cooking.")
+                    .unwrap()
+                    .unwrap(),
+            )),
+        );
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply(&answers(&[("Sicilian", YES), ("Tech", YES)]))])
+                .with_on_chat(move || {
+                    SqliteCategoryRepository::new(database.clone())
+                        .update(&edited)
+                        .unwrap()
+                }),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![ai_verdict(
+                &video,
+                &sicilian,
+                Verdict::Yes,
+                "A Sicilian game."
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_read_the_answer_after_leaked_thinking() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
@@ -950,17 +1022,18 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_mark_rejected_categories_unavailable_on_the_last_attempt() {
+    fn it_should_mark_unavailable_only_what_its_own_call_rejected_on_the_last_attempt() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
         let video = summarized_video();
-        let (food, sicilian, tech) = (
+        let (chess, food, sicilian, tech) = (
+            prompted_category("Chess"),
             prompted_category("Food"),
             prompted_category("Sicilian"),
             prompted_category("Tech"),
         );
-        seed(&db, &video, &[&food, &sicilian, &tech]);
+        seed(&db, &video, &[&chess, &food, &sicilian, &tech]);
         let stopped_at_limit = Ok(LlmReply {
             stopped_at_limit: true,
             ..reply("").unwrap()
@@ -969,6 +1042,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             &db,
             llm_replying(vec![
                 Ok(LlmReply::refused("model is too large")),
+                reply(&answers(&[("Chess", NO)])),
                 stopped_at_limit,
                 Ok(LlmReply::refused("model is too large")),
                 reply("It might belong."),
@@ -990,9 +1064,12 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
-            by_category(
-                [&food, &sicilian, &tech].map(|category| unavailable_verdict(&video, category))
-            )
+            by_category([
+                ai_verdict(&video, &chess, Verdict::No, "A chess game."),
+                unavailable_verdict(&video, &food),
+                unavailable_verdict(&video, &sicilian),
+                unavailable_verdict(&video, &tech),
+            ])
         );
         assert_eq!(
             video_categories_repository
