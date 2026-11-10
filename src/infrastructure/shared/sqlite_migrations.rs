@@ -1201,6 +1201,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_map_settled_chapters_and_quality_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 27);
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, chapters, chapters_settled, chapters_failed_attempts, quality_settled, quality_failed_attempts) VALUES
+             ('gave_up', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 3, 1, 3),
+             ('none', 'yt2', 'B', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 0, 1, 0),
+             ('found', 'yt3', 'C', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[{\"start_seconds\":0,\"end_seconds\":10,\"title\":\"Intro\"}]', 1, 1, 1, 1),
+             ('failing', 'yt4', 'D', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL, 0, 2, 0, 2),
+             ('unchecked', 'yt5', 'E', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', NULL, 0, 0, 0, 0);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let step =
+            |id: &str, status: &str, attempts: u32| (id.to_string(), status.to_string(), attempts);
+        assert_eq!(
+            (
+                step_columns(&conn, "chapters_status", "chapters_failed_attempts"),
+                step_columns(&conn, "quality_status", "quality_failed_attempts"),
+            ),
+            (
+                Ok(vec![
+                    step("gave_up", "FAILED", 11),
+                    step("none", "UNAVAILABLE", 0),
+                    step("found", "DONE", 0),
+                    step("failing", "RETRYING", 2),
+                    step("unchecked", "PENDING", 0),
+                ]),
+                Ok(vec![
+                    step("gave_up", "FAILED", 11),
+                    step("none", "DONE", 0),
+                    step("found", "DONE", 0),
+                    step("failing", "RETRYING", 2),
+                    step("unchecked", "PENDING", 0),
+                ]),
+            )
+        );
+    }
+
     /// Each video's id with a step's status and failed attempts, in
     /// insertion order.
     fn step_columns(
