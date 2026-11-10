@@ -1,30 +1,34 @@
-import { Fragment, type JSX } from 'react'
-import { Link } from 'react-router-dom'
-import { ExternalLink } from 'lucide-react'
-import { avatarMediaUrl } from '@/api/client'
-import type { ChannelListItem, Video } from '@/api/types'
-import { formatDate, formatDateTime, formatRelativeTime } from '@/lib/formatDateTime'
-import { Thumbnail } from './Thumbnail'
-import { PlaybackSpeedMenu } from './PlaybackSpeedMenu'
-import { MarkWatchedButton } from './MarkWatchedButton'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Badge } from '@/components/ui/badge'
-import { storageLocation } from '@/lib/storageLocation'
-import { channelPath } from '@/lib/sourcePath'
-
-const STATUS_LABELS: Record<string, string> = {
-  IN_PROGRESS: 'Downloading',
-  PENDING: 'Pending',
-  RETRYING: 'Retrying',
-  FAILED: 'Failed',
-}
+import { Fragment, type JSX } from "react";
+import { Link } from "react-router-dom";
+import { ExternalLink } from "lucide-react";
+import { avatarMediaUrl } from "@/api/client";
+import type { ChannelListItem, Video } from "@/api/types";
+import {
+  formatDate,
+  formatDateTime,
+  formatRelativeTime,
+} from "@/lib/formatDateTime";
+import { Thumbnail } from "./Thumbnail";
+import { PlaybackSpeedMenu } from "./PlaybackSpeedMenu";
+import { MarkWatchedButton } from "./MarkWatchedButton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { storageLocation } from "@/lib/storageLocation";
+import { channelPath } from "@/lib/sourcePath";
+import { canRetry, failingStepLines, statusLabel } from "@/lib/videoSteps";
+import { RetryVideoButton } from "./RetryVideoButton";
 
 interface VideoDetailProps {
-  basePath: string
-  video: Video
-  channel?: ChannelListItem
-  playbackRate: number
-  onPlaybackRateChange: (rate: number) => void
+  basePath: string;
+  video: Video;
+  channel?: ChannelListItem;
+  playbackRate: number;
+  onPlaybackRateChange: (rate: number) => void;
 }
 
 /**
@@ -42,15 +46,23 @@ export function VideoDetail({
   playbackRate,
   onPlaybackRateChange,
 }: VideoDetailProps) {
-  const location = storageLocation(basePath, video.filename)
+  const location = storageLocation(basePath, video.filename);
 
   return (
     <div className="rounded-lg border border-border p-4">
       <div className="flex items-start gap-2.5">
         {channel && (
-          <Link to={channelPath(channel.id)} className="shrink-0" aria-label={channel.name}>
+          <Link
+            to={channelPath(channel.id)}
+            className="shrink-0"
+            aria-label={channel.name}
+          >
             <Thumbnail
-              src={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
+              src={
+                channel.avatar_filename
+                  ? avatarMediaUrl(channel.avatar_filename)
+                  : null
+              }
               className="mt-0.5 block size-8 rounded-full object-cover"
             />
           </Link>
@@ -63,13 +75,13 @@ export function VideoDetail({
             videoId={video.id}
             title={video.title}
             watched={video.watched}
-            downloaded={video.status === 'DOWNLOADED'}
+            downloaded={video.status === "DOWNLOADED"}
             className="mr-1"
           />
           <PlaybackSpeedMenu
             rate={playbackRate}
             onRateChange={onPlaybackRateChange}
-            disabled={video.status !== 'DOWNLOADED'}
+            disabled={video.status !== "DOWNLOADED"}
           />
           <YouTubeLink youtubeId={video.youtube_id} />
         </div>
@@ -77,31 +89,55 @@ export function VideoDetail({
       <MetaLine video={video} showChannelName={!channel} />
       {video.summary && <AiSummary summary={video.summary} />}
       <div className="mt-2">
-        {video.status !== 'DOWNLOADED' && (
+        {video.status !== "DOWNLOADED" && (
           <Badge variant="outline" className="mb-2">
-            {STATUS_LABELS[video.status] ?? video.status}
+            {statusLabel(video.status)}
           </Badge>
+        )}
+        <FailingSteps video={video} />
+        {canRetry(video.steps) && (
+          <RetryVideoButton videoId={video.id} title={video.title} />
         )}
         <p className="text-xs break-words text-muted-foreground">{location}</p>
       </div>
     </div>
-  )
+  );
+}
+
+/** One line per step of the video that is retrying or failed. */
+function FailingSteps({ video }: { video: Video }) {
+  const lines = failingStepLines(video.steps, new Date());
+  if (lines.length === 0) {
+    return null;
+  }
+  return (
+    <ul
+      aria-label="Failing steps"
+      className="mb-2 text-xs text-muted-foreground"
+    >
+      {lines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
+  );
 }
 
 /** The video's AI summary, in full; its line breaks are kept. */
 function AiSummary({ summary }: { summary: string }) {
-  const label = 'AI summary'
+  const label = "AI summary";
   return (
     <section aria-label={label} className="mt-3">
       <h4 className="text-xs font-medium text-muted-foreground">{label}</h4>
-      <p className="mt-1 text-sm break-words whitespace-pre-line text-foreground">{summary}</p>
+      <p className="mt-1 text-sm break-words whitespace-pre-line text-foreground">
+        {summary}
+      </p>
     </section>
-  )
+  );
 }
 
 /** An icon link opening the video on YouTube in a new tab. */
 function YouTubeLink({ youtubeId }: { youtubeId: string }) {
-  const label = 'Open video on YouTube'
+  const label = "Open video on YouTube";
   return (
     <TooltipProvider>
       <Tooltip>
@@ -119,7 +155,7 @@ function YouTubeLink({ youtubeId }: { youtubeId: string }) {
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
+  );
 }
 
 /**
@@ -127,38 +163,48 @@ function YouTubeLink({ youtubeId }: { youtubeId: string }) {
  * any part whose value is absent, and nothing at all when every part is.
  * "Synced" shows only from the desktop breakpoint, so the line fits a phone.
  */
-function MetaLine({ video, showChannelName }: { video: Video; showChannelName: boolean }) {
+function MetaLine({
+  video,
+  showChannelName,
+}: {
+  video: Video;
+  showChannelName: boolean;
+}) {
   const parts = [
     video.watched && <span key="watched">Watched</span>,
-    showChannelName && video.channel_name && <span key="channel">{video.channel_name}</span>,
-    video.published_at && <span key="published">Published {formatDate(video.published_at)}</span>,
+    showChannelName && video.channel_name && (
+      <span key="channel">{video.channel_name}</span>
+    ),
+    video.published_at && (
+      <span key="published">Published {formatDate(video.published_at)}</span>
+    ),
     video.synced_at && (
       <span key="synced" title={formatDateTime(video.synced_at)}>
         Synced {formatRelativeTime(video.synced_at)}
       </span>
     ),
-  ].filter((part): part is JSX.Element => Boolean(part))
+  ].filter((part): part is JSX.Element => Boolean(part));
 
   if (parts.length === 0) {
-    return null
+    return null;
   }
 
   return (
     <p className="mt-1 text-sm text-muted-foreground">
       {parts.map((part, index) =>
-        part.key === 'synced' ? (
+        part.key === "synced" ? (
           // Hidden with its separator below the desktop breakpoint.
           <span key={part.key} className="max-md:hidden">
-            {index > 0 && ' · '}
+            {index > 0 && " · "}
             {part}
           </span>
         ) : (
           <Fragment key={part.key}>
-            {index > 0 && ' · '}
+            {index > 0 && " · "}
             {part}
           </Fragment>
         ),
       )}
     </p>
-  )
+  );
 }

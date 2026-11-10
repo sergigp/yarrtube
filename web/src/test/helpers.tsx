@@ -1,11 +1,11 @@
-import type { ReactElement, ReactNode } from 'react'
-import { render } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, type InitialEntry } from 'react-router-dom'
-import { vi } from 'vitest'
-import SHIPPED_PROMPT from '../../../prompts/summaries/v3.md?raw'
-import SHIPPED_CATEGORIZATION_PROMPT from '../../../prompts/categorization/v2-batch.md?raw'
-import { VideoCategoriesEditor } from '@/components/VideoCategoriesEditor'
+import type { ReactElement, ReactNode } from "react";
+import { render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, type InitialEntry } from "react-router-dom";
+import { vi } from "vitest";
+import SHIPPED_PROMPT from "../../../prompts/summaries/v3.md?raw";
+import SHIPPED_CATEGORIZATION_PROMPT from "../../../prompts/categorization/v2-batch.md?raw";
+import { VideoCategoriesEditor } from "@/components/VideoCategoriesEditor";
 import type {
   Announcement,
   AppVersion,
@@ -24,7 +24,7 @@ import type {
   Video,
   VideoCategoryChoice,
   VideoSteps,
-} from '@/api/types'
+} from "@/api/types";
 
 /**
  * Stubs `fetch` with a route table: keys are `"METHOD /api/path"` (query
@@ -33,33 +33,43 @@ import type {
  * never-resolving one keeps the request pending). Unrouted requests reject,
  * so a test only ever exercises the endpoints it declared.
  */
-export type RouteResponse = unknown | { status: number; error: string }
-export type Routes = Record<string, RouteResponse | (() => RouteResponse | Promise<RouteResponse>)>
+export type RouteResponse = unknown | { status: number; error: string };
+export type Routes = Record<
+  string,
+  RouteResponse | (() => RouteResponse | Promise<RouteResponse>)
+>;
 
 export function mockApi(routes: Routes): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    const method = init?.method ?? 'GET'
-    const key = `${method} ${url}`
-    if (!(key in routes)) {
-      throw new Error(`unrouted request: ${key}`)
-    }
-    const route = routes[key]
-    const value = await (typeof route === 'function'
-      ? (route as () => RouteResponse | Promise<RouteResponse>)()
-      : route)
-    if (isHttpError(value)) {
-      return jsonResponse({ error: value.error }, value.status)
-    }
-    return jsonResponse(value, 200)
-  })
-  vi.stubGlobal('fetch', fetchMock)
-  return fetchMock
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      const method = init?.method ?? "GET";
+      const key = `${method} ${url}`;
+      if (!(key in routes)) {
+        throw new Error(`unrouted request: ${key}`);
+      }
+      const route = routes[key];
+      const value = await (typeof route === "function"
+        ? (route as () => RouteResponse | Promise<RouteResponse>)()
+        : route);
+      if (isHttpError(value)) {
+        return jsonResponse({ error: value.error }, value.status);
+      }
+      return jsonResponse(value, 200);
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 /** A route value that never responds, keeping the query in its loading state. */
 export function pendingForever(): () => Promise<RouteResponse> {
-  return () => new Promise<RouteResponse>(() => {})
+  return () => new Promise<RouteResponse>(() => {});
 }
 
 /**
@@ -67,31 +77,33 @@ export function pendingForever(): () => Promise<RouteResponse> {
  * is a mock, so a test can wait for the request to have been sent.
  */
 export function heldUntilReleased(value: RouteResponse = null): {
-  route: ReturnType<typeof vi.fn>
-  release: () => void
+  route: ReturnType<typeof vi.fn>;
+  release: () => void;
 } {
-  let release = () => {}
+  let release = () => {};
   const held = new Promise<RouteResponse>((resolve) => {
-    release = () => resolve(value)
-  })
-  return { route: vi.fn(() => held), release: () => release() }
+    release = () => resolve(value);
+  });
+  return { route: vi.fn(() => held), release: () => release() };
 }
 
-function isHttpError(value: unknown): value is { status: number; error: string } {
+function isHttpError(
+  value: unknown,
+): value is { status: number; error: string } {
   return (
-    typeof value === 'object' &&
+    typeof value === "object" &&
     value !== null &&
-    'status' in value &&
-    'error' in value &&
-    typeof (value as { status: unknown }).status === 'number'
-  )
+    "status" in value &&
+    "error" in value &&
+    typeof (value as { status: unknown }).status === "number"
+  );
 }
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json' },
-  })
+    headers: { "content-type": "application/json" },
+  });
 }
 
 /**
@@ -102,30 +114,32 @@ function jsonResponse(body: unknown, status: number): Response {
  */
 export function renderWithProviders(
   ui: ReactElement,
-  { route = '/' }: { route?: InitialEntry } = {},
+  { route = "/" }: { route?: InitialEntry } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchInterval: false } },
-  })
+  });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <VideoCategoriesEditor>
         <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
       </VideoCategoriesEditor>
     </QueryClientProvider>
-  )
-  return { ...render(ui, { wrapper }), queryClient }
+  );
+  return { ...render(ui, { wrapper }), queryClient };
 }
 
-let uniqueId = 0
+let uniqueId = 0;
 
-export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListItem {
-  uniqueId += 1
+export function aChannel(
+  overrides: Partial<ChannelListItem> = {},
+): ChannelListItem {
+  uniqueId += 1;
   return {
     id: `channel-${uniqueId}`,
     name: `Channel ${uniqueId}`,
     path: `channels/channel-${uniqueId}`,
-    quality: 'high',
+    quality: "high",
     video_limit: 3,
     reconcile_interval_minutes: 180,
     avatar_filename: null,
@@ -134,43 +148,45 @@ export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListI
     unwatched_count: 0,
     work_in_progress: false,
     ...overrides,
-  }
+  };
 }
 
-export function aPlaylist(overrides: Partial<PlaylistListItem> = {}): PlaylistListItem {
-  uniqueId += 1
+export function aPlaylist(
+  overrides: Partial<PlaylistListItem> = {},
+): PlaylistListItem {
+  uniqueId += 1;
   return {
     id: `playlist-${uniqueId}`,
     name: `Playlist ${uniqueId}`,
     path: `playlists/playlist-${uniqueId}`,
-    quality: 'high',
-    kind: 'playlist',
+    quality: "high",
+    kind: "playlist",
     exclude_from_home: false,
     hide_unwatched_count: false,
     reconcile_interval_minutes: 180,
     summaries_enabled: false,
     categorization_enabled: false,
-    created_at: '2026-01-01T00:00:00Z',
+    created_at: "2026-01-01T00:00:00Z",
     unwatched_count: 0,
     work_in_progress: false,
     ...overrides,
-  }
+  };
 }
 
 export function aVideo(overrides: Partial<Video> = {}): Video {
-  uniqueId += 1
+  uniqueId += 1;
   return {
     id: `video-${uniqueId}`,
     youtube_id: `youtube-${uniqueId}`,
     title: `Video ${uniqueId}`,
-    status: 'DOWNLOADED',
-    steps: someSteps({ download: aStep({ status: 'DONE' }) }),
-    quality: 'high',
+    status: "DOWNLOADED",
+    steps: someSteps({ download: aStep({ status: "DONE" }) }),
+    quality: "high",
     filename: `video-${uniqueId}.mp4`,
     thumbnail_filename: null,
     duration_seconds: 120,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
     watched: false,
     position_seconds: 0,
     synced_at: null,
@@ -180,17 +196,17 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
     chapters: [],
     summary: null,
     ...overrides,
-  }
+  };
 }
 
 export function aStep(overrides: Partial<Step> = {}): Step {
   return {
-    status: 'PENDING',
+    status: "PENDING",
     failed_attempts: 0,
     next_attempt_at: null,
     failure: null,
     ...overrides,
-  }
+  };
 }
 
 /** Every step Pending, but the ones overridden. */
@@ -204,11 +220,11 @@ export function someSteps(overrides: Partial<VideoSteps> = {}): VideoSteps {
     summary: aStep(),
     categorization: aStep(),
     ...overrides,
-  }
+  };
 }
 
 export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
-  uniqueId += 1
+  uniqueId += 1;
   return {
     id: `video-${uniqueId}`,
     youtube_id: `youtube-${uniqueId}`,
@@ -219,7 +235,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
     position_seconds: 0,
     published_at: null,
     source: {
-      kind: 'playlist',
+      kind: "playlist",
       id: `playlist-${uniqueId}`,
       name: `Playlist ${uniqueId}`,
       path: `playlists/playlist-${uniqueId}`,
@@ -227,15 +243,17 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
     },
     category_ids: [],
     ...overrides,
-  }
+  };
 }
 
-export function aCategoryVideo(overrides: Partial<CategoryVideo> = {}): CategoryVideo {
-  const video = aVideo()
+export function aCategoryVideo(
+  overrides: Partial<CategoryVideo> = {},
+): CategoryVideo {
+  const video = aVideo();
   return {
     ...video,
     source: {
-      kind: 'playlist',
+      kind: "playlist",
       id: `playlist-${uniqueId}`,
       name: `Playlist ${uniqueId}`,
       path: `playlists/playlist-${uniqueId}`,
@@ -243,100 +261,104 @@ export function aCategoryVideo(overrides: Partial<CategoryVideo> = {}): Category
     },
     category_ids: [],
     ...overrides,
-  }
+  };
 }
 
 export function aVideoCategoryChoice(
   overrides: Partial<VideoCategoryChoice> = {},
 ): VideoCategoryChoice {
-  uniqueId += 1
+  uniqueId += 1;
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#f59e0b',
+    color: "#f59e0b",
     belongs: false,
     from: null,
     verdict: null,
     ...overrides,
-  }
+  };
 }
 
 export function aTask(overrides: Partial<Task> = {}): Task {
-  uniqueId += 1
+  uniqueId += 1;
   return {
     id: uniqueId,
-    task_type: 'download_video',
-    status: 'pending',
+    task_type: "download_video",
+    status: "pending",
     retries: 0,
-    run_at: '2026-01-01T00:00:00Z',
-    created_at: '2026-01-01T00:00:00Z',
+    run_at: "2026-01-01T00:00:00Z",
+    created_at: "2026-01-01T00:00:00Z",
     last_error: null,
     payload: {},
     ...overrides,
-  }
+  };
 }
 
-export function anAnnouncement(overrides: Partial<Announcement> = {}): Announcement {
-  uniqueId += 1
+export function anAnnouncement(
+  overrides: Partial<Announcement> = {},
+): Announcement {
+  uniqueId += 1;
   return {
     id: `announcement-${uniqueId}`,
     text: `Announcement ${uniqueId}`,
     ...overrides,
-  }
+  };
 }
 
 export function aVersion(overrides: Partial<AppVersion> = {}): AppVersion {
   return {
-    version: 'v0.9.2',
-    channel: 'release',
+    version: "v0.9.2",
+    channel: "release",
     commit: {
-      sha: 'abc1234def5678abc1234def5678abc1234def56',
-      subject: 'Fix sync',
-      date: '2026-10-19T10:00:00Z',
+      sha: "abc1234def5678abc1234def5678abc1234def56",
+      subject: "Fix sync",
+      date: "2026-10-19T10:00:00Z",
     },
     ...overrides,
-  }
+  };
 }
 
 export function aCategory(overrides: Partial<Category> = {}): Category {
-  uniqueId += 1
+  uniqueId += 1;
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#f59e0b',
+    color: "#f59e0b",
     ai_prompt: null,
     unwatched_count: 0,
     ai_verdict_count: 0,
     channels: [],
     playlists: [],
     ...overrides,
-  }
+  };
 }
 
 export function aHomeCategorySection(
   overrides: Partial<HomeCategorySection> = {},
 ): HomeCategorySection {
-  uniqueId += 1
+  uniqueId += 1;
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#f59e0b',
+    color: "#f59e0b",
     videos: [aHomeVideo()],
     ...overrides,
-  }
+  };
 }
 
-export function aCreatedCategory(overrides: Partial<CreatedCategory> = {}): CreatedCategory {
-  uniqueId += 1
+export function aCreatedCategory(
+  overrides: Partial<CreatedCategory> = {},
+): CreatedCategory {
+  uniqueId += 1;
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#f59e0b',
+    color: "#f59e0b",
     ai_prompt: null,
     channels: [],
     playlists: [],
     ...overrides,
-  }
+  };
 }
 
 export function aCategoryList(
@@ -347,28 +369,30 @@ export function aCategoryList(
     categories,
     unwatched_total: 0,
     ...overrides,
-  }
+  };
 }
 
-export function aPreferences(overrides: Partial<Preferences> = {}): Preferences {
+export function aPreferences(
+  overrides: Partial<Preferences> = {},
+): Preferences {
   return {
     categories_enabled: true,
     home_show_continue_watching: true,
     home_show_categories: true,
     home_show_quick_watches: true,
     home_show_latest: true,
-    theme: 'light',
+    theme: "light",
     ai_enabled: false,
     ollama_url: null,
     summaries_enabled: false,
-    summaries_model: 'qwen3:4b',
+    summaries_model: "qwen3:4b",
     summaries_context_length: 12288,
     summaries_temperature: 0.3,
     summaries_thinking: true,
     summaries_prompt: SHIPPED_PROMPT,
     summaries_prompt_is_default: true,
     categorization_enabled: false,
-    categorization_model: 'qwen3:4b',
+    categorization_model: "qwen3:4b",
     categorization_context_length: 4096,
     categorization_context_length_is_auto: true,
     categorization_temperature: 0,
@@ -376,16 +400,18 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     categorization_prompt: SHIPPED_CATEGORIZATION_PROMPT,
     categorization_prompt_is_default: true,
     ...overrides,
-  }
+  };
 }
 
-export function anOllamaServer(overrides: Partial<OllamaServer> = {}): OllamaServer {
+export function anOllamaServer(
+  overrides: Partial<OllamaServer> = {},
+): OllamaServer {
   return {
-    version: '0.40.13',
+    version: "0.40.13",
     models: [
-      { name: 'gemma3:4b', size_bytes: 3_338_801_804, thinking: false },
-      { name: 'qwen3:4b', size_bytes: 2_497_293_918, thinking: true },
+      { name: "gemma3:4b", size_bytes: 3_338_801_804, thinking: false },
+      { name: "qwen3:4b", size_bytes: 2_497_293_918, thinking: true },
     ],
     ...overrides,
-  }
+  };
 }

@@ -60,7 +60,7 @@
 - [x] 2.41 `it_should_reset_failed_summaries_when_the_summary_settings_change` (renamed, regression)
 - [x] 2.42 `it_should_reset_failed_verdicts_when_the_categorization_model_changes` (renamed, regression)
 - [x] 2.43 Web `videoSteps.test.ts`: one cycle per case (labels, retrying line, failed line, overdue, `canRetry`); `npm run test` green
-- [ ] 2.44 Web `VideoDetail.test.tsx`: one cycle per case (failing-step lines, "Retry now" posts and refetches, no button when healthy, retry error); then the components reading `EXCLUDED`/`unavailable` updated; `npm run test` green
+- [x] 2.44 Web `VideoDetail.test.tsx`: one cycle per case (failing-step lines, "Retry now" posts and refetches, no button when healthy, retry error); then the components reading `EXCLUDED`/`unavailable` updated; `npm run test` green
 
 ## 3. Infrastructure adapters (TDD)
 
