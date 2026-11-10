@@ -15,7 +15,6 @@ use tracing::{debug, info, warn};
 /// download — see the `video-thumbnails` capability. The fetch itself runs
 /// from the `fetch_thumbnail` task and never returns an error to its caller;
 /// `VideoReconciler` decides when to schedule it.
-#[derive(Clone)]
 pub struct ThumbnailFetcher {
     video_repository: Arc<dyn VideoRepository>,
     video_owner_finder: Arc<VideoOwnerFinder>,

@@ -2,7 +2,6 @@ use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
 use crate::domain::task::Task;
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
-use tracing::warn;
 
 /// Downloads one video via `yt-dlp`, scheduled by
 /// the video sync (`SyncVideoTask` via `VideoReconciler`) whenever a video
@@ -22,13 +21,8 @@ impl TaskHandler for DownloadVideoTask {
         let Task::DownloadVideo { video_id } = task else {
             return Err(unexpected_task(task));
         };
-        match VideoId::new(video_id.clone()) {
-            Ok(video_id) => self.video_downloader.download(video_id, is_last_attempt),
-            Err(e) => {
-                warn!(video_id = %video_id, error = %e, "invalid video id, skipping download");
-                Ok(())
-            }
-        }
+        self.video_downloader
+            .download(VideoId::new(video_id.clone())?, is_last_attempt)
     }
 }
 
@@ -2377,12 +2371,12 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_if_invalid_video_id_provided() {
+    fn it_should_fail_if_invalid_video_id_provided() {
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
 
         let result = run(&any_task(downloader.clone()), &task_for(""), false);
 
-        assert_eq!(result, Ok(()));
+        assert_eq!(result, Err("Video ID must not be empty".to_string()));
         assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
     }
 

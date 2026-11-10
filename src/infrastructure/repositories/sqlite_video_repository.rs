@@ -96,6 +96,14 @@ pub trait VideoRepository: Send + Sync {
     /// published on `published_at`'s day, recorded in one write. Fails for an
     /// unnumbered video in no channel: a playlist video is numbered when it is
     /// added to its playlist, never by publish date.
+    ///
+    /// Reading the day's last episode and recording the next one happen under
+    /// the one write connection's lock, deliberately not as `find` + compute +
+    /// `update` in the domain: a download and a thumbnail fetch of two
+    /// same-day videos run concurrently, and would otherwise both read the
+    /// same last episode and record a permanent duplicate. The numbering rule
+    /// itself (first of day, next after the last) is
+    /// `ChannelEpisodeNumber::next_of_day`'s.
     fn assign_episode_number(
         &self,
         id: &VideoId,
@@ -565,10 +573,8 @@ impl SqliteVideoRepository {
             );
         }
         let first = ChannelEpisodeNumber::first_of_day(published_at);
-        match Self::last_sibling_episode_of_day(conn, id, &first)? {
-            Some(last) => Ok(ChannelEpisodeNumber::new(first.season(), last + 1)?.into()),
-            None => Ok(first.into()),
-        }
+        let last_of_day = Self::last_sibling_episode_of_day(conn, id, &first)?;
+        Ok(ChannelEpisodeNumber::next_of_day(published_at, last_of_day)?.into())
     }
 
     fn is_channel_video(conn: &Connection, id: &VideoId) -> anyhow::Result<bool> {

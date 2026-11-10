@@ -20,7 +20,6 @@ use tracing::{debug, info, warn};
 /// processing after its download — see the `video-download` capability's
 /// "Young Video Quality Upgrade". Runs from the `upgrade_quality` task;
 /// `VideoReconciler` decides when to schedule it.
-#[derive(Clone)]
 pub struct QualityUpgrader {
     video_repository: Arc<dyn VideoRepository>,
     video_owner_finder: Arc<VideoOwnerFinder>,
@@ -229,11 +228,8 @@ impl QualityUpgrader {
         let Some(number) = video.episode_number else {
             return;
         };
-        let event = DomainEvent::VideoDownloaded(VideoDownloaded {
-            video_id: video.id.as_str().to_string(),
-            output_dir: output_dir.to_string_lossy().to_string(),
-            folder: number.season_folder(),
-        });
+        let event =
+            DomainEvent::VideoDownloaded(VideoDownloaded::new(&video.id, output_dir, &number));
         if let Err(e) = self.event_publisher.publish(&event) {
             warn!(video_id = %video.id, error = %e, "failed to publish that the video was upgraded");
         }
