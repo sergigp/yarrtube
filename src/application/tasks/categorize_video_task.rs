@@ -316,7 +316,7 @@ mod tests {
                        \n\
                        Answer in JSON with one entry per category, keyed by its name: \"reason\", one sentence on what the video covers and how it fits that category, then \"belongs\", true or false."
                     .to_string(),
-                context_length: 4096,
+                context_length: 6144,
                 temperature: 0.0,
                 thinking: true,
                 max_output_tokens: 4095,
@@ -404,6 +404,27 @@ mod tests {
                 vec![Duration::from_secs(2457)],
                 vec![Duration::from_secs(30 * 60)]
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_ask_with_the_auto_context_length() {
+        let db = TestDatabase::new();
+        let names = NINE_CATEGORIES;
+        let llm = llm_replying(vec![reply(&answers(&names.map(|name| (name, NO))))]);
+        let video = summarized_video();
+        let categories = names.map(prompted_category);
+        seed(&db, &video, &categories.each_ref());
+        let task = categorize_video_task(&db, llm.clone());
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(
+            llm.chats()
+                .iter()
+                .map(|chat| (chat.context_length, chat.max_output_tokens))
+                .collect::<Vec<_>>(),
+            vec![(16384, 12285)]
         );
     }
 

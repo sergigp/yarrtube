@@ -183,7 +183,7 @@ impl VideoCategorizer {
                 .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?
                 .thinking;
         let pending = self.pending(video, &owner)?;
-        let context_length = settings.effective_context_length(0);
+        let context_length = settings.effective_context_length(self.prompted_categories()?);
         Ok(CategorizationJob {
             preferences,
             url,
@@ -194,6 +194,17 @@ impl VideoCategorizer {
             summary: summary.text,
             pending,
         })
+    }
+
+    /// How many categories have an AI prompt: what Auto sizes the context
+    /// length from.
+    fn prompted_categories(&self) -> anyhow::Result<usize> {
+        Ok(self
+            .category_repository
+            .list()?
+            .iter()
+            .filter(|category| category.ai_prompt.is_some())
+            .count())
     }
 
     /// Asks about every pending category, then fails naming the rejected
