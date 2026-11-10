@@ -71,6 +71,9 @@ pub trait VideoRepository: Send + Sync {
     /// Puts every Failed summary back to Pending with no failed attempts,
     /// bumping each changed video's `version`.
     fn reset_failed_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()>;
+    /// Puts every Failed categorization back to Pending with no failed
+    /// attempts, bumping each changed video's `version`.
+    fn reset_failed_categorizations(&self, now: DateTime<Utc>) -> anyhow::Result<()>;
     fn delete(&self, id: &VideoId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &YoutubeVideoId) -> anyhow::Result<Vec<Video>>;
@@ -302,6 +305,20 @@ impl VideoRepository for SqliteVideoRepository {
             ],
         )
         .inspect_err(|e| tracing::error!(error = %e, "failed to reset failed summaries"))?;
+        Ok(())
+    }
+
+    fn reset_failed_categorizations(&self, now: DateTime<Utc>) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE videos SET categorization_status = ?1, categorization_failed_attempts = 0, categorization_last_failed_at = NULL, updated_at = ?2, version = version + 1 WHERE categorization_status = ?3",
+            params![
+                StepStatus::Pending.as_str(),
+                now.to_rfc3339(),
+                StepStatus::Failed.as_str(),
+            ],
+        )
+        .inspect_err(|e| tracing::error!(error = %e, "failed to reset failed categorizations"))?;
         Ok(())
     }
 

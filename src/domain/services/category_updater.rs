@@ -7,6 +7,8 @@ use crate::infrastructure::repositories::sqlite_category_repository::CategoryRep
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 
 /// The fields of a category to change; absent ones are kept.
@@ -26,6 +28,8 @@ pub struct CategoryUpdater {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_category_assigner: VideoCategoryAssigner,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    video_repository: Arc<dyn VideoRepository>,
+    clock: Arc<dyn Clock>,
 }
 
 impl CategoryUpdater {
@@ -35,6 +39,8 @@ impl CategoryUpdater {
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_category_assigner: VideoCategoryAssigner,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        video_repository: Arc<dyn VideoRepository>,
+        clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             repository,
@@ -42,6 +48,8 @@ impl CategoryUpdater {
             playlist_repository,
             video_category_assigner,
             video_category_verdict_repository,
+            video_repository,
+            clock,
         }
     }
 }
@@ -72,7 +80,7 @@ impl CategoryUpdaterApi for CategoryUpdater {
         let reprompted = Self::changes_prompt(&category, &update);
         self.save(&Self::applied(category, update))?;
         if reprompted {
-            self.reset_unavailable_verdicts(id)?;
+            self.reset_failed_verdicts(id)?;
         }
         if renamed {
             self.video_category_assigner
@@ -187,13 +195,18 @@ impl CategoryUpdater {
     }
 
     /// A new prompt may get answers the old one couldn't: the category's
-    /// unavailable verdicts go, so it is pending again for their videos.
-    /// Under the lock, so a running categorization giving up either sees the
-    /// new prompt or has its unavailable verdicts deleted here.
-    fn reset_unavailable_verdicts(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
+    /// `failed` verdicts go, so it is pending again for their videos, and
+    /// every Failed categorization is Pending again. Under the lock, so a
+    /// running categorization giving up either sees the new prompt or has
+    /// its failed verdicts deleted here.
+    fn reset_failed_verdicts(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
         let _guard = self.video_category_assigner.lock();
         self.video_category_verdict_repository
             .delete_failed_for_category(id)
+            .and_then(|()| {
+                self.video_repository
+                    .reset_failed_categorizations(self.clock.now())
+            })
             .map_err(UpdateCategoryError::Repository)
     }
 

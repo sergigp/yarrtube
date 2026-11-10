@@ -391,7 +391,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_delete_unavailable_verdicts_when_categorization_settings_change() {
+    async fn it_should_reset_failed_verdicts_when_the_categorization_model_changes() {
         let requests = [
             UpdatePreferencesRequest {
                 ollama_url: Some("http://other.local:11434".to_string()),
@@ -412,6 +412,17 @@ mod tests {
             let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let verdict_repository =
                 Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+            let video_repository = SqliteVideoRepository::new(db.database());
+            let video = Video {
+                id: verdict_video_id(),
+                ..Video::create(
+                    YoutubeVideoId::new("yt1").unwrap(),
+                    "A video",
+                    fixed_timestamp(),
+                )
+                .mark_categorization_failed(fixed_timestamp())
+            };
+            video_repository.insert(&video).unwrap();
             let decided = [
                 verdict("chess", Verdict::Yes),
                 verdict("funny", Verdict::No),
@@ -434,6 +445,15 @@ mod tests {
             assert_eq!(
                 verdict_repository.find_many(&[verdict_video_id()]).unwrap(),
                 decided.to_vec()
+            );
+            assert_eq!(
+                video_repository.find(&video.id).unwrap(),
+                Some(Video {
+                    version: 1,
+                    categorization: StepState::pending(),
+                    updated_at: fixed_timestamp(),
+                    ..video
+                })
             );
         }
     }

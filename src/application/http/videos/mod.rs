@@ -7053,7 +7053,8 @@ mod tests {
             YoutubeVideoId::new("vid1").unwrap(),
             "My Video",
             fixed_timestamp(),
-        );
+        )
+        .mark_categorization_failed(fixed_timestamp());
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -7090,6 +7091,13 @@ mod tests {
         .await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap()
+                .map(|video| video.categorization),
+            Some(StepState::pending())
+        );
         assert_eq!(
             verdict_repository
                 .find_many(std::slice::from_ref(&video.id))

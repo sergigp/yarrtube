@@ -58,7 +58,7 @@
 - [x] 2.39 `it_should_list_a_downloaded_video_with_a_failed_summary` (http)
 - [x] 2.40 `it_should_move_a_source_whose_only_unfinished_video_waits_for_a_retry` (http)
 - [x] 2.41 `it_should_reset_failed_summaries_when_the_summary_settings_change` (renamed, regression)
-- [ ] 2.42 `it_should_reset_failed_verdicts_when_the_categorization_model_changes` (renamed, regression)
+- [x] 2.42 `it_should_reset_failed_verdicts_when_the_categorization_model_changes` (renamed, regression)
 - [ ] 2.43 Web `videoSteps.test.ts`: one cycle per case (labels, retrying line, failed line, overdue, `canRetry`); `npm run test` green
 - [ ] 2.44 Web `VideoDetail.test.tsx`: one cycle per case (failing-step lines, "Retry now" posts and refetches, no button when healthy, retry error); then the components reading `EXCLUDED`/`unavailable` updated; `npm run test` green
 

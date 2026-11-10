@@ -493,7 +493,6 @@ impl Video {
 
     /// Categorization back to Pending (a category was added or its verdicts
     /// removed), its failed attempts cleared.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn reset_categorization(self, now: DateTime<Utc>) -> Self {
         Self {
             categorization: StepState::pending(),
@@ -516,6 +515,14 @@ impl Video {
     pub fn mark_summary_failed(self, now: DateTime<Utc>) -> Self {
         (0..super::retry_attempts::MAX_ATTEMPTS)
             .fold(self, |video, _| video.record_summary_failure(now))
+    }
+
+    /// Test fixture: a categorization that gave up, after every allowed
+    /// attempt failed `now`.
+    #[cfg(test)]
+    pub fn mark_categorization_failed(self, now: DateTime<Utc>) -> Self {
+        (0..super::retry_attempts::MAX_ATTEMPTS)
+            .fold(self, |video, _| video.record_categorization_failure(now))
     }
 
     /// Test fixture: sets the chapters alone, without recording a check

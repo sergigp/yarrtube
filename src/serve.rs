@@ -579,6 +579,8 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_repository.clone(),
             video_category_assigner(infrastructure),
             infrastructure.video_category_verdict_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.clock.clone(),
         ),
         category_deleter: CategoryDeleter::new(
             infrastructure.category_repository.clone(),

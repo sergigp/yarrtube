@@ -72,7 +72,7 @@ impl PreferencesUpdaterApi for PreferencesUpdater {
                 .map_err(UpdatePreferencesError::Repository)?;
         }
         if stored.changes_categorization(&updated) {
-            self.reset_unavailable_verdicts()?;
+            self.reset_failed_verdicts()?;
         }
         self.resolve(updated)
     }
@@ -99,13 +99,18 @@ impl PreferencesUpdater {
             .map_err(UpdatePreferencesError::Repository)
     }
 
-    /// New settings may get answers the old ones couldn't: every unavailable
-    /// verdict goes. Under the category lock, so a running categorization
-    /// giving up either sees the new settings or has its verdicts deleted here.
-    fn reset_unavailable_verdicts(&self) -> Result<(), UpdatePreferencesError> {
+    /// New settings may get answers the old ones couldn't: every `failed`
+    /// verdict goes and every Failed categorization is Pending again. Under
+    /// the category lock, so a running categorization giving up either sees
+    /// the new settings or has its verdicts deleted here.
+    fn reset_failed_verdicts(&self) -> Result<(), UpdatePreferencesError> {
         let _guard = self.category_lock.lock();
         self.video_category_verdict_repository
             .delete_failed()
+            .and_then(|()| {
+                self.video_repository
+                    .reset_failed_categorizations(self.clock.now())
+            })
             .map_err(UpdatePreferencesError::Repository)
     }
 }

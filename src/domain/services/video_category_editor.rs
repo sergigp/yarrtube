@@ -1,6 +1,7 @@
 use crate::domain::category::{Category, CategoryId, CategoryMember};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
+    VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::task::Task;
 use crate::domain::video::VideoId;
@@ -31,6 +32,7 @@ pub struct VideoCategoryEditor {
     video_category_assigner: VideoCategoryAssigner,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
+    video_updater: VideoUpdater,
 }
 
 impl VideoCategoryEditor {
@@ -49,6 +51,7 @@ impl VideoCategoryEditor {
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
+            video_updater: VideoUpdater::new(video_repository.clone()),
             video_repository,
             video_owner_finder,
             category_repository,
@@ -155,7 +158,22 @@ impl VideoCategoryEditor {
             .video_category_verdict_repository
             .delete_ai_for_videos(video_ids)
             .map_err(EditVideoCategoriesError::Repository)?;
+        self.reset_categorizations(&affected)?;
         self.recompute(&affected)
+    }
+
+    /// The categorization of each of `video_ids` back to Pending: their AI
+    /// verdicts are gone, so their categories are pending again.
+    fn reset_categorizations(&self, video_ids: &[VideoId]) -> Result<(), EditVideoCategoriesError> {
+        let now = self.clock.now();
+        video_ids
+            .iter()
+            .try_for_each(|id| {
+                self.video_updater
+                    .update(id, |video| Some(video.reset_categorization(now)))
+                    .map(|_| ())
+            })
+            .map_err(EditVideoCategoriesError::Repository)
     }
 
     fn recompute(&self, video_ids: &[VideoId]) -> Result<(), EditVideoCategoriesError> {
