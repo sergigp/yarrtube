@@ -122,7 +122,7 @@ impl QualityUpgrader {
             .video_downloader_repository
             .probe_quality(&video.youtube_id.to_url(), quality)?;
         let published_at = probe.published_at.unwrap_or(video.created_at);
-        if probe.height > video.downloaded_height {
+        if probe.height > video.downloaded_quality.height {
             self.redownload(video, quality, staging, output_dir, published_at)
         } else {
             let probed_height = probe.height.filter(|_| !probe.degraded);
@@ -150,14 +150,14 @@ impl QualityUpgrader {
         )?;
         match attempt {
             DownloadAttempt::Succeeded(downloaded)
-                if downloaded.height > video.downloaded_height =>
+                if downloaded.height > video.downloaded_quality.height =>
             {
                 self.replace(video, &downloaded, quality, output_dir, published_at)
             }
             DownloadAttempt::Succeeded(downloaded) => Err(anyhow!(
                 "yt-dlp downloaded no higher quality ({:?}) than the recorded one ({:?})",
                 downloaded.height,
-                video.downloaded_height
+                video.downloaded_quality.height
             )),
             DownloadAttempt::Failed { failure, .. } => Err(anyhow!(
                 "yt-dlp failed to download a higher quality: {}",
@@ -230,7 +230,7 @@ impl QualityUpgrader {
     fn retry_if_degraded(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         let stored = self.video_repository.find(&video.id)?;
         Ok(VideoStepOutcome::retry_at_or_settled(
-            stored.and_then(|video| video.quality_checks.state.next_attempt_at()),
+            stored.and_then(|video| video.downloaded_quality.state.next_attempt_at()),
             DEGRADED_REASON.to_string(),
         ))
     }
@@ -244,7 +244,7 @@ impl QualityUpgrader {
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_check_on(video, None, video.created_at)?;
         Ok(VideoStepOutcome::retry_at_or_settled(
-            recorded.and_then(|video| video.quality_checks.state.next_attempt_at()),
+            recorded.and_then(|video| video.downloaded_quality.state.next_attempt_at()),
             reason,
         ))
     }

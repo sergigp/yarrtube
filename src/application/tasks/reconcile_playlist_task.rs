@@ -41,6 +41,8 @@ mod tests {
     use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
     use crate::domain::preferences::SummaryModel;
     use crate::domain::services::InternalVideoReconciler;
+    use crate::domain::video::Chapters;
+    use crate::domain::video::DownloadedQuality;
 
     use crate::domain::services::ShowFileWriter;
 
@@ -51,8 +53,7 @@ mod tests {
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{
-        EpisodeNumber, FetchedThumbnail, LateDataChecks, PlaylistEpisodeNumber, VideoId,
-        YoutubeVideoId,
+        EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId, YoutubeVideoId,
     };
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoryVerdict,
@@ -1739,8 +1740,11 @@ mod tests {
     /// quality check.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
-            chapters_checks: LateDataChecks::done(),
-            quality_checks: LateDataChecks::done(),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(None)
+            },
+            downloaded_quality: DownloadedQuality::done_at(None),
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(
@@ -1786,8 +1790,11 @@ mod tests {
     fn downloaded_playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
         let base = format!("Season 1/S01E{episode:03} - {title}");
         Video {
-            chapters_checks: LateDataChecks::done(),
-            quality_checks: LateDataChecks::done(),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(None)
+            },
+            downloaded_quality: DownloadedQuality::done_at(None),
             ..playlist_episode(youtube_id, title, episode)
                 .start_download(fixed_timestamp())
                 .mark_downloaded(

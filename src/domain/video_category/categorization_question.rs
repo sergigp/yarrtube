@@ -40,7 +40,7 @@ impl CategorizationQuestion {
             title: video.title.clone(),
             source_name: source_name.to_string(),
             minutes: video.duration_seconds.unwrap_or(0) / 60,
-            chapters: video.chapters.clone().unwrap_or_default(),
+            chapters: video.chapters.found.clone().unwrap_or_default(),
             summary: summary.as_str().to_string(),
             categories: categories.to_vec(),
         }

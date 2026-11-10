@@ -27,9 +27,12 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
+    use crate::domain::video::Chapters;
+    use crate::domain::video::DownloadedQuality;
+    use crate::domain::video::Subtitles;
     use crate::domain::video::WatchState;
-    use crate::domain::video::{LateDataChecks, VideoId, YoutubeVideoId};
     use crate::domain::video::{PlaybackPosition, RetryAttempts, StepState, Video, VideoStatus};
+    use crate::domain::video::{VideoId, YoutubeVideoId};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -1100,12 +1103,6 @@ mod tests {
             updated_at: fixed_timestamp(),
             synced_at: None,
             episode_number: None,
-            subtitles: LateDataChecks::default(),
-            subtitle_filename: None,
-            chapters: None,
-            chapters_checks: LateDataChecks::default(),
-            downloaded_height: None,
-            quality_checks: LateDataChecks::default(),
             summary: StepState::pending(),
             categorization: StepState::pending(),
             version: 0,
@@ -1114,6 +1111,9 @@ mod tests {
                 position: PlaybackPosition::start(),
                 last_played_at: None,
             },
+            subtitles: Subtitles::pending(),
+            chapters: Chapters::pending(),
+            downloaded_quality: DownloadedQuality::pending(),
         }
     }
 

@@ -32,11 +32,11 @@ impl VideoSyncPlan {
             ),
             (
                 VideoSyncStep::FetchChapters,
-                video.is_chapters_fetchable() && video.chapters_checks.is_due(now),
+                video.is_chapters_fetchable() && video.chapters.is_due(now),
             ),
             (
                 VideoSyncStep::UpgradeQuality,
-                video.is_quality_checkable() && video.quality_checks.is_due(now),
+                video.is_quality_checkable() && video.downloaded_quality.is_due(now),
             ),
             (
                 VideoSyncStep::Summarize,

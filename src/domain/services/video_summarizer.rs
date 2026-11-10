@@ -378,7 +378,8 @@ impl VideoSummarizer {
             .find(&video.id)?
             .context("video has no stored transcript")?;
         let filename = video
-            .subtitle_filename
+            .subtitles
+            .filename
             .as_deref()
             .context("video has no subtitle file")?;
         let srt = self

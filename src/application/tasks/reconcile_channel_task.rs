@@ -41,6 +41,8 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::video::Chapters;
+    use crate::domain::video::DownloadedQuality;
 
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::preferences::SummaryModel;
@@ -56,9 +58,7 @@ mod tests {
     use crate::domain::show::ShowKey;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::{
-        EpisodeNumber, FetchedThumbnail, LateDataChecks, VideoId, YoutubeVideoId,
-    };
+    use crate::domain::video::{EpisodeNumber, FetchedThumbnail, VideoId, YoutubeVideoId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoryVerdict,
     };
@@ -2511,8 +2511,11 @@ mod tests {
     /// quality check.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video {
-            chapters_checks: LateDataChecks::done(),
-            quality_checks: LateDataChecks::done(),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(None)
+            },
+            downloaded_quality: DownloadedQuality::done_at(None),
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(

@@ -398,7 +398,7 @@ impl VideoDownloader {
     /// for its next attempt. Best-effort: the download is already recorded,
     /// and a video sync recovers a Retrying step without a task.
     fn requeue_quality_check(&self, video: &Video) {
-        let Some(at) = video.quality_checks.state.next_attempt_at() else {
+        let Some(at) = video.downloaded_quality.state.next_attempt_at() else {
             return;
         };
         let task = Task::UpgradeQuality {

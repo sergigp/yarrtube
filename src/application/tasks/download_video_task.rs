@@ -40,9 +40,10 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+    use crate::domain::video::Chapters;
+    use crate::domain::video::DownloadedQuality;
     use crate::domain::video::DownloadedVideo;
     use crate::domain::video::EpisodeNumber;
-    use crate::domain::video::LateDataChecks;
     use crate::domain::video::PlaybackPosition;
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::RetryAttempts;
@@ -246,8 +247,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                downloaded_height: Some(720),
-                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(720),
+                    ..DownloadedQuality::checked(Some(fixed_timestamp()), 0)
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -305,8 +308,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                downloaded_height: Some(1080),
-                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(1080),
+                    ..DownloadedQuality::done_at(Some(fixed_timestamp()))
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -365,8 +370,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                downloaded_height: Some(1080),
-                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(1080),
+                    ..DownloadedQuality::done_at(Some(fixed_timestamp()))
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -431,8 +438,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                downloaded_height: Some(360),
-                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 1),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(360),
+                    ..DownloadedQuality::checked(Some(fixed_timestamp()), 1)
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -551,8 +560,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                downloaded_height: Some(360),
-                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(360),
+                    ..DownloadedQuality::checked(Some(fixed_timestamp()), 0)
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -610,8 +621,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                downloaded_height: Some(720),
-                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(720),
+                    ..DownloadedQuality::done_at(Some(fixed_timestamp()))
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -669,8 +682,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                chapters: Some(game_chapters()),
-                chapters_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
+                chapters: Chapters {
+                    found: Some(game_chapters()),
+                    ..Chapters::done_at(Some(fixed_timestamp()))
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -729,8 +744,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                chapters: Some(vec![]),
-                chapters_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
+                chapters: Chapters {
+                    found: Some(vec![]),
+                    ..Chapters::checked(Some(fixed_timestamp()), 0)
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -789,7 +806,7 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                chapters: None,
+                chapters: Chapters::pending(),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -1189,7 +1206,7 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                quality_checks: LateDataChecks::done_at(Some(fixed_timestamp())),
+                downloaded_quality: DownloadedQuality::done_at(Some(fixed_timestamp())),
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -1687,10 +1704,12 @@ mod tests {
                 thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
                 thumbnail: StepState::pending().succeed(),
                 episode_number: Some(published_episode()),
-                downloaded_height: Some(720),
-                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
                 synced_at: Some(fixed_timestamp()),
                 updated_at: fixed_timestamp(),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(720),
+                    ..DownloadedQuality::checked(Some(fixed_timestamp()), 0)
+                },
                 ..video
             }]
         );
@@ -1821,7 +1840,7 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                quality_checks: LateDataChecks::checked(Some(fixed_timestamp()), 1),
+                downloaded_quality: DownloadedQuality::checked(Some(fixed_timestamp()), 1),
                 ..video
                     .start_download(fixed_timestamp())
                     .mark_downloaded(
@@ -3344,7 +3363,10 @@ mod tests {
     impl QualityCheckedAt for Video {
         fn quality_checked_at(self, at: DateTime<Utc>) -> Video {
             Video {
-                quality_checks: LateDataChecks::checked(Some(at), 0),
+                downloaded_quality: DownloadedQuality {
+                    height: self.downloaded_quality.height,
+                    ..DownloadedQuality::checked(Some(at), 0)
+                },
                 ..self
             }
         }

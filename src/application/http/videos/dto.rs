@@ -1,6 +1,6 @@
 use crate::domain::video::{
-    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, LateDataChecks, StepState,
-    StepStatus, Video, VideoChapter, VideoSource, VideoStatus, VideoView,
+    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, StepState, StepStatus,
+    Video, VideoChapter, VideoSource, VideoStatus, VideoView,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -73,9 +73,9 @@ impl From<&Video> for VideoStepsResponse {
         Self {
             download: StepResponse::download(video),
             thumbnail: StepResponse::from(video.thumbnail),
-            subtitles: StepResponse::from(video.subtitles),
-            chapters: StepResponse::from(video.chapters_checks),
-            quality: StepResponse::from(video.quality_checks),
+            subtitles: StepResponse::from(video.subtitles.state),
+            chapters: StepResponse::from(video.chapters.state),
+            quality: StepResponse::from(video.downloaded_quality.state),
             summary: StepResponse::from(video.summary),
             categorization: StepResponse::from(video.categorization),
         }
@@ -90,12 +90,6 @@ impl From<StepState> for StepResponse {
             next_attempt_at: state.next_attempt_at(),
             failure: None,
         }
-    }
-}
-
-impl From<LateDataChecks> for StepResponse {
-    fn from(checks: LateDataChecks) -> Self {
-        Self::from(checks.state)
     }
 }
 
@@ -145,7 +139,7 @@ impl From<VideoView> for VideoResponse {
         };
         Self {
             steps: VideoStepsResponse::from(&video),
-            subtitle_language: video.subtitle_language(),
+            subtitle_language: video.subtitles.language(),
             watched: video.watch.is_watched(),
             position_seconds: video.watch.position.seconds(),
             id: video.id.as_str().to_string(),
@@ -163,6 +157,7 @@ impl From<VideoView> for VideoResponse {
             channel_name,
             chapters: video
                 .chapters
+                .found
                 .unwrap_or_default()
                 .into_iter()
                 .map(ChapterResponse::from)

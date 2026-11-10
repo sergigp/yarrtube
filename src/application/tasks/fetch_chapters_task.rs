@@ -43,9 +43,10 @@ impl TaskHandler for FetchChaptersTask {
 mod tests {
     use super::*;
     use crate::domain::shared::Quality;
+    use crate::domain::video::Chapters;
     use crate::domain::video::{
-        ChaptersProbe, LateDataChecks, PlaybackPosition, RetryAttempts, StepState, StepStatus,
-        Video, VideoChapter, YoutubeVideoId,
+        ChaptersProbe, PlaybackPosition, RetryAttempts, StepState, StepStatus, Video, VideoChapter,
+        YoutubeVideoId,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_chapter_repository::FakeChapterRepository;
@@ -77,9 +78,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters: Some(intro_chapters()),
-                chapters_checks: LateDataChecks::done_at(Some(later())),
                 updated_at: later(),
+                chapters: Chapters {
+                    found: Some(intro_chapters()),
+                    ..Chapters::done_at(Some(later()))
+                },
                 ..video
             }]
         );
@@ -96,7 +99,10 @@ mod tests {
         let chapter_repository =
             Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = Video {
-            chapters_checks: LateDataChecks::checked(Some(fixed_timestamp()), 0),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::checked(Some(fixed_timestamp()), 0)
+            },
             ..downloaded_video().with_chapters(vec![], fixed_timestamp())
         };
         video_repository.insert(&video).unwrap();
@@ -116,9 +122,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters: Some(intro_chapters()),
-                chapters_checks: LateDataChecks::done_at(Some(later())),
                 updated_at: later(),
+                chapters: Chapters {
+                    found: Some(intro_chapters()),
+                    ..Chapters::done_at(Some(later()))
+                },
                 ..video
             }]
         );
@@ -151,9 +159,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters: Some(vec![]),
-                chapters_checks: LateDataChecks::checked(Some(later()), 0),
                 updated_at: later(),
+                chapters: Chapters {
+                    found: Some(vec![]),
+                    ..Chapters::checked(Some(later()), 0)
+                },
                 ..video
             }]
         );
@@ -185,9 +195,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters: Some(vec![]),
-                chapters_checks: LateDataChecks::unavailable_at(Some(later())),
                 updated_at: later(),
+                chapters: Chapters {
+                    found: Some(vec![]),
+                    ..Chapters::unavailable_at(Some(later()))
+                },
                 ..video
             }]
         );
@@ -224,8 +236,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters_checks: LateDataChecks::checked(Some(later()), 1),
                 updated_at: later(),
+                chapters: Chapters {
+                    found: video.chapters.found.clone(),
+                    ..Chapters::checked(Some(later()), 1)
+                },
                 ..video
             }]
         );
@@ -243,10 +258,7 @@ mod tests {
             anyhow::anyhow!("Video unavailable"),
         )));
         let video = Video {
-            chapters_checks: LateDataChecks::checked(
-                Some(fixed_timestamp() - Duration::days(2)),
-                10,
-            ),
+            chapters: Chapters::checked(Some(fixed_timestamp() - Duration::days(2)), 10),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -266,7 +278,8 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                chapters_checks: LateDataChecks {
+                updated_at: later(),
+                chapters: Chapters {
                     state: StepState {
                         status: StepStatus::Failed,
                         attempts: RetryAttempts {
@@ -275,8 +288,8 @@ mod tests {
                         },
                     },
                     last_checked_at: Some(later()),
+                    found: video.chapters.found.clone()
                 },
-                updated_at: later(),
                 ..video
             }]
         );
@@ -289,7 +302,10 @@ mod tests {
         let chapter_repository =
             Arc::new(FakeChapterRepository::with_chapters(Ok(intro_chapters())));
         let video = Video {
-            chapters_checks: LateDataChecks::done(),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(None)
+            },
             ..downloaded_video().with_chapters(vec![], fixed_timestamp())
         };
         video_repository.insert(&video).unwrap();
@@ -371,9 +387,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                chapters: Some(intro_chapters()),
-                chapters_checks: LateDataChecks::done_at(Some(later())),
                 updated_at: later(),
+                chapters: Chapters {
+                    found: Some(intro_chapters()),
+                    ..Chapters::done_at(Some(later()))
+                },
                 ..played
             }]
         );

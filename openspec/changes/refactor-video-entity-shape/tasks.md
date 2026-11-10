@@ -13,11 +13,11 @@ passes with no assertion changed in acceptance tests. One PR for all.
 
 ## 2. Subtitles, Chapters, DownloadedQuality
 
-- [ ] 2.1 Add `late_video_data.rs` (constants) and `Subtitles`, replacing `subtitles` + `subtitle_filename`; move `subtitle_language` to `Subtitles::language`; move the `late_data_checks.rs` unit tests onto `Subtitles`; verify green
-- [ ] 2.2 Add `Chapters`, replacing `chapters` + `chapters_checks` (keep None vs Some(vec![]); `reset_checks` keeps found chapters on redownload); verify green and `it_should_round_trip_chapters_none_empty_and_some` unchanged in assertions
-- [ ] 2.3 Add `DownloadedQuality`, replacing `downloaded_height` + `quality_checks` (height overwritten on download, old-video rule moved in); verify green
-- [ ] 2.4 Delete `late_data_checks.rs`; repository decodes each with `decode_late_step`; verify green
-- [ ] 2.5 Commit "Give subtitles, chapters and quality their own types"
+- [x] 2.1 Add `late_video_data.rs` (constants) and `Subtitles`, replacing `subtitles` + `subtitle_filename`; move `subtitle_language` to `Subtitles::language`; move the `late_data_checks.rs` unit tests onto `Subtitles`; verify green
+- [x] 2.2 Add `Chapters`, replacing `chapters` + `chapters_checks` (keep None vs Some(vec![]); `reset_checks` keeps found chapters on redownload); verify green and `it_should_round_trip_chapters_none_empty_and_some` unchanged in assertions
+- [x] 2.3 Add `DownloadedQuality`, replacing `downloaded_height` + `quality_checks` (height overwritten on download, old-video rule moved in); verify green
+- [x] 2.4 Delete `late_data_checks.rs`; repository decodes each with `decode_late_step`; verify green
+- [x] 2.5 Commit "Give subtitles, chapters and quality their own types"
 
 ## 3. Thumbnail, summary and categorization reads
 

@@ -38,9 +38,11 @@ mod tests {
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::Chapters;
+    use crate::domain::video::DownloadedQuality;
     use crate::domain::video::{
-        DownloadedVideo, EpisodeNumber, LateDataChecks, PlaybackPosition, QualityProbe,
-        RetryAttempts, StepState, StepStatus, Video, VideoDownloaded, YoutubeVideoId,
+        DownloadedVideo, EpisodeNumber, PlaybackPosition, QualityProbe, RetryAttempts, StepState,
+        StepStatus, Video, VideoDownloaded, YoutubeVideoId,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -121,9 +123,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                downloaded_height: Some(1080),
-                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(1080),
+                    ..DownloadedQuality::done_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -227,9 +231,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                downloaded_height: Some(720),
-                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(720),
+                    ..DownloadedQuality::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -320,8 +326,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks::checked(Some(now()), 0),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::checked(Some(now()), 0)
+                },
                 ..video.clone()
             }]
         );
@@ -385,8 +394,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -406,7 +418,10 @@ mod tests {
                 .with_quality_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
         );
         let video = Video {
-            quality_checks: LateDataChecks::checked(Some(now() - Duration::days(2)), 10),
+            downloaded_quality: DownloadedQuality {
+                height: Some(360),
+                ..DownloadedQuality::checked(Some(now() - Duration::days(2)), 10)
+            },
             ..sd_video()
         };
         video_repository.insert(&video).unwrap();
@@ -447,7 +462,8 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks {
+                updated_at: now(),
+                downloaded_quality: DownloadedQuality {
                     state: StepState {
                         status: StepStatus::Failed,
                         attempts: RetryAttempts {
@@ -456,8 +472,8 @@ mod tests {
                         },
                     },
                     last_checked_at: Some(now()),
+                    height: video.downloaded_quality.height
                 },
-                updated_at: now(),
                 ..video.clone()
             }]
         );
@@ -526,8 +542,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -601,8 +620,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -676,8 +698,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -741,8 +766,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::done_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -809,8 +837,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality_checks: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -882,10 +913,12 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
-                downloaded_height: Some(1080),
-                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
                 version: 2,
+                downloaded_quality: DownloadedQuality {
+                    height: Some(1080),
+                    ..DownloadedQuality::done_at(Some(now()))
+                },
                 ..progressed
             }]
         );
@@ -1044,7 +1077,10 @@ mod tests {
             })),
         );
         let video = Video {
-            quality_checks: LateDataChecks::done(),
+            downloaded_quality: DownloadedQuality {
+                height: Some(360),
+                ..DownloadedQuality::done_at(None)
+            },
             ..sd_video()
         };
         video_repository.insert(&video).unwrap();
@@ -1149,9 +1185,11 @@ mod tests {
             vec![Video {
                 version: 1,
                 quality: Some(Quality::Mid),
-                downloaded_height: Some(720),
-                quality_checks: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
+                downloaded_quality: DownloadedQuality {
+                    height: Some(720),
+                    ..DownloadedQuality::done_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -1265,9 +1303,14 @@ mod tests {
     fn sd_video() -> Video {
         let downloaded_at = now() - Duration::days(1);
         Video {
-            downloaded_height: Some(360),
-            quality_checks: LateDataChecks::checked(Some(downloaded_at), 0),
-            chapters_checks: LateDataChecks::done(),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(None)
+            },
+            downloaded_quality: DownloadedQuality {
+                height: Some(360),
+                ..DownloadedQuality::checked(Some(downloaded_at), 0)
+            },
             ..Video::create(
                 YoutubeVideoId::new("yt1").unwrap(),
                 "My Video",

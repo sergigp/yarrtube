@@ -179,7 +179,9 @@ fn protected_entries(videos: &[Video]) -> HashSet<String> {
     let thumbnails = videos
         .iter()
         .filter_map(|v| v.thumbnail_filename.as_deref());
-    let subtitles = videos.iter().filter_map(|v| v.subtitle_filename.as_deref());
+    let subtitles = videos
+        .iter()
+        .filter_map(|v| v.subtitles.filename.as_deref());
     let episode_nfos = downloaded_files
         .iter()
         .filter(|filename| is_episode_path(filename))

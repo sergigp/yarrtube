@@ -1,10 +1,12 @@
+use super::chapters::Chapters;
+use super::downloaded_quality::DownloadedQuality;
 use super::episode_number::EpisodeNumber;
-use super::late_data_checks::{LateDataChecks, YOUNG_FOR};
 use super::late_data_outcome::LateDataOutcome;
 use super::playback_position::PlaybackPosition;
 use super::retry_attempts::RetryAttempts;
 use super::step_state::StepState;
 use super::step_status::StepStatus;
+use super::subtitles::Subtitles;
 use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
@@ -46,22 +48,9 @@ pub struct Video {
     /// The video's episode number within its show, assigned once by the
     /// first thumbnail fetch, download or relocation that places a file.
     pub episode_number: Option<EpisodeNumber>,
-    /// The video's subtitles' step state and checks — see the
-    /// `late-video-data` capability.
-    pub subtitles: LateDataChecks,
-    /// The episode's subtitle file, recorded once its subtitles are fetched.
-    pub subtitle_filename: Option<String>,
-    /// The video's YouTube chapters: `None` while never checked,
-    /// `Some(vec![])` once checked and found to have none.
-    pub chapters: Option<Vec<VideoChapter>>,
-    /// The checks of the video's chapters — see the `late-video-data`
-    /// capability.
-    pub chapters_checks: LateDataChecks,
-    /// The height in pixels of the downloaded file, when reported.
-    pub downloaded_height: Option<u32>,
-    /// The checks of the downloaded quality — see the `late-video-data`
-    /// capability.
-    pub quality_checks: LateDataChecks,
+    pub subtitles: Subtitles,
+    pub chapters: Chapters,
+    pub downloaded_quality: DownloadedQuality,
     pub summary: StepState,
     /// The AI categorization's step state — see the `video-categorization`
     /// capability.
@@ -94,12 +83,9 @@ impl Video {
             updated_at: now,
             synced_at: None,
             episode_number: None,
-            subtitles: LateDataChecks::default(),
-            subtitle_filename: None,
-            chapters: None,
-            chapters_checks: LateDataChecks::default(),
-            downloaded_height: None,
-            quality_checks: LateDataChecks::default(),
+            subtitles: Subtitles::pending(),
+            chapters: Chapters::pending(),
+            downloaded_quality: DownloadedQuality::pending(),
             summary: StepState::pending(),
             categorization: StepState::pending(),
             watch: WatchState::unwatched(),
@@ -211,8 +197,8 @@ impl Video {
             download_failure: self.download_failure.filter(|_| !download_retried),
             thumbnail: self.thumbnail.retry(),
             subtitles: self.subtitles.retry(),
-            chapters_checks: self.chapters_checks.retry(),
-            quality_checks: self.quality_checks.retry(),
+            chapters: self.chapters.retry(),
+            downloaded_quality: self.downloaded_quality.retry(),
             summary: self.summary.retry(),
             categorization: self.categorization.retry(),
             updated_at: now,
@@ -293,11 +279,9 @@ impl Video {
             duration_seconds: None,
             updated_at: now,
             synced_at: None,
-            subtitles: LateDataChecks::default(),
-            subtitle_filename: None,
-            chapters_checks: LateDataChecks::default(),
-            downloaded_height: None,
-            quality_checks: LateDataChecks::default(),
+            subtitles: Subtitles::pending(),
+            chapters: self.chapters.reset_checks(),
+            downloaded_quality: DownloadedQuality::pending(),
             ..self
         }
     }
@@ -373,11 +357,7 @@ impl Video {
         now: DateTime<Utc>,
     ) -> Self {
         Self {
-            subtitles: LateDataChecks {
-                state: self.subtitles.state.succeed(),
-                last_checked_at: Some(now),
-            },
-            subtitle_filename: Some(subtitle_filename.into()),
+            subtitles: self.subtitles.fetched(subtitle_filename, now),
             updated_at: now,
             ..self
         }
@@ -386,7 +366,7 @@ impl Video {
     /// Whether a chapters fetch is worth attempting: Downloaded and its
     /// chapters Pending or Retrying.
     pub fn is_chapters_fetchable(&self) -> bool {
-        self.is_downloaded() && self.chapters_checks.is_unsettled()
+        self.is_downloaded() && self.chapters.is_unsettled()
     }
 
     /// Downloaded, subtitles Done, summary Pending or Retrying.
@@ -472,17 +452,6 @@ impl Video {
         }
     }
 
-    /// The language code the fetched subtitle file is named with (`en` for
-    /// `… .en.srt`); `None` unless the subtitles are Done.
-    pub fn subtitle_language(&self) -> Option<String> {
-        self.subtitle_filename
-            .as_deref()
-            .filter(|_| self.subtitles.state.status == StepStatus::Done)
-            .and_then(|filename| filename.strip_suffix(".srt"))
-            .and_then(|stem| stem.rsplit_once('.'))
-            .map(|(_, language)| language.to_string())
-    }
-
     /// Records a subtitle check that found no subtitles (`Incomplete`) or
     /// failed, under the `late-video-data` policy. Touches only the subtitle
     /// fields and `updated_at`.
@@ -493,7 +462,7 @@ impl Video {
         now: DateTime<Utc>,
     ) -> Self {
         Self {
-            subtitles: self.subtitles.record(outcome, published_at, now),
+            subtitles: self.subtitles.record_check(outcome, published_at, now),
             updated_at: now,
             ..self
         }
@@ -509,14 +478,8 @@ impl Video {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = match &chapters {
-            Some(found) if !found.is_empty() => LateDataOutcome::Complete,
-            Some(_) => LateDataOutcome::Incomplete,
-            None => LateDataOutcome::Failed,
-        };
         Self {
-            chapters_checks: self.chapters_checks.record(outcome, published_at, now),
-            chapters: chapters.or(self.chapters),
+            chapters: self.chapters.record_check(chapters, published_at, now),
             updated_at: now,
             ..self
         }
@@ -534,15 +497,15 @@ impl Video {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = match height {
-            _ if degraded => LateDataOutcome::Failed,
-            Some(height) if height >= quality.target_height() => LateDataOutcome::Complete,
-            _ => LateDataOutcome::Incomplete,
-        };
         Self {
             quality: Some(quality),
-            downloaded_height: height,
-            quality_checks: self.record_quality_outcome(outcome, published_at, now),
+            downloaded_quality: self.downloaded_quality.record_download(
+                quality,
+                height,
+                degraded,
+                published_at,
+                now,
+            ),
             updated_at: now,
             ..self
         }
@@ -557,12 +520,12 @@ impl Video {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = match probed_height {
-            Some(_) => LateDataOutcome::Incomplete,
-            None => LateDataOutcome::Failed,
-        };
         Self {
-            quality_checks: self.record_quality_outcome(outcome, published_at, now),
+            downloaded_quality: self.downloaded_quality.record_check(
+                probed_height,
+                published_at,
+                now,
+            ),
             updated_at: now,
             ..self
         }
@@ -571,7 +534,7 @@ impl Video {
     /// Whether a quality check is worth attempting: Downloaded and its
     /// quality Pending or Retrying.
     pub fn is_quality_checkable(&self) -> bool {
-        self.is_downloaded() && self.quality_checks.is_unsettled()
+        self.is_downloaded() && self.downloaded_quality.is_unsettled()
     }
 
     /// Records the episode number assigned to this video.
@@ -608,23 +571,6 @@ impl Video {
         self.filename
             .as_deref()
             .is_some_and(|filename| !is_episode_path(filename))
-    }
-
-    /// The quality checks after one with `outcome`: an old video's quality
-    /// that is no better is Done (kept as it is), not Unavailable.
-    fn record_quality_outcome(
-        &self,
-        outcome: LateDataOutcome,
-        published_at: DateTime<Utc>,
-        now: DateTime<Utc>,
-    ) -> LateDataChecks {
-        let outcome = match outcome {
-            LateDataOutcome::Incomplete if now - published_at >= YOUNG_FOR => {
-                LateDataOutcome::Complete
-            }
-            other => other,
-        };
-        self.quality_checks.record(outcome, published_at, now)
     }
 
     /// The recorded duration, else the reported one. The reported one is
@@ -857,11 +803,11 @@ mod tests {
         assert_eq!(
             fetched,
             Video {
-                subtitles: LateDataChecks {
+                subtitles: Subtitles {
                     state: StepState::pending().succeed(),
                     last_checked_at: Some(now),
+                    filename: Some("Season 1/S01E003 - My Video.en.srt".to_string()),
                 },
-                subtitle_filename: Some("Season 1/S01E003 - My Video.en.srt".to_string()),
                 updated_at: now,
                 ..video
             }
@@ -878,9 +824,10 @@ mod tests {
         assert_eq!(
             unavailable,
             Video {
-                subtitles: LateDataChecks {
+                subtitles: Subtitles {
                     state: StepState::pending().unavailable(),
                     last_checked_at: None,
+                    filename: None,
                 },
                 updated_at: now,
                 ..video
@@ -906,24 +853,6 @@ mod tests {
     }
 
     #[test]
-    fn it_should_report_the_subtitle_language_from_its_filename() {
-        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let filename = "Season 1/S01E003 - My Video.en.srt";
-
-        let languages = [
-            video().mark_subtitles_fetched(filename, now),
-            video(),
-            Video {
-                subtitle_filename: Some(filename.to_string()),
-                ..video().mark_subtitles_unavailable(now)
-            },
-        ]
-        .map(|video| video.subtitle_language());
-
-        assert_eq!(languages, [Some("en".to_string()), None, None]);
-    }
-
-    #[test]
     fn it_should_clear_its_subtitles_when_reset_for_redownload() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
@@ -945,8 +874,7 @@ mod tests {
                 status: VideoStatus::Pending,
                 quality: None,
                 filename: None,
-                subtitles: LateDataChecks::default(),
-                subtitle_filename: None,
+                subtitles: Subtitles::pending(),
                 updated_at: later,
                 synced_at: None,
                 ..fetched
@@ -959,9 +887,10 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
         let checked = Video {
-            subtitles: LateDataChecks {
+            subtitles: Subtitles {
                 state: StepState::pending().fail(now).fail(now),
                 last_checked_at: Some(now),
+                filename: None,
             },
             ..video().mark_downloaded(
                 Quality::High,
@@ -980,7 +909,7 @@ mod tests {
                 status: VideoStatus::Pending,
                 quality: None,
                 filename: None,
-                subtitles: LateDataChecks::default(),
+                subtitles: Subtitles::pending(),
                 updated_at: later,
                 synced_at: None,
                 ..checked

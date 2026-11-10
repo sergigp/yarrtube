@@ -280,10 +280,13 @@ mod tests {
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+    use crate::domain::video::Chapters;
+    use crate::domain::video::DownloadedQuality;
+    use crate::domain::video::Subtitles;
     use crate::domain::video::WatchState;
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, RetryAttempts, StepState, Video, VideoChapter, VideoId,
-        VideoStatus, YoutubeVideoId,
+        EpisodeNumber, RetryAttempts, StepState, Video, VideoChapter, VideoId, VideoStatus,
+        YoutubeVideoId,
     };
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -7008,7 +7011,7 @@ mod tests {
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let a_day_ago = fixed_timestamp() - Duration::days(1);
         let video = Video {
-            subtitles: LateDataChecks::unavailable_at(Some(a_day_ago)),
+            subtitles: Subtitles::unavailable_at(Some(a_day_ago)),
             ..new_video(
                 YoutubeVideoId::new("vid1").unwrap(),
                 "My Video",
@@ -7062,9 +7065,9 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let a_day_ago = fixed_timestamp() - Duration::days(1);
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(a_day_ago), 11),
-            chapters_checks: LateDataChecks::checked(Some(a_day_ago), 2),
-            quality_checks: LateDataChecks::checked(Some(a_day_ago), 11),
+            subtitles: Subtitles::checked(Some(a_day_ago), 11),
+            chapters: Chapters::checked(Some(a_day_ago), 2),
+            downloaded_quality: DownloadedQuality::checked(Some(a_day_ago), 11),
             ..new_video(
                 YoutubeVideoId::new("vid1").unwrap(),
                 "My Video",
@@ -7089,12 +7092,21 @@ mod tests {
             Some(Video {
                 version: 1,
                 thumbnail: StepState::pending(),
-                subtitles: LateDataChecks::default(),
-                chapters_checks: LateDataChecks::default(),
-                quality_checks: LateDataChecks::default(),
                 summary: StepState::pending(),
                 categorization: StepState::pending(),
                 updated_at: fixed_timestamp(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::pending()
+                },
+                chapters: Chapters {
+                    found: video.chapters.found.clone(),
+                    ..Chapters::pending()
+                },
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::pending()
+                },
                 ..video.clone()
             })
         );
