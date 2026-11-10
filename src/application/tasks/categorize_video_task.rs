@@ -464,6 +464,108 @@ mod tests {
     }
 
     #[test]
+    fn it_should_ask_each_category_alone_when_the_call_hits_the_output_limit() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (chess, sicilian, tech) = (
+            prompted_category("Chess"),
+            prompted_category("Sicilian"),
+            prompted_category("Tech"),
+        );
+        seed(&db, &video, &[&chess, &sicilian, &tech]);
+        let llm = llm_replying(vec![
+            Ok(LlmReply {
+                stopped_at_limit: true,
+                ..reply("").unwrap()
+            }),
+            reply(&answers(&[("Chess", YES)])),
+            reply(&answers(&[("Sicilian", YES)])),
+            reply(&answers(&[("Tech", NO)])),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![
+                vec!["Chess", "Sicilian", "Tech"],
+                vec!["Chess"],
+                vec!["Sicilian"],
+                vec!["Tech"]
+            ]
+        );
+        assert_eq!(output_caps(&llm), vec![4095, 3072, 3072, 3072]);
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &chess, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_ask_each_category_alone_when_the_call_is_refused() {
+        let db = TestDatabase::new();
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = summarized_video();
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        seed(&db, &video, &[&sicilian, &tech]);
+        let llm = llm_replying(vec![
+            Ok(LlmReply::refused("the prompt is too long")),
+            reply(&answers(&[("Sicilian", YES)])),
+            reply(&answers(&[("Tech", NO)])),
+        ]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            asked_categories(&llm),
+            vec![vec!["Sicilian", "Tech"], vec!["Sicilian"], vec!["Tech"]]
+        );
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            by_category([
+                ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+                ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_not_fall_back_for_a_single_category() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        let llm = llm_replying(vec![Ok(LlmReply {
+            stopped_at_limit: true,
+            ..reply("").unwrap()
+        })]);
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Err(
+                "the model couldn't answer for Sicilian (it hit the 3072-token output limit)"
+                    .to_string()
+            )
+        );
+        assert_eq!(asked_categories(&llm), vec![vec!["Sicilian"]]);
+    }
+
+    #[test]
     fn it_should_read_the_answer_after_leaked_thinking() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
