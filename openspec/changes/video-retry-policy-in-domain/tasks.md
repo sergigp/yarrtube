@@ -33,7 +33,7 @@
 - [x] 2.14 `it_should_mark_the_thumbnail_done_once_fetched`
 - [x] 2.15 `it_should_schedule_the_next_check_if_the_subtitle_check_fails`
 - [x] 2.16 `it_should_fail_the_subtitles_after_the_eleventh_failed_check`
-- [ ] 2.17 `it_should_keep_young_subtitles_pending_after_a_conclusive_check`
+- [x] 2.17 `it_should_keep_young_subtitles_pending_after_a_conclusive_check`
 - [ ] 2.18 `it_should_mark_old_subtitles_unavailable_without_captions`
 - [ ] 2.19 `it_should_schedule_the_next_check_if_the_chapters_fetch_fails`
 - [ ] 2.20 `it_should_fail_the_chapters_after_the_eleventh_failed_fetch`

@@ -440,7 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_keep_subtitles_missing_for_a_young_video_without_captions() {
+    fn it_should_keep_young_subtitles_pending_after_a_conclusive_check() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
@@ -451,7 +451,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 0),
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 4),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
