@@ -124,7 +124,6 @@ impl VideoDownloaderApi for VideoDownloader {
         let staged = self.staging_area.for_video(&started.id);
         let attempt = self.run_download(&started, target.quality, staged.path());
         self.record_attempt(started, attempt, &target, metadata)
-            .map(|_| VideoStepOutcome::Settled)
     }
 }
 
@@ -176,19 +175,20 @@ impl VideoDownloader {
     }
 
     /// Records the download's outcome: places a successful one as an
-    /// episode, excludes or errors a failed one.
+    /// episode, makes a failed one Unavailable or records a failed attempt.
     fn record_attempt(
         &self,
         started: Video,
         attempt: anyhow::Result<DownloadAttempt>,
         target: &VideoTarget,
         metadata: Option<VideoMetadata>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<VideoStepOutcome> {
         match attempt {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
                 Self::log_sabr(&started, downloaded.sabr_notice.as_deref());
                 self.record_unless_deleted(started.clone(), downloaded, target, metadata)
                     .or_else(|e| self.record_placement_errored(started, e))
+                    .map(|_| VideoStepOutcome::Settled)
             }
             Ok(DownloadAttempt::Failed {
                 failure,
@@ -197,7 +197,9 @@ impl VideoDownloader {
                 Self::log_sabr(&started, sabr_notice.as_deref());
                 self.record_failed(started, failure)
             }
-            Err(e) => self.record_errored(started, e),
+            Err(e) => self
+                .record_errored(started, e)
+                .map(|_| VideoStepOutcome::Settled),
         }
     }
 
@@ -375,9 +377,14 @@ impl VideoDownloader {
 
     /// A clean `yt-dlp` failure: either makes a permanently-unavailable
     /// video Unavailable (settling the task) or records a failed attempt.
-    fn record_failed(&self, started: Video, failure: DownloadFailure) -> anyhow::Result<()> {
+    fn record_failed(
+        &self,
+        started: Video,
+        failure: DownloadFailure,
+    ) -> anyhow::Result<VideoStepOutcome> {
         if failure.is_permanent() {
             self.mark_unavailable(started, &failure)
+                .map(|()| VideoStepOutcome::Settled)
         } else {
             self.fail_retryably(started, &failure)
         }
@@ -395,12 +402,25 @@ impl VideoDownloader {
     }
 
     /// Records a failed attempt with `yt-dlp`'s reason.
-    fn fail_retryably(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
+    fn fail_retryably(
+        &self,
+        started: Video,
+        failure: &DownloadFailure,
+    ) -> anyhow::Result<VideoStepOutcome> {
         let video_id = started.id.clone();
         let error_message = failure.message_for(&video_id);
-        self.mark_errored(started, &error_message)?;
+        let errored = self.mark_errored(started, &error_message)?;
         warn!(video_id = %video_id, error = %error_message, "yt-dlp reported a failed download");
-        Err(anyhow::anyhow!(error_message))
+        Ok(Self::next_attempt(errored, error_message))
+    }
+
+    /// When a Retrying download runs again; settled once it gave up (or is
+    /// gone).
+    fn next_attempt(errored: Option<Video>, reason: String) -> VideoStepOutcome {
+        match errored.and_then(|video| video.next_download_at()) {
+            Some(at) => VideoStepOutcome::RetryAt { at, reason },
+            None => VideoStepOutcome::Settled,
+        }
     }
 
     /// A systemic download error: marks the video errored and propagates
@@ -420,11 +440,10 @@ impl VideoDownloader {
         self.record_errored(started, error)
     }
 
-    fn mark_errored(&self, started: Video, reason: &str) -> anyhow::Result<()> {
+    fn mark_errored(&self, started: Video, reason: &str) -> anyhow::Result<Option<Video>> {
         let now = self.clock.now();
         self.video_updater
             .update(&started.id, |video| Some(video.mark_errored(reason, now)))
-            .map(|_| ())
     }
 
     /// Whether the video's download has nothing left to do: Downloaded,

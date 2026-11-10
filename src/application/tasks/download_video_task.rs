@@ -44,9 +44,11 @@ mod tests {
     use crate::domain::video::LateDataChecks;
     use crate::domain::video::PlaybackPosition;
     use crate::domain::video::PlaylistEpisodeNumber;
+    use crate::domain::video::RetryAttempts;
     use crate::domain::video::Video;
     use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
+    use crate::domain::video::VideoStatus;
     use crate::domain::video::YoutubeVideoId;
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
@@ -1209,7 +1211,10 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("yt-dlp failed to download video {}", video.id),
+            })
         );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
@@ -1255,7 +1260,10 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("yt-dlp failed to download video {}", video.id),
+            })
         );
         let failed_id = video.id.clone();
         assert_eq!(
@@ -1269,6 +1277,60 @@ mod tests {
             }]
         );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_schedule_the_next_attempt_if_the_download_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
+                "HTTP Error 503",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "HTTP Error 503".to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 2,
+                status: VideoStatus::Retrying,
+                download_attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+                download_failure: Some("HTTP Error 503".to_string()),
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
     }
 
     #[test]
@@ -1302,7 +1364,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "HTTP Error 403: Forbidden".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1402,7 +1470,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "HTTP Error 403: Forbidden".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1693,7 +1767,13 @@ mod tests {
 
         let result = run(&task, &task_for(video.id.as_str()));
 
-        assert_eq!(result, Err("Video unavailable".to_string()));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: "Video unavailable".to_string(),
+            })
+        );
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2100,7 +2180,10 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: fixed_timestamp() + Duration::minutes(10),
+                reason: format!("yt-dlp failed to download video {}", video.id),
+            })
         );
         let failed_id = video.id.clone();
         assert_eq!(

@@ -7,6 +7,5 @@ pub enum VideoStepOutcome {
     /// Done, Unavailable, Failed, or nothing to do: no further run needed.
     Settled,
     /// The step is Retrying (or ran before it was due): run it again `at`.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     RetryAt { at: DateTime<Utc>, reason: String },
 }
