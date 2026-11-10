@@ -47,7 +47,6 @@ impl StepState {
     }
 
     /// A Retrying or Failed step back to Pending; any other unchanged.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn retry(self) -> Self {
         match self.status {
             StepStatus::Retrying | StepStatus::Failed => Self::pending(),

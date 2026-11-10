@@ -278,7 +278,9 @@ mod tests {
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoId, YoutubeVideoId};
+    use crate::domain::video::{
+        EpisodeNumber, RetryAttempts, Video, VideoChapter, VideoId, VideoStatus, YoutubeVideoId,
+    };
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
     use crate::domain::video_metadata::VideoMetadata;
@@ -6779,6 +6781,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_retry_a_failed_video() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video = new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_download_failed("HTTP Error 503", fixed_timestamp() - Duration::days(1));
+        video_repository.insert(&video).unwrap();
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                status: VideoStatus::Pending,
+                download_attempts: RetryAttempts::default(),
+                download_failure: None,
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::SyncVideo {
+                    video_id: video.id.as_str().to_string()
+                }
+            )]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_rerun_a_videos_ai_categorization() {
         let db = TestDatabase::new();
         SqliteChannelRepository::new(db.database())
@@ -6942,6 +6987,18 @@ mod tests {
 
     /// A video category editor over every SQLite repository `database`
     /// opens, at `fixed_timestamp()`.
+    fn video_retrier(db: &TestDatabase) -> VideoRetrier {
+        VideoRetrier::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
     fn video_category_editor(database: &dyn Fn() -> Database) -> VideoCategoryEditor {
         let clock = Arc::new(FixedClock(fixed_timestamp()));
         VideoCategoryEditor::new(

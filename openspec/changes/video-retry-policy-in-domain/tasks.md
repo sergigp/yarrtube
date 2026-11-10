@@ -50,7 +50,7 @@
 - [x] 2.31 `it_should_schedule_the_download_of_a_retrying_video_once_due` (sync); remove `recover_if_due` and its tests
 - [x] 2.32 `it_should_not_schedule_steps_that_are_not_due` (sync)
 - [x] 2.33 `it_should_not_schedule_failed_steps` (sync)
-- [ ] 2.34 `it_should_retry_a_failed_video` (http)
+- [x] 2.34 `it_should_retry_a_failed_video` (http)
 - [ ] 2.35 `it_should_retry_the_failed_steps_of_a_downloaded_video` (http)
 - [ ] 2.36 `it_should_bring_forward_a_queued_retry` (http)
 - [ ] 2.37 `it_should_fail_to_retry_an_unknown_video` (http)

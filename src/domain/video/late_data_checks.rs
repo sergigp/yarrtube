@@ -113,7 +113,6 @@ impl LateDataChecks {
     }
 
     /// Any Retrying or Failed data back to Pending, never checked.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn retry(self) -> Self {
         match self.state.status {
             StepStatus::Retrying | StepStatus::Failed => Self::default(),

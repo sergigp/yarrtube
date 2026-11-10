@@ -94,7 +94,6 @@ impl fmt::Display for ReadSubtitlesError {
 impl std::error::Error for ReadSubtitlesError {}
 
 #[derive(Debug)]
-#[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
 pub enum RetryVideoError {
     VideoNotFound(VideoId),
     Repository(anyhow::Error),

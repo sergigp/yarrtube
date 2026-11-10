@@ -207,7 +207,6 @@ impl Video {
     /// Every Retrying or Failed step back to Pending with no failed
     /// attempts — see the `video-retries` capability. Pending, In Progress,
     /// Done and Unavailable steps are left as they are.
-    #[allow(dead_code)] // skeleton: used once its video-retries behaviour lands
     pub fn retry(self, now: DateTime<Utc>) -> Self {
         let download_retried = matches!(self.status, VideoStatus::Retrying | VideoStatus::Failed);
         Self {
