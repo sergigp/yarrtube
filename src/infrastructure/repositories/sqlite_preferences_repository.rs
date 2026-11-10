@@ -8,6 +8,10 @@ use anyhow::Context;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
+/// The categorization context length every save stored before Auto, whether
+/// the user chose it or not.
+const OLD_CATEGORIZATION_DEFAULT: i64 = 4096;
+
 pub trait PreferencesRepository: Send + Sync {
     fn find(&self) -> anyhow::Result<Option<Preferences>>;
     /// Inserts or replaces the single row.
@@ -185,8 +189,11 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_model
                     .and_then(|model| CategorizationModel::new(model).ok())
                     .unwrap_or(defaults.categorization.model),
+                // Every save before Auto stored the old default: it reads as
+                // Auto, like a value no longer valid.
                 context_length: stored
                     .categorization_context_length
+                    .filter(|length| *length != OLD_CATEGORIZATION_DEFAULT)
                     .and_then(|length| ContextLength::new(length).ok()),
                 temperature: stored
                     .categorization_temperature
@@ -252,6 +259,63 @@ mod tests {
         repository.save(&preferences).unwrap();
 
         assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_the_old_default_context_length_as_auto() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"categorization_context_length\": 4096}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository
+                .find()
+                .unwrap()
+                .map(|found| found.categorization.context_length),
+            Some(None)
+        );
+    }
+
+    #[test]
+    fn it_should_round_trip_an_overridden_context_length() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            categorization: CategorizationSettings {
+                context_length: Some(ContextLength::new(8192).unwrap()),
+                ..CategorizationSettings::default()
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_an_invalid_categorization_context_length_as_auto() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"categorization_context_length\": 5}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository
+                .find()
+                .unwrap()
+                .map(|found| found.categorization.context_length),
+            Some(None)
+        );
     }
 
     #[test]

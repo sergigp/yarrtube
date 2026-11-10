@@ -58,9 +58,9 @@
 
 - [x] 3.1 Ollama: `it_should_read_the_answer_and_tokens`, where `eval_count` gives `output_tokens`.
 - [x] 3.2 Ollama: rewrite `it_should_report_a_refusal_when_the_answer_takes_too_long` to use `chat.timeout` (100 ms); remove the `chat_timeout` field.
-- [ ] 3.3 SQLite preferences: `it_should_read_the_old_default_context_length_as_auto`, where a stored 4096 reads as `None`.
-- [ ] 3.4 SQLite preferences: `it_should_round_trip_an_overridden_context_length` (8192), with Auto stored as no value.
-- [ ] 3.5 SQLite preferences: `it_should_read_an_invalid_categorization_context_length_as_auto`, replacing the old invalid-default expectation.
+- [x] 3.3 SQLite preferences: `it_should_read_the_old_default_context_length_as_auto`, where a stored 4096 reads as `None`.
+- [x] 3.4 SQLite preferences: `it_should_round_trip_an_overridden_context_length` (8192), with Auto stored as no value.
+- [x] 3.5 SQLite preferences: `it_should_read_an_invalid_categorization_context_length_as_auto`, replacing the old invalid-default expectation.
 
 ## 4. Eval and docs
 
