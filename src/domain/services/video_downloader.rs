@@ -114,7 +114,7 @@ impl VideoDownloaderApi for VideoDownloader {
         let Some((video, target)) = self.find_downloadable(&video_id)? else {
             return Ok(());
         };
-        let started = self.start(video)?;
+        let started = self.start_download(video)?;
         let metadata = self.fetch_metadata(&started);
         let staged = self.staging_area.for_video(&started.id);
         let attempt = self.run_download(&started, target.quality, staged.path());
@@ -145,7 +145,7 @@ impl VideoDownloader {
         Ok(Some((video, owner.target)))
     }
 
-    fn start(&self, video: Video) -> anyhow::Result<Video> {
+    fn start_download(&self, video: Video) -> anyhow::Result<Video> {
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;
         Ok(started)

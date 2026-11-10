@@ -572,8 +572,7 @@ impl SqliteVideoRepository {
                 "video {id} has no episode number and is in no channel: only a channel video is numbered by publish date"
             );
         }
-        let first = ChannelEpisodeNumber::first_of_day(published_at);
-        let last_of_day = Self::last_sibling_episode_of_day(conn, id, &first)?;
+        let last_of_day = Self::last_sibling_episode_of_day(conn, id, published_at)?;
         Ok(ChannelEpisodeNumber::next_of_day(published_at, last_of_day)?.into())
     }
 
@@ -589,13 +588,14 @@ impl SqliteVideoRepository {
         .context("failed to read the video's channel membership")
     }
 
-    /// The highest episode recorded on `first`'s day among the videos sharing
+    /// The highest episode recorded on `published_at`'s day among the videos sharing
     /// a channel with `id`.
     fn last_sibling_episode_of_day(
         conn: &Connection,
         id: &VideoId,
-        first: &ChannelEpisodeNumber,
+        published_at: DateTime<Utc>,
     ) -> anyhow::Result<Option<u32>> {
+        let first = ChannelEpisodeNumber::first_of_day(published_at);
         conn.query_row(
             "SELECT MAX(episode) FROM videos
              WHERE season = ?2 AND episode / 100 = ?3 AND id IN (

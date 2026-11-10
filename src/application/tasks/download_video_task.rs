@@ -1642,6 +1642,48 @@ mod tests {
     }
 
     #[test]
+    fn it_should_retry_a_download_that_errored() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            Path::new("/videos"),
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::failing(
+                "yt-dlp could not be run",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &task_for(video.id.as_str()), false);
+
+        assert_eq!(result, Err("yt-dlp could not be run".to_string()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_errored_retrying(fixed_timestamp())
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_exclude_a_permanently_unavailable_video_without_dead_lettering_on_the_last_attempt()
      {
         let db = TestDatabase::new();
