@@ -64,7 +64,7 @@
 
 ## 4. Eval and docs
 
-- [ ] 4.1 `evals/categories/eval.py --batch`, mirroring the app's constants:
+- [ ] 4.1 (Implemented and checked on synthetic rows; the run against Ollama was stopped, see `decisions.md` 2026-11-10.) `evals/categories/eval.py --batch`, mirroring the app's constants:
   - Auto `num_ctx`: 1,820 per category, rounded up to a multiple of 1,024, at least 4,096.
   - Per-call cap: 1,365 per category, at least 3,072, at most `num_ctx`. `--num-ctx` and `--max-output` still override.
   - The fallback: categories with an error from a call about several categories are asked alone, with rows `"fallback": true` and the failed call's stats in `"batch_call"`. Only final rows go into `verdicts.jsonl`.
@@ -72,14 +72,14 @@
   - A "Fallbacks" section in the report (videos, calls, output tokens, tokens spent on failed batch calls); the speed section counts both.
 
   Verify with `python3 -I evals/categories/eval.py --check`, then a `--limit 2` run against Ollama (or by hand if Ollama isn't available) that writes a report.
-- [ ] 4.2 Run the batch eval on the cap-hit video (`IgJri10gl2M`, *1 in a Billion Checkmate?*), or the full set if time allows. Confirm the fallback answers its 9 categories, and add a `decisions.md` entry with the outcome, including whether batch-of-one with `v2-batch` matches `v2` on that video. Update the prompts README's eval column.
+- [ ] 4.2 (Skipped by the user on 2026-11-10: gap recorded in `decisions.md`.) Run the batch eval on the cap-hit video (`IgJri10gl2M`, *1 in a Billion Checkmate?*), or the full set if time allows. Confirm the fallback answers its 9 categories, and add a `decisions.md` entry with the outcome, including whether batch-of-one with `v2-batch` matches `v2` on that video. Update the prompts README's eval column.
 - [x] 4.3 `evals/categories/README.md`: document the fallback and the Auto/cap defaults for `--batch`. Verify that the documented commands match `--help`.
 - [x] 4.4 `doc/AI.md` and `doc/CATEGORIES.md`: one call per video, the fallback, Auto context length (with how it scales), the scaled cap and timeout, and the `v2-batch` default. Verify that no doc still says "context 4096" or "once per category" for categorization.
 
 ## 5. Verification
 
 - [x] 5.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests).
-- [ ] 5.2 Manual (agent):
+- [ ] 5.2 (Steps 1-5 and 7 done: Auto 6144 for 3 categories read-only with the hint, PATCH `8192`, then `null` and Auto shown again; step 6 not done, Ollama was busy.) Manual (agent):
   1. Start `scripts/run-local.sh --port <free port> --fresh-videos`.
   2. Through the HTTP API, turn on AI and categorization with the Ollama URL, create 3 categories with AI prompts and add a short channel.
   3. With the Playwright MCP browser, open `/ai` → Categorization → Advanced. Check that "Auto context length" is on and the field is read-only at `6144` (Auto for 3 categories), with the hint shown.

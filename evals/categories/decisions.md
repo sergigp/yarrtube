@@ -5,10 +5,33 @@ works: [README.md](README.md).
 
 ## In use
 
-Nothing yet: no settings pass the bar. Leading: **`qwen3:4b` with thinking**,
-prompt [`v2`](../../prompts/categorization/v2.md), temperature 0, `num_ctx` 4096,
-a higher output cap, once the [category prompts](category-prompts.md) are
-tuned.
+Nothing passes the bar yet. The app ships **`qwen3:4b` with thinking**, prompt
+[`v2-batch`](../../prompts/categorization/v2-batch.md), temperature 0, one call
+per video about all its pending categories (Auto `num_ctx`, 16384 for 9; output
+cap 1,365 per category, at least 3072), and one call per category for a video
+that call can't answer. See the two entries below.
+
+## 2026-11-10 · batch shipped with its fallback · single calls on `v2-batch` unmeasured
+
+The app now asks as recommended below: one call per video, and for a video
+whose call is rejected (output cap, refusal, timeout) or leaves categories
+without a usable answer, one call per such category, in the same run.
+`--batch` does the same (rows marked `fallback`, report section "Fallbacks"),
+with the app's Auto `num_ctx` and per-call cap.
+
+**Gap: a single-category call with prompt `v2-batch` has never been measured.**
+The app uses `v2-batch` for every call, fallback ones included, so there is
+one prompt to edit; every per-category number so far is from `v2`. The two
+differ only in wording for one category vs several. The check planned for this
+change, the fallback on *1 in a Billion Checkmate?* (whose 9 categories `v2`
+got right one at a time), was stopped: Ollama was shared and ran at 4 tokens/s.
+It concerns about 1 video in 58. To close it: run `--batch` on an idle machine
+and read the fallback rows of that video, or, for a real measure, a run one
+call per category with `--prompt v2-batch` (not wired up: `--prompt` changes
+the system prompt, the user message stays v2's).
+
+The new `--batch` code was checked on synthetic rows (Auto `num_ctx`, caps,
+"Fallbacks" and speed sections), not yet in a run against Ollama.
 
 ## 2026-11-09 · batch vs one call per category · batch, with a fallback
 
