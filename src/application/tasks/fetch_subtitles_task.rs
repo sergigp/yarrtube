@@ -39,8 +39,8 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, PlaybackPosition, Video, VideoSubtitlesFetched,
-        YoutubeVideoId,
+        EpisodeNumber, LateDataChecks, PlaybackPosition, RetryAttempts, StepState, StepStatus,
+        Video, VideoSubtitlesFetched, YoutubeVideoId,
     };
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionProbe, CaptionSource, CaptionTracks, FetchedSubtitles,
@@ -886,6 +886,45 @@ mod tests {
             }]
         );
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[test]
+    fn it_should_fail_the_subtitles_after_the_eleventh_failed_check() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Err(anyhow::anyhow!(
+            "HTTP Error 429: Too Many Requests"
+        ))));
+        let video = Video {
+            created_at: now() - Duration::days(2),
+            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 10),
+            ..downloaded_video()
+        };
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = subtitles_task(&db, video_repository.clone(), caption_repository);
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                subtitles: LateDataChecks {
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(now()),
+                        },
+                    },
+                    last_checked_at: Some(now()),
+                },
+                updated_at: now(),
+                ..video
+            }]
+        );
     }
 
     #[test]
@@ -1773,6 +1812,48 @@ mod tests {
 
     /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
     /// still missing, created 30 days before `now`.
+    /// Stores `my_channel()` holding `video`.
+    fn seed_channel_video(db: &TestDatabase, video: &Video) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn subtitles_task(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        caption_repository: Arc<FakeCaptionRepository>,
+    ) -> FetchSubtitlesTask {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
+            video_repository,
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            caption_repository,
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            Arc::new(StagingArea::new(video_file_repository, "/videos")),
+        )))
+    }
+
     fn my_channel_id() -> ChannelHandle {
         ChannelHandle::new("@mychannel").unwrap()
     }
