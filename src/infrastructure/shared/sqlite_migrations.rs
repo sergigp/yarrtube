@@ -119,6 +119,9 @@ mod tests {
     use super::*;
     use chrono::{DateTime, Duration, Utc};
 
+    /// The migrations applied before the step statuses were introduced.
+    const BEFORE_STEP_STATUSES: usize = 27;
+
     #[test]
     fn it_should_create_every_table_on_a_fresh_in_memory_database() {
         let mut conn = Connection::open_in_memory().unwrap();
@@ -548,7 +551,7 @@ mod tests {
         )
         .unwrap();
 
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
 
         let subtitles = conn.query_row(
             "SELECT subtitle_state, subtitle_filename FROM videos WHERE id = 'rec1'",
@@ -1012,7 +1015,7 @@ mod tests {
         )
         .unwrap();
 
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
 
         let summary = conn.query_row("SELECT summary_state FROM videos", [], |row| {
             row.get::<_, String>(0)
@@ -1034,7 +1037,7 @@ mod tests {
         )
         .unwrap();
 
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
 
         let settled = conn
             .prepare("SELECT id, chapters_settled, quality_settled FROM videos ORDER BY id")
@@ -1085,7 +1088,7 @@ mod tests {
     #[test]
     fn it_should_map_download_statuses_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
         conn.execute_batch(
             "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, last_errored_at) VALUES
              ('retrying', 'yt1', 'A', 'ERRORED_RETRYING', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00', NULL),
@@ -1139,7 +1142,7 @@ mod tests {
     #[test]
     fn it_should_backfill_the_download_failure_from_the_download_task_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
         conn.execute_batch(
             "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at) VALUES
              ('queued', 'yt1', 'A', 'ERRORED_RETRYING', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'),
@@ -1176,7 +1179,7 @@ mod tests {
     #[test]
     fn it_should_map_subtitle_states_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
         conn.execute_batch(
             "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, subtitle_state, subtitles_failed_attempts) VALUES
              ('fetched', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'FETCHED', 1),
@@ -1204,7 +1207,7 @@ mod tests {
     #[test]
     fn it_should_map_settled_chapters_and_quality_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
         conn.execute_batch(
             "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, chapters, chapters_settled, chapters_failed_attempts, quality_settled, quality_failed_attempts) VALUES
              ('gave_up', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '[]', 1, 3, 1, 3),
@@ -1252,7 +1255,7 @@ mod tests {
     #[test]
     fn it_should_map_summary_states_and_verdicts_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
         conn.execute_batch(
             "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, summary_state) VALUES
              ('missing', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 'MISSING'),
@@ -1298,7 +1301,7 @@ mod tests {
     #[test]
     fn it_should_fail_the_categorization_of_a_video_with_failed_verdicts_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
-        migrate_to(&mut conn, 27);
+        migrate_to(&mut conn, BEFORE_STEP_STATUSES);
         conn.execute_batch(
             "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at) VALUES
              ('gave_up', 'yt1', 'A', 'DOWNLOADED', '2026-01-01T00:00:00+00:00', '2026-01-02T00:00:00+00:00'),

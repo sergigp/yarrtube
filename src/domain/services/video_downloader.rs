@@ -4,6 +4,7 @@ use crate::domain::services::{
     VideoUpdaterApi,
 };
 use crate::domain::shared::Quality;
+use crate::domain::task::Task;
 use crate::domain::video::{
     DownloadAttempt, DownloadFailure, DownloadedVideo, EpisodeNumber, EpisodePaths, Video,
     VideoDownloaded, VideoId, VideoStatus, VideoStepOutcome, VideoTarget,
@@ -11,6 +12,7 @@ use crate::domain::video::{
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
@@ -23,7 +25,8 @@ use tracing::{debug, error, info, warn};
 
 /// Where a downloaded video's files go in its show: the recorded media and
 /// thumbnail paths (relative to the show dir), the episode NFO's path, and the
-/// thumbnail's name as the NFO references it.
+/// thumbnail's name as the NFO references it: the downloaded one, or else the
+/// one the video kept from a fetch ahead of its download.
 struct EpisodeFiles {
     filename: String,
     thumbnail_filename: Option<String>,
@@ -36,6 +39,7 @@ impl EpisodeFiles {
         number: &EpisodeNumber,
         title: &str,
         downloaded: &DownloadedVideo,
+        kept_thumbnail: Option<String>,
         output_dir: &Path,
     ) -> Self {
         let extension = downloaded
@@ -49,7 +53,7 @@ impl EpisodeFiles {
             filename: paths.media(extension),
             thumbnail_filename: has_thumbnail.then(|| paths.thumbnail()),
             nfo_path: output_dir.join(paths.nfo()),
-            thumb: has_thumbnail.then(|| paths.thumb()),
+            thumb: has_thumbnail.then(|| paths.thumb()).or(kept_thumbnail),
         }
     }
 }
@@ -68,6 +72,7 @@ pub struct VideoDownloader {
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     staging_area: Arc<StagingArea>,
+    task_repository: Arc<dyn TaskRepository>,
     video_updater: VideoUpdater,
 }
 
@@ -84,6 +89,7 @@ impl VideoDownloader {
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
         staging_area: Arc<StagingArea>,
+        task_repository: Arc<dyn TaskRepository>,
     ) -> Self {
         Self {
             video_updater: VideoUpdater::new(video_repository.clone()),
@@ -97,6 +103,7 @@ impl VideoDownloader {
             event_publisher,
             clock,
             staging_area,
+            task_repository,
         }
     }
 }
@@ -249,7 +256,13 @@ impl VideoDownloader {
         metadata: Option<VideoMetadata>,
     ) -> anyhow::Result<()> {
         let number = self.assign_episode_number(&video, &downloaded)?;
-        let files = EpisodeFiles::new(&number, &video.title, &downloaded, output_dir);
+        let files = EpisodeFiles::new(
+            &number,
+            &video.title,
+            &downloaded,
+            video.thumbnail_basename(),
+            output_dir,
+        );
         let metadata = metadata.map(|metadata| metadata.with_thumb(files.thumb.clone()));
         if let Some(metadata) = &metadata {
             self.write_nfo(&video, metadata, &number, &files.nfo_path);
@@ -261,6 +274,7 @@ impl VideoDownloader {
             return Ok(());
         };
         self.save_metadata(&downloaded_video, metadata, &number, &files);
+        self.requeue_quality_check(&downloaded_video);
         self.publish_downloaded(&downloaded_video, output_dir, &number);
         Ok(())
     }
@@ -379,6 +393,21 @@ impl VideoDownloader {
         }
     }
 
+    /// A degraded download leaves the quality Retrying: its check is queued
+    /// for its next attempt. Best-effort: the download is already recorded,
+    /// and a video sync recovers a Retrying step without a task.
+    fn requeue_quality_check(&self, video: &Video) {
+        let Some(at) = video.quality_checks.state.next_attempt_at() else {
+            return;
+        };
+        let task = Task::UpgradeQuality {
+            video_id: video.id.as_str().to_string(),
+        };
+        if let Err(e) = self.task_repository.schedule(&task, at) {
+            warn!(video_id = %video.id, error = %e, "failed to re-queue the quality check");
+        }
+    }
+
     /// Best-effort: the download is already recorded, and losing the event
     /// only skips reacting to it (e.g. asking Plex to scan the show).
     fn publish_downloaded(&self, video: &Video, output_dir: &Path, number: &EpisodeNumber) {
@@ -428,15 +457,6 @@ impl VideoDownloader {
         Ok(Self::next_attempt(errored, error_message))
     }
 
-    /// When a Retrying download runs again; settled once it gave up (or is
-    /// gone).
-    fn next_attempt(errored: Option<Video>, reason: String) -> VideoStepOutcome {
-        match errored.and_then(|video| video.next_download_at()) {
-            Some(at) => VideoStepOutcome::RetryAt { at, reason },
-            None => VideoStepOutcome::Settled,
-        }
-    }
-
     /// The download couldn't run at all (e.g. `yt-dlp` failed to start) or
     /// its files couldn't be placed (numbering, moving or recording them): a
     /// failed attempt like any other, with that error as its reason. Applied
@@ -451,6 +471,15 @@ impl VideoDownloader {
         let reason = error.to_string();
         let errored = self.mark_errored(started, &reason)?;
         Ok(Self::next_attempt(errored, reason))
+    }
+
+    /// The outcome of a failed attempt: retry when the stored video is
+    /// Retrying, settled otherwise.
+    fn next_attempt(errored: Option<Video>, reason: String) -> VideoStepOutcome {
+        VideoStepOutcome::retry_at_or_settled(
+            errored.and_then(|video| video.next_download_at()),
+            reason,
+        )
     }
 
     fn mark_errored(&self, started: Video, reason: &str) -> anyhow::Result<Option<Video>> {

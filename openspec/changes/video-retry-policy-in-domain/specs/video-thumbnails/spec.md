@@ -25,6 +25,10 @@ A thumbnail fetch that runs after the video already has a recorded thumbnail fil
 - **WHEN** a video's thumbnail fetch runs after that video's download already recorded a thumbnail filename
 - **THEN** the fetch makes no changes to the video or to disk
 
+#### Scenario: Download without a thumbnail keeps the fetched one
+- **WHEN** a video's thumbnail was fetched ahead of its download and the download brings no thumbnail
+- **THEN** the video keeps its recorded thumbnail filename, its thumbnail stays Done and its episode NFO references it
+
 #### Scenario: Fetch runs for an excluded video
 - **WHEN** a thumbnail fetch was scheduled for a video (e.g. on its addition) and, by the time it runs, the video's download is Unavailable
 - **THEN** the fetch does not try to obtain a thumbnail and makes no changes to the video or to disk

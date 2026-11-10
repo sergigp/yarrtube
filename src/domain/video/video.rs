@@ -130,7 +130,8 @@ impl Video {
     }
 
     /// Records the download done, its failed attempts and failure cleared;
-    /// a recorded thumbnail makes the thumbnail Done.
+    /// a recorded thumbnail makes the thumbnail Done. A download without a
+    /// thumbnail keeps the one fetched ahead of it.
     pub fn mark_downloaded(
         self,
         quality: Quality,
@@ -139,6 +140,7 @@ impl Video {
         duration_seconds: Option<i64>,
         now: DateTime<Utc>,
     ) -> Self {
+        let thumbnail_filename = thumbnail_filename.or(self.thumbnail_filename);
         Self {
             status: VideoStatus::Downloaded,
             download_attempts: RetryAttempts::default(),
@@ -277,6 +279,15 @@ impl Video {
             && self.is_thumbnail_fetchable()
             && self.status != VideoStatus::InProgress
             && self.thumbnail.is_due(now)
+    }
+
+    /// The thumbnail's file name as an NFO references it, next to the episode.
+    pub fn thumbnail_basename(&self) -> Option<String> {
+        self.thumbnail_filename
+            .as_deref()
+            .and_then(|f| std::path::Path::new(f).file_name())
+            .and_then(|f| f.to_str())
+            .map(str::to_string)
     }
 
     /// Resets a video back to `Pending`, clearing its recorded filename,
@@ -479,6 +490,21 @@ impl Video {
             updated_at: now,
             ..self
         }
+    }
+
+    /// Whether the categorization is Pending.
+    pub fn is_categorization_pending(&self) -> bool {
+        self.categorization.status == StepStatus::Pending
+    }
+
+    /// Whether the categorization gave up: Failed.
+    pub fn is_categorization_failed(&self) -> bool {
+        self.categorization.status == StepStatus::Failed
+    }
+
+    /// When a Retrying categorization's next attempt is due.
+    pub fn next_categorization_at(&self) -> Option<DateTime<Utc>> {
+        self.categorization.next_attempt_at()
     }
 
     /// Records a failed categorization attempt: Retrying, or Failed on the

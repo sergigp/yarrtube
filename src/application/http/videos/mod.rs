@@ -266,7 +266,9 @@ fn vtt_response(vtt: WebVtt) -> VttResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::http::test_support::{ai_verdict, user_verdict};
+    use crate::application::http::test_support::{
+        ai_verdict, categorization_resetter, user_verdict,
+    };
     use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
@@ -6946,7 +6948,13 @@ mod tests {
                 "My Video",
                 fixed_timestamp(),
             )
-            .mark_downloaded(Quality::High, "My Video.mp4", None, None, a_day_ago)
+            .mark_downloaded(
+                Quality::High,
+                "My Video.mp4",
+                Some("My Video.jpg".to_string()),
+                None,
+                a_day_ago,
+            )
             .mark_summary_failed(a_day_ago)
         };
         video_repository.insert(&video).unwrap();
@@ -6979,6 +6987,50 @@ mod tests {
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![ai_verdict(&video, &politics, Verdict::Yes)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_retry_every_retrying_or_failed_step() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let a_day_ago = fixed_timestamp() - Duration::days(1);
+        let video = Video {
+            subtitles: LateDataChecks::checked(Some(a_day_ago), 11),
+            chapters_checks: LateDataChecks::checked(Some(a_day_ago), 2),
+            quality_checks: LateDataChecks::checked(Some(a_day_ago), 11),
+            ..new_video(
+                YoutubeVideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .mark_downloaded(Quality::High, "My Video.mp4", None, None, a_day_ago)
+            .record_thumbnail_failure(a_day_ago)
+            .record_summary_failure(a_day_ago)
+            .mark_categorization_failed(a_day_ago)
+        };
+        video_repository.insert(&video).unwrap();
+
+        let response = retry_video(
+            State(video_retrier(&db)),
+            Path(video.id.as_str().to_string()),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                thumbnail: StepState::pending(),
+                subtitles: LateDataChecks::default(),
+                chapters_checks: LateDataChecks::default(),
+                quality_checks: LateDataChecks::default(),
+                summary: StepState::pending(),
+                categorization: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
         );
     }
 
@@ -7054,7 +7106,7 @@ mod tests {
             "My Video",
             fixed_timestamp(),
         )
-        .mark_categorization_failed(fixed_timestamp());
+        .mark_categorization_failed(fixed_timestamp() - Duration::days(1));
         save_channel_video(
             &SqliteVideoRepository::new(db.database()),
             &SqliteChannelVideoRepository::new(db.database()),
@@ -7094,9 +7146,13 @@ mod tests {
         assert_eq!(
             SqliteVideoRepository::new(db.database())
                 .find(&video.id)
-                .unwrap()
-                .map(|video| video.categorization),
-            Some(StepState::pending())
+                .unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            })
         );
         assert_eq!(
             verdict_repository
@@ -7213,8 +7269,8 @@ mod tests {
         .map(|Json(body)| body)
     }
 
-    /// A video category editor over every SQLite repository `database`
-    /// opens, at `fixed_timestamp()`.
+    /// A video retrier over every SQLite repository `db` opens, at
+    /// `fixed_timestamp()`.
     fn video_retrier(db: &TestDatabase) -> VideoRetrier {
         VideoRetrier::new(
             Arc::new(SqliteVideoRepository::new(db.database())),
@@ -7227,6 +7283,8 @@ mod tests {
         )
     }
 
+    /// A video category editor over every SQLite repository `database`
+    /// opens, at `fixed_timestamp()`.
     fn video_category_editor(database: &dyn Fn() -> Database) -> VideoCategoryEditor {
         let clock = Arc::new(FixedClock(fixed_timestamp()));
         VideoCategoryEditor::new(
@@ -7250,6 +7308,7 @@ mod tests {
             ),
             Arc::new(SqliteTaskRepository::new(database(), clock.clone())),
             clock,
+            categorization_resetter(database()),
         )
     }
 

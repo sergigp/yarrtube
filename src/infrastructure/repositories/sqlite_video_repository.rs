@@ -71,9 +71,6 @@ pub trait VideoRepository: Send + Sync {
     /// Puts every Failed summary back to Pending with no failed attempts,
     /// bumping each changed video's `version`.
     fn reset_failed_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()>;
-    /// Puts every Failed categorization back to Pending with no failed
-    /// attempts, bumping each changed video's `version`.
-    fn reset_failed_categorizations(&self, now: DateTime<Utc>) -> anyhow::Result<()>;
     fn delete(&self, id: &VideoId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &YoutubeVideoId) -> anyhow::Result<Vec<Video>>;
@@ -305,20 +302,6 @@ impl VideoRepository for SqliteVideoRepository {
             ],
         )
         .inspect_err(|e| tracing::error!(error = %e, "failed to reset failed summaries"))?;
-        Ok(())
-    }
-
-    fn reset_failed_categorizations(&self, now: DateTime<Utc>) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
-            "UPDATE videos SET categorization_status = ?1, categorization_failed_attempts = 0, categorization_last_failed_at = NULL, updated_at = ?2, version = version + 1 WHERE categorization_status = ?3",
-            params![
-                StepStatus::Pending.as_str(),
-                now.to_rfc3339(),
-                StepStatus::Failed.as_str(),
-            ],
-        )
-        .inspect_err(|e| tracing::error!(error = %e, "failed to reset failed categorizations"))?;
         Ok(())
     }
 
@@ -646,16 +629,11 @@ impl SqliteVideoRepository {
         column: &str,
     ) -> anyhow::Result<LateDataChecks> {
         let last_checked_at = Self::decode_timestamp(last_checked_at, column)?;
-        Ok(LateDataChecks {
-            state: StepState {
-                status: StepStatus::parse(status)?,
-                attempts: RetryAttempts {
-                    failed,
-                    last_failed_at: last_checked_at.filter(|_| failed > 0),
-                },
-            },
+        Ok(LateDataChecks::restored(
+            StepStatus::parse(status)?,
+            failed,
             last_checked_at,
-        })
+        ))
     }
 
     fn decode_step(
@@ -795,22 +773,22 @@ mod tests {
     }
 
     #[test]
-    fn it_should_reset_failed_summaries_to_missing() {
+    fn it_should_reset_failed_summaries_to_pending() {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
-        let unavailable = video("Unavailable", now).mark_summary_failed(now);
+        let failed = video("Failed", now).mark_summary_failed(now);
         let generated = Video::create(YoutubeVideoId::new("yt2").unwrap(), "Generated", now)
             .mark_summary_generated(now);
-        repo.insert(&unavailable).unwrap();
+        repo.insert(&failed).unwrap();
         repo.insert(&generated).unwrap();
 
         repo.reset_failed_summaries(later).unwrap();
 
         assert_eq!(
             (
-                repo.find(&unavailable.id).unwrap(),
+                repo.find(&failed.id).unwrap(),
                 repo.find(&generated.id).unwrap()
             ),
             (
@@ -818,7 +796,7 @@ mod tests {
                     summary: StepState::pending(),
                     updated_at: later,
                     version: 1,
-                    ..unavailable
+                    ..failed
                 }),
                 Some(generated)
             )
@@ -887,18 +865,18 @@ mod tests {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
-        let unavailable = video("Unavailable", now).mark_summary_failed(now);
-        repo.insert(&unavailable).unwrap();
+        let failed = video("Failed", now).mark_summary_failed(now);
+        repo.insert(&failed).unwrap();
 
         repo.reset_failed_summaries(later).unwrap();
 
         assert_eq!(
-            repo.find(&unavailable.id).unwrap(),
+            repo.find(&failed.id).unwrap(),
             Some(Video {
                 summary: StepState::pending(),
                 updated_at: later,
                 version: 1,
-                ..unavailable
+                ..failed
             })
         );
     }

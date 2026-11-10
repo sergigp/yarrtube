@@ -100,6 +100,7 @@ fn update_preferences_error(error: UpdatePreferencesError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::http::test_support::categorization_resetter;
     use crate::domain::category::{
         Category, CategoryColor, CategoryId, CategoryName, CategoryPrompt,
     };
@@ -438,6 +439,7 @@ mod tests {
                 verdict_repository.clone(),
                 Arc::new(CategoryLock::default()),
                 Arc::new(SqliteCategoryRepository::new(db.database())),
+                categorization_resetter(db.database()),
             );
 
             update(preferences_updater, request).await.unwrap();
@@ -456,6 +458,34 @@ mod tests {
                 })
             );
         }
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_a_failed_categorization_with_no_failed_verdict_when_the_model_changes()
+    {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "A video",
+            fixed_timestamp(),
+        )
+        .mark_categorization_failed(fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        let preferences_updater = preferences_updater(&db, repository);
+
+        update(
+            preferences_updater,
+            UpdatePreferencesRequest {
+                categorization_model: Some("gemma3:4b".to_string()),
+                ..UpdatePreferencesRequest::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
     }
 
     #[tokio::test]
@@ -480,8 +510,8 @@ mod tests {
             let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             let verdict_repository =
                 Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
-            let unavailable = verdict("tech", Verdict::Failed);
-            verdict_repository.save(&unavailable).unwrap();
+            let failed = verdict("tech", Verdict::Failed);
+            verdict_repository.save(&failed).unwrap();
             let preferences_updater = PreferencesUpdater::new(
                 repository,
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -489,13 +519,14 @@ mod tests {
                 verdict_repository.clone(),
                 Arc::new(CategoryLock::default()),
                 Arc::new(SqliteCategoryRepository::new(db.database())),
+                categorization_resetter(db.database()),
             );
 
             update(preferences_updater, request).await.unwrap();
 
             assert_eq!(
                 verdict_repository.find_many(&[verdict_video_id()]).unwrap(),
-                vec![unavailable]
+                vec![failed]
             );
         }
     }
@@ -1284,6 +1315,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(database())),
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(database())),
+            categorization_resetter(database()),
         )
     }
 
@@ -1298,6 +1330,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(db.database())),
+            categorization_resetter(db.database()),
         )
     }
 

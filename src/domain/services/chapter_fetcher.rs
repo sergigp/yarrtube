@@ -67,12 +67,10 @@ impl ChapterFetcher {
         reason: String,
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_check(video, None, None)?;
-        Ok(
-            match recorded.and_then(|video| video.chapters_checks.state.next_attempt_at()) {
-                Some(at) => VideoStepOutcome::RetryAt { at, reason },
-                None => VideoStepOutcome::Settled,
-            },
-        )
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.chapters_checks.state.next_attempt_at()),
+            reason,
+        ))
     }
 
     fn fetch_chapters(&self, video: &Video) -> anyhow::Result<ChaptersProbe> {

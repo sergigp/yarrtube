@@ -83,10 +83,24 @@
 
   Update `doc/INSTALLATION.md` (`YARRTUBE_RETRY_BASE_DELAY_SECONDS`, back up the database before upgrading).
 - [x] 4.2 `scripts/run-tests.sh --only web --only rust` passes.
-- [ ] 4.3 `scripts/run-tests.sh --only e2e` passes.
+- [x] 4.3 `scripts/run-tests.sh --only e2e` passes.
 - [ ] 4.4 Manual (agent):
   1. Start `scripts/run-local.sh --port <free port> --fresh-videos`.
   2. Seed a playlist whose video fails, open it with the Playwright MCP browser, and assert "Retrying", "next attempt in 10 minutes" and the reason, plus the `steps.download` entry in `/api/playlists/{id}/videos`.
   3. Set the download to `FAILED` with 11 attempts in the local SQLite database, reload, and assert "Failed" and "gave up after 11 attempts".
   4. Click "Retry now" and assert the network `POST` and the status becoming Pending/Downloading.
   5. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
+
+## 5. Audit follow-ups
+
+- [x] 5.1 Migration 0028: chapters, quality and subtitles mapped by what was found; categorization `FAILED` (11) for a video with a `failed` verdict (design.md "Policy & Migration"); tests 61–63
+- [x] 5.2 `it_should_make_categorizations_pending_for_a_created_ai_category`, `it_should_keep_categorizations_for_a_created_category_without_a_prompt`
+- [x] 5.3 `it_should_make_a_failed_categorization_pending_when_rerunning_a_category`
+- [x] 5.4 `it_should_only_make_pending_the_categorizations_of_a_reprompted_categorys_failed_verdicts`, `it_should_keep_a_failed_categorization_without_failed_verdicts_when_the_model_changes` (no bulk SQL reset)
+- [x] 5.5 `it_should_fail_pending_categories_if_ollama_is_down_on_the_eleventh_attempt`
+- [x] 5.6 `it_should_keep_the_fetched_thumbnail_if_the_download_brings_none`
+- [x] 5.7 `it_should_requeue_the_quality_check_of_a_degraded_download`
+- [x] 5.8 `it_should_discard_a_thumbnail_staging_dir_when_dropped` (thumbnail staged in its own dir; e2e green)
+- [x] 5.9 `it_should_reference_the_kept_thumbnail_in_the_episode_nfo`
+- [x] 5.10 `it_should_make_categorizations_pending_when_a_category_gets_an_ai_prompt`
+- [x] 5.11 `it_should_ask_again_about_failed_categories_when_a_category_is_created`

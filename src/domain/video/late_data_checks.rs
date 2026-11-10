@@ -1,4 +1,5 @@
 use super::LateDataOutcome;
+use super::retry_attempts::RetryAttempts;
 use super::step_state::StepState;
 use super::step_status::StepStatus;
 use chrono::{DateTime, Duration, Utc};
@@ -20,6 +21,25 @@ pub struct LateDataChecks {
 }
 
 impl LateDataChecks {
+    /// The checks as stored: a check counts as a failed attempt's time only
+    /// while some attempt failed.
+    pub fn restored(
+        status: StepStatus,
+        failed: u32,
+        last_checked_at: Option<DateTime<Utc>>,
+    ) -> Self {
+        Self {
+            state: StepState {
+                status,
+                attempts: RetryAttempts {
+                    failed,
+                    last_failed_at: last_checked_at.filter(|_| failed > 0),
+                },
+            },
+            last_checked_at,
+        }
+    }
+
     /// Records a check that ran `now`: `Complete` makes the data Done;
     /// `Incomplete` Unavailable when the video is old, else Pending; `Failed`
     /// one more failed attempt (Retrying, or Failed on the last one).

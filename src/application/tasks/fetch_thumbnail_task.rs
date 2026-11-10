@@ -116,7 +116,10 @@ mod tests {
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
             vec![(
-                PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
+                PathBuf::from(format!(
+                    "/videos/.downloads/{}-thumbnail/yt1.jpg",
+                    video.id.as_str()
+                )),
                 PathBuf::from(
                     "/videos/creators/somechannel/Season 2026/S2026E031501 - My Video.jpg"
                 ),
@@ -125,7 +128,7 @@ mod tests {
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![PathBuf::from(format!(
-                "/videos/.downloads/{}",
+                "/videos/.downloads/{}-thumbnail",
                 video.id.as_str()
             ))]
         );
@@ -390,7 +393,7 @@ mod tests {
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![PathBuf::from(format!(
-                "/videos/.downloads/{}",
+                "/videos/.downloads/{}-thumbnail",
                 video.id.as_str()
             ))]
         );
@@ -461,7 +464,7 @@ mod tests {
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![PathBuf::from(format!(
-                "/videos/.downloads/{}",
+                "/videos/.downloads/{}-thumbnail",
                 video.id.as_str()
             ))]
         );
@@ -533,10 +536,70 @@ mod tests {
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
             vec![PathBuf::from(format!(
-                "/videos/.downloads/{}",
+                "/videos/.downloads/{}-thumbnail",
                 video.id.as_str()
             ))]
         );
+        assert_eq!(
+            *thumbnail_repository.calls.lock().unwrap(),
+            vec![thumbnail_call(&video)]
+        );
+    }
+
+    #[test]
+    fn it_should_not_count_a_failed_fetch_if_the_video_was_given_a_thumbnail_meanwhile() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video = my_video();
+        video_repository.insert(&video).unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let thumbnail_repository = Arc::new({
+            let video_repository = video_repository.clone();
+            let video_id = video.id.clone();
+            FakeThumbnailRepository::failing().with_on_fetch(move || {
+                let stored = video_repository.find(&video_id).unwrap().unwrap();
+                video_repository
+                    .update(&stored.with_thumbnail(DOWNLOADED_THUMBNAIL, later()))
+                    .unwrap()
+            })
+        });
+        let task = FetchThumbnailTask::new(Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            thumbnail_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(FixedClock(later())),
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+        )));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..video.clone().with_thumbnail(DOWNLOADED_THUMBNAIL, later())
+            }]
+        );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
             *thumbnail_repository.calls.lock().unwrap(),
             vec![thumbnail_call(&video)]
@@ -707,7 +770,10 @@ mod tests {
     fn thumbnail_call(video: &Video) -> (String, PathBuf) {
         (
             "https://www.youtube.com/watch?v=yt1".to_string(),
-            PathBuf::from(format!("/videos/.downloads/{}", video.id.as_str())),
+            PathBuf::from(format!(
+                "/videos/.downloads/{}-thumbnail",
+                video.id.as_str()
+            )),
         )
     }
 

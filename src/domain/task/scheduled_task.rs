@@ -266,6 +266,30 @@ mod tests {
     }
 
     #[test]
+    fn it_should_run_again_at_the_time_its_handler_asks_for() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_100, 0).unwrap();
+        let running = task_with_retries(3).start(now - Duration::minutes(1));
+
+        let requeued = running.run_again_at(
+            now + Duration::minutes(10),
+            "HTTP Error 503".to_string(),
+            now,
+        );
+
+        assert_eq!(
+            requeued,
+            ScheduledTask {
+                status: TaskStatus::Pending,
+                retries: 0,
+                run_at: now + Duration::minutes(10),
+                updated_at: now,
+                last_error: Some("HTTP Error 503".to_string()),
+                ..task_with_retries(3)
+            }
+        );
+    }
+
+    #[test]
     fn it_should_round_trip_status_through_its_string_representation() {
         assert_eq!(TaskStatus::parse("pending").unwrap(), TaskStatus::Pending);
         assert_eq!(TaskStatus::parse("running").unwrap(), TaskStatus::Running);

@@ -126,7 +126,7 @@ impl VideoSearcherApi for VideoSearcher {
         playlist_videos
             .iter()
             .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
-            .filter(|video| !is_excluded(video))
+            .filter(|video| !is_unavailable(video))
             .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
@@ -150,7 +150,7 @@ impl VideoSearcherApi for VideoSearcher {
         channel_videos
             .iter()
             .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
-            .filter(|video| !is_excluded(video))
+            .filter(|video| !is_unavailable(video))
             .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
@@ -229,7 +229,7 @@ impl VideoSearcherApi for VideoSearcher {
 /// read paths can omit it (see the `video-listing` capability). An `Err` is
 /// never excluded,
 /// so a lookup failure still propagates rather than being silently dropped.
-fn is_excluded(video: &anyhow::Result<Video>) -> bool {
+fn is_unavailable(video: &anyhow::Result<Video>) -> bool {
     matches!(video, Ok(video) if video.status == VideoStatus::Unavailable)
 }
 

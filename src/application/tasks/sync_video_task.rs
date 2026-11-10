@@ -1128,6 +1128,36 @@ mod tests {
     }
 
     #[test]
+    fn it_should_schedule_retrying_steps_once_their_next_attempt_is_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let ten_minutes_ago = fixed_timestamp() - Duration::minutes(10);
+        let video = Video {
+            thumbnail_filename: None,
+            thumbnail: StepState::pending().fail(ten_minutes_ago),
+            subtitles: LateDataChecks::checked(Some(ten_minutes_ago), 1),
+            ..downloaded_video()
+        };
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &fetch_thumbnail(&video)),
+                pending_task(2, &fetch_subtitles(&video)),
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_schedule_nothing_for_a_settled_errored_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2946,6 +2976,36 @@ mod tests {
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(1, &categorize_video(&video))]
         );
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_categorization_that_failed_recently() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = summarized_video()
+            .record_categorization_failure(fixed_timestamp() - Duration::minutes(3));
+        video_repository.insert(&video).unwrap();
+        seed_channel_with_categorization(&db, &video, true);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&prompted_category("Sicilian", &[]))
+            .unwrap();
+        preferences_repository.save(&categorization_on()).unwrap();
+        let task = sync_task_of_downloaded_video(
+            &db,
+            video_repository,
+            task_repository.clone(),
+            preferences_repository,
+        );
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.

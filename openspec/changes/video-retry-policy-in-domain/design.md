@@ -96,19 +96,22 @@ stateDiagram-v2
     - `ERRORED` → `RETRYING`, attempts 4, `last_errored_at = COALESCE(last_errored_at, updated_at)`. Due 24 h after the last error, then 7 more daily tries.
     - `EXCLUDED` → `UNAVAILABLE`.
     - `download_failure` is backfilled from the pending `download_video` task's `last_error`, else the latest dead-letter row.
+  - The old late-data `failed_attempts` is a lifetime count, never reset on success, so it can't tell found data from a give-up. Found data is mapped by what was found, not by the count.
   - **Subtitles:**
     - `FETCHED` → `DONE`.
-    - `UNAVAILABLE` with `failed_attempts >= 3` → `FAILED` (attempts 11), else `UNAVAILABLE`.
+    - `UNAVAILABLE` with `failed_attempts >= 3` → `FAILED` (attempts 11), else `UNAVAILABLE`. Some of these were a conclusive "no captions"; a retry just re-checks them.
     - `MISSING` with attempts > 0 → `RETRYING`, else `PENDING`.
-  - **Chapters / quality:**
-    - settled with `failed_attempts >= 3` → `FAILED` (11).
-    - Chapters settled with no chapters and no failures → `UNAVAILABLE`.
-    - Other settled → `DONE`.
+  - **Chapters:**
+    - Settled with chapters → `DONE`.
+    - Settled with no chapters (`[]`): `UNAVAILABLE` below 3 attempts, `FAILED` (11) at 3 or more.
+    - Unsettled with attempts → `RETRYING`, else `PENDING`.
+  - **Quality:**
+    - Settled → `DONE` (the quality kept is what the old binary kept; it never retried a settled one).
     - Unsettled with attempts → `RETRYING`, else `PENDING`.
   - **Summary:** `MISSING` → `PENDING`, `GENERATED` → `DONE`, `UNAVAILABLE` → `FAILED`.
   - **Thumbnail:** `DONE` when a filename is recorded, else `PENDING`.
-  - **Categorization:** `PENDING`.
   - **Verdicts:** `UNAVAILABLE` → `FAILED`.
+  - **Categorization:** `FAILED` (attempts 11, last failure `updated_at`) when the video has a `FAILED` verdict after the verdict mapping, so "Retry now" is offered; else `PENDING`.
   - Drops `subtitle_state`, `summary_state`, `chapters_settled`, `quality_settled`.
   - In-flight tasks run under the new binary and re-queue or settle; their `retries` resets on re-queue. Dead-letter rows stay.
 - Rollback: the old binary needs the dropped columns. Downgrading means restoring the database backup taken before upgrading (release note).
@@ -147,8 +150,16 @@ stateDiagram-v2
 - `web/src/lib/videoSteps.ts` (+ test): status label and failing-steps lines at `now`.
 - `web/src/components/VideoDetail.tsx`, `VideoListPane.tsx` (+ tests), and every component reading `EXCLUDED` or `unavailable`.
 - `web/src/test/helpers.tsx`: `aVideo` with `steps`.
-- `e2e-tests/helpers/video.js`, `e2e-tests/tests/erroredDownload.spec.js`.
-- `doc/INSTALLATION.md` (`YARRTUBE_RETRY_BASE_DELAY_SECONDS` covers infrastructure only, plus the back-up-before-upgrading note).
+- `e2e-tests/helpers/video.js`, `e2e-tests/tests/erroredDownload.spec.js`, `e2e-tests/README.md`.
+- `doc/INSTALLATION.md` (`YARRTUBE_RETRY_BASE_DELAY_SECONDS` covers infrastructure only, plus the back-up-before-upgrading note), `doc/ARCHITECTURE.md`.
+- `src/domain/video/video_sync_step.rs`: `VideoSyncStep::ALL`, the step tasks `VideoRetrier` brings forward.
+- `src/domain/task/mod.rs`, `src/domain/services/mod.rs`: module registrations.
+- `src/domain/services/internal_video_reconciler.rs`, `show_mover.rs`, `src/application/http/{categories,channels,playlists,preferences,tasks}/mod.rs`: the renamed fields and values.
+- `src/domain/services/category_creator.rs`: a new AI category makes the categorization of the videos it is pending for Pending.
+- `src/domain/services/categorization_resetter.rs` (new): `CategorizationResetter`, the one place a categorization goes back to Pending (`reset(ids)`, `reset_pending_for(category)`), deleting the video's remaining `failed` verdicts; used by category creation and update, `VideoCategoryEditor` and `PreferencesUpdater`.
+- `src/application/http/test_support.rs`: the shared resetter for tests.
+- `src/domain/video/video_output_entry.rs` (`thumbnail_staging_dir`), `src/infrastructure/shared/staging_area.rs` (`StagingArea::for_thumbnail`): the thumbnail fetch stages into its own `<videos>/.downloads/<id>-thumbnail`. A download starting right after a thumbnail fetch must not run in a dir deleted and recreated under the same path: on a Docker Desktop bind mount yt-dlp got a stale working dir, and with the 10-minute first retry that failure became visible.
+- `web/src/api/client.ts` (`retryVideo`), `web/src/components/RetryVideoButton.tsx`.
 
 ## Types & Signatures
 
@@ -187,6 +198,8 @@ impl LateDataChecks {
     /// Complete → Done; Incomplete → Unavailable when old, else Pending; Failed → state.fail.
     pub fn record(self, outcome: LateDataOutcome, published_at: DateTime<Utc>, now: DateTime<Utc>) -> Self;
     pub fn is_due(&self, now: DateTime<Utc>) -> bool; // Pending: never checked or RECHECK_AFTER since; Retrying: backoff
+    pub fn is_unsettled(&self) -> bool;              // Pending | Retrying
+    pub fn retry(self) -> Self;                      // state.retry()
 }
 // removed: MAX_FAILED_ATTEMPTS, failures_exhausted, settles
 
@@ -194,6 +207,10 @@ impl LateDataChecks {
 pub enum VideoStepOutcome {
     Settled,                                            // done, unavailable, failed, nothing to do
     RetryAt { at: DateTime<Utc>, reason: String },      // retrying, or ran before due
+}
+impl VideoStepOutcome {
+    /// RetryAt the step's next attempt; Settled once it gave up or the video is gone (None).
+    pub fn retry_at_or_settled(next_attempt_at: Option<DateTime<Utc>>, reason: String) -> Self;
 }
 
 // domain/video/video_status.rs
@@ -215,7 +232,8 @@ pub struct Video {
 impl Video {
     pub fn mark_errored(self, reason: impl Into<String>, now: DateTime<Utc>) -> Self; // Retrying | Failed (11th)
     pub fn mark_unavailable(self, now: DateTime<Utc>) -> Self;                         // was mark_excluded
-    pub fn mark_downloaded(..) -> Self;                       // + attempts and failure cleared
+    pub fn mark_downloaded(..) -> Self;                       // + attempts and failure cleared; keeps a fetched thumbnail when the download brings none
+    pub fn is_categorization_due(&self, now: DateTime<Utc>) -> bool; // Done || categorization.is_due(now)
     pub fn is_download_due(&self, now: DateTime<Utc>) -> bool;
     pub fn next_download_at(&self) -> Option<DateTime<Utc>>;
     pub fn record_thumbnail_failure(self, now: DateTime<Utc>) -> Self;
@@ -233,7 +251,11 @@ impl Video {
 pub enum Verdict { Yes, No, Failed }   // was Unavailable
 
 // domain/video/errors.rs
-pub enum RetryVideoError { VideoNotFound, Repository(anyhow::Error) }
+pub enum RetryVideoError { VideoNotFound(VideoId), Repository(anyhow::Error) }
+
+// domain/video/video_output_entry.rs, infrastructure/shared/staging_area.rs
+pub fn thumbnail_staging_dir(videos_path: &str, video_id: &VideoId) -> PathBuf; // <videos>/.downloads/<id>-thumbnail
+impl StagingArea { pub fn for_thumbnail(&self, video_id: &VideoId) -> StagedDir; }
 
 // domain/services/* (Err only when the video can't be read or stored)
 fn download(&self, video_id: VideoId) -> anyhow::Result<VideoStepOutcome>;
@@ -262,8 +284,9 @@ pub trait VideoRetrierApi: Send + Sync {
 
 // infrastructure/repositories
 fn reset_failed_summaries(&self, now: DateTime<Utc>) -> anyhow::Result<()>;   // was reset_unavailable_summaries
-fn delete_failed(&self) -> anyhow::Result<()>;                                // verdicts, was delete_unavailable
-fn delete_failed_for_category(&self, id: &CategoryId) -> anyhow::Result<()>;
+fn delete_failed(&self) -> anyhow::Result<Vec<VideoId>>;                      // verdicts, was delete_unavailable; the videos that had one
+fn delete_failed_for_category(&self, id: &CategoryId) -> anyhow::Result<Vec<VideoId>>;
+// no bulk categorization reset: the services reset the returned videos through VideoUpdater
 fn delete_failed_for_video(&self, id: &VideoId) -> anyhow::Result<()>;
 
 // domain/task/task_outcome.rs
@@ -353,6 +376,30 @@ SummarizeVideoTask::handle -> VideoSummarizer::summarize(&video)
   ok -> mark_summary_generated (Done) -> Settled
 ```
 
+Categorization gives up the same way whatever failed (rejection, server fault, Ollama down, model missing): the failure that makes it Failed also stores `failed` verdicts for every category still pending (`give_up`).
+
+Categorization back to Pending (through `VideoUpdater`, `Video::reset_categorization`):
+```
+CategoryCreator::create            -> the videos the new AI category is pending for
+CategoryUpdater (first AI prompt)  -> the videos the category is now pending for, as CategoryCreator
+every reset above also deletes the video's remaining `failed` verdicts (delete_failed_for_video), as Retry now does
+VideoCategoryEditor::rerun_category -> the videos whose AI verdicts were deleted (as rerun_video / rerun_source)
+CategoryUpdater (prompt changed)   -> delete_failed_for_category -> the returned videos
+PreferencesUpdater (model/URL/prompt changed) -> delete_failed -> the returned videos
+```
+
+- Creating a category, or giving one its first prompt, resets regardless of the source's `categorization_enabled` and the AI preferences. Nothing runs while categorization is off, and when it is turned back on the new category is asked; a Failed categorization left alone would never be due again.
+- A Pending categorization never keeps a `failed` verdict: a run asks only pending categories, so a kept one would end Done with a category nobody asks again and no "Retry now" to offer.
+
+Degraded download (SABR) and thumbnail:
+```
+VideoDownloader::record_downloaded
+  mark_downloaded: no thumbnail from yt-dlp -> keeps the fetched thumbnail_filename (thumbnail stays Done)
+  episode NFO: <thumb> from the kept thumbnail_filename
+  record_downloaded_quality(degraded) -> quality Retrying
+    -> task_repository.schedule(&Task::UpgradeQuality { video_id }, quality.next_attempt_at)
+```
+
 Retry:
 ```
 POST /api/videos/{id}/retry -> retry_video(State<VideoRetrier>, id)
@@ -371,7 +418,7 @@ VideoReconciler::reconcile(&id)
   schedule_steps -> VideoSyncPlan::for_video(&video, summaries_wanted, categorization_wanted, now)
     Download: is_download_due; FetchThumbnail: is_thumbnail_due
     FetchSubtitles / FetchChapters / UpgradeQuality: checks.is_due
-    Summarize: wanted && summarizable && summary.is_due; Categorize: wanted && categorization.is_due
+    Summarize: wanted && summarizable && summary.is_due; Categorize: wanted && is_categorization_due (Done counts)
 ```
 
 ## Test Plan
@@ -448,3 +495,24 @@ VideoReconciler::reconcile(&id)
    - web (Vitest)
      52. `videoSteps.test.ts`: labels; retrying and failed lines; overdue; `canRetry`.
      53. `VideoDetail.test.tsx`: failing-step lines, "Retry now" posts and refetches, no button when healthy, an error on a failed retry.
+3. Audit follow-ups:
+   - `http/categories`
+     54. `it_should_make_a_failed_categorization_pending_when_a_category_is_created`.
+     55. `it_should_make_a_failed_categorization_pending_when_its_category_is_rerun`.
+     56. `it_should_keep_another_categorys_failure_when_a_prompt_changes`: Failed with a `failed` "Chess" verdict, "Tech" prompt edited → still Failed; a video with a `failed` "Tech" verdict → Pending.
+   - `categorize_video_task`
+     57. `it_should_fail_pending_categories_when_ollama_is_down_on_the_eleventh_attempt`.
+   - `download_video_task`
+     58. `it_should_keep_the_fetched_thumbnail_if_the_download_brings_none`.
+     59. `it_should_schedule_the_quality_check_if_the_download_is_degraded`: `upgrade_quality` pending at now + 10 min.
+   - `staging_area`
+     60. `it_should_discard_a_thumbnail_staging_dir_when_dropped`.
+   - `sqlite_migrations`
+     61. `it_should_map_settled_chapters_and_quality_when_migrating` (reworked): found chapters `DONE` whatever the count; `[]` `UNAVAILABLE` below 3, `FAILED` at 3; settled quality `DONE`.
+     62. `it_should_fail_the_categorization_of_a_video_with_failed_verdicts_when_migrating`.
+     63. `it_should_map_subtitle_states_when_migrating` (kept: `UNAVAILABLE` with 3 → `FAILED`).
+   - `download_video_task`
+     64. `it_should_reference_the_kept_thumbnail_in_the_episode_nfo`.
+   - `http/categories`
+     65. `it_should_make_categorizations_pending_when_a_category_gets_an_ai_prompt`.
+     66. `it_should_ask_again_about_failed_categories_when_a_category_is_created`: Failed with a `failed` "Chess" verdict, "Food" created → Pending, "Chess" verdict deleted.

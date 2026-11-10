@@ -75,7 +75,7 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
             info!(video_id = %video_id, "video has no playlist or channel any more, skipping thumbnail fetch");
             return Ok(VideoStepOutcome::Settled);
         };
-        let staged = self.staging_area.for_video(&video.id);
+        let staged = self.staging_area.for_thumbnail(&video.id);
         match self.fetch_and_place(&video, staged.path(), &owner.target.output_dir) {
             Ok(()) => Ok(VideoStepOutcome::Settled),
             Err(reason) => self.record_failure(&video, reason),
@@ -119,12 +119,10 @@ impl ThumbnailFetcher {
             (video.thumbnail_filename.is_none() && video.is_thumbnail_fetchable())
                 .then(|| video.record_thumbnail_failure(now))
         })?;
-        Ok(
-            match recorded.and_then(|video| video.thumbnail.next_attempt_at()) {
-                Some(at) => VideoStepOutcome::RetryAt { at, reason },
-                None => VideoStepOutcome::Settled,
-            },
-        )
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.thumbnail.next_attempt_at()),
+            reason,
+        ))
     }
 
     fn fetch_thumbnail(&self, video: &Video, staging: &Path) -> anyhow::Result<ThumbnailFetch> {

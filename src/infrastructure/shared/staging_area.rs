@@ -1,4 +1,4 @@
-use crate::domain::video::{VideoId, staging_dir, subtitle_staging_dir};
+use crate::domain::video::{VideoId, staging_dir, subtitle_staging_dir, thumbnail_staging_dir};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,9 +32,15 @@ impl StagingArea {
         }
     }
 
-    /// The staging dir a video's download or thumbnail fetch writes into.
+    /// The staging dir a video's download or quality upgrade writes into.
     pub fn for_video(&self, video_id: &VideoId) -> StagedDir {
         self.staged(video_id, staging_dir(&self.videos_path, video_id))
+    }
+
+    /// The staging dir a video's thumbnail fetch writes into, a sibling of
+    /// its download's.
+    pub fn for_thumbnail(&self, video_id: &VideoId) -> StagedDir {
+        self.staged(video_id, thumbnail_staging_dir(&self.videos_path, video_id))
     }
 
     /// The staging dir a video's subtitle fetch writes into, a sibling of
@@ -106,6 +112,25 @@ mod tests {
         drop(staged);
 
         assert_eq!(path, videos_root.join(".downloads").join("v1-subtitles"));
+        assert!(!path.exists());
+        std::fs::remove_dir_all(&videos_root).unwrap();
+    }
+
+    #[test]
+    fn it_should_discard_a_thumbnail_staging_dir_when_dropped() {
+        let videos_root = unique_temp_dir("staging-area-thumbnail");
+        let staging_area = StagingArea::new(
+            Arc::new(FilesystemVideoFileRepository),
+            videos_root.to_string_lossy(),
+        );
+
+        let staged = staging_area.for_thumbnail(&video_id());
+        let path = staged.path().to_path_buf();
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("yt1.jpg"), b"").unwrap();
+        drop(staged);
+
+        assert_eq!(path, videos_root.join(".downloads").join("v1-thumbnail"));
         assert!(!path.exists());
         std::fs::remove_dir_all(&videos_root).unwrap();
     }

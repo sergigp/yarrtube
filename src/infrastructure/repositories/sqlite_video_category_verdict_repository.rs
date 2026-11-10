@@ -15,10 +15,11 @@ pub trait VideoCategoryVerdictRepository: Send + Sync {
     fn save(&self, verdict: &VideoCategoryVerdict) -> anyhow::Result<()>;
     fn delete_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
-    /// Every `failed` verdict.
-    fn delete_failed(&self) -> anyhow::Result<()>;
-    /// `category_id`'s `failed` verdicts.
-    fn delete_failed_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()>;
+    /// Deletes every `failed` verdict; returns the videos that had one.
+    fn delete_failed(&self) -> anyhow::Result<Vec<VideoId>>;
+    /// Deletes `category_id`'s `failed` verdicts; returns the videos that
+    /// had one.
+    fn delete_failed_for_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoId>>;
     /// `video_id`'s `failed` verdicts.
     fn delete_failed_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     /// Deletes the AI verdicts of `video_ids`; returns the videos that had
@@ -111,12 +112,12 @@ impl VideoCategoryVerdictRepository for SqliteVideoCategoryVerdictRepository {
         self.delete_where("category_id = ?1", &[category_id.as_str()])
     }
 
-    fn delete_failed(&self) -> anyhow::Result<()> {
-        self.delete_where("verdict = ?1", &[Verdict::Failed.as_str()])
+    fn delete_failed(&self) -> anyhow::Result<Vec<VideoId>> {
+        self.delete_returning_videos("verdict = ?1", &[Verdict::Failed.as_str()])
     }
 
-    fn delete_failed_for_category(&self, category_id: &CategoryId) -> anyhow::Result<()> {
-        self.delete_where(
+    fn delete_failed_for_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoId>> {
+        self.delete_returning_videos(
             "verdict = ?1 AND category_id = ?2",
             &[Verdict::Failed.as_str(), category_id.as_str()],
         )
@@ -372,7 +373,10 @@ mod tests {
 
         let result = repository.delete_failed();
 
-        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(vec![video_id("rec1"), video_id("rec2")])
+        );
         assert_eq!(
             repository
                 .find_many(&[video_id("rec1"), video_id("rec2")])
@@ -396,7 +400,10 @@ mod tests {
 
         let result = repository.delete_failed_for_category(&CategoryId::new("chess").unwrap());
 
-        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(vec![video_id("rec1")])
+        );
         assert_eq!(
             repository
                 .find_many(&[video_id("rec1"), video_id("rec2")])

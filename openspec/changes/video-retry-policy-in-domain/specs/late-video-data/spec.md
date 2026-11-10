@@ -44,4 +44,4 @@ A check that fails (the downloader errors) or is inconclusive (the downloader re
 
 ### Requirement: Bounded Failed Checks
 **Reason**: Replaced by "Failed Checks Follow The Retry Policy": failures back off and give up after 11 attempts, for young and old videos alike, instead of settling an old video after 3 failures and never settling a young one.
-**Migration**: Data already settled with at least 3 failed attempts becomes Failed (11 failed attempts), so the user can retry it; other settled data becomes Done or Unavailable; unsettled data with failed attempts becomes Retrying with them, else Pending.
+**Migration**: The stored failed attempts were never reset on success, so settled data is mapped by what was found. Found subtitles become Done; unavailable subtitles with at least 3 failed attempts become Failed (11 failed attempts), so the user can retry them, else Unavailable. Found chapters become Done; settled chapters with none found become Unavailable below 3 failed attempts and Failed (11) from 3. Settled quality becomes Done. Unsettled data with failed attempts becomes Retrying with them, else Pending.

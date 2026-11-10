@@ -126,7 +126,8 @@ impl QualityUpgrader {
             self.redownload(video, quality, staging, output_dir, published_at)
         } else {
             let probed_height = probe.height.filter(|_| !probe.degraded);
-            self.record_check(video, probed_height, published_at)
+            self.record_check_on(video, probed_height, published_at)
+                .map(|_| ())
         }
     }
 
@@ -211,18 +212,6 @@ impl QualityUpgrader {
             .is_some_and(|stored| stored.is_downloaded() && stored.filename == video.filename))
     }
 
-    /// Records a quality check that found nothing better (`probed_height`)
-    /// or failed (`None`).
-    fn record_check(
-        &self,
-        video: &Video,
-        probed_height: Option<u32>,
-        published_at: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
-        self.record_check_on(video, probed_height, published_at)
-            .map(|_| ())
-    }
-
     /// The video as stored once the check is recorded on it.
     fn record_check_on(
         &self,
@@ -240,15 +229,10 @@ impl QualityUpgrader {
     /// Retrying: it runs again when its next attempt is due.
     fn retry_if_degraded(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         let stored = self.video_repository.find(&video.id)?;
-        Ok(Self::next_check(stored, DEGRADED_REASON.to_string()))
-    }
-
-    /// When a Retrying quality check runs again; settled otherwise.
-    fn next_check(stored: Option<Video>, reason: String) -> VideoStepOutcome {
-        match stored.and_then(|video| video.quality_checks.state.next_attempt_at()) {
-            Some(at) => VideoStepOutcome::RetryAt { at, reason },
-            None => VideoStepOutcome::Settled,
-        }
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            stored.and_then(|video| video.quality_checks.state.next_attempt_at()),
+            DEGRADED_REASON.to_string(),
+        ))
     }
 
     /// Records a failed check, failed for `reason`: Retrying, run again when
@@ -259,12 +243,10 @@ impl QualityUpgrader {
         reason: String,
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_check_on(video, None, video.created_at)?;
-        Ok(
-            match recorded.and_then(|video| video.quality_checks.state.next_attempt_at()) {
-                Some(at) => VideoStepOutcome::RetryAt { at, reason },
-                None => VideoStepOutcome::Settled,
-            },
-        )
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.quality_checks.state.next_attempt_at()),
+            reason,
+        ))
     }
 
     /// Best effort, like `VideoDownloader`'s: the upgrade is already

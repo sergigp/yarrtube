@@ -121,7 +121,9 @@ impl SubtitleFetcher {
                 Self::log_inconclusive(video, &probe);
                 Err(anyhow::anyhow!(probe.warnings.join("; ")))
             }
-            None => self.record_check(video, LateDataOutcome::Incomplete, probe.published_at),
+            None => self
+                .record_check_on(video, LateDataOutcome::Incomplete, probe.published_at)
+                .map(|_| ()),
         }
     }
 
@@ -135,20 +137,6 @@ impl SubtitleFetcher {
             warnings = ?probe.warnings,
             "caption probe warned and found no original-language track"
         );
-    }
-
-    /// Records a check that found no selectable track (`Incomplete`) or was
-    /// inconclusive (`Failed`), dated by the video's publish time (its
-    /// video's creation time when none is known): Unavailable once the
-    /// `late-video-data` policy settles it, Missing otherwise.
-    fn record_check(
-        &self,
-        video: &Video,
-        outcome: LateDataOutcome,
-        published_at: Option<DateTime<Utc>>,
-    ) -> anyhow::Result<()> {
-        self.record_check_on(video, outcome, published_at)
-            .map(|_| ())
     }
 
     /// The video as stored once the check is recorded on it.
@@ -173,12 +161,10 @@ impl SubtitleFetcher {
         reason: String,
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_check_on(video, LateDataOutcome::Failed, None)?;
-        Ok(
-            match recorded.and_then(|video| video.subtitles.state.next_attempt_at()) {
-                Some(at) => VideoStepOutcome::RetryAt { at, reason },
-                None => VideoStepOutcome::Settled,
-            },
-        )
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.subtitles.state.next_attempt_at()),
+            reason,
+        ))
     }
 
     /// Downloads `track`, moves it next to the episode, stores its

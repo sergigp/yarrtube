@@ -1,7 +1,9 @@
 //! Test helpers shared by the acceptance tests of the HTTP resources.
 
 use crate::domain::category::{Category, CategoryColor, CategoryName};
-use crate::domain::services::{VideoCategoryAssigner, VideoCategoryEditor, VideoOwnerFinder};
+use crate::domain::services::{
+    CategorizationResetter, VideoCategoryAssigner, VideoCategoryEditor, VideoOwnerFinder,
+};
 use crate::domain::video::Video;
 use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
 use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
@@ -38,8 +40,9 @@ pub fn video_category_editor(database: Database) -> VideoCategoryEditor {
         Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
         video_category_assigner(database.clone()),
-        Arc::new(SqliteTaskRepository::new(database, clock.clone())),
+        Arc::new(SqliteTaskRepository::new(database.clone(), clock.clone())),
         clock,
+        categorization_resetter(database),
     )
 }
 
@@ -70,6 +73,16 @@ pub fn user_verdict(video: &Video, category: &Category, verdict: Verdict) -> Vid
         reason: None,
         ..ai_verdict(video, category, verdict)
     }
+}
+
+pub fn categorization_resetter(database: Database) -> CategorizationResetter {
+    CategorizationResetter::new(
+        Arc::new(SqliteVideoRepository::new(database.clone())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
+        Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+        Arc::new(SqlitePlaylistVideoRepository::new(database)),
+        Arc::new(FixedClock(fixed_timestamp())),
+    )
 }
 
 pub fn video_category_assigner(database: Database) -> VideoCategoryAssigner {

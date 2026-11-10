@@ -1,3 +1,4 @@
+pub mod categorization_resetter;
 pub mod category_creator;
 pub mod category_deleter;
 pub mod category_member_remover;
@@ -49,6 +50,7 @@ pub mod video_summarizer;
 pub mod video_updater;
 pub mod video_watch_state_updater;
 
+pub use categorization_resetter::{CategorizationResetter, CategorizationResetterApi};
 pub use category_creator::{CategoryCreator, CategoryCreatorApi, NewCategory};
 pub use category_deleter::{CategoryDeleter, CategoryDeleterApi};
 pub use category_member_remover::{CategoryMemberRemover, CategoryMemberRemoverApi};

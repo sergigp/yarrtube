@@ -190,12 +190,10 @@ impl VideoSummarizer {
                 .is_summarizable()
                 .then(|| video.record_summary_failure(now))
         })?;
-        Ok(
-            match recorded.and_then(|video| video.summary.next_attempt_at()) {
-                Some(at) => VideoStepOutcome::RetryAt { at, reason },
-                None => VideoStepOutcome::Settled,
-            },
-        )
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.summary.next_attempt_at()),
+            reason,
+        ))
     }
 
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> Result<(), Failure> {

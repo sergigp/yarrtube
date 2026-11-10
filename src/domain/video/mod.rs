@@ -75,7 +75,7 @@ pub use video_id::VideoId;
 pub use video_output_entry::{
     MOVIE_NFO_FILENAME, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, STAGING_DIRNAME, is_episode_path,
     is_season_folder, nfo_path_for, owning_entry, resolve_output_dir, staging_dir,
-    subtitle_staging_dir, top_level_entry,
+    subtitle_staging_dir, thumbnail_staging_dir, top_level_entry,
 };
 pub use video_owner::VideoOwner;
 pub use video_search_text::VideoSearchText;

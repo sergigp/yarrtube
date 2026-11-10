@@ -1151,7 +1151,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_not_mark_a_category_unavailable_when_the_settings_changed_during_its_attempt() {
+    fn it_should_not_mark_a_category_failed_when_the_settings_changed_during_its_attempt() {
         let changes: [fn(&TestDatabase, &Category); 2] = [
             |db, _| {
                 SqlitePreferencesRepository::new(db.database())
@@ -1252,6 +1252,84 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                     retrying
                 ),
                 (run_again("connection reset"), vec![], retrying),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_fail_pending_categories_if_ollama_is_down_on_the_eleventh_attempt() {
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+        let unreachable = FakeLlmServerRepository::failing();
+        let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
+            name: "llama3:8b".to_string(),
+            ..thinking_model()
+        }));
+        let down_during_call = FakeLlmServerRepository::new(server_with(thinking_model()))
+            .with_replies(vec![Err(anyhow::anyhow!("connection reset"))]);
+        let down_during_fallback = FakeLlmServerRepository::new(server_with(thinking_model()))
+            .with_replies(vec![
+                reply(&answers(&[("Sicilian", NO)])),
+                Err(anyhow::anyhow!("connection reset")),
+            ]);
+
+        let outcomes = [
+            unreachable,
+            model_missing,
+            down_during_call,
+            down_during_fallback,
+        ]
+        .map(|llm| {
+            let db = TestDatabase::new();
+            seed(&db, &video, &[&sicilian, &tech]);
+            let task = categorize_video_task(&db, Arc::new(llm));
+
+            let result = run(&task, &video);
+
+            let verdicts = SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap();
+            let categorization = SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap()
+                .map(|video| video.categorization);
+            (result, verdicts, categorization)
+        });
+
+        let failed = Some(StepState {
+            status: StepStatus::Failed,
+            attempts: RetryAttempts {
+                failed: 11,
+                last_failed_at: Some(later()),
+            },
+        });
+        let all_failed = by_category([
+            failed_verdict(&video, &sicilian),
+            failed_verdict(&video, &tech),
+        ]);
+        assert_eq!(
+            outcomes,
+            [
+                (Ok(TaskOutcome::Done), all_failed.clone(), failed),
+                (Ok(TaskOutcome::Done), all_failed.clone(), failed),
+                (Ok(TaskOutcome::Done), all_failed, failed),
+                (
+                    Ok(TaskOutcome::Done),
+                    by_category([
+                        ai_verdict(&video, &sicilian, Verdict::No, "A chess game."),
+                        failed_verdict(&video, &tech),
+                    ]),
+                    failed
+                ),
             ]
         );
     }

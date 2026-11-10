@@ -5,7 +5,7 @@ use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
     VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{StepStatus, Video, VideoOwner, VideoStepOutcome};
+use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -28,8 +28,9 @@ enum Skip {
     NotWanted(&'static str),
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
-    /// Ollama can't be reached or hasn't the saved model: a failed attempt.
-    Unreachable(anyhow::Error),
+    /// Ollama can't be reached or hasn't the saved model: a failed attempt
+    /// of the job that would have run.
+    Unreachable(anyhow::Error, Box<CategorizationJob>),
 }
 
 impl From<anyhow::Error> for Skip {
@@ -148,10 +149,7 @@ impl VideoCategorizerApi for VideoCategorizer {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
                 Ok(VideoStepOutcome::Settled)
             }
-            Err(Skip::Unreachable(reason)) => {
-                warn!(video_id = %video.id, %reason, "couldn't categorize video");
-                self.record_failure(video, reason.to_string())
-            }
+            Err(Skip::Unreachable(reason, job)) => self.fail_everything(video, &job, reason),
         }
     }
 }
@@ -184,27 +182,38 @@ impl VideoCategorizer {
             .find(&video.id)?
             .context("the video has no summary")?;
         let settings = preferences.categorization.clone();
-        let thinking = settings.thinking
-            && self
-                .llm_server_repository
-                .find(&url)
-                .map_err(Skip::Unreachable)?
-                .model(settings.model.as_str())
-                .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))
-                .map_err(Skip::Unreachable)?
-                .thinking;
         let pending = self.pending(video, &owner)?;
         let context_length = settings.effective_context_length(self.prompted_categories()?);
-        Ok(CategorizationJob {
+        let job = CategorizationJob {
             preferences,
             url,
             settings,
-            thinking,
+            thinking: false,
             context_length,
             owner,
             summary: summary.text,
             pending,
-        })
+        };
+        match self.thinking(&job) {
+            Ok(thinking) => Ok(CategorizationJob { thinking, ..job }),
+            Err(reason) => Err(Skip::Unreachable(reason, Box::new(job))),
+        }
+    }
+
+    /// Whether `job` asks with thinking: when its settings want it and the
+    /// saved model on Ollama supports it. Fails when Ollama can't be reached
+    /// or hasn't the model.
+    fn thinking(&self, job: &CategorizationJob) -> anyhow::Result<bool> {
+        if !job.settings.thinking {
+            return Ok(false);
+        }
+        let model = job.settings.model.as_str();
+        Ok(self
+            .llm_server_repository
+            .find(&job.url)?
+            .model(model)
+            .with_context(|| format!("{model} isn't installed on Ollama"))?
+            .thinking)
     }
 
     /// How many categories have an AI prompt: what Auto sizes the context
@@ -223,24 +232,12 @@ impl VideoCategorizer {
     fn ask_each(&self, video: &Video, job: &CategorizationJob) -> anyhow::Result<VideoStepOutcome> {
         let rejected = match self.rejected_categories(video, job) {
             Ok(rejected) => rejected,
-            Err(Stop::Server(reason)) => {
-                warn!(video_id = %video.id, %reason, "couldn't categorize video");
-                return self.record_failure(video, reason.to_string());
-            }
+            Err(Stop::Server(reason)) => return self.fail_everything(video, job, reason),
             Err(Stop::Failed(error)) => return Err(error),
         };
         match Self::fail_if_rejected(&rejected) {
             Ok(()) => self.mark_categorized(video),
-            Err(cause) => {
-                let recorded = self.record_attempt_failure(video)?;
-                if recorded
-                    .as_ref()
-                    .is_some_and(|video| video.categorization.status == StepStatus::Failed)
-                {
-                    self.give_up(video, job, &rejected)?;
-                }
-                Ok(Self::next_attempt(recorded, cause.to_string()))
-            }
+            Err(cause) => self.fail_attempt(video, job, &rejected, cause.to_string()),
         }
     }
 
@@ -442,12 +439,41 @@ impl VideoCategorizer {
             && current.is_some_and(|current| current.ai_prompt == category.ai_prompt))
     }
 
-    /// An error naming each of `rejected`, with why; `Ok` when none was.
+    /// Records a failed attempt with every pending category rejected, for
+    /// `reason`: the server couldn't be reached or answered with a fault.
+    fn fail_everything(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        reason: anyhow::Error,
+    ) -> anyhow::Result<VideoStepOutcome> {
+        warn!(video_id = %video.id, %reason, "couldn't categorize video");
+        let reason = reason.to_string();
+        let rejected = Self::rejected_all(&job.pending, &reason);
+        self.fail_attempt(video, job, &rejected, reason)
+    }
+
     /// Records a failed attempt, failed for `reason`: Retrying, run again
-    /// when its next attempt is due, or Failed.
-    fn record_failure(&self, video: &Video, reason: String) -> anyhow::Result<VideoStepOutcome> {
+    /// when its next attempt is due, or Failed, giving each of `rejected`
+    /// a `failed` verdict (see `give_up`).
+    fn fail_attempt(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        rejected: &[(&Category, String)],
+        reason: String,
+    ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_attempt_failure(video)?;
-        Ok(Self::next_attempt(recorded, reason))
+        if recorded
+            .as_ref()
+            .is_some_and(|video| video.is_categorization_failed())
+        {
+            self.give_up(video, job, rejected)?;
+        }
+        Ok(VideoStepOutcome::retry_at_or_settled(
+            recorded.and_then(|video| video.next_categorization_at()),
+            reason,
+        ))
     }
 
     /// Records a run that left nothing rejected: Done.
@@ -466,14 +492,6 @@ impl VideoCategorizer {
         })
     }
 
-    /// When a Retrying categorization runs again; settled otherwise.
-    fn next_attempt(recorded: Option<Video>, reason: String) -> VideoStepOutcome {
-        match recorded.and_then(|video| video.categorization.next_attempt_at()) {
-            Some(at) => VideoStepOutcome::RetryAt { at, reason },
-            None => VideoStepOutcome::Settled,
-        }
-    }
-
     /// Gives each of `rejected` a `failed` verdict once the categorization
     /// gave up, unless it is no longer pending as the job started (see
     /// `still_pending`).
@@ -483,12 +501,13 @@ impl VideoCategorizer {
         job: &CategorizationJob,
         rejected: &[(&Category, String)],
     ) -> anyhow::Result<()> {
+        let now = self.clock.now();
         rejected.iter().try_for_each(|(category, _)| {
             let verdict = VideoCategoryVerdict::failed(
                 video.id.clone(),
                 category.id.clone(),
                 job.settings.model.as_str(),
-                self.clock.now(),
+                now,
             );
             self.video_category_assigner
                 .apply_verdict_if(&verdict, &job.owner.source, &|| {
@@ -498,6 +517,7 @@ impl VideoCategorizer {
         })
     }
 
+    /// An error naming each of `rejected`, with why; `Ok` when none was.
     fn fail_if_rejected(rejected: &[(&Category, String)]) -> anyhow::Result<()> {
         if rejected.is_empty() {
             return Ok(());

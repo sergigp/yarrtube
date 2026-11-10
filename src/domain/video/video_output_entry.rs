@@ -74,8 +74,8 @@ pub fn nfo_path_for(relative_path: &str) -> String {
         .into_owned()
 }
 
-/// Where a video's download or thumbnail fetch is staged before being moved
-/// into its show: `<videos root>/.downloads/<video id>`. Keyed by the
+/// Where a video's download (or quality upgrade) is staged before being
+/// moved into its show: `<videos root>/.downloads/<video id>`. Keyed by the
 /// video's own id, not the YouTube id: the same YouTube video tracked by
 /// two shows is two stored videos that may download at once, and each
 /// discards its own dir.
@@ -85,14 +85,27 @@ pub fn staging_dir(videos_path: &str, video_id: &VideoId) -> PathBuf {
         .join(video_id.as_str())
 }
 
-/// Where a video's subtitle fetch is staged: a sibling of its download and
-/// thumbnail staging dir, `<videos root>/.downloads/<video id>-subtitles`,
-/// since a thumbnail fetch discards its own dir whole, possibly while a
-/// subtitle fetch of the same video runs in its own lane.
+/// Where a video's thumbnail fetch is staged: a sibling of its download
+/// staging dir, `<videos root>/.downloads/<video id>-thumbnail`. Each step
+/// discards its own dir whole when it ends, and a download starting right
+/// after a thumbnail fetch must not run in a dir deleted and recreated
+/// under the same path (a bind mount may hand yt-dlp a stale working dir).
+pub fn thumbnail_staging_dir(videos_path: &str, video_id: &VideoId) -> PathBuf {
+    sibling_staging_dir(videos_path, video_id, "thumbnail")
+}
+
+/// Where a video's subtitle fetch is staged: a sibling of its download
+/// staging dir, `<videos root>/.downloads/<video id>-subtitles`, since a
+/// download discards its own dir whole, possibly while a subtitle fetch of
+/// the same video runs in its own lane.
 pub fn subtitle_staging_dir(videos_path: &str, video_id: &VideoId) -> PathBuf {
+    sibling_staging_dir(videos_path, video_id, "subtitles")
+}
+
+fn sibling_staging_dir(videos_path: &str, video_id: &VideoId, step: &str) -> PathBuf {
     Path::new(videos_path)
         .join(STAGING_DIRNAME)
-        .join(format!("{}-subtitles", video_id.as_str()))
+        .join(format!("{}-{step}", video_id.as_str()))
 }
 
 /// Whether a file name starts with an episode code: `S<season>E<episode> - `.

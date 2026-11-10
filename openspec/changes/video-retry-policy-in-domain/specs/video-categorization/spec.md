@@ -21,11 +21,15 @@ Each stored video copy SHALL have at most one verdict per category: `yes`, `no` 
 - **THEN** they are `failed` verdicts
 
 ### Requirement: Failed Verdicts Reset
-Saving a change to the Ollama URL, the categorization model or the categorization prompt SHALL delete every `failed` verdict. Saving a different AI prompt for a category SHALL delete that category's `failed` verdicts. Saving the same values SHALL change nothing. A categorization that started before such a change SHALL NOT store `failed` verdicts after it.
+Saving a change to the Ollama URL, the categorization model or the categorization prompt SHALL delete every `failed` verdict. Saving a different AI prompt for a category SHALL delete that category's `failed` verdicts. The categorization of every video that had a deleted `failed` verdict SHALL be Pending; other videos' categorization SHALL be unchanged. Saving the same values SHALL change nothing. A categorization that started before such a change SHALL NOT store `failed` verdicts after it.
 
 #### Scenario: New model
 - **WHEN** a video has an `failed` verdict for "Tech" and the categorization model is changed
 - **THEN** "Tech" is pending for the video again
+
+#### Scenario: Another category's failure kept
+- **WHEN** a video's categorization is Failed with a `failed` verdict for "Chess" and "Tech"'s AI prompt is changed
+- **THEN** its categorization is still Failed and its "Chess" verdict is kept
 
 #### Scenario: Model changed during a last attempt
 - **WHEN** the categorization model is changed while a video's last attempt is running and "Tech" is rejected
@@ -59,16 +63,20 @@ A video's sync SHALL schedule its categorization only when AI, categories and ca
 - **THEN** no categorization is scheduled
 
 ### Requirement: Ollama Unavailable For Categorization
-When Ollama can't be reached or the saved categorization model isn't installed on it, the categorization SHALL stop with a logged warning, storing nothing more, make the categorization Retrying with one more failed attempt and re-queue it under the `video-retries` policy, without failing the task.
+When Ollama can't be reached or the saved categorization model isn't installed on it, the categorization SHALL stop with a logged warning, storing nothing more, make the categorization Retrying with one more failed attempt and re-queue it under the `video-retries` policy, without failing the task. The 11th consecutive failed attempt SHALL make it Failed and give every category still pending a `failed` verdict, as a rejected call does.
 
 #### Scenario: Ollama down
 - **WHEN** Ollama can't be reached when a categorization runs
 - **THEN** no verdict is stored, the categorization is Retrying with one more failed attempt, it is re-queued for its next attempt, and the categories stay pending
 
+#### Scenario: Ollama down on the eleventh attempt
+- **WHEN** Ollama can't be reached when a categorization with 10 consecutive failed attempts runs and "Tech" is pending
+- **THEN** the categorization is Failed and the video has a `failed` verdict for "Tech"
+
 ## ADDED Requirements
 
 ### Requirement: Categorization Status
-Every video SHALL record a categorization status from the `video-retries` vocabulary: Pending (a run is wanted and none succeeded since the categories last changed), Retrying, Done (the last run left nothing rejected) or Failed, with its consecutive failed attempts. Adding or re-running a category for the video, deleting its AI verdicts, or a `failed` verdict being reset SHALL make it Pending again.
+Every video SHALL record a categorization status from the `video-retries` vocabulary: Pending (a run is wanted and none succeeded since the categories last changed), Retrying, Done (the last run left nothing rejected) or Failed, with its consecutive failed attempts. Adding or re-running a category for the video, giving a category its first AI prompt, deleting its AI verdicts, or a `failed` verdict being reset SHALL make it Pending again, whether or not categorization is on for its playlist or channel. Making it Pending SHALL delete its remaining `failed` verdicts, so the next run asks those categories again.
 
 #### Scenario: Run leaves nothing rejected
 - **WHEN** a categorization stores a verdict for every pending category
@@ -76,6 +84,14 @@ Every video SHALL record a categorization status from the `video-retries` vocabu
 
 #### Scenario: New category after a run
 - **WHEN** a video's categorization is Done and a category with an AI prompt is added
+- **THEN** its categorization is Pending
+
+#### Scenario: Failed categories asked again
+- **WHEN** a video's categorization is Failed with a `failed` verdict for "Chess" and a category "Food" with an AI prompt is added
+- **THEN** its categorization is Pending, it has no verdict for "Chess", and its next run asks about "Chess" and "Food"
+
+#### Scenario: Category given a prompt
+- **WHEN** a video's categorization is Failed and a category without an AI prompt is given one
 - **THEN** its categorization is Pending
 
 ### Requirement: Rejected Category Calls
@@ -113,4 +129,4 @@ A call SHALL be rejected when Ollama stopped at the output limit, when Ollama re
 
 ### Requirement: Rejected Calls
 **Reason**: Replaced by "Rejected Category Calls": rejections back off and give up after 11 attempts on the video, instead of on the task queue's 5th attempt.
-**Migration**: Existing `unavailable` verdicts become `failed`, kept until the categorization settings change or the user retries the video.
+**Migration**: Existing `unavailable` verdicts become `failed`, kept until the categorization settings change or the user retries the video; a video with any becomes Failed (11 failed attempts), so the user can retry it.

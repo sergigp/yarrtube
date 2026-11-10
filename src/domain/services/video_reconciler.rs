@@ -74,7 +74,7 @@ impl VideoReconciler {
 pub trait VideoReconcilerApi: Send + Sync {
     /// Brings the stored video to its desired state (run by the `sync_video`
     /// task, so never alongside another task for the same video):
-    /// categories, broken-file reset, errored recovery, metadata repair,
+    /// categories, broken-file reset, metadata repair,
     /// stranded warning, then schedules every step still needed. No-op if
     /// the video or its owner is gone. Idempotent.
     fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<()>;
@@ -156,7 +156,7 @@ impl VideoReconciler {
         else {
             return;
         };
-        let metadata = metadata.with_thumb(thumbnail_basename(&video));
+        let metadata = metadata.with_thumb(video.thumbnail_basename());
         let nfo_path = owner.target.output_dir.join(nfo_path_for(filename));
         if let Err(e) = self
             .video_metadata_repository
@@ -258,14 +258,4 @@ impl VideoReconciler {
                 .schedule(&step.task_for(video), self.clock.now())
         })
     }
-}
-
-/// The thumbnail's file name as an NFO references it, next to the episode.
-fn thumbnail_basename(video: &Video) -> Option<String> {
-    video
-        .thumbnail_filename
-        .as_deref()
-        .and_then(|f| Path::new(f).file_name())
-        .and_then(|f| f.to_str())
-        .map(str::to_string)
 }

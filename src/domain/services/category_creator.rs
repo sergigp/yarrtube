@@ -1,7 +1,10 @@
 use crate::domain::category::{
     Category, CategoryColor, CategoryMember, CategoryName, CategoryPrompt, CreateCategoryError,
 };
-use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
+use crate::domain::services::{
+    CategorizationResetter, CategorizationResetterApi, VideoCategoryAssigner,
+    VideoCategoryAssignerApi,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -26,6 +29,7 @@ pub struct CategoryCreator {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
+    categorization_resetter: CategorizationResetter,
 }
 
 impl CategoryCreator {
@@ -35,6 +39,7 @@ impl CategoryCreator {
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_category_assigner: VideoCategoryAssigner,
         clock: Arc<dyn Clock>,
+        categorization_resetter: CategorizationResetter,
     ) -> Self {
         Self {
             repository,
@@ -42,13 +47,16 @@ impl CategoryCreator {
             playlist_repository,
             video_category_assigner,
             clock,
+            categorization_resetter,
         }
     }
 }
 
 pub trait CategoryCreatorApi: Send + Sync {
     /// Creates `category` with its prompt and members in one save, then
-    /// computes the categories of its members' stored videos. Another category
+    /// computes the categories of its members' stored videos. With an AI
+    /// prompt, it is pending for every other stored video, whose
+    /// categorization is Pending again. Another category
     /// with the same name ignoring case → `NameTaken`. Every member must be a
     /// tracked channel/playlist; the first that is not → `MemberNotTracked`.
     fn create(&self, category: NewCategory) -> Result<Category, CreateCategoryError>;
@@ -70,6 +78,7 @@ impl CategoryCreatorApi for CategoryCreator {
             .insert(&category)
             .map_err(CreateCategoryError::Repository)?;
         self.assign_videos(&category)?;
+        self.reset_categorizations(&category)?;
         Ok(category)
     }
 }
@@ -124,6 +133,17 @@ impl CategoryCreator {
         let categories = self.list_categories()?;
         self.video_category_assigner
             .reassign_category(&category.id, &[], &categories)
+            .map_err(CreateCategoryError::Repository)
+    }
+
+    /// With an AI prompt, `category` is pending for every stored video
+    /// outside its members: each one's categorization is Pending again.
+    fn reset_categorizations(&self, category: &Category) -> Result<(), CreateCategoryError> {
+        if category.ai_prompt.is_none() {
+            return Ok(());
+        }
+        self.categorization_resetter
+            .reset_pending_for(category)
             .map_err(CreateCategoryError::Repository)
     }
 
