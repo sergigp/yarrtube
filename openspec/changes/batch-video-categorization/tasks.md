@@ -47,7 +47,7 @@
   - Off then on without saving sends nothing.
 
   Verify with `npm run test`.
-- [ ] 2.23 Web `AiSettingsView.test.tsx`, one cycle per case:
+- [x] 2.23 Web `AiSettingsView.test.tsx`, one cycle per case:
   - "Auto context length" is on, with "Context length" read-only showing the value and the hint text from the spec.
   - Turning it off makes the field editable, holding the value.
   - Saving after turning it back on sends `null`.

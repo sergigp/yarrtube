@@ -69,6 +69,17 @@ function AiSettings({ saved }: { saved: Preferences }) {
     server?.models.find((model) => model.name === name)?.thinking === false
   const summariesCannotThink = modelCannotThink(form.summaries_model)
   const categorizationCannotThink = modelCannotThink(form.categorization_model)
+  // While Auto is on, what the daemon sized it to (known once saved).
+  const categorizationContextLength =
+    form.categorization_context_length_auto && saved.categorization_context_length_is_auto
+      ? String(saved.categorization_context_length)
+      : form.categorization_context_length
+  const setCategorizationAuto = (auto: boolean) =>
+    setForm((current) => ({
+      ...current,
+      categorization_context_length_auto: auto,
+      categorization_context_length: categorizationContextLength,
+    }))
   const patch = changedFields(saved, form, {
     summariesThinking: !summariesCannotThink,
     categorizationThinking: !categorizationCannotThink,
@@ -275,11 +286,25 @@ function AiSettings({ saved }: { saved: Preferences }) {
                       min={1024}
                       max={131072}
                       step={1024}
-                      value={form.categorization_context_length}
+                      value={categorizationContextLength}
+                      readOnly={form.categorization_context_length_auto}
                       disabled={aiOff}
                       onChange={(event) => set('categorization_context_length', event.target.value)}
                     />
+                    <p className="text-sm text-muted-foreground">
+                      Auto sizes it from your categories with an AI prompt, about 1,800 tokens
+                      each. Too small and videos are asked about one category at a time, which is
+                      slower.
+                    </p>
                   </Field>
+                  <SwitchRow
+                    id="categorization-context-length-auto"
+                    label="Auto"
+                    name="Auto context length"
+                    checked={form.categorization_context_length_auto}
+                    disabled={aiOff}
+                    onChange={setCategorizationAuto}
+                  />
                   <Field id="categorization-temperature" label="Temperature">
                     <Input
                       id="categorization-temperature"
