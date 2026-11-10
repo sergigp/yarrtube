@@ -572,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_stop_quietly_if_ollama_is_unreachable_during_the_fallback() {
+    fn it_should_stop_if_ollama_is_unreachable_during_the_fallback() {
         let db = TestDatabase::new();
         let video = summarized_video();
         seed(
@@ -588,7 +588,13 @@ mod tests {
 
         let result = run(&task, &video);
 
-        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason: "connection reset".to_string(),
+            })
+        );
         assert_eq!(
             asked_categories(&llm),
             vec![vec!["Sicilian", "Tech"], vec!["Sicilian"]]
@@ -1106,7 +1112,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_complete_without_verdicts_when_ollama_is_unreachable() {
+    fn it_should_count_ollama_down_as_a_failed_categorization_attempt() {
         let unreachable = FakeLlmServerRepository::failing();
         let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
             name: "llama3:8b".to_string(),
@@ -1126,15 +1132,36 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             let verdicts = SqliteVideoCategoryVerdictRepository::new(db.database())
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap();
-            (result, verdicts)
+            let categorization = SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap()
+                .map(|video| video.categorization);
+            (result, verdicts, categorization)
         });
 
+        let retrying = Some(StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 1,
+                last_failed_at: Some(later()),
+            },
+        });
+        let run_again = |reason: &str| {
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::minutes(10),
+                reason: reason.to_string(),
+            })
+        };
         assert_eq!(
             outcomes,
             [
-                (Ok(TaskOutcome::Done), vec![]),
-                (Ok(TaskOutcome::Done), vec![]),
-                (Ok(TaskOutcome::Done), vec![])
+                (run_again("connection refused"), vec![], retrying),
+                (
+                    run_again("qwen3:4b isn't installed on Ollama"),
+                    vec![],
+                    retrying
+                ),
+                (run_again("connection reset"), vec![], retrying),
             ]
         );
     }

@@ -28,6 +28,8 @@ enum Skip {
     NotWanted(&'static str),
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
+    /// Ollama can't be reached or hasn't the saved model: a failed attempt.
+    Unreachable(anyhow::Error),
 }
 
 impl From<anyhow::Error> for Skip {
@@ -146,6 +148,10 @@ impl VideoCategorizerApi for VideoCategorizer {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
                 Ok(VideoStepOutcome::Settled)
             }
+            Err(Skip::Unreachable(reason)) => {
+                warn!(video_id = %video.id, %reason, "couldn't categorize video");
+                self.record_failure(video, reason.to_string())
+            }
         }
     }
 }
@@ -181,9 +187,11 @@ impl VideoCategorizer {
         let thinking = settings.thinking
             && self
                 .llm_server_repository
-                .find(&url)?
+                .find(&url)
+                .map_err(Skip::Unreachable)?
                 .model(settings.model.as_str())
-                .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))?
+                .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))
+                .map_err(Skip::Unreachable)?
                 .thinking;
         let pending = self.pending(video, &owner)?;
         let context_length = settings.effective_context_length(self.prompted_categories()?);
@@ -210,14 +218,14 @@ impl VideoCategorizer {
             .count())
     }
 
-    /// Asks about every pending category, then fails naming the rejected
-    /// ones. A server fault stops it quietly.
+    /// Asks about every pending category; any rejected, or a server fault
+    /// stopping it, is a failed attempt.
     fn ask_each(&self, video: &Video, job: &CategorizationJob) -> anyhow::Result<VideoStepOutcome> {
         let rejected = match self.rejected_categories(video, job) {
             Ok(rejected) => rejected,
             Err(Stop::Server(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
-                return Ok(VideoStepOutcome::Settled);
+                return self.record_failure(video, reason.to_string());
             }
             Err(Stop::Failed(error)) => return Err(error),
         };
