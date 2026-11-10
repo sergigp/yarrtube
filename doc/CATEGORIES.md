@@ -52,9 +52,16 @@ it:
 3. Turn on categorization for the channels and playlists whose videos should
    be judged.
 
-Once a video of those sources has a summary, the AI asks once per category
-with a prompt whether it belongs, and adds it to every category it fits. It
-never removes a category a video gets from its source.
+Once a video of those sources has a summary, the AI asks, in one go, which of
+the categories with a prompt it belongs in (one at a time for a video it
+can't answer in one go), and adds it to every category it fits. It never
+removes a category a video gets from its source.
+
+The more categories have a prompt, the more the AI has to read and think
+about per video: the categorization **Context length** in **Settings → AI**
+is Auto by default and grows with them (about 1,800 tokens each). Turn Auto
+off only to set it by hand; too small, and videos are asked about one
+category at a time, which is slower.
 
 This happens on the video's next sync after its summary, at the latest its
 source's next reconcile pass (every 3 hours by default), so a new video

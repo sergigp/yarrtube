@@ -35,10 +35,10 @@ spec: decisions here feed OpenSpec changes later.
   shipping a new version is changing that one path. Users who never saved a
   prompt get it on upgrade; a saved prompt is kept until "Reset to default".
 - On the AI page, categorization has its own switch, model, context length
-  (4096), temperature (0), thinking (on) and wrapping prompt
-  (`prompts/categorization/v2.md`, plain text with no sections or variables,
-  saved like the summary prompt): the values `evals/categories` runs with,
-  still under evaluation. Each category has an optional AI prompt (`ai_prompt`)
+  (Auto by default, see below), temperature (0), thinking (on) and wrapping
+  prompt (`prompts/categorization/v2-batch.md`, plain text with no sections or
+  variables, saved like the summary prompt): the values `evals/categories`
+  runs with, still under evaluation. Each category has an optional AI prompt (`ai_prompt`)
   describing the videos it should hold, written in the category dialog, when
   adding it or under "Edit settings", while AI, categories and categorization
   are all on, and each source a `categorization_enabled` opt-in. What the model
@@ -132,21 +132,39 @@ spec: decisions here feed OpenSpec changes later.
   its source needs summaries on too.
 - The task runs in the summaries lane, so one Ollama call runs at a time. It
   re-checks those conditions, reads the pending categories again, and asks
-  once per category: the saved (or shipped) categorization prompt as system
-  message; the title, channel or playlist name, length, chapters, summary,
-  category name and AI prompt as user message. Temperature 0, context 4096,
-  at most 3072 output tokens (stops runaway thinking), the answer's JSON
-  schema as `format`, and thinking when the model supports it. Each verdict is
-  stored as it comes, unless meanwhile its category was deleted, its video
-  removed, the user set that pair by hand, or the categorization settings or
-  the category's AI prompt changed: then the answer is dropped and the pair
-  stays pending, asked again with the new prompt.
-- The answer is read after the last `</think>`: a JSON object with a boolean
-  `belongs` and a `reason`.
-- A rejected call (unusable answer, output limit hit, refused, past the
-  30-minute timeout) fails the task once every pending category was tried; the
-  retry asks only the ones still pending. On the last attempt each rejected
-  category gets an `unavailable` verdict. Ollama down, or the model not
+  about all of them **in one call**: the saved (or shipped) categorization
+  prompt as system message; the title, channel or playlist name, length,
+  chapters and summary, then each category as `### <name>` and its AI prompt,
+  as user message. The answer's JSON schema, as `format`, has one entry per
+  category keyed by its name, each a `reason` then a boolean `belongs`.
+  Temperature 0, thinking when the model supports it. `evals/categories`
+  measured this against one call per category (`decisions.md`, 2026-11-09):
+  as good or better, a third of the output tokens.
+- **Context length** is Auto unless the user sets one: 1,820 tokens per
+  category with an AI prompt, rounded up to a multiple of 1,024, at least
+  4,096 (16,384 for 9 categories). It is the same for every call, so Ollama
+  doesn't reload the model between them; it changes only when a category gains
+  or loses its AI prompt. A stored `4096`, the old default, reads as Auto.
+- **Output cap**: 1,365 tokens per category asked, at least 3,072 (stops
+  runaway thinking without cutting one category short), at most the context
+  length. **Timeout**: the cap at 5 tokens a second, at least 30 minutes
+  (about 41 minutes for 9 categories); the Air writes about 11.
+- Each verdict is stored as its call's answer is read, unless meanwhile its
+  category was deleted, its video removed, the user set that pair by hand, or
+  the categorization settings or the category's AI prompt changed: then that
+  category's answer is dropped and the pair stays pending, asked again with the
+  new prompt. The call's other answers are kept.
+- The answer is read after the last `</think>`: a JSON object with, under each
+  category's name, a boolean `belongs` and a `reason`. A category whose entry
+  is missing or has no boolean `belongs` has no usable answer.
+- **Fallback**: when a call about several categories is rejected (output limit
+  hit, refused, past its timeout) or leaves some without a usable answer, each
+  of those is asked again in its own call, in the same run, logged at warning
+  level. In the eval one video in 58 (a stream with six chess openings) looped
+  past the cap in the call about all 9; alone, each answered. Only what those
+  single calls reject fails the task once every pending category was tried;
+  the retry asks only the ones still pending. On the last attempt each
+  rejected category gets an `unavailable` verdict. Ollama down, or the model not
   installed, stops the run with a warning and leaves the rest pending for a
   later sync.
 - Saving a new Ollama URL, categorization model or prompt deletes every
@@ -240,9 +258,11 @@ spec: decisions here feed OpenSpec changes later.
 ## Feature B: Auto-categorization
 
 - It's classification, what small models do best when kept simple.
-- One prompt per category, one yes/no call per category per video. Simple,
-  independent, easy to debug. N categories means N calls per video; with short
-  inputs (title + summary, not the full transcript) each is a few seconds.
+- One prompt per category; one call per video about all of them, each decided
+  on its own, with one call per category for a video that call can't answer
+  (see "How a video is categorized"). One call per category was the first
+  design: the eval found no rules bleeding between categories in one call, at
+  a third of the output tokens.
 - Output via structured output, including a short `reason`: helps debugging
   and makes assignments explainable in the UI.
 - Possible complement: embed the category prompt and the video summary and

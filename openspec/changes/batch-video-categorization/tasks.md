@@ -73,12 +73,12 @@
 
   Verify with `python3 -I evals/categories/eval.py --check`, then a `--limit 2` run against Ollama (or by hand if Ollama isn't available) that writes a report.
 - [ ] 4.2 Run the batch eval on the cap-hit video (`IgJri10gl2M`, *1 in a Billion Checkmate?*), or the full set if time allows. Confirm the fallback answers its 9 categories, and add a `decisions.md` entry with the outcome, including whether batch-of-one with `v2-batch` matches `v2` on that video. Update the prompts README's eval column.
-- [ ] 4.3 `evals/categories/README.md`: document the fallback and the Auto/cap defaults for `--batch`. Verify that the documented commands match `--help`.
-- [ ] 4.4 `doc/AI.md` and `doc/CATEGORIES.md`: one call per video, the fallback, Auto context length (with how it scales), the scaled cap and timeout, and the `v2-batch` default. Verify that no doc still says "context 4096" or "once per category" for categorization.
+- [x] 4.3 `evals/categories/README.md`: document the fallback and the Auto/cap defaults for `--batch`. Verify that the documented commands match `--help`.
+- [x] 4.4 `doc/AI.md` and `doc/CATEGORIES.md`: one call per video, the fallback, Auto context length (with how it scales), the scaled cap and timeout, and the `v2-batch` default. Verify that no doc still says "context 4096" or "once per category" for categorization.
 
 ## 5. Verification
 
-- [ ] 5.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests).
+- [x] 5.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests).
 - [ ] 5.2 Manual (agent):
   1. Start `scripts/run-local.sh --port <free port> --fresh-videos`.
   2. Through the HTTP API, turn on AI and categorization with the Ollama URL, create 3 categories with AI prompts and add a short channel.
