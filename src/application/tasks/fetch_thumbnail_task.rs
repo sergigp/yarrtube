@@ -543,8 +543,89 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_fail_the_thumbnail_after_the_eleventh_failed_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video = Video {
+            thumbnail: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+                },
+            },
+            ..my_video()
+        };
+        video_repository.insert(&video).unwrap();
+        seed_channel_video(&db, &video);
+        let task = thumbnail_task(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeThumbnailRepository::failing()),
+            video_file_repository,
+        );
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                thumbnail: StepState {
+                    status: StepStatus::Failed,
+                    attempts: RetryAttempts {
+                        failed: 11,
+                        last_failed_at: Some(later()),
+                    },
+                },
+                updated_at: later(),
+                ..video
+            }]
+        );
+    }
+
     /// A thumbnail a download placed while the fetch was in flight.
     const DOWNLOADED_THUMBNAIL: &str = "Season 2026/S2026E031501 - My Video.jpg";
+
+    /// Stores `my_channel()` holding `video`.
+    fn seed_channel_video(db: &TestDatabase, video: &Video) {
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn thumbnail_task(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        thumbnail_repository: Arc<FakeThumbnailRepository>,
+        video_file_repository: Arc<FakeVideoFileRepository>,
+    ) -> FetchThumbnailTask {
+        FetchThumbnailTask::new(Arc::new(ThumbnailFetcher::new(
+            video_repository,
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            thumbnail_repository,
+            video_file_repository.clone(),
+            Arc::new(FixedClock(later())),
+            Arc::new(StagingArea::new(video_file_repository, "/videos")),
+        )))
+    }
 
     fn my_channel_id() -> ChannelHandle {
         ChannelHandle::new("@somechannel").unwrap()

@@ -29,7 +29,7 @@
 - [x] 2.10 `it_should_skip_a_failed_video`
 - [x] 2.11 `it_should_fail_if_the_video_cannot_be_read`
 - [x] 2.12 `it_should_schedule_the_next_attempt_if_no_thumbnail_is_obtained`
-- [ ] 2.13 `it_should_fail_the_thumbnail_after_the_eleventh_failed_attempt`
+- [x] 2.13 `it_should_fail_the_thumbnail_after_the_eleventh_failed_attempt`
 - [ ] 2.14 `it_should_mark_the_thumbnail_done_once_fetched`
 - [ ] 2.15 `it_should_schedule_the_next_check_if_the_subtitle_check_fails`
 - [ ] 2.16 `it_should_fail_the_subtitles_after_the_eleventh_failed_check`
