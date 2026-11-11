@@ -68,7 +68,9 @@ mod tests {
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
     use crate::domain::video_summary::{SummaryText, VideoSummary};
-    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
+    use crate::infrastructure::repositories::ollama_llm_server_repository::{
+        FakeLlmServerRepository, unreachable_error,
+    };
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
@@ -578,7 +580,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_stop_if_ollama_is_unreachable_during_the_fallback() {
+    fn it_should_count_a_connection_dropped_during_the_fallback_as_a_failed_attempt() {
         let db = TestDatabase::new();
         let video = summarized_video();
         seed(
@@ -610,6 +612,19 @@ mod tests {
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![]
+        );
+        assert_eq!(
+            SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap()
+                .map(|video| video.categorization),
+            Some(StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            })
         );
     }
 
@@ -1210,14 +1225,14 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
-    fn it_should_count_ollama_down_as_a_failed_categorization_attempt() {
-        let unreachable = FakeLlmServerRepository::failing();
+    fn it_should_wait_for_ollama_if_it_is_unavailable_for_a_categorization() {
+        let unreachable = FakeLlmServerRepository::unreachable();
         let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
             name: "llama3:8b".to_string(),
             ..thinking_model()
         }));
         let down_during_call = FakeLlmServerRepository::new(server_with(thinking_model()))
-            .with_replies(vec![Err(anyhow::anyhow!("connection reset"))]);
+            .with_replies(vec![Err(unreachable_error())]);
 
         let outcomes = [unreachable, model_missing, down_during_call].map(|llm| {
             let db = TestDatabase::new();
@@ -1237,35 +1252,74 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             (result, verdicts, categorization)
         });
 
-        let retrying = Some(StepState {
-            status: StepStatus::Retrying,
-            attempts: RetryAttempts {
-                failed: 1,
-                last_failed_at: Some(later()),
-            },
-        });
-        let run_again = |reason: &str| {
+        let pending = Some(StepState::pending());
+        let wait = |reason: &str| {
             Ok(TaskOutcome::RunAgainAt {
-                run_at: later() + chrono::Duration::minutes(10),
+                run_at: later() + chrono::Duration::hours(6),
                 reason: reason.to_string(),
             })
         };
         assert_eq!(
             outcomes,
             [
-                (run_again("connection refused"), vec![], retrying),
                 (
-                    run_again("qwen3:4b isn't installed on Ollama"),
+                    wait("can't connect to Ollama: connection refused"),
                     vec![],
-                    retrying
+                    pending
                 ),
-                (run_again("connection reset"), vec![], retrying),
+                (wait("qwen3:4b isn't installed on Ollama"), vec![], pending),
+                (
+                    wait("can't connect to Ollama: connection refused"),
+                    vec![],
+                    pending
+                ),
             ]
         );
     }
 
     #[test]
-    fn it_should_fail_pending_categories_if_ollama_is_down_on_the_eleventh_attempt() {
+    fn it_should_wait_for_ollama_if_the_model_is_missing_with_thinking_off() {
+        let db = TestDatabase::new();
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(LlmModel {
+                name: "llama3:8b".to_string(),
+                ..thinking_model()
+            }))
+            .with_replies(vec![reply(&answers(&[("Sicilian", YES)]))]),
+        );
+        let video = summarized_video();
+        seed(&db, &video, &[&prompted_category("Sicilian")]);
+        SqlitePreferencesRepository::new(db.database())
+            .save(&Preferences {
+                categorization: CategorizationSettings {
+                    thinking: false,
+                    ..categorization_on().categorization
+                },
+                ..categorization_on()
+            })
+            .unwrap();
+        let task = categorize_video_task(&db, llm.clone());
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::hours(6),
+                reason: "qwen3:4b isn't installed on Ollama".to_string(),
+            })
+        );
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(
+            SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap(),
+            Some(video.clone())
+        );
+    }
+
+    #[test]
+    fn it_should_not_fail_pending_categories_if_ollama_is_down_on_the_eleventh_attempt() {
         let video = Video {
             categorization: StepState {
                 status: StepStatus::Retrying,
@@ -1277,17 +1331,17 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             ..summarized_video()
         };
         let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
-        let unreachable = FakeLlmServerRepository::failing();
+        let unreachable = FakeLlmServerRepository::unreachable();
         let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
             name: "llama3:8b".to_string(),
             ..thinking_model()
         }));
         let down_during_call = FakeLlmServerRepository::new(server_with(thinking_model()))
-            .with_replies(vec![Err(anyhow::anyhow!("connection reset"))]);
+            .with_replies(vec![Err(unreachable_error())]);
         let down_during_fallback = FakeLlmServerRepository::new(server_with(thinking_model()))
             .with_replies(vec![
                 reply(&answers(&[("Sicilian", NO)])),
-                Err(anyhow::anyhow!("connection reset")),
+                Err(unreachable_error()),
             ]);
 
         let outcomes = [
@@ -1313,30 +1367,28 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             (result, verdicts, categorization)
         });
 
-        let failed = Some(StepState {
-            status: StepStatus::Failed,
-            attempts: RetryAttempts {
-                failed: 11,
-                last_failed_at: Some(later()),
-            },
-        });
-        let all_failed = by_category([
-            failed_verdict(&video, &sicilian),
-            failed_verdict(&video, &tech),
-        ]);
+        let wait = |reason: &str| {
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + chrono::Duration::hours(6),
+                reason: reason.to_string(),
+            })
+        };
+        let unreachable = wait("can't connect to Ollama: connection refused");
+        let unchanged = Some(video.categorization);
         assert_eq!(
             outcomes,
             [
-                (Ok(TaskOutcome::Done), all_failed.clone(), failed),
-                (Ok(TaskOutcome::Done), all_failed.clone(), failed),
-                (Ok(TaskOutcome::Done), all_failed, failed),
+                (unreachable.clone(), vec![], unchanged),
                 (
-                    Ok(TaskOutcome::Done),
-                    by_category([
-                        ai_verdict(&video, &sicilian, Verdict::No, "A chess game."),
-                        failed_verdict(&video, &tech),
-                    ]),
-                    failed
+                    wait("qwen3:4b isn't installed on Ollama"),
+                    vec![],
+                    unchanged
+                ),
+                (unreachable.clone(), vec![], unchanged),
+                (
+                    unreachable,
+                    vec![ai_verdict(&video, &sicilian, Verdict::No, "A chess game.")],
+                    unchanged
                 ),
             ]
         );

@@ -99,8 +99,9 @@ spec: decisions here feed OpenSpec changes later.
   starts when it can be, and summarized by map-reduce. Size is estimated at 4.3
   characters per token for English, 1.5 for Japanese, Chinese and Korean, and
   3.4 otherwise. Answers that don't fit one reduce are reduced in groups first.
-- Ollama down, or the model not installed, skips the run and changes nothing:
-  a later sync tries again.
+- Ollama unreachable (can't connect), or the model not installed, stops the
+  run without spending one of the video's attempts: it is re-queued 6 hours
+  later, as many times as it takes.
 - Any other failure fails the task, and the queue retries it with its usual
   backoff. When the retries run out, a rejected call (ran out of context,
   empty, refused as too long, past the 30-minute timeout) or an unreadable
@@ -164,9 +165,10 @@ spec: decisions here feed OpenSpec changes later.
   past the cap in the call about all 9; alone, each answered. Only what those
   single calls reject fails the task once every pending category was tried;
   the retry asks only the ones still pending. On the last attempt each
-  rejected category gets an `unavailable` verdict. Ollama down, or the model not
-  installed, stops the run with a warning and leaves the rest pending for a
-  later sync.
+  rejected category gets an `unavailable` verdict. Ollama unreachable, or the model not
+  installed, stops the run with a warning, keeps the verdicts already stored,
+  spends no attempt and writes no `unavailable` verdict: the rest stay pending
+  and the run is re-queued 6 hours later.
 - Saving a new Ollama URL, categorization model or prompt deletes every
   `unavailable` verdict; a new AI prompt for a category deletes that
   category's. `yes` and `no` verdicts are final: editing or clearing a

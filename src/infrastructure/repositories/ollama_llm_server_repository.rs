@@ -1,4 +1,6 @@
-use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, OllamaUrl};
+use crate::domain::llm_server::{
+    LlmChat, LlmModel, LlmReply, LlmServer, LlmServerUnreachable, OllamaUrl,
+};
 use anyhow::Context;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -62,7 +64,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
                     "no answer within {minutes} minutes"
                 )));
             }
-            sent => sent?,
+            sent => sent.map_err(Self::send_error)?,
         };
         if response.status() == StatusCode::BAD_REQUEST {
             return Ok(LlmReply::refused(Self::refusal(response)?));
@@ -89,6 +91,17 @@ impl OllamaLlmServerRepository {
             .connect_timeout(REQUEST_TIMEOUT)
             .timeout(timeout)
             .build()?)
+    }
+
+    /// `error`, tagged `LlmServerUnreachable` when it is a connect error.
+    fn send_error(error: reqwest::Error) -> anyhow::Error {
+        let connect = error.is_connect();
+        let error = anyhow::Error::new(error);
+        if connect {
+            error.context(LlmServerUnreachable)
+        } else {
+            error
+        }
     }
 
     fn refusal(response: reqwest::blocking::Response) -> anyhow::Result<String> {
@@ -154,7 +167,8 @@ impl OllamaLlmServerRepository {
         request: reqwest::blocking::RequestBuilder,
     ) -> anyhow::Result<T> {
         request
-            .send()?
+            .send()
+            .map_err(Self::send_error)?
             .error_for_status()?
             .json()
             .with_context(|| format!("{path} didn't answer as Ollama does"))
@@ -208,6 +222,9 @@ struct TagsModel {
 #[cfg(test)]
 pub struct FakeLlmServerRepository {
     server: Option<LlmServer>,
+    /// Whether `find` fails as when nothing can connect, rather than as a
+    /// server that connected but failed.
+    unreachable: bool,
     /// The answers `chat` gives, in order; once used up, it fails.
     replies: std::sync::Mutex<std::collections::VecDeque<anyhow::Result<LlmReply>>>,
     chats: std::sync::Mutex<Vec<LlmChat>>,
@@ -220,9 +237,19 @@ impl FakeLlmServerRepository {
         Self::with(Some(server))
     }
 
-    /// A server that is down: every call fails.
+    /// A server whose check fails, though not as a connect failure (see
+    /// `unreachable()`): `find` fails with a plain error.
     pub fn failing() -> Self {
         Self::with(None)
+    }
+
+    /// A server nothing can connect to: `find` fails with
+    /// `unreachable_error()`.
+    pub fn unreachable() -> Self {
+        Self {
+            unreachable: true,
+            ..Self::with(None)
+        }
     }
 
     /// Answers `chat` with `replies`, in order.
@@ -249,6 +276,7 @@ impl FakeLlmServerRepository {
     fn with(server: Option<LlmServer>) -> Self {
         Self {
             server,
+            unreachable: false,
             replies: Default::default(),
             chats: Default::default(),
             on_chat: None,
@@ -256,12 +284,20 @@ impl FakeLlmServerRepository {
     }
 }
 
+/// What the adapter fails with when nothing can connect to the server.
+#[cfg(test)]
+pub fn unreachable_error() -> anyhow::Error {
+    anyhow::anyhow!("connection refused").context(LlmServerUnreachable)
+}
+
 #[cfg(test)]
 impl LlmServerRepository for FakeLlmServerRepository {
     fn find(&self, _url: &OllamaUrl) -> anyhow::Result<LlmServer> {
-        self.server
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("connection refused"))
+        match (&self.server, self.unreachable) {
+            (Some(server), _) => Ok(server.clone()),
+            (None, true) => Err(unreachable_error()),
+            (None, false) => Err(anyhow::anyhow!("connection refused")),
+        }
     }
 
     fn chat(&self, _url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
@@ -407,20 +443,31 @@ mod tests {
     }
 
     #[test]
-    fn it_should_fail_if_the_server_is_unreachable() {
-        let closed = std::net::TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap();
-        let url = OllamaUrl::new(format!("http://{closed}")).unwrap();
+    fn it_should_report_an_unreachable_server_on_chat() {
+        let url = closed_url();
 
         let result = OllamaLlmServerRepository::new().chat(&url, &chat());
 
-        assert!(result.is_err(), "expected an error, got {result:?}");
+        assert_eq!(
+            result.map_err(|e| e.is::<LlmServerUnreachable>()),
+            Err(true)
+        );
     }
 
     #[test]
-    fn it_should_fail_if_the_server_drops_the_connection() {
+    fn it_should_report_an_unreachable_server_on_find() {
+        let url = closed_url();
+
+        let result = OllamaLlmServerRepository::new().find(&url);
+
+        assert_eq!(
+            result.map_err(|e| e.is::<LlmServerUnreachable>()),
+            Err(true)
+        );
+    }
+
+    #[test]
+    fn it_should_not_report_a_dropped_connection_as_unreachable() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = OllamaUrl::new(format!("http://{}", listener.local_addr().unwrap())).unwrap();
         std::thread::spawn(move || {
@@ -431,7 +478,10 @@ mod tests {
 
         let result = OllamaLlmServerRepository::new().chat(&url, &chat());
 
-        assert!(result.is_err(), "expected an error, got {result:?}");
+        assert_eq!(
+            result.map_err(|e| e.is::<LlmServerUnreachable>()),
+            Err(false)
+        );
     }
 
     #[test]
@@ -589,6 +639,20 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_report_a_slow_server_check_as_unreachable() {
+        // Connections queue in the backlog but nobody ever answers.
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = OllamaUrl::new(format!("http://{}", silent.local_addr().unwrap())).unwrap();
+
+        let result = OllamaLlmServerRepository::new().find(&url);
+
+        assert_eq!(
+            result.map_err(|e| e.is::<LlmServerUnreachable>()),
+            Err(false)
+        );
+    }
+
+    #[test]
     fn it_should_fail_if_the_server_doesnt_answer_in_time() {
         // Connections queue in the backlog but nobody ever answers.
         let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -603,6 +667,15 @@ mod tests {
 
         assert_eq!(failed, Ok(true));
         assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    /// A URL where nothing listens: connecting is refused.
+    fn closed_url() -> OllamaUrl {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        OllamaUrl::new(format!("http://{closed}")).unwrap()
     }
 
     fn url(server: &mockito::Server) -> OllamaUrl {

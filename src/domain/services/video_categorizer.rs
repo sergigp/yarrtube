@@ -1,11 +1,13 @@
 use crate::domain::category::Category;
-use crate::domain::llm_server::{LlmReply, OllamaUrl};
+use crate::domain::llm_server::{LlmReply, LlmServerUnreachable, OllamaUrl};
 use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
     VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{StepStatus, Video, VideoOwner, VideoStepOutcome};
+use crate::domain::video::{
+    StepStatus, UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome,
+};
 use crate::domain::video_category::{
     CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
 };
@@ -29,9 +31,24 @@ enum Skip {
     NotWanted(&'static str),
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
-    /// Ollama can't be reached or hasn't the saved model: a failed attempt
-    /// of the job that would have run.
-    Unreachable(anyhow::Error, Box<CategorizationJob>),
+    /// Ollama can't be connected to or hasn't the saved model: wait for it,
+    /// no attempt spent.
+    Unavailable(anyhow::Error),
+    /// The server check connected but failed: a failed attempt of the job
+    /// that would have run.
+    Failed(anyhow::Error, Box<CategorizationJob>),
+}
+
+impl Skip {
+    /// What a failed server check means: Ollama unavailable, or a failed
+    /// attempt of `job`.
+    fn from_server_error(error: anyhow::Error, job: &CategorizationJob) -> Self {
+        if error.is::<LlmServerUnreachable>() {
+            Self::Unavailable(error)
+        } else {
+            Self::Failed(error, Box::new(job.clone()))
+        }
+    }
 }
 
 impl From<anyhow::Error> for Skip {
@@ -50,10 +67,24 @@ enum Call {
 
 /// Why the categorization stops before trying every category.
 enum Stop {
+    /// Ollama can't be connected to during a call: wait for it, no attempt
+    /// spent.
+    Unavailable(anyhow::Error),
     /// The server's fault: a later sync tries again.
     Server(anyhow::Error),
     /// Storing failed.
     Failed(anyhow::Error),
+}
+
+impl Stop {
+    /// What a failed chat call means: Ollama unavailable, or its fault.
+    fn from_chat_error(error: anyhow::Error) -> Self {
+        if error.is::<LlmServerUnreachable>() {
+            Self::Unavailable(error)
+        } else {
+            Self::Server(error)
+        }
+    }
 }
 
 impl From<anyhow::Error> for Stop {
@@ -63,6 +94,7 @@ impl From<anyhow::Error> for Stop {
 }
 
 /// What every call of one categorization shares.
+#[derive(Clone)]
 struct CategorizationJob {
     preferences: Preferences,
     url: OllamaUrl,
@@ -123,7 +155,9 @@ pub trait VideoCategorizerApi: Send + Sync {
     fn pending(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<Vec<Category>>;
     /// Asks the model about each category pending when it runs, storing
     /// each verdict as it comes. A run with any category rejected is a
-    /// failed attempt under the `video-retries` policy.
+    /// failed attempt under the `video-retries` policy. Ollama that can't be
+    /// connected to, or hasn't the model, re-queues it later without touching
+    /// the video or writing `failed` verdicts.
     fn categorize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
@@ -150,7 +184,8 @@ impl VideoCategorizerApi for VideoCategorizer {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
                 Ok(VideoStepOutcome::Settled)
             }
-            Err(Skip::Unreachable(reason, job)) => self.fail_everything(video, &job, reason),
+            Err(Skip::Unavailable(reason)) => Ok(self.wait_for_server(video, reason)),
+            Err(Skip::Failed(reason, job)) => self.fail_everything(video, &job, reason),
         }
     }
 }
@@ -195,26 +230,33 @@ impl VideoCategorizer {
             summary: summary.text,
             pending,
         };
-        match self.thinking(&job) {
-            Ok(thinking) => Ok(CategorizationJob { thinking, ..job }),
-            Err(reason) => Err(Skip::Unreachable(reason, Box::new(job))),
-        }
+        let thinking = self.check_server(&job)?;
+        Ok(CategorizationJob { thinking, ..job })
     }
 
-    /// Whether `job` asks with thinking: when its settings want it and the
-    /// saved model on Ollama supports it. Fails when Ollama can't be reached
-    /// or hasn't the model.
-    fn thinking(&self, job: &CategorizationJob) -> anyhow::Result<bool> {
-        if !job.settings.thinking {
-            return Ok(false);
-        }
+    /// Checks the server before any call, whatever the settings: whether
+    /// `job` asks with thinking (its settings want it and the saved model
+    /// supports it). Waits when Ollama can't be connected to or hasn't the
+    /// model; a failed attempt when the check otherwise fails.
+    fn check_server(&self, job: &CategorizationJob) -> Result<bool, Skip> {
         let model = job.settings.model.as_str();
-        Ok(self
-            .llm_server_repository
-            .find(&job.url)?
+        self.llm_server_repository
+            .find(&job.url)
+            .map_err(|error| Skip::from_server_error(error, job))?
             .model(model)
-            .with_context(|| format!("{model} isn't installed on Ollama"))?
-            .thinking)
+            .map(|installed| job.settings.thinking && installed.thinking)
+            .with_context(|| format!("{model} isn't installed on Ollama"))
+            .map_err(Skip::Unavailable)
+    }
+
+    /// Re-queues the categorization once Ollama may be back, leaving the
+    /// video and its verdicts as they are: no attempt spent.
+    fn wait_for_server(&self, video: &Video, reason: anyhow::Error) -> VideoStepOutcome {
+        warn!(video_id = %video.id, %reason, "Ollama is unavailable, waiting to categorize video");
+        VideoStepOutcome::RetryAt {
+            at: self.clock.now() + UNAVAILABLE_SERVER_WAIT,
+            reason: error_report::cause_chain(&reason),
+        }
     }
 
     /// How many categories have an AI prompt: what Auto sizes the context
@@ -229,10 +271,12 @@ impl VideoCategorizer {
     }
 
     /// Asks about every pending category; any rejected, or a server fault
-    /// stopping it, is a failed attempt.
+    /// stopping it, is a failed attempt. Ollama becoming unreachable stops
+    /// it to wait, keeping the verdicts already stored.
     fn ask_each(&self, video: &Video, job: &CategorizationJob) -> anyhow::Result<VideoStepOutcome> {
         let rejected = match self.rejected_categories(video, job) {
             Ok(rejected) => rejected,
+            Err(Stop::Unavailable(reason)) => return Ok(self.wait_for_server(video, reason)),
             Err(Stop::Server(reason)) => return self.fail_everything(video, job, reason),
             Err(Stop::Failed(error)) => return Err(error),
         };
@@ -272,7 +316,7 @@ impl VideoCategorizer {
                 &job.url,
                 &question.chat(&job.settings, job.context_length, job.thinking),
             )
-            .map_err(Stop::Server)?;
+            .map_err(Stop::from_chat_error)?;
         Self::log_call(video, categories, call, &reply, started);
         let rejection = match (&reply.refusal, reply.stopped_at_limit) {
             (Some(refusal), _) => Some(format!("Ollama refused the call: {refusal}")),
@@ -443,7 +487,7 @@ impl VideoCategorizer {
     }
 
     /// Records a failed attempt with every pending category rejected, for
-    /// `reason`: the server couldn't be reached or answered with a fault.
+    /// `reason`: the server check or a call failed with a server fault.
     fn fail_everything(
         &self,
         video: &Video,
