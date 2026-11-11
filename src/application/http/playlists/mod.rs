@@ -1919,6 +1919,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_delete_a_playlist_while_another_source_is_being_synced() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let show_locks = Arc::new(ShowLocks::default());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            show_locks.clone(),
+        );
+        let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL2")));
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_delete_a_missing_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
