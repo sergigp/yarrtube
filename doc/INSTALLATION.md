@@ -25,7 +25,8 @@ docker run -d \
 - `-v /path/on/host/videos:/videos` is where downloaded videos will show up
   on your host — point it at your media library.
 - `-v /path/on/host/config:/config` holds yarrtube's state: the SQLite
-  database (your tracked playlists and channels) and channel avatars. Always
+  database (your tracked playlists and channels), channel avatars and the
+  [log files](#logs). Always
   mount it — otherwise everything you've tracked is lost whenever the
   container is recreated, including on every [update](#updating).
 - `PUID`/`PGID` are the numeric user/group ID the daemon runs as and that
@@ -89,6 +90,8 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 | `YARRTUBE_AVATARS_PATH`               | `/config/avatars`     | Directory channel avatars are stored in (inside the container)                                                                                                                                                |
 | `YTDLP_PATH`                          | `/app/bin/yt-dlp`     | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time)                                                                                                                      |
 | `RUST_LOG`                            | `info`                | Log verbosity (e.g. `RUST_LOG=debug`)                                                                                                                                                                         |
+| `YARRTUBE_LOGS_PATH`                  | `/config/logs`        | Directory the daily log files are written to (inside the container), see [Logs](#logs)                                                                                                                       |
+| `YARRTUBE_LOG_RETENTION_DAYS`         | `30`                  | How many daily log files are kept; older ones are deleted                                                                                                                                                     |
 | `YARRTUBE_PLEX_URL`                   | —                     | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). With the token and `YARRTUBE_PLEX_VIDEOS_PATH`, enables the [Plex scan trigger](#plex)                                                       |
 | `YARRTUBE_PLEX_TOKEN`                 | —                     | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                    |
 | `YARRTUBE_PLEX_VIDEOS_PATH`           | —                     | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. Plex is asked to scan a show's folder after each download |
@@ -105,6 +108,20 @@ How often each channel and playlist is checked for new videos is not an
 environment variable: it is set per source in the web UI ("Check for new
 videos every" under "Advanced options" when adding it, or "Edit settings"
 afterwards), 3 hours by default.
+
+## Logs
+
+Besides `docker logs`, which loses everything when the container is
+recreated (e.g. on every update), Yarrtube writes its log to one plain-text
+file per day under `/config/logs/`: `yarrtube.<YYYY-MM-DD>.log`, dated in
+UTC. The newest 30 files are kept (`YARRTUBE_LOG_RETENTION_DAYS`) and older
+ones are deleted as the log rotates. They follow `RUST_LOG` like the console
+output, and grep straight from the host:
+
+```bash
+grep -h ERROR /path/on/host/config/logs/yarrtube.*.log
+tail -f /path/on/host/config/logs/yarrtube.$(date -u +%F).log
+```
 
 ## Videos on disk
 
