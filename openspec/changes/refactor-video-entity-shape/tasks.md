@@ -35,7 +35,7 @@ passes with no assertion changed in acceptance tests. One PR for all.
 
 ## 5. Verification
 
-- [ ] 5.1 Run `scripts/run-tests.sh --only e2e` once; verify it passes untouched (API did not move)
+- [x] 5.1 Run `scripts/run-tests.sh --only e2e` once; verify it passes untouched (API did not move)
 - [ ] 5.2 Run /audit-change and address its findings
 - [ ] 5.3 Open one PR (what and why, field table, mermaid diagrams from design.md; no attribution lines, no model names) and verify GitHub CI is green; for a flaky e2e push an empty "Re-run CI" commit
 
