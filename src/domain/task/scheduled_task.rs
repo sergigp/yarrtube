@@ -1,23 +1,8 @@
 use super::Task;
+use crate::domain::shared::retry_delay::retry_delay_seconds;
 use chrono::{DateTime, Duration, Utc};
 
 const MAX_ATTEMPTS: i64 = 5;
-
-/// Retry delay grows geometrically with the post-increment retry count:
-/// `base_delay_seconds * RETRY_DELAY_MULTIPLIER.pow(retries)`. With the
-/// default base delay, a task's first 4 failures (the 5th dead-letters
-/// instead of retrying) span about 5 hours total end-to-end (~7.5min,
-/// ~22.5min, ~1.1h, ~3.4h between successive attempts) — wide enough for the
-/// hourly `yt-dlp` self-update loop to realistically fix a systemic problem
-/// before `download_video`'s attempts are exhausted. `base_delay_seconds` is
-/// applied uniformly to every task type (see design.md's "Retry-count-based
-/// delay, applied uniformly" decision); only it is configurable, the
-/// multiplier stays fixed.
-const RETRY_DELAY_MULTIPLIER: i64 = 3;
-
-pub(crate) fn retry_delay_seconds(retries: i64, base_delay_seconds: i64) -> i64 {
-    base_delay_seconds * RETRY_DELAY_MULTIPLIER.pow(retries as u32)
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {

@@ -1297,7 +1297,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video = my_video();
         save_channel_video(
             &video_repository,
@@ -1552,7 +1553,8 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video = my_video();
         video_repository.insert(&video).unwrap();
         SqlitePlaylistRepository::new(db.database())
@@ -3373,6 +3375,7 @@ mod tests {
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,

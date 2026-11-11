@@ -43,6 +43,7 @@ const CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL: &str =
 const VIDEO_VERSION_SQL: &str = include_str!("../../../migrations/0027_video_version.sql");
 const VIDEO_STEP_STATUSES_SQL: &str =
     include_str!("../../../migrations/0028_video_step_statuses.sql");
+const EVENT_RUN_AT_SQL: &str = include_str!("../../../migrations/0029_event_run_at.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(migrations())
@@ -85,6 +86,7 @@ fn migrations() -> Vec<M<'static>> {
         M::up(CATEGORIZATION_CONTEXT_LENGTH_AUTO_SQL),
         M::up(VIDEO_VERSION_SQL),
         M::up(VIDEO_STEP_STATUSES_SQL),
+        M::up(EVENT_RUN_AT_SQL),
     ]
 }
 
@@ -204,6 +206,35 @@ mod tests {
             )
             .unwrap();
         assert_eq!(name, "Some Channel");
+    }
+
+    #[test]
+    fn it_should_keep_pre_migration_events_eligible() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 28);
+        conn.execute_batch(
+            "INSERT INTO events (event_type, payload, status, retries, created_at, updated_at, last_error)
+             VALUES ('video_downloaded', '{}', 'pending', 2, '2026-10-28T10:00:00+00:00', '2026-10-28T10:00:20+00:00', 'boom');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let row: (i64, String, String) = conn
+            .query_row(
+                "SELECT retries, run_at, created_at FROM events",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            row,
+            (
+                2,
+                "2026-10-28T10:00:00+00:00".to_string(),
+                "2026-10-28T10:00:00+00:00".to_string()
+            )
+        );
     }
 
     #[test]
