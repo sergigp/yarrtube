@@ -7,7 +7,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_remove_the_pending_tasks_of_a_deleted_playlists_videos`: deleting a playlist removes its video's pending `download_video` (future run_at), `fetch_thumbnail` and `summarize_video`
-- [ ] 2.2 `it_should_keep_the_pending_tasks_of_another_playlists_videos`: deleting playlist A keeps playlist B's video's pending `download_video`
+- [x] 2.2 `it_should_keep_the_pending_tasks_of_another_playlists_videos`: deleting playlist A keeps playlist B's video's pending `download_video`
 - [ ] 2.3 `it_should_remove_the_pending_tasks_of_a_deleted_channels_videos`: deleting a channel removes its video's pending tasks
 - [ ] 2.4 `it_should_keep_the_pending_tasks_of_another_channels_videos`: deleting channel A keeps channel B's video's pending `download_video`
 
