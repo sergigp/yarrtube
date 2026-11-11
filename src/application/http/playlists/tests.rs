@@ -1,0 +1,5249 @@
+use super::*;
+use crate::application::http::test_support::{
+    ai_verdict, named_category, user_verdict, video_category_editor,
+};
+use crate::domain::category::CategoryId;
+use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+use crate::domain::channel_video::ChannelVideo;
+use crate::domain::event::{DomainEvent, ScheduledEvent};
+use crate::domain::llm_server::OllamaUrl;
+use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName};
+use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
+use crate::domain::playlist_video::PlaylistVideo;
+use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
+use crate::domain::preferences::SummaryModel;
+use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
+use crate::domain::services::CategoryVideoCollector;
+use crate::domain::services::InternalVideoReconciler;
+
+use crate::domain::services::ShowFileWriter;
+
+use crate::domain::show::{ShowKey, ShowMoved};
+use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+use crate::domain::video::PlaylistEpisodeNumber;
+use crate::domain::video::Video;
+use crate::domain::video::VideoDownloaded;
+use crate::domain::video::YoutubeVideoId;
+use crate::domain::video_category::{
+    Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
+};
+use crate::domain::video_summary::{SummaryText, VideoSummary};
+use crate::domain::video_transcript::{
+    CaptionLanguage, CaptionSource, CaptionTrack, TranscriptText, VideoTranscript,
+};
+use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
+use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
+use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+
+use crate::infrastructure::repositories::sqlite_category_repository::{
+    CategoryRepository, SqliteCategoryRepository,
+};
+use crate::infrastructure::repositories::sqlite_channel_repository::{
+    ChannelRepository, SqliteChannelRepository,
+};
+use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+    ChannelVideoRepository, SqliteChannelVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_playlist_repository::{
+    PlaylistRepository, SqlitePlaylistRepository,
+};
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+    PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_preferences_repository::{
+    PreferencesRepository, SqlitePreferencesRepository,
+};
+use crate::infrastructure::repositories::sqlite_task_repository::{
+    SqliteTaskRepository, TaskRepository,
+};
+use crate::infrastructure::repositories::sqlite_video_categories_repository::{
+    SqliteVideoCategoriesRepository, VideoCategoriesRepository,
+};
+use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
+    SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
+};
+
+use crate::infrastructure::repositories::sqlite_video_repository::{
+    SqliteVideoRepository, VideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_video_summary_repository::{
+    SqliteVideoSummaryRepository, VideoSummaryRepository,
+};
+use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
+    SqliteVideoTranscriptRepository, VideoTranscriptRepository,
+};
+
+use crate::infrastructure::repositories::youtube_playlist_items_repository::{
+    FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
+};
+use crate::infrastructure::repositories::youtube_playlist_repository::{
+    FakeYoutubePlaylistRepository, ResolvedPlaylist, YoutubePlaylistRepository,
+};
+
+use crate::infrastructure::shared::domain_events::event_publisher::{
+    EventPublisher, SqliteEventPublisher,
+};
+use crate::infrastructure::shared::domain_events::event_repository::{
+    EventRepository, SqliteEventRepository,
+};
+use crate::infrastructure::shared::show_locks::ShowLocks;
+use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+use crate::infrastructure::shared::system_clock::FixedClock;
+
+use chrono::{DateTime, Utc};
+use rusqlite::Connection;
+use std::sync::Arc;
+
+const DEFAULT_PATH: &str = "music/chill";
+
+#[tokio::test]
+async fn it_should_create_a_playlist_with_summaries_disabled() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = CreatePlaylistRequest {
+        summaries_enabled: Some(false),
+        ..create_request("PL1")
+    };
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((StatusCode::CREATED, playlist_response("PL1", DEFAULT_PATH)))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_with_summaries_enabled() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    preferences_repository.save(&summaries_on()).unwrap();
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        preferences_repository,
+    );
+
+    let request = CreatePlaylistRequest {
+        summaries_enabled: Some(true),
+        ..create_request("PL1")
+    };
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                summaries_enabled: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_with_categorization_enabled() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    preferences_repository.save(&categorization_on()).unwrap();
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        preferences_repository,
+    );
+
+    let request = CreatePlaylistRequest {
+        categorization_enabled: Some(true),
+        ..create_request("PL1")
+    };
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                categorization_enabled: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_a_playlist_with_summaries_if_ai_is_off() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    // Failing lookup: reaching YouTube would answer 502, not 409.
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FailingYoutubePlaylistRepository),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = CreatePlaylistRequest {
+        summaries_enabled: Some(true),
+        ..create_request("PL1")
+    };
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "Turn on AI summaries before enabling them for a playlist"
+        ))
+    );
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_a_playlist_with_categorization_if_unavailable() {
+    for preferences in categorization_unavailable() {
+        let db = TestDatabase::new();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&preferences).unwrap();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        // Failing lookup: reaching YouTube would answer 502, not 409.
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FailingYoutubePlaylistRepository),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = CreatePlaylistRequest {
+            categorization_enabled: Some(true),
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "Turn on AI categorization before enabling it for a playlist"
+            ))
+        );
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = create(playlist_creator, create_request("PL1")).await;
+
+    assert_eq!(
+        response,
+        Ok((StatusCode::CREATED, playlist_response("PL1", DEFAULT_PATH)))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PL1"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_showing_its_unwatched_count() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = create(playlist_creator, create_request("PL1")).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                hide_unwatched_count: false,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![Playlist {
+            hide_unwatched_count: false,
+            ..playlist("PL1", DEFAULT_PATH)
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_with_the_default_interval() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = CreatePlaylistRequest {
+        reconcile_interval_minutes: None,
+        ..create_request("PL1")
+    };
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                reconcile_interval_minutes: 180,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![
+            playlist("PL1", DEFAULT_PATH)
+                .with_reconcile_interval(ReconcileInterval::new(180).unwrap())
+        ]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PL1"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_with_its_interval() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = CreatePlaylistRequest {
+        reconcile_interval_minutes: Some(720),
+        ..create_request("PL1")
+    };
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                reconcile_interval_minutes: 720,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![
+            playlist("PL1", DEFAULT_PATH)
+                .with_reconcile_interval(ReconcileInterval::new(720).unwrap())
+        ]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PL1"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_from_a_youtube_url() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = create(
+        playlist_creator,
+        create_request("https://www.youtube.com/playlist?list=PL1"),
+    )
+    .await;
+
+    assert_eq!(
+        response,
+        Ok((StatusCode::CREATED, playlist_response("PL1", DEFAULT_PATH)))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PL1"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_shown_on_home_by_default() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+    let request = CreatePlaylistRequest {
+        exclude_from_home: None,
+        ..create_request("PL1")
+    };
+
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                exclude_from_home: false,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![Playlist {
+            exclude_from_home: false,
+            ..playlist("PL1", DEFAULT_PATH)
+        }]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PL1"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_excluded_from_home() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+    let request = CreatePlaylistRequest {
+        exclude_from_home: Some(true),
+        ..create_request("PL1")
+    };
+
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                exclude_from_home: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![Playlist {
+            exclude_from_home: true,
+            ..playlist("PL1", DEFAULT_PATH)
+        }]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PL1"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_name_the_playlist_after_its_id_if_youtube_title_blank() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(ResolvedPlaylist {
+                title: "  ".to_string(),
+                ..resolved_playlist()
+            }),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = create(playlist_creator, create_request("PLabc123")).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                name: "PLabc123".to_string(),
+                ..playlist_response("PLabc123", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![Playlist {
+            name: PlaylistName::new("PLabc123").unwrap(),
+            ..playlist("PLabc123", DEFAULT_PATH)
+        }]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PLabc123"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_create_a_playlist_with_a_title_unsafe_for_filesystems() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(ResolvedPlaylist {
+                title: "AC/DC: greatest hits?".to_string(),
+                ..resolved_playlist()
+            }),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = create(playlist_creator, create_request("PLabc123")).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::CREATED,
+            PlaylistResponse {
+                name: "AC/DC: greatest hits?".to_string(),
+                ..playlist_response("PLabc123", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![Playlist {
+            name: PlaylistName::new("AC/DC: greatest hits?").unwrap(),
+            ..playlist("PLabc123", DEFAULT_PATH)
+        }]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PLabc123"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_return_the_existing_playlist_if_already_created() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+    let request = CreatePlaylistRequest {
+        path: Some("different/path".to_string()),
+        quality: Some("low".to_string()),
+        ..create_request("PL1")
+    };
+
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((StatusCode::OK, playlist_response("PL1", DEFAULT_PATH)))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_keep_the_interval_of_an_existing_playlist_on_duplicate_create() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let existing =
+        playlist("PL1", DEFAULT_PATH).with_reconcile_interval(ReconcileInterval::new(60).unwrap());
+    playlist_repository.insert(&existing).unwrap();
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+    let request = CreatePlaylistRequest {
+        reconcile_interval_minutes: Some(30),
+        ..create_request("PL1")
+    };
+
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((
+            StatusCode::OK,
+            PlaylistResponse {
+                reconcile_interval_minutes: 60,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }
+        ))
+    );
+    assert_eq!(playlist_repository.list().unwrap(), vec![existing]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_keep_the_existing_source_when_categorization_differs_on_create() {
+    let db = TestDatabase::new();
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    preferences_repository.save(&categorization_on()).unwrap();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let existing = playlist("PL1", DEFAULT_PATH);
+    playlist_repository.insert(&existing).unwrap();
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        preferences_repository,
+    );
+    let request = CreatePlaylistRequest {
+        categorization_enabled: Some(true),
+        ..create_request("PL1")
+    };
+
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((StatusCode::OK, playlist_response("PL1", DEFAULT_PATH)))
+    );
+    assert_eq!(playlist_repository.list().unwrap(), vec![existing]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_keep_exclude_from_home_of_an_existing_playlist_on_duplicate_create() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+    let request = CreatePlaylistRequest {
+        exclude_from_home: Some(true),
+        ..create_request("PL1")
+    };
+
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Ok((StatusCode::OK, playlist_response("PL1", DEFAULT_PATH)))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_publish_playlist_created_only_once() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    create(playlist_creator.clone(), create_request("PL1"))
+        .await
+        .unwrap();
+    create(playlist_creator, create_request("PL1"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_created("PL1"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_invalid_interval_provided() {
+    let request = CreatePlaylistRequest {
+        reconcile_interval_minutes: Some(0),
+        ..create_request("PL1")
+    };
+
+    let response = create(any_playlist_creator(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Reconcile interval must be at least 1 minute (got 0)"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_invalid_playlist_provided() {
+    let response = create(any_playlist_creator(), create_request("")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Playlist ID or URL must not be empty"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_path_missing() {
+    let request = CreatePlaylistRequest {
+        path: None,
+        ..create_request("PL1")
+    };
+
+    let response = create(any_playlist_creator(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request("Playlist path must not be empty"))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_summaries_missing() {
+    let request = CreatePlaylistRequest {
+        summaries_enabled: None,
+        ..create_request("PL1")
+    };
+
+    let response = create(any_playlist_creator(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Summaries setting must be true or false (missing)"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_categorization_missing() {
+    let request = CreatePlaylistRequest {
+        categorization_enabled: None,
+        ..create_request("PL1")
+    };
+
+    let response = create(any_playlist_creator(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Categorization setting must be true or false (missing)"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_quality_missing() {
+    let request = CreatePlaylistRequest {
+        quality: None,
+        ..create_request("PL1")
+    };
+
+    let response = create(any_playlist_creator(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Quality must be one of \"high\", \"mid\", or \"low\" (missing)"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_path_already_in_use() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", "shared/path"))
+        .unwrap();
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+    let request = CreatePlaylistRequest {
+        path: Some("shared/path".to_string()),
+        ..create_request("PL2")
+    };
+
+    let response = create(playlist_creator, request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "playlist path \"shared/path\" is already used by another playlist"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "shared/path")]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_playlist_not_found_on_youtube() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FakeYoutubePlaylistRepository { resolved: None }),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = create(playlist_creator, create_request("PL404")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "YouTube playlist PL404 does not exist or is not accessible"
+        ))
+    );
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_create_if_youtube_lookup_fails() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_creator = PlaylistCreator::new(
+        playlist_repository.clone(),
+        Arc::new(FailingYoutubePlaylistRepository),
+        event_publisher(&db),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = create(playlist_creator, create_request("PL1")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::BAD_GATEWAY,
+            "YouTube API request failed"
+        ))
+    );
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_preview_a_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = SqlitePlaylistRepository::new(db.database());
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let task_repository = task_repository(&db);
+    let playlist_previewer = PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository {
+        resolved: Some(resolved_playlist()),
+    }));
+
+    let response = preview(playlist_previewer, preview_query("PLabc123")).await;
+
+    assert_eq!(response, Ok(playlist_preview_response("PLabc123")));
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_preview_a_playlist_from_a_youtube_url() {
+    let playlist_previewer = PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository {
+        resolved: Some(resolved_playlist()),
+    }));
+
+    let response = preview(
+        playlist_previewer,
+        preview_query("https://www.youtube.com/watch?v=vid1&list=PLabc123"),
+    )
+    .await;
+
+    assert_eq!(response, Ok(playlist_preview_response("PLabc123")));
+}
+
+#[tokio::test]
+async fn it_should_fail_to_preview_if_invalid_playlist_provided() {
+    let response = preview(
+        any_playlist_previewer(),
+        preview_query("https://www.youtube.com/watch?v=abc"),
+    )
+    .await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "YouTube URL is missing a \"list\" query parameter (got \"https://www.youtube.com/watch?v=abc\")"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_preview_if_playlist_missing() {
+    let query = PreviewPlaylistQuery { playlist: None };
+
+    let response = preview(any_playlist_previewer(), query).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Playlist ID or URL must not be empty"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_preview_if_playlist_not_found_on_youtube() {
+    let playlist_previewer =
+        PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository { resolved: None }));
+
+    let response = preview(playlist_previewer, preview_query("PLabc123")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "YouTube playlist PLabc123 does not exist or is not accessible"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_preview_if_youtube_lookup_fails() {
+    let playlist_previewer = PlaylistPreviewer::new(Arc::new(FailingYoutubePlaylistRepository));
+
+    let response = preview(playlist_previewer, preview_query("PLabc123")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::BAD_GATEWAY,
+            "YouTube API request failed"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_delete_a_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::PlaylistDeleted(PlaylistDeleted {
+                playlist_id: "PL1".to_string(),
+                name: "Lofi beats".to_string(),
+                path: DEFAULT_PATH.to_string(),
+            })
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_remove_the_pending_reconcile_of_a_deleted_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    task_repository
+        .schedule(
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::hours(3),
+        )
+        .unwrap();
+    task_repository
+        .schedule(
+            &reconcile_task("PL2"),
+            fixed_timestamp() + chrono::Duration::hours(3),
+        )
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        event_publisher(&db),
+        task_repository.clone(),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            2,
+            &reconcile_task("PL2"),
+            fixed_timestamp() + chrono::Duration::hours(3),
+        )]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::PlaylistDeleted(PlaylistDeleted {
+                playlist_id: "PL1".to_string(),
+                name: "Lofi beats".to_string(),
+                path: DEFAULT_PATH.to_string(),
+            })
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_remove_every_pending_reconcile_of_a_deleted_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    task_repository
+        .schedule(
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::hours(1),
+        )
+        .unwrap();
+    task_repository
+        .schedule(
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::hours(3),
+        )
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        event_publisher(&db),
+        task_repository.clone(),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::PlaylistDeleted(PlaylistDeleted {
+                playlist_id: "PL1".to_string(),
+                name: "Lofi beats".to_string(),
+                path: DEFAULT_PATH.to_string(),
+            })
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_delete_only_the_deleted_playlist_videos() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL2", "music/other"))
+        .unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid2",
+        1,
+    );
+    let (other_video, other_playlist_video) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL2",
+        "vid3",
+        0,
+    );
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL2", "music/other")]
+    );
+    assert_eq!(video_repository.list().unwrap(), vec![other_video]);
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL1"))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL2"))
+            .unwrap(),
+        vec![other_playlist_video]
+    );
+}
+
+#[tokio::test]
+async fn it_should_delete_the_transcripts_of_the_deleted_playlist_videos() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_transcript_repository = Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (video, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    video_transcript_repository
+        .save(&video_transcript(&video))
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        video_transcript_repository.clone(),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.list().unwrap(), vec![]);
+    assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+}
+
+#[tokio::test]
+async fn it_should_delete_the_summaries_of_a_deleted_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_transcript_repository = Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (video, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    video_transcript_repository
+        .save(&video_transcript(&video))
+        .unwrap();
+    let video_summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    video_summary_repository
+        .save(&VideoSummary::create(
+            video.id.clone(),
+            SummaryText::new("Three games."),
+            &SummaryModel::default(),
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        video_transcript_repository.clone(),
+        video_summary_repository.clone(),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.list().unwrap(), vec![]);
+    assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
+}
+
+#[tokio::test]
+async fn it_should_delete_the_categories_of_a_deleted_playlist_videos() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_categories_repository = Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (video, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    video_categories_repository
+        .save_many(&[VideoCategories::new(
+            video.id.clone(),
+            vec![CategoryId::new("music").unwrap()],
+        )])
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        video_categories_repository.clone(),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_categories_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![VideoCategories::none(video.id.clone())]
+    );
+}
+
+#[tokio::test]
+async fn it_should_delete_the_verdicts_of_a_deleted_playlists_videos() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (video, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    verdict_repository
+        .save(&VideoCategoryVerdict {
+            video_id: video.id.clone(),
+            category_id: CategoryId::new("music").unwrap(),
+            verdict: Verdict::No,
+            decided_by: VerdictAuthor::Ai,
+            model: Some("qwen3:4b".to_string()),
+            reason: Some("A chess game.".to_string()),
+            decided_at: fixed_timestamp(),
+        })
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        verdict_repository.clone(),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[tokio::test]
+async fn it_should_remove_the_pending_tasks_of_a_deleted_playlists_videos() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (video, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    let video_id = video.id.as_str().to_string();
+    task_repository
+        .schedule(
+            &Task::DownloadVideo {
+                video_id: video_id.clone(),
+            },
+            fixed_timestamp() + chrono::Duration::minutes(10),
+        )
+        .unwrap();
+    task_repository
+        .schedule(
+            &Task::FetchThumbnail {
+                video_id: video_id.clone(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    task_repository
+        .schedule(&Task::SummarizeVideo { video_id }, fixed_timestamp())
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        task_repository.clone(),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_keep_the_pending_tasks_of_another_playlists_videos() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL2", "other"))
+        .unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    let (other_video, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL2",
+        "vid2",
+        0,
+    );
+    let other_download = Task::DownloadVideo {
+        video_id: other_video.id.as_str().to_string(),
+    };
+    task_repository
+        .schedule(
+            &other_download,
+            fixed_timestamp() + chrono::Duration::minutes(10),
+        )
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        task_repository.clone(),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &other_download,
+            fixed_timestamp() + chrono::Duration::minutes(10),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_delete_a_playlist_while_it_is_being_synced() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let show_locks = Arc::new(ShowLocks::default());
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (video, playlist_video) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid1",
+        0,
+    );
+    let download = Task::DownloadVideo {
+        video_id: video.id.as_str().to_string(),
+    };
+    task_repository
+        .schedule(&download, fixed_timestamp())
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        event_publisher(&db),
+        task_repository.clone(),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        show_locks.clone(),
+    );
+    let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL1")));
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist PL1 is being synced, try again once it finishes"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL1"))
+            .unwrap(),
+        vec![playlist_video]
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(1, &download, fixed_timestamp())]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_delete_a_playlist_while_another_source_is_being_synced() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let show_locks = Arc::new(ShowLocks::default());
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        show_locks.clone(),
+    );
+    let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL2")));
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(playlist_repository.list().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_delete_a_missing_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+    );
+
+    let response = delete(playlist_deleter, "PL404").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request("playlist PL404 not found"))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_delete_if_invalid_playlist_id_provided() {
+    let response = delete(any_playlist_deleter(), " ").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "YouTube playlist ID must not be empty"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_no_playlists() {
+    let db = TestDatabase::new();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(response, Ok(vec![]));
+}
+
+#[tokio::test]
+async fn it_should_list_all_playlists() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", "music/first"))
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL2", "music/second"))
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            playlist_list_item_response("PL1", "music/first"),
+            playlist_list_item_response("PL2", "music/second"),
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_playlists_with_their_exclude_from_home() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", "music/first"))
+        .unwrap();
+    playlist_repository
+        .insert(&Playlist {
+            exclude_from_home: true,
+            ..playlist("PL2", "music/second")
+        })
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            playlist_list_item_response("PL1", "music/first"),
+            PlaylistListItemResponse {
+                exclude_from_home: true,
+                ..playlist_list_item_response("PL2", "music/second")
+            },
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_playlists_with_their_summaries_setting() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true))
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            summaries_enabled: true,
+            ..playlist_list_item_response("PL1", DEFAULT_PATH)
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_playlists_with_their_categorization_setting() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true))
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            categorization_enabled: true,
+            ..playlist_list_item_response("PL1", DEFAULT_PATH)
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_playlists_with_their_interval() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(
+            &playlist("PL1", DEFAULT_PATH)
+                .with_reconcile_interval(ReconcileInterval::new(720).unwrap()),
+        )
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            reconcile_interval_minutes: 720,
+            ..playlist_list_item_response("PL1", DEFAULT_PATH)
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_playlists_sorted_by_name_ignoring_case() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    for (id, name) in [
+        ("PL1", "watch later"),
+        ("PL2", "Courses"),
+        ("PL3", "Ambient"),
+    ] {
+        playlist_repository
+            .insert(&Playlist {
+                name: PlaylistName::new(name).unwrap(),
+                ..playlist(id, "music/list")
+            })
+            .unwrap();
+    }
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            PlaylistListItemResponse {
+                name: "Ambient".to_string(),
+                ..playlist_list_item_response("PL3", "music/list")
+            },
+            PlaylistListItemResponse {
+                name: "Courses".to_string(),
+                ..playlist_list_item_response("PL2", "music/list")
+            },
+            PlaylistListItemResponse {
+                name: "watch later".to_string(),
+                ..playlist_list_item_response("PL1", "music/list")
+            },
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_count_unwatched_downloaded_videos_when_listing_playlists() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", "music/first"))
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL2", "music/second"))
+        .unwrap();
+    for (youtube_id, position) in [("vid_unwatched_1", 0), ("vid_unwatched_2", 1)] {
+        save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            youtube_id,
+            position,
+        );
+    }
+    let watched = save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_watched",
+        2,
+    );
+    video_repository
+        .update(&watched.mark_watched(fixed_timestamp()))
+        .unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_pending",
+        3,
+    );
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        video_repository,
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            PlaylistListItemResponse {
+                unwatched_count: 2,
+                work_in_progress: true,
+                ..playlist_list_item_response("PL1", "music/first")
+            },
+            playlist_list_item_response("PL2", "music/second"),
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_playlist_with_a_pending_video_as_work_in_progress() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", "music/busy"))
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL2", "music/settled"))
+        .unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_pending",
+        0,
+    );
+    save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL2",
+        "vid_downloaded",
+        0,
+    );
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        video_repository,
+        task_repository(&db),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            PlaylistListItemResponse {
+                work_in_progress: true,
+                ..playlist_list_item_response("PL1", "music/busy")
+            },
+            PlaylistListItemResponse {
+                unwatched_count: 1,
+                ..playlist_list_item_response("PL2", "music/settled")
+            },
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_playlist_with_a_queued_task_as_work_in_progress() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    playlist_repository
+        .insert(&playlist("PL1", "music/busy"))
+        .unwrap();
+    let video = save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    task_repository
+        .schedule(
+            &Task::FetchSubtitles {
+                video_id: video.id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        video_repository,
+        task_repository,
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            unwatched_count: 1,
+            work_in_progress: true,
+            ..playlist_list_item_response("PL1", "music/busy")
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_playlist_with_an_unhandled_downloaded_video_as_work_in_progress() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", "music/busy"))
+        .unwrap();
+    let video = save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    event_publisher(&db)
+        .publish(&video_downloaded(&video, "music/busy"))
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        video_repository,
+        task_repository(&db),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            unwatched_count: 1,
+            work_in_progress: true,
+            ..playlist_list_item_response("PL1", "music/busy")
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_playlist_with_a_backing_off_downloaded_video_event_as_work_in_progress() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = Arc::new(SqliteEventRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    playlist_repository
+        .insert(&playlist("PL1", "music/busy"))
+        .unwrap();
+    let video = save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    event_publisher(&db)
+        .publish(&video_downloaded(&video, "music/busy"))
+        .unwrap();
+    event_repository
+        .update(&backing_off_event(
+            1,
+            video_downloaded(&video, "music/busy"),
+        ))
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        video_repository,
+        task_repository(&db),
+        event_repository,
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            unwatched_count: 1,
+            work_in_progress: true,
+            ..playlist_list_item_response("PL1", "music/busy")
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_playlists_with_their_hide_unwatched_count() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH).with_hide_unwatched_count(true))
+        .unwrap();
+    save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_unwatched",
+        0,
+    );
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        video_repository,
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            hide_unwatched_count: true,
+            unwatched_count: 1,
+            ..playlist_list_item_response("PL1", DEFAULT_PATH)
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_exclude_a_playlist_from_home() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = update(playlist_updater, "PL1", update_request(true)).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            exclude_from_home: true,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![Playlist {
+            exclude_from_home: true,
+            ..playlist("PL1", DEFAULT_PATH)
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_hide_a_playlists_unwatched_count() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let stored = Playlist {
+        exclude_from_home: true,
+        ..playlist("PL1", DEFAULT_PATH)
+    }
+    .with_reconcile_interval(ReconcileInterval::new(720).unwrap());
+    playlist_repository.insert(&stored).unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = update(playlist_updater, "PL1", hide_count_request(true)).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            exclude_from_home: true,
+            hide_unwatched_count: true,
+            reconcile_interval_minutes: 720,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![stored.with_hide_unwatched_count(true)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_show_a_playlists_unwatched_count_again() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH).with_hide_unwatched_count(true))
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = update(playlist_updater, "PL1", hide_count_request(false)).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", DEFAULT_PATH)));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_a_playlist_in_home_again() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&Playlist {
+            exclude_from_home: true,
+            ..playlist("PL1", DEFAULT_PATH)
+        })
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = update(playlist_updater, "PL1", update_request(false)).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", DEFAULT_PATH)));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_leave_a_playlist_unchanged_if_already_set() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let excluded = Playlist {
+        exclude_from_home: true,
+        ..playlist("PL1", DEFAULT_PATH)
+    };
+    playlist_repository.insert(&excluded).unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = update(playlist_updater, "PL1", update_request(true)).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            exclude_from_home: true,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(playlist_repository.list().unwrap(), vec![excluded]);
+}
+
+#[tokio::test]
+async fn it_should_enable_summaries_on_a_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    preferences_repository.save(&summaries_on()).unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        preferences_repository,
+    );
+
+    let request = UpdatePlaylistRequest {
+        summaries_enabled: Some(true),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            summaries_enabled: true,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_enable_categorization_on_a_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    preferences_repository.save(&categorization_on()).unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        preferences_repository,
+    );
+
+    let request = UpdatePlaylistRequest {
+        categorization_enabled: Some(true),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            categorization_enabled: true,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_enable_summaries_on_a_playlist_if_summaries_are_off() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let ai_on_summaries_off = Preferences {
+        ai_enabled: true,
+        ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+        ..Preferences::default()
+    };
+    preferences_repository.save(&ai_on_summaries_off).unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        preferences_repository,
+    );
+
+    let request = UpdatePlaylistRequest {
+        reconcile_interval_minutes: Some(60),
+        summaries_enabled: Some(true),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "Turn on AI summaries before enabling them for a playlist"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_enable_categorization_on_a_playlist_if_unavailable() {
+    for preferences in categorization_unavailable() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        preferences_repository.save(&preferences).unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            preferences_repository,
+        );
+
+        let request = UpdatePlaylistRequest {
+            reconcile_interval_minutes: Some(60),
+            categorization_enabled: Some(true),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "Turn on AI categorization before enabling it for a playlist"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+    }
+}
+
+#[tokio::test]
+async fn it_should_disable_summaries_on_a_playlist_while_ai_is_off() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH).with_summaries_enabled(true))
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = UpdatePlaylistRequest {
+        summaries_enabled: Some(false),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", DEFAULT_PATH)));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_disable_categorization_on_a_playlist_while_ai_is_off() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH).with_categorization_enabled(true))
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = UpdatePlaylistRequest {
+        categorization_enabled: Some(false),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", DEFAULT_PATH)));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_update_a_playlists_interval() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let excluded = Playlist {
+        exclude_from_home: true,
+        ..playlist("PL1", DEFAULT_PATH)
+    };
+    playlist_repository.insert(&excluded).unwrap();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        task_repository.clone(),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = UpdatePlaylistRequest {
+        reconcile_interval_minutes: Some(60),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            exclude_from_home: true,
+            reconcile_interval_minutes: 60,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![excluded.with_reconcile_interval(ReconcileInterval::new(60).unwrap())]
+    );
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_bring_the_next_reconcile_forward_if_interval_shortened() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::hours(20),
+        )
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        task_repository.clone(),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = UpdatePlaylistRequest {
+        reconcile_interval_minutes: Some(60),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            reconcile_interval_minutes: 60,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::minutes(60),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_stamp_the_brought_forward_reconcile_with_the_update_time() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp() - chrono::Duration::hours(1))),
+    ));
+    task_repository
+        .schedule(
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::hours(20),
+        )
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        task_repository.clone(),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = UpdatePlaylistRequest {
+        reconcile_interval_minutes: Some(60),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            reconcile_interval_minutes: 60,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![ScheduledTask {
+            created_at: fixed_timestamp() - chrono::Duration::hours(1),
+            ..pending_task(
+                1,
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::minutes(60),
+            )
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_the_next_reconcile_if_interval_lengthened() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::minutes(30),
+        )
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        task_repository.clone(),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let request = UpdatePlaylistRequest {
+        reconcile_interval_minutes: Some(1440),
+        ..empty_update_request()
+    };
+    let response = update(playlist_updater, "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Ok(PlaylistResponse {
+            reconcile_interval_minutes: 1440,
+            ..playlist_response("PL1", DEFAULT_PATH)
+        })
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::minutes(30),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_update_an_unknown_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_updater = PlaylistUpdater::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+    );
+
+    let response = update(playlist_updater, "PL404", update_request(true)).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "playlist PL404 not found"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", DEFAULT_PATH)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_update_if_nothing_to_change() {
+    let request = empty_update_request();
+
+    let response = update(any_playlist_updater(), "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Request must change exclude from home, hide unwatched count, the reconcile interval, summaries or categorization"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_update_if_invalid_interval_provided() {
+    let request = UpdatePlaylistRequest {
+        reconcile_interval_minutes: Some(0),
+        ..empty_update_request()
+    };
+
+    let response = update(any_playlist_updater(), "PL1", request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Reconcile interval must be at least 1 minute (got 0)"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_update_if_invalid_id_provided() {
+    let response = update(any_playlist_updater(), " ", update_request(true)).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "YouTube playlist ID must not be empty"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_add_new_videos_on_reconcile() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        vec![playlist_item("vid1", "One", 0)],
+        task_repository.clone(),
+    );
+
+    let response = reconcile(playlist_video_reconciler, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    let videos = video_repository.list().unwrap();
+    let video_id = videos[0].id.clone();
+    assert_eq!(
+        videos,
+        vec![Video {
+            id: video_id.clone(),
+            ..playlist_episode("vid1", "One", 1)
+        }]
+    );
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL1"))
+            .unwrap(),
+        vec![PlaylistVideo {
+            id: 1,
+            ..PlaylistVideo::create(playlist_id("PL1"), video_id.clone(), 0, fixed_timestamp())
+        }]
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: video_id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        ),]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
+                playlist_id: "PL1".to_string(),
+                video_id: video_id.as_str().to_string(),
+            })
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_remove_videos_gone_from_youtube_on_reconcile() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (removed, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_old",
+        0,
+    );
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        Vec::new(),
+        task_repository(&db),
+    );
+
+    let response = reconcile(playlist_video_reconciler, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.list().unwrap(), vec![]);
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL1"))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoRemovedFromPlaylist(VideoRemovedFromPlaylist {
+                playlist_id: "PL1".to_string(),
+                video_id: removed.id.as_str().to_string(),
+                title: "Video vid_old".to_string(),
+                filename: None,
+                thumbnail_filename: None,
+                subtitle_filename: None,
+                was_downloaded: false,
+            })
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_be_idempotent_on_repeated_reconciles() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        vec![playlist_item("vid1", "One", 0)],
+        task_repository.clone(),
+    );
+
+    reconcile(playlist_video_reconciler.clone(), "PL1")
+        .await
+        .unwrap();
+    let videos_after_first_reconcile = video_repository.list().unwrap();
+    let playlist_videos_after_first_reconcile = playlist_video_repository
+        .list_for_playlist(&playlist_id("PL1"))
+        .unwrap();
+    let events_after_first_reconcile = event_repository.list_eligible().unwrap();
+    let response = reconcile(playlist_video_reconciler, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        videos_after_first_reconcile
+    );
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL1"))
+            .unwrap(),
+        playlist_videos_after_first_reconcile
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: videos_after_first_reconcile[0].id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        ),]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        events_after_first_reconcile
+    );
+}
+
+#[tokio::test]
+async fn it_should_not_reschedule_an_already_pending_reconcile() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let existing_task = Task::ReconcilePlaylist {
+        playlist_id: "PL1".to_string(),
+    };
+    let existing_run_at = fixed_timestamp() + chrono::Duration::seconds(1800);
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    task_repository
+        .schedule(&existing_task, existing_run_at)
+        .unwrap();
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Vec::new(),
+        task_repository.clone(),
+    );
+
+    let response = reconcile(playlist_video_reconciler, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(1, &existing_task, existing_run_at)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_videos_on_reconcile_if_listing_fails() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let (existing, existing_playlist_video) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_kept",
+        0,
+    );
+    let playlist_video_reconciler = PlaylistVideoReconciler::new(
+        playlist_repository,
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        Arc::new(FakeYoutubePlaylistItemsRepository::failing()),
+        event_publisher(&db),
+        task_repository.clone(),
+        Arc::new(InternalVideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )),
+        Arc::new(ShowFileWriter::new(
+            Arc::new(FakeShowFileRepository::default()),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            "/videos",
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(ShowLocks::default()),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+    );
+
+    let response = reconcile(playlist_video_reconciler, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL1"))
+            .unwrap(),
+        vec![existing_playlist_video]
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: existing.id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        ),]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_ignore_reconcile_of_a_missing_playlist() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        vec![playlist_item("vid1", "One", 0)],
+        task_repository.clone(),
+    );
+
+    let response = reconcile(playlist_video_reconciler, "PL404").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.list().unwrap(), vec![]);
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id("PL404"))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_reconcile_if_invalid_playlist_id_provided() {
+    let response = reconcile(any_playlist_video_reconciler(), " ").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "YouTube playlist ID must not be empty"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_mark_every_downloaded_playlist_video_watched() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let downloaded = save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    let (pending, _) = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_pending",
+        1,
+    );
+    let shared = save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        "vid_shared",
+        2,
+    );
+    let channel_copy = downloaded_video("vid_shared");
+    video_repository.insert(&channel_copy).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo::create(
+            ChannelHandle::new("@somechannel").unwrap(),
+            channel_copy.id.clone(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let video_watch_state_updater = VideoWatchStateUpdater::new(
+        video_repository.clone(),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        channel_video_repository,
+        playlist_repository,
+        playlist_video_repository,
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+    );
+
+    let response = mark_watched(video_watch_state_updater, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![
+            Video {
+                version: 1,
+                ..downloaded.mark_watched(watched_timestamp())
+            },
+            pending,
+            Video {
+                version: 1,
+                ..shared.mark_watched(watched_timestamp())
+            },
+            Video {
+                version: 1,
+                ..channel_copy.mark_watched(watched_timestamp())
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_mark_watched_a_missing_playlist() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video = save_downloaded_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PLmissing",
+        "vid1",
+        0,
+    );
+    let video_watch_state_updater = VideoWatchStateUpdater::new(
+        video_repository.clone(),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        playlist_video_repository,
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+    );
+
+    let response = mark_watched(video_watch_state_updater, "PLmissing").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request("playlist PLmissing not found"))
+    );
+    assert_eq!(video_repository.list().unwrap(), vec![video]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_mark_watched_if_invalid_playlist_id_provided() {
+    let response = mark_watched(any_video_watch_state_updater(), " ").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "YouTube playlist ID must not be empty"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_move_a_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/lofi")]
+    );
+    assert_eq!(
+        video_file_repository.renamed_dirs(),
+        vec![(
+            std::path::PathBuf::from("/videos/music/chill"),
+            std::path::PathBuf::from("/videos/music/lofi")
+        )]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, show_moved("music/chill", "music/lofi"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_the_pending_reconcile_when_moving() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    task_repository
+        .schedule(
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::hours(3),
+        )
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository);
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &reconcile_task("PL1"),
+            fixed_timestamp() + chrono::Duration::hours(3),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_move_a_playlist_with_errored_and_excluded_videos() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    save_playlist_video_as(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        playlist_episode("vid_errored", "Errored", 2)
+            .mark_download_failed("HTTP Error 503", fixed_timestamp()),
+        1,
+    );
+    save_playlist_video_as(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        playlist_episode("vid_excluded", "Excluded", 3).mark_unavailable(fixed_timestamp()),
+        2,
+    );
+    let show_mover = show_mover(&db, video_file_repository);
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/lofi")]
+    );
+}
+
+#[tokio::test]
+async fn it_should_move_a_source_whose_only_unfinished_video_waits_for_a_retry() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let task_repository = task_repository(&db);
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    let retrying = playlist_episode("vid_retrying", "Retrying", 2)
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+        .mark_errored("HTTP Error 503", fixed_timestamp());
+    save_playlist_video_as(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        retrying.clone(),
+        1,
+    );
+    task_repository
+        .schedule(
+            &Task::DownloadVideo {
+                video_id: retrying.id.as_str().to_string(),
+            },
+            fixed_timestamp() + chrono::Duration::hours(6),
+        )
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository);
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/lofi")]
+    );
+}
+
+#[tokio::test]
+async fn it_should_record_the_new_path_if_the_show_directory_is_missing() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/lofi")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_path_missing() {
+    let response = move_(any_show_mover(), "PL1", MovePlaylistRequest { path: None }).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request("Playlist path must not be empty"))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_path_invalid() {
+    let response = move_(any_show_mover(), "PL1", move_request("/music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Playlist path must not be an absolute path"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_a_missing_playlist() {
+    let db = TestDatabase::new();
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PLmissing", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "playlist or channel not found"
+        ))
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_to_the_same_path() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/chill")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel is already stored at that path"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_to_a_path_used_by_a_channel() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let channel_repository = SqliteChannelRepository::new(db.database());
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    channel_repository
+        .insert(&channel("@somechannel", "creators/somechannel"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("creators/somechannel")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "path \"creators/somechannel\" overlaps the path of a playlist or channel"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_into_its_own_path() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music"));
+    playlist_repository
+        .insert(&playlist("PL1", "music"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/chill")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "path \"music/chill\" overlaps the path of a playlist or channel"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_inside_another_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/lofi"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/lofi"))
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL2", "music/chill"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/chill/extra")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "path \"music/chill/extra\" overlaps the path of a playlist or channel"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![
+            playlist("PL1", "music/lofi"),
+            playlist("PL2", "music/chill")
+        ]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_destination_exists_on_disk() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository = Arc::new(
+        FakeVideoFileRepository::default()
+            .with_dir("/videos/music/chill")
+            .with_dir("/videos/music/lofi"),
+    );
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "path \"music/lofi\" already exists on disk"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_into_the_folder_of_a_source_being_deleted() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    task_repository
+        .schedule(&delete_playlist_files("PL2", "archive"), fixed_timestamp())
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("archive/b")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "path \"archive/b\" overlaps the path of a playlist or channel"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &delete_playlist_files("PL2", "archive"),
+            fixed_timestamp()
+        )]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_into_the_folder_of_a_source_whose_deletion_is_backing_off() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    event_publisher(&db)
+        .publish(&playlist_deleted("PL2", "archive"))
+        .unwrap();
+    let backing_off = backing_off_event(1, playlist_deleted("PL2", "archive"));
+    event_repository.update(&backing_off).unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("archive/b")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "path \"archive/b\" overlaps the path of a playlist or channel"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    assert_eq!(event_repository.list_pending().unwrap(), vec![backing_off]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_into_the_folder_of_a_source_whose_deletion_is_not_yet_handled() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    event_publisher(&db)
+        .publish(&playlist_deleted("PL2", "archive"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("archive/b")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "path \"archive/b\" overlaps the path of a playlist or channel"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, playlist_deleted("PL2", "archive"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_a_video_is_pending() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    save_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_pending",
+        1,
+    );
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel still has work in progress, try again once its downloads finish"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_a_thumbnail_fetch_is_queued() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let video = save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    task_repository
+        .schedule(
+            &Task::FetchThumbnail {
+                video_id: video.id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel still has work in progress, try again once its downloads finish"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_a_download_is_queued() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let video = save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    task_repository
+        .schedule(
+            &Task::DownloadVideo {
+                video_id: video.id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel still has work in progress, try again once its downloads finish"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_move_a_playlist_while_a_download_of_another_source_is_queued() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL2", "music/rock"))
+        .unwrap();
+    let other_video = save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL2",
+        "vid_rock",
+        0,
+    );
+    task_repository
+        .schedule(
+            &Task::DownloadVideo {
+                video_id: other_video.id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/lofi"), playlist("PL2", "music/rock")]
+    );
+    assert_eq!(
+        video_file_repository.renamed_dirs(),
+        vec![(
+            std::path::PathBuf::from("/videos/music/chill"),
+            std::path::PathBuf::from("/videos/music/lofi")
+        )]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, show_moved("music/chill", "music/lofi"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_a_video_file_deletion_is_queued() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    task_repository
+        .schedule(
+            &Task::DeleteVideoFile {
+                filename: Some("Season 1/S01E001 - My Video.mp4".to_string()),
+                thumbnail_filename: None,
+                subtitle_filename: None,
+                output_dir: "/videos/music/chill".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel still has work in progress, try again once its downloads finish"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_while_a_downloaded_video_is_not_yet_handled() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let video = save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    event_publisher(&db)
+        .publish(&video_downloaded(&video, "music/chill"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel still has work in progress, try again once its downloads finish"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(1, video_downloaded(&video, "music/chill"))]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_a_downloaded_video_event_is_backing_off() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    let task_repository = task_repository(&db);
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let video = save_downloaded_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        "vid_downloaded",
+        0,
+    );
+    event_publisher(&db)
+        .publish(&video_downloaded(&video, "music/chill"))
+        .unwrap();
+    let backing_off = backing_off_event(1, video_downloaded(&video, "music/chill"));
+    event_repository.update(&backing_off).unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel still has work in progress, try again once its downloads finish"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    assert_eq!(event_repository.list_pending().unwrap(), vec![backing_off]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_while_reconciling() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    let show_locks = Arc::new(ShowLocks::default());
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let show_mover = ShowMover::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        task_repository(&db),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        video_file_repository.clone(),
+        event_publisher(&db),
+        show_locks.clone(),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+    let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL1")));
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "playlist or channel is being synced, try again once it finishes"
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_fail_to_move_if_rename_fails() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::with_failing_renames().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let show_mover = show_mover(&db, video_file_repository.clone());
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::internal(
+            "cross-device link renaming \"/videos/music/chill\""
+        ))
+    );
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_rename_back_if_recording_the_path_fails() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_file_repository =
+        Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+    playlist_repository
+        .insert(&playlist("PL1", "music/chill"))
+        .unwrap();
+    let show_mover = ShowMover::new(
+        Arc::new(FailingUpdatePlaylistRepository(
+            SqlitePlaylistRepository::new(db.database()),
+        )),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        task_repository(&db),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        video_file_repository.clone(),
+        event_publisher(&db),
+        Arc::new(ShowLocks::default()),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+    assert_eq!(response, Err(ApiError::internal("disk I/O error")));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![playlist("PL1", "music/chill")]
+    );
+    assert_eq!(
+        video_file_repository.renamed_dirs(),
+        vec![
+            (
+                std::path::PathBuf::from("/videos/music/chill"),
+                std::path::PathBuf::from("/videos/music/lofi")
+            ),
+            (
+                std::path::PathBuf::from("/videos/music/lofi"),
+                std::path::PathBuf::from("/videos/music/chill")
+            ),
+        ]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_clear_a_playlists_ai_verdicts_keeping_user_ones() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1", "playlists/pl1"))
+        .unwrap();
+    let [ai_only, with_user] = [("vid1", 0), ("vid2", 1)].map(|(youtube_id, position)| {
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            youtube_id,
+            position,
+        )
+        .0
+    });
+    let category_repository = SqliteCategoryRepository::new(db.database());
+    let [funny, politics] = ["Funny", "Politics"].map(named_category);
+    [&funny, &politics]
+        .into_iter()
+        .for_each(|category| category_repository.insert(category).unwrap());
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let user_no = user_verdict(&with_user, &funny, Verdict::No);
+    [
+        ai_verdict(&ai_only, &politics, Verdict::Yes),
+        ai_verdict(&with_user, &politics, Verdict::Failed),
+        user_no.clone(),
+    ]
+    .iter()
+    .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+    let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+    video_categories_repository
+        .save_many(&[VideoCategories::new(
+            ai_only.id.clone(),
+            vec![politics.id.clone()],
+        )])
+        .unwrap();
+    let ids = [ai_only.id.clone(), with_user.id.clone()];
+
+    let response = delete_playlist_ai_verdicts(
+        State(video_category_editor(db.database())),
+        Path("PL1".to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(verdict_repository.find_many(&ids).unwrap(), vec![user_no]);
+    assert_eq!(
+        video_categories_repository.find_many(&ids).unwrap(),
+        vec![
+            VideoCategories::none(ai_only.id.clone()),
+            VideoCategories::none(with_user.id.clone()),
+        ]
+    );
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged {
+                video_ids: vec![ai_only.id.as_str().to_string()],
+            })
+        )]
+    );
+    assert_eq!(
+        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_non_completed()
+            .unwrap(),
+        vec![pending_task(1, &reconcile_task("PL1"), fixed_timestamp())]
+    );
+}
+
+/// A creator for tests whose request is rejected before reaching it. Its
+/// repositories sit on an unmigrated in-memory database, so a request that
+/// wrongly got through would fail loudly instead of passing.
+fn any_playlist_creator() -> PlaylistCreator {
+    PlaylistCreator::new(
+        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+        Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }),
+        unused_event_publisher(),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(unused_connection())),
+    )
+}
+
+/// A previewer for tests whose request is rejected before reaching it. Its
+/// YouTube lookup fails, so a request that wrongly got through would
+/// fail loudly instead of passing.
+fn any_playlist_previewer() -> PlaylistPreviewer {
+    PlaylistPreviewer::new(Arc::new(FailingYoutubePlaylistRepository))
+}
+
+/// A deleter for tests whose request is rejected before reaching it (see
+/// `any_playlist_creator`).
+fn any_playlist_deleter() -> PlaylistDeleter {
+    PlaylistDeleter::new(
+        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+        Arc::new(SqliteVideoRepository::new(unused_connection())),
+        Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
+        Arc::new(SqliteVideoSummaryRepository::new(unused_connection())),
+        Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+        unused_event_publisher(),
+        Arc::new(SqliteTaskRepository::new(
+            unused_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(
+            unused_connection(),
+        )),
+        Arc::new(ShowLocks::default()),
+    )
+}
+
+/// An updater for tests whose request is rejected before reaching it (see
+/// `any_playlist_creator`).
+fn any_playlist_updater() -> PlaylistUpdater {
+    PlaylistUpdater::new(
+        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+        Arc::new(SqliteTaskRepository::new(
+            unused_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqlitePreferencesRepository::new(unused_connection())),
+    )
+}
+
+/// Builds a reconciler around the repositories a test seeds and asserts;
+/// the remaining ports (metadata, files, thumbnails) are ones no playlist
+/// reconcile test observes. Events go to `db`'s outbox table.
+fn playlist_video_reconciler(
+    db: &TestDatabase,
+    playlist_repository: Arc<SqlitePlaylistRepository>,
+    video_repository: Arc<SqliteVideoRepository>,
+    playlist_video_repository: Arc<SqlitePlaylistVideoRepository>,
+    playlist_items: Vec<YoutubePlaylistItem>,
+    task_repository: Arc<SqliteTaskRepository>,
+) -> PlaylistVideoReconciler {
+    PlaylistVideoReconciler::new(
+        playlist_repository,
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository,
+        Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(
+            playlist_items,
+        )),
+        event_publisher(db),
+        task_repository.clone(),
+        Arc::new(InternalVideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )),
+        Arc::new(ShowFileWriter::new(
+            Arc::new(FakeShowFileRepository::default()),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            "/videos",
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(ShowLocks::default()),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+    )
+}
+
+/// A reconciler for tests whose request is rejected before reaching it
+/// (see `any_playlist_creator`).
+fn any_playlist_video_reconciler() -> PlaylistVideoReconciler {
+    let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        unused_connection(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    PlaylistVideoReconciler::new(
+        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
+        Arc::new(SqliteVideoSummaryRepository::new(unused_connection())),
+        Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+        Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(Vec::new())),
+        unused_event_publisher(),
+        task_repository.clone(),
+        Arc::new(InternalVideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )),
+        Arc::new(ShowFileWriter::new(
+            Arc::new(FakeShowFileRepository::default()),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            "/videos",
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(ShowLocks::default()),
+        Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(
+            unused_connection(),
+        )),
+    )
+}
+
+/// The real playlist repository, except that `update` fails: the one
+/// write SQLite can't be made to fail on its own.
+struct FailingUpdatePlaylistRepository(SqlitePlaylistRepository);
+
+impl PlaylistRepository for FailingUpdatePlaylistRepository {
+    fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
+        self.0.find(id)
+    }
+
+    fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        self.0.insert(playlist)
+    }
+
+    fn update(&self, _playlist: &Playlist) -> anyhow::Result<()> {
+        anyhow::bail!("disk I/O error")
+    }
+
+    fn record_last_episode(
+        &self,
+        id: &PlaylistId,
+        number: PlaylistEpisodeNumber,
+    ) -> anyhow::Result<()> {
+        self.0.record_last_episode(id, number)
+    }
+
+    fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
+        self.0.delete(id)
+    }
+
+    fn list(&self) -> anyhow::Result<Vec<Playlist>> {
+        self.0.list()
+    }
+}
+
+struct FailingYoutubePlaylistRepository;
+
+impl YoutubePlaylistRepository for FailingYoutubePlaylistRepository {
+    fn resolve(&self, _id: &PlaylistId) -> anyhow::Result<Option<ResolvedPlaylist>> {
+        anyhow::bail!("YouTube API request failed")
+    }
+}
+
+/// An updater for tests whose request is rejected before reaching it, on
+/// an unmigrated in-memory database.
+fn any_video_watch_state_updater() -> VideoWatchStateUpdater {
+    VideoWatchStateUpdater::new(
+        Arc::new(SqliteVideoRepository::new(unused_connection())),
+        Arc::new(SqliteChannelRepository::new(unused_connection())),
+        Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+        Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(unused_connection())),
+        any_category_video_collector(),
+    )
+}
+
+fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+    crate::infrastructure::shared::sqlite_connection::Database::single(
+        Connection::open_in_memory().unwrap(),
+    )
+}
+
+fn unused_event_publisher() -> Arc<SqliteEventPublisher> {
+    Arc::new(SqliteEventPublisher::new(
+        unused_connection(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ))
+}
+
+fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {
+    Arc::new(SqliteEventPublisher::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ))
+}
+
+fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {
+    Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ))
+}
+
+/// The outbox row `SqliteEventPublisher` writes for `event`, as read back
+/// before the consumer has dispatched it.
+/// The `id`th published event after one failed attempt: waiting out its
+/// retry delay, an hour from `fixed_timestamp()`.
+fn backing_off_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+    ScheduledEvent {
+        retries: 1,
+        run_at: fixed_timestamp() + chrono::Duration::hours(1),
+        last_error: Some("Plex unreachable".to_string()),
+        ..pending_event(id, event)
+    }
+}
+
+fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+    ScheduledEvent {
+        id,
+        event_type: event.event_type().to_string(),
+        payload: event.payload().to_string(),
+        retries: 0,
+        run_at: fixed_timestamp(),
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        last_error: None,
+    }
+}
+
+fn reconcile_task(playlist_id: &str) -> Task {
+    Task::ReconcilePlaylist {
+        playlist_id: playlist_id.to_string(),
+    }
+}
+
+/// The row `SqliteTaskRepository::schedule` writes for `task`, as read
+/// back before the executor has picked it up.
+fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
+    ScheduledTask {
+        id,
+        task: task.clone(),
+        status: TaskStatus::Pending,
+        retries: 0,
+        run_at,
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        last_error: None,
+    }
+}
+
+fn fixed_timestamp() -> DateTime<Utc> {
+    DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+}
+
+fn watched_timestamp() -> DateTime<Utc> {
+    DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
+}
+
+fn playlist_id(id: &str) -> PlaylistId {
+    PlaylistId::new(id).unwrap()
+}
+
+/// A newly stored playlist video numbered `episode`.
+fn playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
+    Video::create(
+        YoutubeVideoId::new(youtube_id).unwrap(),
+        title,
+        fixed_timestamp(),
+    )
+    .with_episode_number(
+        PlaylistEpisodeNumber::new(episode).unwrap().into(),
+        fixed_timestamp(),
+    )
+}
+
+/// Preferences with AI, categories and categorization on.
+fn categorization_on() -> Preferences {
+    Preferences {
+        ai_enabled: true,
+        ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+        categorization: CategorizationSettings {
+            enabled: true,
+            ..CategorizationSettings::default()
+        },
+        ..Preferences::default()
+    }
+}
+
+/// One of AI, categories and categorization off in each.
+fn categorization_unavailable() -> [Preferences; 3] {
+    [
+        Preferences {
+            ai_enabled: false,
+            ..categorization_on()
+        },
+        Preferences {
+            categories_enabled: false,
+            ..categorization_on()
+        },
+        Preferences {
+            categorization: CategorizationSettings::default(),
+            ..categorization_on()
+        },
+    ]
+}
+
+/// Preferences with AI and summaries on, so sources can enable summaries.
+fn summaries_on() -> Preferences {
+    Preferences {
+        ai_enabled: true,
+        ollama_url: Some(OllamaUrl::new("http://localhost:11434").unwrap()),
+        summaries: SummarySettings {
+            enabled: true,
+            ..SummarySettings::default()
+        },
+        ..Preferences::default()
+    }
+}
+
+fn playlist(id: &str, path: &str) -> Playlist {
+    Playlist::create(
+        playlist_id(id),
+        PlaylistName::new("Lofi beats").unwrap(),
+        PlaylistPath::new(path).unwrap(),
+        Quality::High,
+        PlaylistKind::YoutubeLinked,
+        false,
+        ReconcileInterval::default_interval(),
+        fixed_timestamp(),
+    )
+}
+
+fn video_transcript(video: &Video) -> VideoTranscript {
+    VideoTranscript::create(
+        video.id.clone(),
+        &CaptionTrack {
+            key: "en".to_string(),
+            language: CaptionLanguage::new("en").unwrap(),
+            source: CaptionSource::Manual,
+        },
+        TranscriptText::new("Hello there"),
+        fixed_timestamp(),
+    )
+}
+
+/// Saves a video and its playlist membership, returning both as stored
+/// (the playlist video with its storage-assigned `id`).
+fn save_playlist_video(
+    video_repository: &dyn VideoRepository,
+    playlist_video_repository: &dyn PlaylistVideoRepository,
+    playlist: &str,
+    youtube_id: &str,
+    position: i64,
+) -> (Video, PlaylistVideo) {
+    let video = Video::create(
+        YoutubeVideoId::new(youtube_id).unwrap(),
+        format!("Video {youtube_id}"),
+        fixed_timestamp(),
+    );
+    video_repository.insert(&video).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            playlist_id(playlist),
+            video.id.clone(),
+            position,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let playlist_video = playlist_video_repository
+        .find_by_video(&video.id)
+        .unwrap()
+        .unwrap();
+    (video, playlist_video)
+}
+
+/// Saves a downloaded video and its playlist membership, returning the
+/// video as stored.
+fn save_downloaded_playlist_video(
+    video_repository: &dyn VideoRepository,
+    playlist_video_repository: &dyn PlaylistVideoRepository,
+    playlist: &str,
+    youtube_id: &str,
+    position: i64,
+) -> Video {
+    let video = downloaded_video(youtube_id);
+    video_repository.insert(&video).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            playlist_id(playlist),
+            video.id.clone(),
+            position,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    video
+}
+
+fn downloaded_video(youtube_id: &str) -> Video {
+    Video::create(
+        YoutubeVideoId::new(youtube_id).unwrap(),
+        format!("Video {youtube_id}"),
+        fixed_timestamp(),
+    )
+    .mark_downloaded(
+        Quality::High,
+        format!("Video {youtube_id}.mp4"),
+        None,
+        Some(100),
+        fixed_timestamp(),
+    )
+}
+
+fn playlist_item(youtube_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
+    YoutubePlaylistItem {
+        youtube_id: youtube_id.to_string(),
+        title: title.to_string(),
+        position,
+    }
+}
+
+fn resolved_playlist() -> ResolvedPlaylist {
+    ResolvedPlaylist {
+        title: "Lofi beats".to_string(),
+        item_count: 42,
+    }
+}
+
+fn playlist_created(playlist_id: &str) -> DomainEvent {
+    DomainEvent::PlaylistCreated(PlaylistCreated {
+        playlist_id: playlist_id.to_string(),
+    })
+}
+
+fn create_request(playlist: &str) -> CreatePlaylistRequest {
+    CreatePlaylistRequest {
+        playlist: playlist.to_string(),
+        path: Some(DEFAULT_PATH.to_string()),
+        quality: Some("high".to_string()),
+        exclude_from_home: None,
+        reconcile_interval_minutes: None,
+        summaries_enabled: Some(false),
+        categorization_enabled: Some(false),
+    }
+}
+
+fn empty_update_request() -> UpdatePlaylistRequest {
+    UpdatePlaylistRequest {
+        exclude_from_home: None,
+        hide_unwatched_count: None,
+        reconcile_interval_minutes: None,
+        summaries_enabled: None,
+        categorization_enabled: None,
+    }
+}
+
+fn update_request(exclude_from_home: bool) -> UpdatePlaylistRequest {
+    UpdatePlaylistRequest {
+        exclude_from_home: Some(exclude_from_home),
+        hide_unwatched_count: None,
+        reconcile_interval_minutes: None,
+        summaries_enabled: None,
+        categorization_enabled: None,
+    }
+}
+
+fn hide_count_request(hide_unwatched_count: bool) -> UpdatePlaylistRequest {
+    UpdatePlaylistRequest {
+        hide_unwatched_count: Some(hide_unwatched_count),
+        ..empty_update_request()
+    }
+}
+
+fn preview_query(playlist: &str) -> PreviewPlaylistQuery {
+    PreviewPlaylistQuery {
+        playlist: Some(playlist.to_string()),
+    }
+}
+
+fn playlist_preview_response(id: &str) -> PlaylistPreviewResponse {
+    PlaylistPreviewResponse {
+        id: id.to_string(),
+        title: "Lofi beats".to_string(),
+        video_count: 42,
+    }
+}
+
+fn playlist_response(id: &str, path: &str) -> PlaylistResponse {
+    PlaylistResponse {
+        id: id.to_string(),
+        name: "Lofi beats".to_string(),
+        path: path.to_string(),
+        quality: "high".to_string(),
+        kind: "youtube_linked".to_string(),
+        exclude_from_home: false,
+        hide_unwatched_count: false,
+        reconcile_interval_minutes: 180,
+        created_at: fixed_timestamp(),
+        summaries_enabled: false,
+        categorization_enabled: false,
+    }
+}
+
+fn playlist_list_item_response(id: &str, path: &str) -> PlaylistListItemResponse {
+    PlaylistListItemResponse {
+        id: id.to_string(),
+        name: "Lofi beats".to_string(),
+        path: path.to_string(),
+        quality: "high".to_string(),
+        kind: "youtube_linked".to_string(),
+        exclude_from_home: false,
+        hide_unwatched_count: false,
+        reconcile_interval_minutes: 180,
+        created_at: fixed_timestamp(),
+        unwatched_count: 0,
+        work_in_progress: false,
+        summaries_enabled: false,
+        categorization_enabled: false,
+    }
+}
+
+async fn create(
+    playlist_creator: PlaylistCreator,
+    request: CreatePlaylistRequest,
+) -> Result<(StatusCode, PlaylistResponse), ApiError> {
+    create_playlist(State(playlist_creator), Json(request))
+        .await
+        .map(|(status, Json(playlist))| (status, playlist))
+}
+
+async fn preview(
+    playlist_previewer: PlaylistPreviewer,
+    query: PreviewPlaylistQuery,
+) -> Result<PlaylistPreviewResponse, ApiError> {
+    preview_playlist(State(playlist_previewer), Query(query))
+        .await
+        .map(|Json(preview)| preview)
+}
+
+async fn delete(playlist_deleter: PlaylistDeleter, id: &str) -> Result<StatusCode, ApiError> {
+    delete_playlist(State(playlist_deleter), Path(id.to_string())).await
+}
+
+async fn list(
+    playlist_view_searcher: PlaylistViewSearcher,
+) -> Result<Vec<PlaylistListItemResponse>, ApiError> {
+    list_playlists(State(playlist_view_searcher))
+        .await
+        .map(|Json(playlists)| playlists)
+}
+
+async fn update(
+    playlist_updater: PlaylistUpdater,
+    id: &str,
+    request: UpdatePlaylistRequest,
+) -> Result<PlaylistResponse, ApiError> {
+    update_playlist(State(playlist_updater), Path(id.to_string()), Json(request))
+        .await
+        .map(|Json(playlist)| playlist)
+}
+
+async fn mark_watched(
+    video_watch_state_updater: VideoWatchStateUpdater,
+    id: &str,
+) -> Result<StatusCode, ApiError> {
+    mark_playlist_watched(State(video_watch_state_updater), Path(id.to_string())).await
+}
+
+async fn reconcile(
+    playlist_video_reconciler: PlaylistVideoReconciler,
+    id: &str,
+) -> Result<StatusCode, ApiError> {
+    reconcile_playlist(State(playlist_video_reconciler), Path(id.to_string())).await
+}
+
+async fn move_(
+    show_mover: ShowMover,
+    id: &str,
+    request: MovePlaylistRequest,
+) -> Result<PlaylistResponse, ApiError> {
+    move_playlist(State(show_mover), Path(id.to_string()), Json(request))
+        .await
+        .map(|Json(playlist)| playlist)
+}
+
+/// Builds a mover on `db` (where each test seeds and asserts sources,
+/// videos, tasks and events) under the videos root `/videos`, with its
+/// own show locks, nobody else holds.
+fn show_mover(db: &TestDatabase, video_file_repository: Arc<FakeVideoFileRepository>) -> ShowMover {
+    ShowMover::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        task_repository(db),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        video_file_repository,
+        event_publisher(db),
+        Arc::new(ShowLocks::default()),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    )
+}
+
+fn channel(handle: &str, path: &str) -> Channel {
+    Channel::create(
+        ChannelHandle::new(handle).unwrap(),
+        "Some Channel",
+        "UC123",
+        Quality::High,
+        VideoLimit::new(10).unwrap(),
+        ReconcileInterval::default_interval(),
+        PlaylistPath::new(path).unwrap(),
+        None,
+        fixed_timestamp(),
+    )
+}
+
+/// Saves `video` as it is and its playlist membership.
+fn save_playlist_video_as(
+    video_repository: &dyn VideoRepository,
+    playlist_video_repository: &dyn PlaylistVideoRepository,
+    playlist: &str,
+    video: Video,
+    position: i64,
+) {
+    video_repository.insert(&video).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            playlist_id(playlist),
+            video.id.clone(),
+            position,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+}
+
+/// A mover for tests whose request is rejected before reaching it, on an
+/// unmigrated in-memory database.
+fn any_show_mover() -> ShowMover {
+    ShowMover::new(
+        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+        Arc::new(SqliteChannelRepository::new(unused_connection())),
+        Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+        Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+        Arc::new(SqliteVideoRepository::new(unused_connection())),
+        Arc::new(SqliteTaskRepository::new(
+            unused_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            unused_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+        unused_event_publisher(),
+        Arc::new(ShowLocks::default()),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    )
+}
+
+fn delete_playlist_files(playlist_id: &str, path: &str) -> Task {
+    Task::DeletePlaylistFiles {
+        playlist_id: playlist_id.to_string(),
+        path: path.to_string(),
+    }
+}
+
+fn playlist_deleted(playlist_id: &str, path: &str) -> DomainEvent {
+    DomainEvent::PlaylistDeleted(PlaylistDeleted {
+        playlist_id: playlist_id.to_string(),
+        name: "Lofi beats".to_string(),
+        path: path.to_string(),
+    })
+}
+
+fn move_request(path: &str) -> MovePlaylistRequest {
+    MovePlaylistRequest {
+        path: Some(path.to_string()),
+    }
+}
+
+/// `ShowMoved` for a show moved between two paths under `/videos`.
+fn show_moved(from: &str, to: &str) -> DomainEvent {
+    DomainEvent::ShowMoved(ShowMoved {
+        from: format!("/videos/{from}"),
+        to: format!("/videos/{to}"),
+    })
+}
+
+/// `VideoDownloaded` for `video` downloaded into the show at `path` under
+/// `/videos`.
+fn video_downloaded(video: &Video, path: &str) -> DomainEvent {
+    DomainEvent::VideoDownloaded(VideoDownloaded {
+        video_id: video.id.as_str().to_string(),
+        output_dir: format!("/videos/{path}"),
+        folder: "Season 1".to_string(),
+    })
+}
+
+/// The collector the updater reads category videos through, on `db` like
+/// the repositories each test seeds.
+fn category_video_collector(db: &TestDatabase) -> CategoryVideoCollector {
+    CategoryVideoCollector::new(
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+    )
+}
+
+/// A collector on an unmigrated in-memory database.
+fn any_category_video_collector() -> CategoryVideoCollector {
+    CategoryVideoCollector::new(
+        Arc::new(SqliteChannelRepository::new(unused_connection())),
+        Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+        Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+        Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+        Arc::new(SqliteVideoRepository::new(unused_connection())),
+        Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
+    )
+}

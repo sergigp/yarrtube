@@ -11,9 +11,13 @@ use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer};
 use std::ffi::{OsStr, OsString};
-use std::io;
+use std::io::{self, Read};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use tracing::info;
 
 /// One video discovered by `list_channel_videos`, in the order `yt-dlp`
@@ -105,7 +109,7 @@ pub fn download_video(
     staging_dir: &Path,
 ) -> Result<DownloadAttempt> {
     ensure_output_dir(staging_dir)?;
-    let command = YtDlpCommand::new(ytdlp_path)
+    let command = YtDlpCommand::new(ytdlp_path, DOWNLOAD_DEADLINE)
         .args(args_for_quality(quality))
         .args([
             "-o",
@@ -143,7 +147,7 @@ pub fn download_video(
 /// failure, clean or systemic, including printed chapters that can't be
 /// read.
 pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<ChaptersProbe> {
-    let command = YtDlpCommand::new(ytdlp_path)
+    let command = YtDlpCommand::new(ytdlp_path, PROBE_DEADLINE)
         .args([
             "--skip-download",
             "--quiet",
@@ -189,7 +193,7 @@ pub fn fetch_thumbnail(
     staging_dir: &Path,
 ) -> Result<ThumbnailFetch> {
     ensure_output_dir(staging_dir)?;
-    let command = YtDlpCommand::new(ytdlp_path)
+    let command = YtDlpCommand::new(ytdlp_path, PROBE_DEADLINE)
         .args([
             "-o",
             STAGED_OUTPUT_TEMPLATE,
@@ -219,7 +223,7 @@ pub fn fetch_thumbnail(
 /// (no `--no-warnings`) so the SABR-only streaming signal reaches stderr
 /// and marks the probe degraded. `Err` on any failure, clean or systemic.
 pub fn probe_quality(ytdlp_path: &Path, video_url: &str, quality: Quality) -> Result<QualityProbe> {
-    let command = YtDlpCommand::new(ytdlp_path)
+    let command = YtDlpCommand::new(ytdlp_path, PROBE_DEADLINE)
         .args(format_selection_args(quality))
         .args(["--skip-download", "--quiet", "--print", QUALITY_PRINT])
         .arg(video_url);
@@ -250,7 +254,7 @@ pub fn probe_captions(
     staging_dir: &Path,
 ) -> Result<CaptionProbe> {
     ensure_output_dir(staging_dir)?;
-    let command = YtDlpCommand::new(ytdlp_path)
+    let command = YtDlpCommand::new(ytdlp_path, PROBE_DEADLINE)
         .args(["-J", "--skip-download", "--write-subs"])
         .arg(video_url)
         .in_dir(staging_dir);
@@ -275,7 +279,7 @@ pub fn fetch_subtitles(
         CaptionSource::Manual => "--write-subs",
         CaptionSource::Automatic => "--write-auto-subs",
     };
-    let command = YtDlpCommand::new(ytdlp_path)
+    let command = YtDlpCommand::new(ytdlp_path, PROBE_DEADLINE)
         .arg("--load-info-json")
         .arg(&probe.info_json)
         .args([
@@ -320,7 +324,7 @@ pub fn fetch_subtitles(
 /// spawn failure — the caller swallows that and treats the reason as
 /// undetermined.
 pub fn diagnose(ytdlp_path: &Path, video_url: &str) -> Result<Option<String>> {
-    let output = YtDlpCommand::new(ytdlp_path)
+    let output = YtDlpCommand::new(ytdlp_path, PROBE_DEADLINE)
         .args([
             "--simulate",
             "--no-warnings",
@@ -345,7 +349,7 @@ pub fn list_channel_videos(
     channel_url: &str,
     limit: u32,
 ) -> Result<Vec<ChannelVideoEntry>> {
-    let command = YtDlpCommand::new(ytdlp_path)
+    let command = YtDlpCommand::new(ytdlp_path, PROBE_DEADLINE)
         .args([
             "--flat-playlist",
             "--print-json",
@@ -364,22 +368,35 @@ pub fn list_channel_videos(
     }
 }
 
-/// One `yt-dlp` invocation: the binary, its args in order and the working
-/// directory it runs in (the caller's when unset). stdout and stderr are
-/// always captured, never inherited, so none of it reaches the daemon's own
-/// output.
+/// Run-time limit of a media download.
+const DOWNLOAD_DEADLINE: Duration = Duration::from_secs(4 * 60 * 60);
+/// Run-time limit of every other invocation (listings, probes, fetches).
+const PROBE_DEADLINE: Duration = Duration::from_secs(15 * 60);
+/// Passed as `--socket-timeout` to every invocation.
+const SOCKET_TIMEOUT_SECONDS: &str = "30";
+
+/// One `yt-dlp` invocation: the binary, its args in order, the working
+/// directory it runs in (the caller's when unset) and how long it may run.
+/// stdout and stderr are always captured, never inherited, so none of it
+/// reaches the daemon's own output.
 struct YtDlpCommand<'a> {
     ytdlp_path: &'a Path,
     args: Vec<OsString>,
     working_dir: Option<&'a Path>,
+    deadline: Duration,
 }
 
 impl<'a> YtDlpCommand<'a> {
-    fn new(ytdlp_path: &'a Path) -> Self {
+    /// Starts the arg list with `--socket-timeout SOCKET_TIMEOUT_SECONDS`,
+    /// so no call site can leave it out.
+    fn new(ytdlp_path: &'a Path, deadline: Duration) -> Self {
         Self {
             ytdlp_path,
-            args: vec![],
+            args: ["--socket-timeout", SOCKET_TIMEOUT_SECONDS]
+                .map(OsString::from)
+                .to_vec(),
             working_dir: None,
+            deadline,
         }
     }
 
@@ -412,7 +429,8 @@ impl<'a> YtDlpCommand<'a> {
     /// Runs the command, telling a successful exit from a clean failure
     /// (non-zero exit). `Err` only for a systemic problem: no binary at the
     /// path, or a spawn failure, described as `Failed to run yt-dlp
-    /// <purpose>: <error>`.
+    /// <purpose>: <error>`, or the deadline passing, described as `yt-dlp
+    /// timed out after <deadline> (<purpose>)`.
     fn run(&self, purpose: &str) -> Result<RunOutcome> {
         let output = self.output(purpose)?;
         Ok(if output.status.success() {
@@ -425,19 +443,39 @@ impl<'a> YtDlpCommand<'a> {
     }
 
     /// Runs the command and returns its output whatever its exit status,
-    /// retrying on a transient busy error. `Err` as `run`.
+    /// retrying on a transient busy error. Spawns `yt-dlp` in its own process
+    /// group, drains stdout and stderr on two threads and waits up to the
+    /// deadline; past it, kills the whole group. `Err` as `run`.
     fn output(&self, purpose: &str) -> Result<Output> {
         let mut command = Command::new(self.ytdlp_path);
         command
             .args(&self.args)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            .process_group(0);
         if let Some(working_dir) = self.working_dir {
             command.current_dir(working_dir);
         }
-        output_retrying_busy(&mut command).map_err(|e| match e.kind() {
+        let mut child = spawn_retrying_busy(&mut command).map_err(|e| match e.kind() {
             io::ErrorKind::NotFound => anyhow!(not_found_message(self.ytdlp_path)),
             _ => anyhow!("Failed to run yt-dlp {purpose}: {e}"),
+        })?;
+        let stdout = child.stdout.take().map(drain);
+        let stderr = child.stderr.take().map(drain);
+        let status = wait_with_deadline(child, self.deadline)
+            .map_err(|e| anyhow!("Failed to run yt-dlp {purpose}: {e}"))?;
+        let stdout = joined(stdout);
+        let stderr = joined(stderr);
+        let Some(status) = status else {
+            return Err(anyhow!(
+                "yt-dlp timed out after {} ({purpose})",
+                deadline_text(self.deadline)
+            ));
+        };
+        Ok(Output {
+            status,
+            stdout,
+            stderr,
         })
     }
 
@@ -701,26 +739,80 @@ fn probe_failure(action: &str, video_url: &str, stderr: &str) -> anyhow::Error {
     )
 }
 
-/// Runs `cmd`, retrying briefly on a transient "text file busy" error. The
+/// Spawns `cmd`, retrying briefly on a transient "text file busy" error. The
 /// `yt-dlp` binary can be mid-replacement by a concurrent `update-ytdlp` run
 /// (which swaps it in via an atomic rename, but the exec of the old inode
 /// can still transiently race the kernel's write-lock teardown), and the
 /// same race shows up in tests that write a fake binary and exec it right
 /// away.
-fn output_retrying_busy(cmd: &mut Command) -> io::Result<Output> {
+fn spawn_retrying_busy(cmd: &mut Command) -> io::Result<Child> {
     const MAX_ATTEMPTS: u32 = 5;
-    const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
+    const RETRY_DELAY: Duration = Duration::from_millis(20);
 
     let mut attempt = 0;
     loop {
         attempt += 1;
-        match cmd.output() {
+        match cmd.spawn() {
             Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy && attempt < MAX_ATTEMPTS => {
-                std::thread::sleep(RETRY_DELAY);
+                thread::sleep(RETRY_DELAY);
             }
             result => return result,
         }
     }
+}
+
+/// The child's exit status, or `None` if it outlived `deadline`. Either way
+/// its whole process group is killed before returning, so no process it
+/// started outlives the call or holds its pipes open, and the child itself
+/// is reaped.
+fn wait_with_deadline(mut child: Child, deadline: Duration) -> io::Result<Option<ExitStatus>> {
+    let group = child.id() as libc::pid_t;
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || sender.send(child.wait()));
+    let exited = match receiver.recv_timeout(deadline) {
+        Ok(status) => Some(status),
+        Err(RecvTimeoutError::Timeout) => None,
+        Err(RecvTimeoutError::Disconnected) => {
+            return Err(io::Error::other("yt-dlp waiter thread died"));
+        }
+    };
+    // SAFETY: `killpg` only sends a signal. `group` is the child's own
+    // process group (`process_group(0)`): the group outlives the child while
+    // any member it left is alive, so its id can't be reused until then. An
+    // empty group's id is only reused after the pid space wraps, which the
+    // microseconds since the reap rule out.
+    unsafe { libc::killpg(group, libc::SIGKILL) };
+    match exited {
+        Some(status) => status.map(Some),
+        None => receiver.recv().map_err(io::Error::other)?.map(|_| None),
+    }
+}
+
+/// Reads a pipe to its end on its own thread.
+fn drain(mut pipe: impl Read + Send + 'static) -> JoinHandle<Vec<u8>> {
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        // A read error ends the drain with what was read so far.
+        let _ = pipe.read_to_end(&mut bytes);
+        bytes
+    })
+}
+
+/// What a drain thread read; empty when there was no pipe.
+fn joined(handle: Option<JoinHandle<Vec<u8>>>) -> Vec<u8> {
+    handle
+        .and_then(|handle| handle.join().ok())
+        .unwrap_or_default()
+}
+
+/// `4 hours`, `15 minutes`, `1 second`: whole units, for the timeout error.
+fn deadline_text(deadline: Duration) -> String {
+    let seconds = deadline.as_secs();
+    let (count, unit) = [(3600, "hour"), (60, "minute")]
+        .into_iter()
+        .find(|(size, _)| seconds >= *size && seconds.is_multiple_of(*size))
+        .map_or((seconds, "second"), |(size, unit)| (seconds / size, unit));
+    format!("{count} {unit}{}", if count == 1 { "" } else { "s" })
 }
 
 /// Extracts the human-readable failure reason from a diagnostic probe's
@@ -929,6 +1021,10 @@ pub(crate) mod test_support {
         captured_args_path: PathBuf,
     }
 
+    /// Where `FakeYtDlp::sleeping` and `leaving_a_child` write their pids.
+    #[cfg(unix)]
+    const SLEEPING_PIDS_FILE: &str = "pids";
+
     /// The filename `with_exit_code` prints on stdout when it succeeds,
     /// standing in for the `filename` of the object a download prints.
     pub(crate) const DEFAULT_PRINTED_FILENAME: &str = "fake-output.mp4";
@@ -1060,6 +1156,73 @@ pub(crate) mod test_support {
                 path: script_path,
                 captured_args_path,
             }
+        }
+
+        /// A fake `yt-dlp` that sleeps for 60 s, standing in for a hung one,
+        /// after starting a background `sleep 60` (standing in for its
+        /// `ffmpeg` child). Neither sleep holds the pipes, so a kill that
+        /// misses them returns at once and leaves them running. Its own pid
+        /// and the child's are retrievable via `pids` once it has started.
+        pub(crate) fn sleeping() -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let bin_dir = unique_temp_dir("fake-ytdlp-bin");
+            let script_path = bin_dir.join("yt-dlp");
+            let captured_args_path = bin_dir.join("captured-args");
+            fs::write(
+                &script_path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\nsleep 60 >/dev/null 2>&1 &\necho $$ $! > \"{}\"\nsleep 60 >/dev/null 2>&1\n",
+                    captured_args_path.display(),
+                    bin_dir.join(SLEEPING_PIDS_FILE).display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+            Self {
+                _bin_dir: bin_dir,
+                path: script_path,
+                captured_args_path,
+            }
+        }
+
+        /// A fake `yt-dlp` that exits 0 at once, leaving behind a background
+        /// `sleep 60` that still holds its stdout and stderr (standing in for
+        /// a child that outlives a crashed `yt-dlp`). The child's pid is
+        /// retrievable via `pids`.
+        pub(crate) fn leaving_a_child() -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let bin_dir = unique_temp_dir("fake-ytdlp-bin");
+            let script_path = bin_dir.join("yt-dlp");
+            let captured_args_path = bin_dir.join("captured-args");
+            fs::write(
+                &script_path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\nsleep 60 &\necho $! > \"{}\"\nexit 0\n",
+                    captured_args_path.display(),
+                    bin_dir.join(SLEEPING_PIDS_FILE).display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+            Self {
+                _bin_dir: bin_dir,
+                path: script_path,
+                captured_args_path,
+            }
+        }
+
+        /// The pids `sleeping` or `leaving_a_child` wrote: `sleeping`'s own,
+        /// then its background child's; `leaving_a_child`'s child's.
+        pub(crate) fn pids(&self) -> Vec<i32> {
+            fs::read_to_string(self.path.with_file_name(SLEEPING_PIDS_FILE))
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(|pid| pid.parse().unwrap())
+                .collect()
         }
 
         /// The arguments the fake `yt-dlp` was last invoked with, one per line.
@@ -1610,6 +1773,8 @@ mod tests {
         assert_eq!(
             fake.captured_args(),
             vec![
+                "--socket-timeout",
+                "30",
                 "-f",
                 "bv[height<=720]+ba/b[height<=720]",
                 "-S",
@@ -1700,6 +1865,8 @@ mod tests {
         assert_eq!(
             fake.captured_args(),
             vec![
+                "--socket-timeout",
+                "30",
                 "--skip-download",
                 "--quiet",
                 "--no-warnings",
@@ -1843,6 +2010,8 @@ mod tests {
         assert_eq!(
             fake.captured_args(),
             [
+                "--socket-timeout",
+                "30",
                 "-J",
                 "--skip-download",
                 "--write-subs",
@@ -2001,6 +2170,8 @@ mod tests {
         assert_eq!(
             fake.captured_args(),
             [
+                "--socket-timeout",
+                "30",
                 "--load-info-json",
                 &staging_dir.join("info.json").to_string_lossy(),
                 "-o",
@@ -2039,6 +2210,8 @@ mod tests {
         assert_eq!(
             fake.captured_args(),
             [
+                "--socket-timeout",
+                "30",
                 "--load-info-json",
                 &staging_dir.join("info.json").to_string_lossy(),
                 "-o",
@@ -2293,6 +2466,150 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn it_should_fail_with_a_timeout_if_yt_dlp_outlives_its_deadline() {
+        use test_support::FakeYtDlp;
+
+        let fake = FakeYtDlp::sleeping();
+        let started = std::time::Instant::now();
+
+        let result = YtDlpCommand::new(&fake.path, Duration::from_secs(1)).run("for x");
+
+        assert_eq!(
+            result.map(|_| ()).map_err(|e| e.to_string()),
+            Err("yt-dlp timed out after 1 second (for x)".to_string())
+        );
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn it_should_kill_the_children_of_a_timed_out_yt_dlp() {
+        use test_support::FakeYtDlp;
+
+        let fake = FakeYtDlp::sleeping();
+
+        let _ = YtDlpCommand::new(&fake.path, Duration::from_secs(1)).run("for x");
+
+        let pids = fake.pids();
+        assert_eq!(pids.len(), 2);
+        assert_eq!(
+            pids.into_iter().map(is_running).collect::<Vec<_>>(),
+            vec![false, false]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn it_should_return_the_whole_output_of_a_yt_dlp_that_exits_in_time() {
+        // Past any pipe buffer, so a sequential read would deadlock.
+        let stdout = "o".repeat(1 << 20);
+        let stderr = "e".repeat(1 << 20);
+        let succeeding = fake_ytdlp_writing_and_exiting("ytdlp-large-ok", &stdout, &stderr, 0);
+        let failing = fake_ytdlp_writing_and_exiting("ytdlp-large-fail", &stdout, &stderr, 3);
+        let run = |path: &Path| YtDlpCommand::new(path, Duration::from_secs(10)).run("for x");
+
+        let succeeded = run(&succeeding);
+        let failed = run(&failing);
+
+        assert_eq!(
+            succeeded
+                .map(|outcome| match outcome {
+                    RunOutcome::Success(output) => Some(output.stdout),
+                    RunOutcome::CleanFailure { .. } => None,
+                })
+                .map_err(|e| e.to_string()),
+            Ok(Some(stdout.into_bytes()))
+        );
+        assert_eq!(
+            failed
+                .map(|outcome| match outcome {
+                    RunOutcome::Success(_) => None,
+                    RunOutcome::CleanFailure { stderr_raw } => Some(stderr_raw),
+                })
+                .map_err(|e| e.to_string()),
+            Ok(Some(stderr))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn it_should_pass_a_socket_timeout_to_yt_dlp() {
+        use test_support::{FakeYtDlp, unique_temp_dir};
+
+        let staging_dir = unique_temp_dir("ytdlp-socket-timeout");
+        let fake = FakeYtDlp::with_exit_code(0);
+
+        download_video(
+            &fake.path,
+            "https://example.com/v",
+            Quality::High,
+            &staging_dir,
+        )
+        .unwrap();
+
+        assert_eq!(
+            fake.captured_args()[..2],
+            ["--socket-timeout".to_string(), "30".to_string()]
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn it_should_kill_the_children_left_by_a_yt_dlp_that_exits_in_time() {
+        use test_support::FakeYtDlp;
+
+        let fake = FakeYtDlp::leaving_a_child();
+        let started = std::time::Instant::now();
+
+        let result = YtDlpCommand::new(&fake.path, Duration::from_secs(10)).run("for x");
+
+        assert!(matches!(result, Ok(RunOutcome::Success(_))));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(
+            fake.pids().into_iter().map(is_running).collect::<Vec<_>>(),
+            vec![false]
+        );
+    }
+
+    #[test]
+    fn it_should_describe_a_deadline_in_whole_units() {
+        assert_eq!(
+            [
+                DOWNLOAD_DEADLINE,
+                PROBE_DEADLINE,
+                Duration::from_secs(1),
+                Duration::from_secs(90),
+            ]
+            .map(deadline_text),
+            ["4 hours", "15 minutes", "1 second", "90 seconds"].map(str::to_string)
+        );
+    }
+
+    /// Whether `pid` is still alive two seconds from now. A zombie is dead:
+    /// an orphan killed with its group waits for whoever adopted it to reap
+    /// it, which on Linux may never happen during the test. The wait covers
+    /// SIGKILL landing asynchronously after `killpg` returns.
+    #[cfg(unix)]
+    fn is_running(pid: i32) -> bool {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            let state = Command::new("ps")
+                .args(["-o", "stat=", "-p", &pid.to_string()])
+                .output()
+                .unwrap()
+                .stdout;
+            let state = String::from_utf8_lossy(&state);
+            if state.trim().is_empty() || state.trim().starts_with('Z') {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        true
+    }
+
+    #[cfg(unix)]
     fn fake_ytdlp_writing_stderr(
         dir_name: &str,
         stderr: &str,
@@ -2325,6 +2642,17 @@ mod tests {
         stdout: &str,
         stderr: &str,
     ) -> std::path::PathBuf {
+        fake_ytdlp_writing_and_exiting(dir_name, stdout, stderr, 0)
+    }
+
+    /// `fake_ytdlp_writing_stdout_and_stderr`, exiting with `exit_code`.
+    #[cfg(unix)]
+    fn fake_ytdlp_writing_and_exiting(
+        dir_name: &str,
+        stdout: &str,
+        stderr: &str,
+        exit_code: i32,
+    ) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt;
 
         let bin_dir = test_support::unique_temp_dir(dir_name);
@@ -2336,7 +2664,7 @@ mod tests {
         std::fs::write(
             &script_path,
             format!(
-                "#!/bin/sh\ncat \"{}\"\ncat \"{}\" >&2\nexit 0\n",
+                "#!/bin/sh\ncat \"{}\"\ncat \"{}\" >&2\nexit {exit_code}\n",
                 stdout_path.display(),
                 stderr_path.display()
             ),
@@ -2517,6 +2845,8 @@ mod tests {
         assert_eq!(
             fake.captured_args(),
             vec![
+                "--socket-timeout".to_string(),
+                "30".to_string(),
                 "--simulate".to_string(),
                 "--no-warnings".to_string(),
                 "--extractor-args".to_string(),
@@ -2614,6 +2944,8 @@ mod tests {
         fetch_thumbnail(&fake.path, "https://example.com/video", &output_dir).unwrap();
 
         let expected = vec![
+            "--socket-timeout".to_string(),
+            "30".to_string(),
             "-o".to_string(),
             "%(id)s.%(ext)s".to_string(),
             "--skip-download".to_string(),
