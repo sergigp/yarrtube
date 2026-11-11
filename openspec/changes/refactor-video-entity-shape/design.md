@@ -37,8 +37,14 @@ in `Subtitles`, `Chapters`, `DownloadedQuality`).
   layout_migrator, video_watch_state_updater, video_searcher, *_view_searcher,
   category_video_collector, subtitle_reader, *_video_reconciler,
   plex_label_syncer, video_retrier): field paths and moved reads only.
+- `src/domain/video_category/categorization_question.rs`,
+  `src/domain/video_summary/summary_input.rs`: field paths only
+  (`download.duration_seconds()`, `chapters.found`).
 - Test modules under `src/application/**` and repository tests: construction
   of seeded/expected videos only.
+- `scripts/run-tests.sh`, `CLAUDE.md`, `doc/DEVELOPMENT.md`: incidental
+  tooling riding in this PR, not part of the refactor (the test script
+  installs or builds what the repo produces itself when missing).
 
 ## Types & Signatures
 
@@ -233,6 +239,8 @@ impl Download {
     pub fn is_due(&self, now: DateTime<Utc>) -> bool;              // started || state.is_due
     pub fn next_attempt_at(&self) -> Option<DateTime<Utc>>;       // None while started
     pub fn is_in_legacy_layout(&self) -> bool;
+    pub fn filename(&self) -> Option<&str>;                       // file's, once Done
+    pub fn duration_seconds(&self) -> Option<i64>;                // file's, once Done and known
     pub fn start(self) -> Self;
     pub fn succeed(self, file: DownloadedFile) -> Self;
     pub fn fail(self, reason: impl Into<String>, now: DateTime<Utc>) -> Self;
@@ -404,6 +412,8 @@ impl Video {
     pub fn mark_categorization_failed(self, now: DateTime<Utc>) -> Self;
     pub fn with_chapters(self, chapters: Vec<VideoChapter>, now: DateTime<Utc>) -> Self;
     pub fn mark_subtitles_unavailable(self, now: DateTime<Utc>) -> Self;
+    pub fn map_file(self, change: impl FnOnce(DownloadedFile) -> DownloadedFile) -> Self;
+    pub fn lasting(self, duration_seconds: Option<i64>) -> Self;
 }
 // Per type, only what the tests use (from today's LateDataChecks fixtures):
 impl Subtitles { pub fn checked(at: Option<DateTime<Utc>>, failed: u32) -> Self; pub fn done_at(..) -> Self; pub fn unavailable_at(..) -> Self; }

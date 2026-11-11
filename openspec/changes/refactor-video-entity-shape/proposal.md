@@ -48,5 +48,9 @@ None: behaviour-preserving refactor (`skip_specs: true`).
 - `src/infrastructure/repositories/sqlite_video_repository.rs`: row mapping
   only.
 - Domain services and HTTP DTO mapping: field paths and moved reads.
-- Tests: construction of seeded/expected videos only; no assertion changes.
-- One PR, four commits, each green.
+- Tests: construction of seeded/expected videos only; no existing assertion
+  changes. The audit added 5 tests for behaviour mutation testing showed
+  unprotected (late-data retries, upgraded quality, subtitles discarded after
+  a rename, rewatch at 90%).
+- One PR, one commit per task group, each green. It also carries an
+  incidental tooling commit (`scripts/run-tests.sh` and its docs).
