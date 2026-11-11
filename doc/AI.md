@@ -130,7 +130,9 @@ spec: decisions here feed OpenSpec changes later.
   `categorization_enabled`, its summary is Generated, and a category is
   **pending**: it has an AI prompt, the source isn't a member of it, and the
   video has no verdict for it. The video is categorized from its summary, so
-  its source needs summaries on too.
+  its source needs summaries on too. Storing a summary syncs the video right
+  away (`video_summary_generated`), so its categorization follows without
+  waiting for the source's next reconcile pass.
 - The task runs in the summaries lane, so one Ollama call runs at a time. It
   re-checks those conditions, reads the pending categories again, and asks
   about all of them **in one call**: the saved (or shipped) categorization

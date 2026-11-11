@@ -1,3 +1,4 @@
+use crate::domain::event::DomainEvent;
 use crate::domain::llm_server::{
     LlmChat, LlmModel, LlmServerUnreachable, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
@@ -5,7 +6,9 @@ use crate::domain::preferences::{SummaryPrompt, SummarySettings};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome};
+use crate::domain::video::{
+    UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome, VideoSummaryGenerated,
+};
 use crate::domain::video_summary::{
     PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
 };
@@ -104,7 +107,6 @@ pub struct VideoSummarizer {
     video_file_repository: Arc<dyn VideoFileRepository>,
     llm_server_repository: Arc<dyn LlmServerRepository>,
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
-    #[allow(dead_code)]
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     video_updater: VideoUpdater,
@@ -277,11 +279,14 @@ impl VideoSummarizer {
             &job.settings.model,
             now,
         ))?;
-        self.video_updater.update(&video.id, |video| {
+        let marked = self.video_updater.update(&video.id, |video| {
             video
                 .is_summarizable()
                 .then(|| video.mark_summary_generated(now))
         })?;
+        if marked.is_some() {
+            self.publish_generated(video);
+        }
         info!(
             video_id = %video.id,
             summary = %text.as_str(),
@@ -295,8 +300,14 @@ impl VideoSummarizer {
 
     /// Best effort, like `VideoSubtitlesFetched`: a lost event only delays
     /// the categorization to the next reconcile pass.
-    #[allow(dead_code)]
-    fn publish_generated(&self, _video: &Video) {}
+    fn publish_generated(&self, video: &Video) {
+        let event = DomainEvent::VideoSummaryGenerated(VideoSummaryGenerated {
+            video_id: video.id.as_str().to_string(),
+        });
+        if let Err(e) = self.event_publisher.publish(&event) {
+            warn!(video_id = %video.id, error = %e, "failed to publish that the video's summary was generated");
+        }
+    }
 
     /// The stored video when the generated summary should still be stored
     /// now the minutes-long generation is done: the video still exists and

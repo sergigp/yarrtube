@@ -22,7 +22,6 @@ pub enum DomainEvent {
     VideoRemovedFromChannel(VideoRemovedFromChannel),
     VideoDownloaded(VideoDownloaded),
     VideoSubtitlesFetched(VideoSubtitlesFetched),
-    #[allow(dead_code)]
     VideoSummaryGenerated(VideoSummaryGenerated),
     ShowMoved(ShowMoved),
     VideoCategoriesChanged(VideoCategoriesChanged),
