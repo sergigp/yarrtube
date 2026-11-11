@@ -20,4 +20,4 @@ None: no adapter changes.
 
 ## 4. Verification
 
-- [ ] 4.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests).
+- [x] 4.1 `scripts/run-tests.sh --only web --only rust` passes (fmt, clippy, tests).
