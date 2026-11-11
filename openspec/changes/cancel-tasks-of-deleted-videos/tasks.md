@@ -21,4 +21,4 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run `scripts/run-tests.sh --only web --only rust`; fmt, clippy and tests pass
+- [x] 4.1 Run `scripts/run-tests.sh --only web --only rust`; fmt, clippy and tests pass
