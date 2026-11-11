@@ -251,7 +251,14 @@ impl TaskRepository for SqliteTaskRepository {
         Ok(())
     }
 
-    fn delete_pending_for_video(&self, _video_id: &VideoId) -> anyhow::Result<()> {
+    fn delete_pending_for_video(&self, video_id: &VideoId) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "DELETE FROM tasks WHERE json_extract(payload, '$.video_id') = ?1",
+            params![video_id.as_str()],
+        )
+        .inspect_err(|e| tracing::error!(video_id = %video_id, error = %e, "failed to delete pending tasks of video"))
+        .context("failed to delete pending tasks of video")?;
         Ok(())
     }
 
