@@ -36,6 +36,9 @@ pub trait TaskRepository: Send + Sync {
     ) -> anyhow::Result<Option<ScheduledTask>>;
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
+    /// Deletes every pending task whose payload names `video_id`. Running
+    /// tasks are kept: they settle on their own once the video is gone.
+    fn delete_pending_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     /// Atomically inserts `task` into the dead-letter table and deletes the
     /// original row.
     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()>;
@@ -245,6 +248,10 @@ impl TaskRepository for SqliteTaskRepository {
         conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
             .inspect_err(|e| tracing::error!(task_id = id, error = %e, "failed to delete task"))
             .context("failed to delete task")?;
+        Ok(())
+    }
+
+    fn delete_pending_for_video(&self, _video_id: &VideoId) -> anyhow::Result<()> {
         Ok(())
     }
 

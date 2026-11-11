@@ -88,8 +88,8 @@ impl ChannelDeleter {
     }
 
     /// Deletes each `ChannelVideo`'s owned `Video` row, its transcript, its
-    /// summary, its categories and its verdicts, then the `ChannelVideo` rows
-    /// themselves.
+    /// summary, its categories, its verdicts and its pending tasks, then the
+    /// `ChannelVideo` rows themselves.
     fn delete_channel_videos(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
         let channel_videos = self
             .channel_video_repository
@@ -110,6 +110,9 @@ impl ChannelDeleter {
                 .map_err(DeleteChannelError::Repository)?;
             self.video_category_verdict_repository
                 .delete_for_video(&channel_video.video_id)
+                .map_err(DeleteChannelError::Repository)?;
+            self.task_repository
+                .delete_pending_for_video(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
         }
         self.channel_video_repository

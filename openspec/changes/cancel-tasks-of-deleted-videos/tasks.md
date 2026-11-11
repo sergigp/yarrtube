@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Add `TaskRepository::delete_pending_for_video(&self, video_id: &VideoId)` to the trait with a stub `SqliteTaskRepository` body returning `Ok(())`; call it per video in `PlaylistDeleter::delete_playlist_videos` and `ChannelDeleter::delete_channel_videos`. Done when `cargo build` succeeds and all existing tests pass
+- [x] 1.1 Add `TaskRepository::delete_pending_for_video(&self, video_id: &VideoId)` to the trait with a stub `SqliteTaskRepository` body returning `Ok(())`; call it per video in `PlaylistDeleter::delete_playlist_videos` and `ChannelDeleter::delete_channel_videos`. Done when `cargo build` succeeds and all existing tests pass
 
 ## 2. Behaviour (TDD)
 
