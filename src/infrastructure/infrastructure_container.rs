@@ -198,7 +198,7 @@ impl InfrastructureContainer {
             llm_server_repository: Arc::new(OllamaLlmServerRepository::new()),
             task_repository: Arc::new(SqliteTaskRepository::new(db.clone(), clock.clone())),
             event_publisher: Arc::new(SqliteEventPublisher::new(db.clone(), clock.clone())),
-            event_repository: Arc::new(SqliteEventRepository::new(db.clone())),
+            event_repository: Arc::new(SqliteEventRepository::new(db.clone(), clock.clone())),
             youtube_playlist_repository: Arc::new(YoutubeApiPlaylistRepository::new(
                 settings.youtube_api_key.clone(),
                 settings.youtube_api_url.clone(),

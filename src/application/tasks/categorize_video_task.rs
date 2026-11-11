@@ -152,7 +152,8 @@ mod tests {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video = summarized_video();
         let sicilian = prompted_category("Sicilian");
         seed(&db, &video, &[&sicilian]);
@@ -200,7 +201,8 @@ mod tests {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video = summarized_video();
         let tech = prompted_category("Tech");
         seed(&db, &video, &[&tech]);
@@ -783,7 +785,8 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video = summarized_video();
         let sicilian = prompted_category("Sicilian");
         seed(&db, &video, &[&sicilian]);
@@ -821,7 +824,8 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     fn it_should_not_store_a_verdict_for_a_video_removed_during_its_call() {
         let db = TestDatabase::new();
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video = summarized_video();
         seed(&db, &video, &[&prompted_category("Sicilian")]);
         let (database, removed) = (db.database(), video.id.clone());
@@ -1651,6 +1655,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,

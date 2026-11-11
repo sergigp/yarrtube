@@ -88,7 +88,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let subscriber = ReconcileOnChannelCreated::new(channel_video_reconciler(
             &db,
@@ -193,7 +194,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let subscriber = ReconcileOnChannelCreated::new(ChannelVideoReconciler::new(
             channel_repository.clone(),
@@ -249,7 +251,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let subscriber = ReconcileOnChannelCreated::new(channel_video_reconciler(
             &db,
             Arc::new(SqliteChannelRepository::new(db.database())),

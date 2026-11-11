@@ -71,7 +71,8 @@ mod tests {
     fn it_should_replace_the_file_with_a_higher_quality_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
@@ -159,6 +160,7 @@ mod tests {
                 .payload()
                 .to_string(),
                 retries: 0,
+                run_at: now(),
                 created_at: now(),
                 updated_at: now(),
                 last_error: None,
@@ -170,7 +172,8 @@ mod tests {
     fn it_should_count_a_degraded_upgrade_as_a_failed_check() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
@@ -267,6 +270,7 @@ mod tests {
                 .payload()
                 .to_string(),
                 retries: 0,
+                run_at: now(),
                 created_at: now(),
                 updated_at: now(),
                 last_error: None,
@@ -278,7 +282,8 @@ mod tests {
     fn it_should_record_the_check_if_nothing_better_is_available() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
@@ -343,7 +348,8 @@ mod tests {
     fn it_should_schedule_the_next_check_if_the_quality_check_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::new(true)
@@ -411,7 +417,8 @@ mod tests {
     fn it_should_fail_the_quality_after_the_eleventh_failed_check() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::new(true)
@@ -486,7 +493,8 @@ mod tests {
     fn it_should_keep_the_file_if_the_redownload_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::with_failed_reason("HTTP Error 403: Forbidden")
@@ -562,7 +570,8 @@ mod tests {
     fn it_should_keep_the_file_if_the_redownload_is_no_better() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
@@ -640,7 +649,8 @@ mod tests {
     fn it_should_keep_the_file_if_the_redownload_is_no_taller() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
@@ -718,7 +728,8 @@ mod tests {
     fn it_should_settle_quality_once_the_video_is_old() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
@@ -783,7 +794,8 @@ mod tests {
     fn it_should_count_a_degraded_probe_as_a_failed_check() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
@@ -928,7 +940,8 @@ mod tests {
     fn it_should_skip_the_upgrade_if_the_video_was_reset_meanwhile() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video = sd_video();
         video_repository.insert(&video).unwrap();
@@ -995,7 +1008,8 @@ mod tests {
     fn it_should_skip_the_upgrade_if_the_video_was_redownloaded_meanwhile() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video = sd_video();
         video_repository.insert(&video).unwrap();
@@ -1217,7 +1231,8 @@ mod tests {
     fn it_should_skip_if_no_playlist_or_channel_holds_the_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {

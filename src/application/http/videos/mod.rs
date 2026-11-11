@@ -6795,7 +6795,7 @@ mod tests {
             )]
         );
         assert_eq!(
-            SqliteEventRepository::new(db.database())
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
                 .list_eligible()
                 .unwrap(),
             vec![categories_changed_event(1, &[&video])]
@@ -6861,7 +6861,7 @@ mod tests {
             vec![VideoCategories::none(video.id.clone())]
         );
         assert_eq!(
-            SqliteEventRepository::new(db.database())
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
                 .list_eligible()
                 .unwrap(),
             vec![categories_changed_event(1, &[&video])]
@@ -6910,7 +6910,7 @@ mod tests {
             vec![]
         );
         assert_eq!(
-            SqliteEventRepository::new(db.database())
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
                 .list_eligible()
                 .unwrap(),
             vec![]
@@ -7282,7 +7282,7 @@ mod tests {
             )]
         );
         assert_eq!(
-            SqliteEventRepository::new(db.database())
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
                 .list_eligible()
                 .unwrap(),
             vec![categories_changed_event(1, &[&video])]
@@ -7459,6 +7459,7 @@ mod tests {
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,
