@@ -71,10 +71,11 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /app
 
-# /config holds yarrtube's state (SQLite database + channel avatars), so a
-# single mount persists everything across container recreation.
+# /config holds yarrtube's state (SQLite database, channel avatars and log
+# files), so a single mount persists everything across container recreation.
 ENV YARRTUBE_DB_PATH=/config/yarrtube.db \
-    YARRTUBE_AVATARS_PATH=/config/avatars
+    YARRTUBE_AVATARS_PATH=/config/avatars \
+    YARRTUBE_LOGS_PATH=/config/logs
 
 EXPOSE 8080
 VOLUME ["/config", "/videos"]

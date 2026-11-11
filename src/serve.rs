@@ -42,8 +42,11 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tower_http::services::ServeDir;
 use tracing::{error, info, warn};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DB_PATH: &str = "yarrtube.sqlite3";
@@ -51,6 +54,8 @@ const DEFAULT_RETRY_BASE_DELAY_SECONDS: i64 = 150;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
 const DEFAULT_DOWNLOAD_CONCURRENCY: usize = 2;
 const DEFAULT_AVATARS_PATH: &str = "avatars";
+const DEFAULT_LOGS_PATH: &str = "logs";
+const DEFAULT_LOG_RETENTION_DAYS: usize = 30;
 pub(crate) const DEFAULT_YOUTUBE_API_URL: &str = "https://www.googleapis.com/youtube/v3";
 /// The parent directories the add dialog's folder browser defaults to, seeded
 /// under the videos root at startup so the browser is never empty on a fresh
@@ -62,13 +67,7 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 pub fn run() -> ExitCode {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .init();
+    init_logging();
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -265,6 +264,74 @@ fn avatars_path() -> PathBuf {
     std::env::var("YARRTUBE_AVATARS_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_AVATARS_PATH))
+}
+
+/// Logs to stdout (for `docker logs`) and to one plain-text file per day
+/// under the logs directory, which outlives the container. Files are written
+/// synchronously so nothing is lost on a crash or an early exit. When the
+/// directory can't be used, logging carries on to stdout only.
+fn init_logging() {
+    let filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env_lossy();
+    let logs_path = logs_path();
+    let retention_days = log_retention_days();
+    let file_appender = log_file_appender(&logs_path, retention_days);
+    let registry = tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer());
+    match file_appender {
+        Ok(appender) => {
+            registry
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .with_ansi(false)
+                        .with_writer(appender),
+                )
+                .init();
+            info!(path = %logs_path.display(), retention_days, "writing logs to files");
+        }
+        Err(e) => {
+            registry.init();
+            warn!(path = %logs_path.display(), error = %e, "can't write log files, logging to stdout only");
+        }
+    }
+}
+
+/// Daily `yarrtube.<YYYY-MM-DD>.log` files (UTC dates), keeping the newest
+/// `retention_days` and deleting older ones as it rotates.
+fn log_file_appender(
+    logs_path: &std::path::Path,
+    retention_days: usize,
+) -> Result<RollingFileAppender> {
+    RollingFileAppender::builder()
+        .rotation(Rotation::DAILY)
+        .filename_prefix("yarrtube")
+        .filename_suffix("log")
+        .max_log_files(retention_days)
+        .build(logs_path)
+        .context("failed to open the log file")
+}
+
+/// Lives alongside the SQLite database; the Docker image sets it to
+/// `/config/logs` (see the Dockerfile's `ENV`) so logs survive container
+/// recreation. The relative default only applies outside Docker.
+fn logs_path() -> PathBuf {
+    std::env::var("YARRTUBE_LOGS_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_LOGS_PATH))
+}
+
+fn log_retention_days() -> usize {
+    parse_log_retention_days(std::env::var("YARRTUBE_LOG_RETENTION_DAYS").ok())
+}
+
+/// Keeps only a positive integer, defaulting otherwise.
+fn parse_log_retention_days(value: Option<String>) -> usize {
+    value
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|days| *days > 0)
+        .unwrap_or(DEFAULT_LOG_RETENTION_DAYS)
 }
 
 fn run_startup_ytdlp_update() {
@@ -1474,6 +1541,38 @@ mod tests {
             .collect();
 
         assert_eq!(concurrencies, vec![2, 2, 2, 2, 4]);
+    }
+
+    #[test]
+    fn it_should_default_log_retention_days_when_invalid() {
+        let days: Vec<usize> = [None, Some("0"), Some("-1"), Some("abc"), Some(" 7 ")]
+            .into_iter()
+            .map(|value| parse_log_retention_days(value.map(str::to_string)))
+            .collect();
+
+        assert_eq!(days, vec![30, 30, 30, 30, 7]);
+    }
+
+    #[test]
+    fn it_should_write_logs_to_a_dated_file_in_the_logs_directory() {
+        use std::io::Write;
+        let logs_dir = unique_temp_dir("log-files");
+
+        let mut appender = log_file_appender(&logs_dir, 30).unwrap();
+        appender.write_all(b"a log line\n").unwrap();
+        appender.flush().unwrap();
+
+        let files: Vec<String> = std::fs::read_dir(&logs_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].starts_with("yarrtube.") && files[0].ends_with(".log"));
+        assert_eq!(
+            std::fs::read_to_string(logs_dir.join(&files[0])).unwrap(),
+            "a log line\n"
+        );
+        std::fs::remove_dir_all(&logs_dir).unwrap();
     }
 
     #[test]
