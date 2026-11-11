@@ -105,6 +105,16 @@ mod tests {
     }
 
     #[test]
+    fn it_should_map_video_summary_generated_to_a_stable_type_and_payload() {
+        let event = DomainEvent::VideoSummaryGenerated(VideoSummaryGenerated {
+            video_id: "rec1".to_string(),
+        });
+
+        assert_eq!(event.event_type(), "video_summary_generated");
+        assert_eq!(event.payload(), json!({ "video_id": "rec1" }));
+    }
+
+    #[test]
     fn it_should_map_playlist_deleted_to_a_stable_type_and_payload() {
         let event = DomainEvent::PlaylistDeleted(PlaylistDeleted {
             playlist_id: "PL1".to_string(),
