@@ -126,7 +126,7 @@ The system SHALL reject a request to create a playlist whose storage path is alr
 - **THEN** the system treats this as the existing idempotent duplicate-ID case and does not reject it under this rule
 
 ### Requirement: Delete a Playlist
-The system SHALL provide an HTTP endpoint that deletes a previously created playlist identified by its ID, and SHALL delete every video record stored for that playlist as part of the same operation, so that no video record can ever be observed referencing a playlist that no longer exists. Deleting a playlist SHALL also remove its pending recurring reconcile, so no reconcile of the playlist stays queued after it is gone. Deleting a playlist SHALL also remove every pending task of the videos it deletes, so no work for a video that no longer exists stays queued; a task of those videos already running is left to finish.
+The system SHALL provide an HTTP endpoint that deletes a previously created playlist identified by its ID, and SHALL delete every video record stored for that playlist as part of the same operation, so that no video record can ever be observed referencing a playlist that no longer exists. Deleting a playlist SHALL also remove its pending recurring reconcile, so no reconcile of the playlist stays queued after it is gone. Deleting a playlist SHALL also remove every pending task of the videos it deletes, so no work for a video that no longer exists stays queued; a task of those videos already running is left to finish. Deleting a playlist while a sync of that same playlist is running SHALL be refused, so a running sync can never write videos for a playlist that no longer exists.
 
 #### Scenario: Successful deletion
 - **WHEN** a request identifies a playlist ID that exists in storage
@@ -155,6 +155,14 @@ The system SHALL provide an HTTP endpoint that deletes a previously created play
 #### Scenario: Deleting a nonexistent playlist
 - **WHEN** a request identifies a playlist ID that does not exist in storage
 - **THEN** the system reports that nothing was found and makes no change to storage, including no change to any video records, and returns a bad request with a meaningful error description
+
+#### Scenario: Deleting a playlist while it is being synced
+- **WHEN** a request deletes a playlist while a sync of that playlist is running
+- **THEN** the system refuses with a conflict and the message "playlist <id> is being synced, try again once it finishes", and makes no change to storage: the playlist, its video records and its pending tasks remain, and no PlaylistDeleted event is published
+
+#### Scenario: Deleting a playlist while another source is being synced
+- **WHEN** a request deletes a playlist while a sync of a different playlist or channel is running
+- **THEN** the system deletes the playlist as usual
 
 ### Requirement: List All Playlists
 The system SHALL provide an HTTP endpoint that returns every currently stored playlist, sorted alphabetically by name, ignoring case. Each returned playlist SHALL include its count of unwatched videos, counting only videos that have finished downloading, and whether that count is hidden.
