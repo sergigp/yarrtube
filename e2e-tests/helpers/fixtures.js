@@ -200,8 +200,15 @@ async function deleteAllSources(request) {
     const response = await request.get(`/api/${kind}`)
     expect(response.ok(), `GET /api/${kind}`).toBeTruthy()
     for (const source of await response.json()) {
-      const deleted = await request.delete(`/api/${kind}/${encodeURIComponent(source.id)}`)
-      expect(deleted.ok(), `DELETE /api/${kind}/${source.id}`).toBeTruthy()
+      // A source still syncing refuses deletion with 409; retry until its
+      // sync finishes.
+      const url = `/api/${kind}/${encodeURIComponent(source.id)}`
+      await expect
+        .poll(async () => (await request.delete(url)).status(), {
+          message: `DELETE /api/${kind}/${source.id}`,
+          timeout: 30_000,
+        })
+        .toBe(204)
       leftovers.push(libraryPath(source.path))
     }
   }
