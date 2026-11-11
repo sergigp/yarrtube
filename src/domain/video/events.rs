@@ -37,3 +37,13 @@ pub struct VideoSubtitlesFetched {
 impl VideoSubtitlesFetched {
     pub const EVENT_TYPE: &str = "video_subtitles_fetched";
 }
+
+/// A video's summary was stored and its summary step is Done.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VideoSummaryGenerated {
+    pub video_id: String,
+}
+
+impl VideoSummaryGenerated {
+    pub const EVENT_TYPE: &str = "video_summary_generated";
+}

@@ -2,8 +2,8 @@ use crate::domain::category::Category;
 use crate::domain::llm_server::{LlmReply, LlmServerUnreachable, OllamaUrl};
 use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
-    VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
-    VideoUpdater, VideoUpdaterApi,
+    CategorizationResetter, CategorizationResetterApi, VideoCategoryAssigner,
+    VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
     StepStatus, UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome,
@@ -26,10 +26,14 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, warn};
 
-/// Why a video isn't categorized now. Nothing about it changes.
+/// Why the model isn't asked about a video now. Nothing about the video
+/// changes, except that with nothing pending it is marked categorized.
 enum Skip {
     /// It shouldn't be, for now.
     NotWanted(&'static str),
+    /// No category is pending for the video: nothing to ask, so it is
+    /// categorized as it stands (Done), without checking the server.
+    NothingPending,
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
     /// Ollama can't be connected to or hasn't the saved model: wait for it,
@@ -121,6 +125,7 @@ pub struct VideoCategorizer {
     video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
     video_updater: VideoUpdater,
+    categorization_resetter: CategorizationResetter,
 }
 
 impl VideoCategorizer {
@@ -135,9 +140,11 @@ impl VideoCategorizer {
         video_category_assigner: VideoCategoryAssigner,
         clock: Arc<dyn Clock>,
         video_repository: Arc<dyn VideoRepository>,
+        categorization_resetter: CategorizationResetter,
     ) -> Self {
         Self {
             video_updater: VideoUpdater::new(video_repository),
+            categorization_resetter,
             preferences_repository,
             video_owner_finder,
             category_repository,
@@ -181,6 +188,14 @@ impl VideoCategorizerApi for VideoCategorizer {
                 info!(video_id = %video.id, reason, "skipped video categorization");
                 Ok(VideoStepOutcome::Settled)
             }
+            Err(Skip::NothingPending) => {
+                info!(
+                    video_id = %video.id,
+                    reason = "no category is pending",
+                    "skipped video categorization"
+                );
+                self.mark_categorized(video)
+            }
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
                 Ok(VideoStepOutcome::Settled)
@@ -220,6 +235,9 @@ impl VideoCategorizer {
             .context("the video has no summary")?;
         let settings = preferences.categorization.clone();
         let pending = self.pending(video, &owner)?;
+        if pending.is_empty() {
+            return Err(Skip::NothingPending);
+        }
         let context_length = settings.effective_context_length(self.prompted_categories()?);
         let job = CategorizationJob {
             preferences,
@@ -353,7 +371,7 @@ impl VideoCategorizer {
         rejected: Vec<(&'a Category, String)>,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
         let rejected = match job.pending.len() {
-            0 | 1 => rejected,
+            1 => rejected,
             _ => rejected
                 .into_iter()
                 .map(|(category, reason)| {
@@ -539,16 +557,36 @@ impl VideoCategorizer {
         reason: String,
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_attempt_failure(video)?;
-        if recorded
+        let recorded = if recorded
             .as_ref()
             .is_some_and(|video| video.categorization.status == StepStatus::Failed)
         {
             self.give_up(video, job, rejected)?;
-        }
+            self.reset_if_still_pending(video, job, recorded)?
+        } else {
+            recorded
+        };
         Ok(VideoStepOutcome::retry_at_or_settled(
             recorded.and_then(|video| video.categorization.next_attempt_at()),
             reason,
         ))
+    }
+
+    /// After a give-up: back to Pending when a category is still pending
+    /// (its `failed` verdict dropped because the settings or its prompt
+    /// changed during the attempt); the video as stored after.
+    fn reset_if_still_pending(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        recorded: Option<Video>,
+    ) -> anyhow::Result<Option<Video>> {
+        if self.pending(video, &job.owner)?.is_empty() {
+            return Ok(recorded);
+        }
+        self.categorization_resetter
+            .reset(std::slice::from_ref(&video.id))?;
+        Ok(None)
     }
 
     /// Records a run that left nothing rejected: Done.

@@ -10,6 +10,7 @@ use crate::domain::llm_server::OllamaUrl;
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::preferences::{CategorizationSettings, Preferences, SummarySettings};
+use crate::domain::services::CategorizationResetter;
 use crate::domain::services::MetadataGenerator;
 use crate::domain::services::VideoCategorizer;
 use crate::domain::services::VideoCategoryAssigner;
@@ -3623,6 +3624,16 @@ fn run(task: &SyncVideoTask, queued: &Task) -> Result<TaskOutcome, String> {
     task.handle(queued).map_err(|e| e.to_string())
 }
 
+fn categorization_resetter(database: Database) -> CategorizationResetter {
+    CategorizationResetter::new(
+        Arc::new(SqliteVideoRepository::new(database.clone())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(database.clone())),
+        Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+        Arc::new(SqlitePlaylistVideoRepository::new(database)),
+        Arc::new(FixedClock(fixed_timestamp())),
+    )
+}
+
 fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
     VideoCategoryAssigner::new(
         Arc::new(SqliteVideoRepository::new(database.clone())),
@@ -3655,6 +3666,7 @@ fn video_categorizer(database: Database) -> Arc<VideoCategorizer> {
         Arc::new(FakeLlmServerRepository::failing()),
         video_category_assigner(database.clone()),
         Arc::new(FixedClock(fixed_timestamp())),
-        Arc::new(SqliteVideoRepository::new(database)),
+        Arc::new(SqliteVideoRepository::new(database.clone())),
+        categorization_resetter(database),
     ))
 }

@@ -62,12 +62,17 @@ impl Preferences {
         self.ollama_url != other.ollama_url || settings != other.summaries
     }
 
-    /// Whether `other` categorizes differently: another Ollama URL,
-    /// categorization model or prompt.
+    /// Whether `other` categorizes differently: another server or other
+    /// settings (model, context length as saved, temperature, thinking,
+    /// effective prompt), not merely categorization turned on or off.
     pub fn changes_categorization(&self, other: &Self) -> bool {
+        let calls = |settings: &CategorizationSettings| CategorizationSettings {
+            enabled: false,
+            prompt: Some(settings.effective_prompt()),
+            ..settings.clone()
+        };
         self.ollama_url != other.ollama_url
-            || self.categorization.model != other.categorization.model
-            || self.categorization.effective_prompt() != other.categorization.effective_prompt()
+            || calls(&self.categorization) != calls(&other.categorization)
     }
 
     /// These preferences with `change` applied, as long as the result is

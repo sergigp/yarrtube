@@ -13,7 +13,7 @@ use crate::domain::preferences::{
     CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength, Preferences,
     Temperature,
 };
-use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
+use crate::domain::services::{CategorizationResetter, VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::video::Chapters;
 use crate::domain::video::{
@@ -934,6 +934,7 @@ fn it_should_not_keep_a_verdict_for_a_video_removed_while_it_was_stored() {
             ),
             Arc::new(FixedClock(later())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            categorization_resetter(&db),
         )),
     );
 
@@ -1092,6 +1093,51 @@ fn it_should_mark_the_categorization_done_when_nothing_is_rejected() {
 }
 
 #[test]
+fn it_should_mark_the_categorization_done_without_asking_if_nothing_is_pending() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let llm = Arc::new(FakeLlmServerRepository::unreachable());
+    let video = Video {
+        categorization: StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 2,
+                last_failed_at: Some(fixed_timestamp()),
+            },
+        },
+        ..summarized_video()
+    };
+    let chess = prompted_category("Chess");
+    seed(&db, &video, &[&chess]);
+    SqliteVideoCategoryVerdictRepository::new(db.database())
+        .save(&VideoCategoryVerdict::by_user(
+            video.id.clone(),
+            chess.id.clone(),
+            true,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Done,
+                attempts: RetryAttempts::default(),
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
 fn it_should_retry_only_the_categories_still_pending() {
     let db = TestDatabase::new();
     let video = summarized_video();
@@ -1166,6 +1212,138 @@ fn it_should_not_mark_a_category_failed_when_the_settings_changed_during_its_att
     });
 
     assert_eq!(verdicts, [vec![], vec![]]);
+}
+
+#[test]
+fn it_should_not_mark_a_category_failed_when_the_generation_settings_changed_during_its_attempt() {
+    let db = Arc::new(TestDatabase::new());
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video = Video {
+        categorization: StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 10,
+                last_failed_at: Some(fixed_timestamp()),
+            },
+        },
+        ..summarized_video()
+    };
+    let tech = prompted_category("Tech");
+    seed(&db, &video, &[&tech]);
+    let changed_db = db.clone();
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(server_with(thinking_model()))
+            .with_replies(vec![reply("It might belong.")])
+            .with_on_chat(move || {
+                SqlitePreferencesRepository::new(changed_db.database())
+                    .save(&Preferences {
+                        categorization: CategorizationSettings {
+                            temperature: Temperature::new(0.5).unwrap(),
+                            ..categorization_on().categorization
+                        },
+                        ..categorization_on()
+                    })
+                    .unwrap()
+            }),
+    );
+    let task = categorize_video_task(&db, llm);
+
+    run(&task, &video).unwrap();
+
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[test]
+fn it_should_put_the_categorization_back_to_pending_when_the_settings_changed_during_its_last_attempt()
+ {
+    let changes: [fn(&TestDatabase, &Category); 3] = [
+        |db, _| {
+            SqlitePreferencesRepository::new(db.database())
+                .save(&Preferences {
+                    categorization: CategorizationSettings {
+                        temperature: Temperature::new(0.5).unwrap(),
+                        ..categorization_on().categorization
+                    },
+                    ..categorization_on()
+                })
+                .unwrap()
+        },
+        |db, _| {
+            SqlitePreferencesRepository::new(db.database())
+                .save(&Preferences {
+                    categorization: CategorizationSettings {
+                        model: CategorizationModel::new("gemma3:4b").unwrap(),
+                        ..categorization_on().categorization
+                    },
+                    ..categorization_on()
+                })
+                .unwrap()
+        },
+        |db, category| {
+            SqliteCategoryRepository::new(db.database())
+                .update(
+                    &category.clone().with_ai_prompt(Some(
+                        CategoryPrompt::new("The video is about cooking.")
+                            .unwrap()
+                            .unwrap(),
+                    )),
+                )
+                .unwrap()
+        },
+    ];
+    let video = Video {
+        categorization: StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 10,
+                last_failed_at: Some(fixed_timestamp()),
+            },
+        },
+        ..summarized_video()
+    };
+    let tech = prompted_category("Tech");
+
+    let outcomes = changes.map(|change| {
+        let db = Arc::new(TestDatabase::new());
+        seed(&db, &video, &[&tech]);
+        let (changed_db, changed) = (db.clone(), tech.clone());
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply("It might belong.")])
+                .with_on_chat(move || change(&changed_db, &changed)),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        let result = run(&task, &video);
+
+        let stored = SqliteVideoRepository::new(db.database())
+            .find(&video.id)
+            .unwrap();
+        let verdicts = SqliteVideoCategoryVerdictRepository::new(db.database())
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap();
+        (result, stored, verdicts)
+    });
+
+    let pending_again = Some(Video {
+        version: 2,
+        categorization: StepState::pending(),
+        updated_at: later(),
+        ..video
+    });
+    assert_eq!(
+        outcomes,
+        [
+            (Ok(TaskOutcome::Done), pending_again.clone(), vec![]),
+            (Ok(TaskOutcome::Done), pending_again.clone(), vec![]),
+            (Ok(TaskOutcome::Done), pending_again, vec![])
+        ]
+    );
 }
 
 #[test]
@@ -1538,7 +1716,18 @@ fn categorize_video_task(
             ),
             Arc::new(FixedClock(later())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            categorization_resetter(db),
         )),
+    )
+}
+
+fn categorization_resetter(db: &TestDatabase) -> CategorizationResetter {
+    CategorizationResetter::new(
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(FixedClock(later())),
     )
 }
 

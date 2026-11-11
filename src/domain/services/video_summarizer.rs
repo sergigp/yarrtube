@@ -1,3 +1,4 @@
+use crate::domain::event::DomainEvent;
 use crate::domain::llm_server::{
     LlmChat, LlmModel, LlmServerUnreachable, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
@@ -5,7 +6,9 @@ use crate::domain::preferences::{SummaryPrompt, SummarySettings};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome};
+use crate::domain::video::{
+    UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome, VideoSummaryGenerated,
+};
 use crate::domain::video_summary::{
     PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
 };
@@ -16,6 +19,7 @@ use crate::infrastructure::repositories::sqlite_preferences_repository::Preferen
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
+use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
@@ -103,6 +107,7 @@ pub struct VideoSummarizer {
     video_file_repository: Arc<dyn VideoFileRepository>,
     llm_server_repository: Arc<dyn LlmServerRepository>,
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
+    event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     video_updater: VideoUpdater,
 }
@@ -117,6 +122,7 @@ impl VideoSummarizer {
         video_file_repository: Arc<dyn VideoFileRepository>,
         llm_server_repository: Arc<dyn LlmServerRepository>,
         video_summary_repository: Arc<dyn VideoSummaryRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -128,6 +134,7 @@ impl VideoSummarizer {
             video_file_repository,
             llm_server_repository,
             video_summary_repository,
+            event_publisher,
             clock,
         }
     }
@@ -272,11 +279,14 @@ impl VideoSummarizer {
             &job.settings.model,
             now,
         ))?;
-        self.video_updater.update(&video.id, |video| {
+        let marked = self.video_updater.update(&video.id, |video| {
             video
                 .is_summarizable()
                 .then(|| video.mark_summary_generated(now))
         })?;
+        if marked.is_some() {
+            self.publish_generated(video);
+        }
         info!(
             video_id = %video.id,
             summary = %text.as_str(),
@@ -286,6 +296,17 @@ impl VideoSummarizer {
             "video summary generated"
         );
         Ok(())
+    }
+
+    /// Best effort, like `VideoSubtitlesFetched`: a lost event only delays
+    /// the categorization to the next reconcile pass.
+    fn publish_generated(&self, video: &Video) {
+        let event = DomainEvent::VideoSummaryGenerated(VideoSummaryGenerated {
+            video_id: video.id.as_str().to_string(),
+        });
+        if let Err(e) = self.event_publisher.publish(&event) {
+            warn!(video_id = %video.id, error = %e, "failed to publish that the video's summary was generated");
+        }
     }
 
     /// The stored video when the generated summary should still be stored

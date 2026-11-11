@@ -132,9 +132,13 @@ spec: decisions here feed OpenSpec changes later.
   `categorization_enabled`, its summary is Generated, and a category is
   **pending**: it has an AI prompt, the source isn't a member of it, and the
   video has no verdict for it. The video is categorized from its summary, so
-  its source needs summaries on too.
+  its source needs summaries on too. Storing a summary syncs the video right
+  away (`video_summary_generated`), so its categorization follows without
+  waiting for the source's next reconcile pass.
 - The task runs in the summaries lane, so one Ollama call runs at a time. It
-  re-checks those conditions, reads the pending categories again, and asks
+  re-checks those conditions and reads the pending categories again. With
+  none left (decided or deleted since the sync) it marks the categorization
+  Done without checking Ollama or calling it. Otherwise it asks
   about all of them **in one call**: the saved (or shipped) categorization
   prompt as system message; the title, channel or playlist name, length,
   chapters and summary, then each category as `### <name>` and its AI prompt,
@@ -167,13 +171,17 @@ spec: decisions here feed OpenSpec changes later.
   past the cap in the call about all 9; alone, each answered. Only what those
   single calls reject fails the task once every pending category was tried;
   the retry asks only the ones still pending. On the last attempt each
-  rejected category gets an `unavailable` verdict. Ollama unreachable, or the model not
+  rejected category gets an `unavailable` verdict, unless the categorization
+  settings or that category's prompt changed during the attempt: then no
+  verdict is written and the categorization goes back to Pending, so the next
+  sync asks again with the new settings. Ollama unreachable, or the model not
   installed, stops the run with a warning, keeps the verdicts already stored,
   spends no attempt and writes no `unavailable` verdict: the rest stay pending
   and the run is re-queued 6 hours later.
-- Saving a new Ollama URL, categorization model or prompt deletes every
-  `unavailable` verdict; a new AI prompt for a category deletes that
-  category's. `yes` and `no` verdicts are final: editing or clearing a
+- Saving a new Ollama URL or categorization model, context length,
+  temperature, thinking or prompt (not just turning categorization on or off)
+  deletes every `unavailable` verdict; a new AI prompt for a category deletes
+  that category's. `yes` and `no` verdicts are final: editing or clearing a
   category's prompt, turning a source's categorization off, or turning AI off
   keeps them, and the categories they give.
 - Deleting a category deletes its verdicts; removing a video, or deleting its

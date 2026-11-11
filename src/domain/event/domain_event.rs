@@ -3,7 +3,7 @@ use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel}
 use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::show::ShowMoved;
-use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched};
+use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched, VideoSummaryGenerated};
 use crate::domain::video_category::VideoCategoriesChanged;
 use serde::Serialize;
 use serde_json::Value;
@@ -22,6 +22,7 @@ pub enum DomainEvent {
     VideoRemovedFromChannel(VideoRemovedFromChannel),
     VideoDownloaded(VideoDownloaded),
     VideoSubtitlesFetched(VideoSubtitlesFetched),
+    VideoSummaryGenerated(VideoSummaryGenerated),
     ShowMoved(ShowMoved),
     VideoCategoriesChanged(VideoCategoriesChanged),
 }
@@ -39,6 +40,7 @@ impl DomainEvent {
             Self::VideoRemovedFromChannel(_) => VideoRemovedFromChannel::EVENT_TYPE,
             Self::VideoDownloaded(_) => VideoDownloaded::EVENT_TYPE,
             Self::VideoSubtitlesFetched(_) => VideoSubtitlesFetched::EVENT_TYPE,
+            Self::VideoSummaryGenerated(_) => VideoSummaryGenerated::EVENT_TYPE,
             Self::ShowMoved(_) => ShowMoved::EVENT_TYPE,
             Self::VideoCategoriesChanged(_) => VideoCategoriesChanged::EVENT_TYPE,
         }
@@ -56,6 +58,7 @@ impl DomainEvent {
             Self::VideoRemovedFromChannel(event) => to_payload(event),
             Self::VideoDownloaded(event) => to_payload(event),
             Self::VideoSubtitlesFetched(event) => to_payload(event),
+            Self::VideoSummaryGenerated(event) => to_payload(event),
             Self::ShowMoved(event) => to_payload(event),
             Self::VideoCategoriesChanged(event) => to_payload(event),
         }
@@ -98,6 +101,16 @@ mod tests {
                 "folder": "My Video",
             })
         );
+    }
+
+    #[test]
+    fn it_should_map_video_summary_generated_to_a_stable_type_and_payload() {
+        let event = DomainEvent::VideoSummaryGenerated(VideoSummaryGenerated {
+            video_id: "rec1".to_string(),
+        });
+
+        assert_eq!(event.event_type(), "video_summary_generated");
+        assert_eq!(event.payload(), json!({ "video_id": "rec1" }));
     }
 
     #[test]

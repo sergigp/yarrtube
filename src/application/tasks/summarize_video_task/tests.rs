@@ -2,6 +2,7 @@ use super::*;
 use crate::application::tasks::log_capture::captured_log_lines;
 use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
+use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::llm_server::{
     LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
@@ -13,7 +14,8 @@ use crate::domain::services::VideoOwnerFinder;
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::video::Chapters;
 use crate::domain::video::{
-    PlaybackPosition, RetryAttempts, StepState, StepStatus, Video, VideoChapter, YoutubeVideoId,
+    PlaybackPosition, RetryAttempts, StepState, StepStatus, Video, VideoChapter,
+    VideoSummaryGenerated, YoutubeVideoId,
 };
 use crate::domain::video_summary::{SummaryMessages, SummaryText, VideoSummary};
 use crate::domain::video_transcript::{
@@ -40,6 +42,10 @@ use crate::infrastructure::repositories::sqlite_video_summary_repository::{
 };
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
     SqliteVideoTranscriptRepository, VideoTranscriptRepository,
+};
+use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+use crate::infrastructure::shared::domain_events::event_repository::{
+    EventRepository, SqliteEventRepository,
 };
 use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 use crate::infrastructure::shared::system_clock::FixedClock;
@@ -86,6 +92,40 @@ fn it_should_store_the_summary_of_a_video_that_fits_one_call() {
         })
     );
     assert_eq!(llm.chats(), vec![one_call_chat()]);
+}
+
+#[test]
+fn it_should_announce_the_stored_summary() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(later())));
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        llm_replying(vec![reply("Three games.")]),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoSummaryGenerated(VideoSummaryGenerated {
+                video_id: video.id.as_str().to_string(),
+            }),
+        )]
+    );
 }
 
 #[test]
@@ -1733,6 +1773,47 @@ fn it_should_drop_the_summary_when_summaries_are_turned_off_while_generating() {
 }
 
 #[test]
+fn it_should_not_announce_a_dropped_summary() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(later())));
+    let video = subtitled_video();
+    let llm = {
+        let preferences_repository = preferences_repository.clone();
+        Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply("Three games.")])
+                .with_on_chat(move || {
+                    preferences_repository
+                        .save(&with_summaries(|settings| SummarySettings {
+                            enabled: false,
+                            ..settings
+                        }))
+                        .unwrap()
+                }),
+        )
+    };
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        llm,
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
 fn it_should_drop_the_summary_when_the_source_turns_summaries_off_while_generating() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1986,9 +2067,26 @@ fn summarize_video_task(
             files,
             llm,
             summary_repository,
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(later())),
+            )),
             Arc::new(FixedClock(later())),
         )),
     )
+}
+
+fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+    ScheduledEvent {
+        id,
+        event_type: event.event_type().to_string(),
+        payload: event.payload().to_string(),
+        retries: 0,
+        run_at: later(),
+        created_at: later(),
+        updated_at: later(),
+        last_error: None,
+    }
 }
 
 fn run(task: &SummarizeVideoTask, video: &Video) -> Result<TaskOutcome, String> {
