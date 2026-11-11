@@ -1169,6 +1169,81 @@ mod tests {
     }
 
     #[test]
+    fn it_should_discard_the_subtitles_if_the_video_was_redownloaded_under_another_name_meanwhile()
+    {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = downloaded_video();
+        video_repository.insert(&video).unwrap();
+        let redownloaded = video
+            .clone()
+            .map_file(|file| file.with_filename("Season 2026/S2026E031501 - New Title.mp4"));
+        let redownloading_repository = video_repository.clone();
+        let redownloaded_video = redownloaded.clone();
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt")))
+                .with_on_fetch_subtitles(move || {
+                    redownloading_repository
+                        .update(&redownloaded_video)
+                        .unwrap();
+                }),
+        );
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            video_transcript_repository.clone(),
+            caption_repository,
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+        )));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..redownloaded
+            }]
+        );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![staging_dir(&video)]
+        );
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_skip_if_subtitles_already_fetched() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

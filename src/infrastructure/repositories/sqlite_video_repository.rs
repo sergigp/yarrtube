@@ -556,20 +556,15 @@ impl SqliteVideoRepository {
             id: VideoId::new(row.id)?,
             youtube_id: YoutubeVideoId::new(row.youtube_id)?,
             title: row.title,
-            download: Download {
-                state: Self::decode_download_step(
-                    &row.status,
-                    row.download_failed_attempts,
-                    row.last_errored_at,
-                )?,
-                started: VideoStatus::parse(&row.status)? == VideoStatus::InProgress,
-                failure: row.download_failure,
-                file: Self::decode_downloaded_file(
-                    row.filename,
-                    row.quality,
-                    row.duration_seconds,
-                )?,
-            },
+            download: Self::decode_download(
+                &row.status,
+                row.download_failed_attempts,
+                row.last_errored_at,
+                row.download_failure,
+                row.filename,
+                row.quality,
+                row.duration_seconds,
+            )?,
             created_at: Self::parse_timestamp(&row.created_at, "created_at")?,
             updated_at: Self::parse_timestamp(&row.updated_at, "updated_at")?,
             synced_at: Self::decode_timestamp(row.synced_at, "synced_at")?,
@@ -660,14 +655,20 @@ impl SqliteVideoRepository {
         })
     }
 
-    /// The download's step as stored: In Progress is Retrying on top of
-    /// failed attempts, else Pending; Downloaded is Done.
-    fn decode_download_step(
+    /// The download as stored: the status is parsed once. In Progress is
+    /// Retrying on top of failed attempts, else Pending, and is the only
+    /// status that marks the download started; Downloaded is Done.
+    fn decode_download(
         status: &str,
         failed: u32,
         last_errored_at: Option<String>,
-    ) -> anyhow::Result<StepState> {
-        let status = match VideoStatus::parse(status)? {
+        failure: Option<String>,
+        filename: Option<String>,
+        quality: Option<String>,
+        duration_seconds: Option<i64>,
+    ) -> anyhow::Result<Download> {
+        let status = VideoStatus::parse(status)?;
+        let step_status = match status {
             VideoStatus::InProgress if failed > 0 => StepStatus::Retrying,
             VideoStatus::InProgress | VideoStatus::Pending => StepStatus::Pending,
             VideoStatus::Retrying => StepStatus::Retrying,
@@ -675,12 +676,17 @@ impl SqliteVideoRepository {
             VideoStatus::Downloaded => StepStatus::Done,
             VideoStatus::Unavailable => StepStatus::Unavailable,
         };
-        Ok(StepState {
-            status,
-            attempts: RetryAttempts {
-                failed,
-                last_failed_at: Self::decode_timestamp(last_errored_at, "last_errored_at")?,
+        Ok(Download {
+            state: StepState {
+                status: step_status,
+                attempts: RetryAttempts {
+                    failed,
+                    last_failed_at: Self::decode_timestamp(last_errored_at, "last_errored_at")?,
+                },
             },
+            started: status == VideoStatus::InProgress,
+            failure,
+            file: Self::decode_downloaded_file(filename, quality, duration_seconds)?,
         })
     }
 
@@ -759,10 +765,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::video::Chapters;
-    use crate::domain::video::DownloadedQuality;
-    use crate::domain::video::PlaylistEpisodeNumber;
-    use crate::domain::video::Thumbnail;
+    use crate::domain::video::{Chapters, DownloadedQuality, PlaylistEpisodeNumber, Thumbnail};
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
@@ -1302,7 +1305,7 @@ mod tests {
             watch: WatchState {
                 watched_at: Some(watched_at),
                 position: PlaybackPosition::new(42).unwrap(),
-                last_played_at: None,
+                ..WatchState::unwatched()
             },
             ..video("First", now)
         };

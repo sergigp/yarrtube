@@ -280,15 +280,9 @@ mod tests {
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::Chapters;
-    use crate::domain::video::Download;
-    use crate::domain::video::DownloadedQuality;
-    use crate::domain::video::StepStatus;
-    use crate::domain::video::Subtitles;
-    use crate::domain::video::Thumbnail;
-    use crate::domain::video::WatchState;
     use crate::domain::video::{
-        EpisodeNumber, RetryAttempts, StepState, Video, VideoChapter, VideoId, YoutubeVideoId,
+        Chapters, Download, DownloadedQuality, EpisodeNumber, RetryAttempts, StepState, StepStatus,
+        Subtitles, Thumbnail, Video, VideoChapter, VideoId, WatchState, YoutubeVideoId,
     };
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -3173,6 +3167,7 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
+        let watched = started_video("vid_watched", "Watched", 120, watched_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -3180,24 +3175,24 @@ mod tests {
             &Video {
                 watch: WatchState {
                     watched_at: Some(watched_timestamp()),
-                    position: PlaybackPosition::new(120).unwrap(),
-                    last_played_at: Some(watched_timestamp()),
+                    ..watched.watch
                 },
                 created_at: DateTime::<Utc>::from_timestamp(200, 0).unwrap(),
-                ..started_video("vid_watched", "Watched", 120, watched_timestamp())
+                ..watched
             },
         );
+        let never_played =
+            started_video("vid_never_played", "Never Played", 120, watched_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
             &Video {
                 watch: WatchState {
-                    watched_at: None,
-                    position: PlaybackPosition::new(120).unwrap(),
                     last_played_at: None,
+                    ..never_played.watch
                 },
-                ..started_video("vid_never_played", "Never Played", 120, watched_timestamp())
+                ..never_played
             },
         );
         let video_searcher = VideoSearcher::new(
@@ -4135,6 +4130,43 @@ mod tests {
         let request = RecordProgressRequest {
             was_watched: Some(true),
             ..progress_request(95)
+        };
+
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
+
+        assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                watch: WatchState {
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_a_watched_video_watched_when_a_rewatch_reaches_90_percent() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+        let request = RecordProgressRequest {
+            was_watched: Some(true),
+            ..progress_request(90)
         };
 
         let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;

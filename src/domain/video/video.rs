@@ -272,8 +272,8 @@ impl Video {
             && self.subtitles.is_unsettled()
     }
 
-    /// Records the fetched subtitle file: subtitles Done, checked `now`. Touches only the subtitle fields and
-    /// `updated_at`.
+    /// Records the fetched subtitle file: subtitles Done, checked `now`.
+    /// Touches only the subtitle fields and `updated_at`.
     pub fn mark_subtitles_fetched(
         self,
         subtitle_filename: impl Into<String>,
@@ -373,8 +373,8 @@ impl Video {
 
     /// Records a chapters check: `Some` non-empty chapters are `Complete`,
     /// `Some(vec![])` `Incomplete`, `None` a failed check (keeping the
-    /// chapters already recorded, if any).
-    /// Touches only the chapters fields and `updated_at`.
+    /// chapters already recorded, if any). Touches only the chapters fields
+    /// and `updated_at`.
     pub fn record_chapters_check(
         self,
         chapters: Option<Vec<VideoChapter>>,

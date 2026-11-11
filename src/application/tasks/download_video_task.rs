@@ -40,23 +40,11 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::Chapters;
-    use crate::domain::video::Download;
-    use crate::domain::video::DownloadedFile;
-    use crate::domain::video::DownloadedQuality;
-    use crate::domain::video::DownloadedVideo;
-    use crate::domain::video::EpisodeNumber;
-    use crate::domain::video::PlaybackPosition;
-    use crate::domain::video::PlaylistEpisodeNumber;
-    use crate::domain::video::RetryAttempts;
-    use crate::domain::video::StepState;
-    use crate::domain::video::StepStatus;
-    use crate::domain::video::Thumbnail;
-    use crate::domain::video::Video;
-    use crate::domain::video::VideoChapter;
-    use crate::domain::video::VideoDownloaded;
-    use crate::domain::video::WatchState;
-    use crate::domain::video::YoutubeVideoId;
+    use crate::domain::video::{
+        Chapters, Download, DownloadedFile, DownloadedQuality, DownloadedVideo, EpisodeNumber,
+        PlaybackPosition, PlaylistEpisodeNumber, RetryAttempts, StepState, StepStatus, Thumbnail,
+        Video, VideoChapter, VideoDownloaded, WatchState, YoutubeVideoId,
+    };
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,

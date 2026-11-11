@@ -1173,6 +1173,67 @@ mod tests {
     }
 
     #[test]
+    fn it_should_schedule_retrying_chapters_once_their_next_attempt_is_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = Video {
+            chapters: Chapters::checked(Some(fixed_timestamp() - Duration::minutes(10)), 1),
+            ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
+        };
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::FetchChapters {
+                    video_id: video.id.as_str().to_string(),
+                },
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_schedule_a_retrying_quality_check_once_its_next_attempt_is_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = Video {
+            downloaded_quality: DownloadedQuality::checked(
+                Some(fixed_timestamp() - Duration::minutes(10)),
+                1,
+            ),
+            ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
+        };
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::UpgradeQuality {
+                    video_id: video.id.as_str().to_string(),
+                },
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_schedule_nothing_for_a_settled_errored_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

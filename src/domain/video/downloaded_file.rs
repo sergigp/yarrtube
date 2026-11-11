@@ -30,3 +30,26 @@ impl DownloadedFile {
         Self { quality, ..self }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_record_the_file_at_the_upgraded_quality() {
+        let file = DownloadedFile {
+            filename: "Season 2026/S2026E031501 - Title.mp4".to_string(),
+            quality: Quality::Low,
+            duration_seconds: Some(120),
+        };
+
+        assert_eq!(
+            file.with_quality(Quality::Mid),
+            DownloadedFile {
+                filename: "Season 2026/S2026E031501 - Title.mp4".to_string(),
+                quality: Quality::Mid,
+                duration_seconds: Some(120),
+            }
+        );
+    }
+}

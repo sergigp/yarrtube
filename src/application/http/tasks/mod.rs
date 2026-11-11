@@ -27,14 +27,10 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
-    use crate::domain::video::Chapters;
-    use crate::domain::video::Download;
-    use crate::domain::video::DownloadedQuality;
-    use crate::domain::video::Subtitles;
-    use crate::domain::video::Thumbnail;
-    use crate::domain::video::WatchState;
-    use crate::domain::video::{PlaybackPosition, StepState, Video};
-    use crate::domain::video::{VideoId, YoutubeVideoId};
+    use crate::domain::video::{
+        Chapters, Download, DownloadedQuality, StepState, Subtitles, Thumbnail, Video, VideoId,
+        WatchState, YoutubeVideoId,
+    };
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -1100,11 +1096,7 @@ mod tests {
             summary: StepState::pending(),
             categorization: StepState::pending(),
             version: 0,
-            watch: WatchState {
-                watched_at: None,
-                position: PlaybackPosition::start(),
-                last_played_at: None,
-            },
+            watch: WatchState::unwatched(),
             subtitles: Subtitles::pending(),
             chapters: Chapters::pending(),
             downloaded_quality: DownloadedQuality::pending(),
