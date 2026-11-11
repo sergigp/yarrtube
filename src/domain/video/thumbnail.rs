@@ -38,14 +38,13 @@ impl Thumbnail {
     /// The thumbnail a download wrote, else the one fetched ahead of it:
     /// Done if either, else unchanged.
     pub fn record_download(self, filename: Option<String>) -> Self {
-        match filename.or_else(|| self.filename.clone()) {
-            Some(filename) => Self {
-                state: self.state.succeed(),
-                filename: Some(filename),
-            },
-            // No file anywhere, so `self.filename` is already `None`.
-            None => self,
-        }
+        let filename = filename.or(self.filename);
+        let state = if filename.is_some() {
+            self.state.succeed()
+        } else {
+            self.state
+        };
+        Self { state, filename }
     }
 
     /// A fetch that obtained no thumbnail: one more failed attempt.
