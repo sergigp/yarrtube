@@ -16,7 +16,7 @@
 ### SqliteTaskRepository
 
 - [x] 3.1 `it_should_delete_every_pending_task_of_a_video`: the video's pending `download_video` and `fetch_thumbnail` are gone
-- [ ] 3.2 `it_should_not_delete_a_running_task_of_a_video`: a claimed `download_video` of the video is still non-completed
+- [x] 3.2 `it_should_not_delete_a_running_task_of_a_video`: a claimed `download_video` of the video is still non-completed
 - [ ] 3.3 `it_should_not_delete_the_pending_tasks_of_another_video`: another video's pending `download_video` and a `reconcile_playlist` are kept
 
 ## 4. Verification

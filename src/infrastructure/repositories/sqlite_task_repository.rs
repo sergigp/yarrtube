@@ -254,7 +254,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn delete_pending_for_video(&self, video_id: &VideoId) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "DELETE FROM tasks WHERE json_extract(payload, '$.video_id') = ?1",
+            "DELETE FROM tasks WHERE json_extract(payload, '$.video_id') = ?1 AND status = 'pending'",
             params![video_id.as_str()],
         )
         .inspect_err(|e| tracing::error!(video_id = %video_id, error = %e, "failed to delete pending tasks of video"))
@@ -963,6 +963,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(repo.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_not_delete_a_running_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&download_task("v1"), now).unwrap();
+        repo.claim(1, now).unwrap();
+
+        repo.delete_pending_for_video(&VideoId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &download_task("v1"), now, now).start(now)]
+        );
     }
 
     #[test]
