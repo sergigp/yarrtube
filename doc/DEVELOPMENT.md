@@ -107,12 +107,15 @@ The suites are the web UI's checks, Rust formatting, clippy and tests, the
 YouTube contract tests and the end-to-end suite (`e2e-tests/`, see its
 README: the Docker image driven through real browsers against a fake
 YouTube). CI runs all of them except the contract tests, which need the real
-YouTube, on every pull request and push to `main`. The script only checks:
-it installs and builds nothing, so install the web UI's and `e2e-tests/`'s
-dependencies (and the Playwright browsers) and build the web UI first. Each
+YouTube, on every pull request and push to `main`. Tools (`npm`, `cargo`,
+Docker, and for the contract tests `yt-dlp` and `ffprobe`) must be
+installed; what the repo produces itself, the web UI's and `e2e-tests/`'s
+`node_modules`, the web UI build and the Playwright browsers, the script
+installs or builds when missing (or `node_modules` older than its lockfile),
+so it runs as is in a fresh clone or worktree. Each
 end-to-end worker runs its own container on its own ports, so the suite runs
 in parallel and worktrees can run it at the same time. Before running
-anything it checks every selected suite's dependencies, listing all that are
+anything it checks every selected suite's tools, listing all that are
 missing, and prints what will run: the suites, CI mode (`--ci` or
 `CI=true`: no contract tests, failing end-to-end tests retried) and the
 end-to-end workers and upgrade check. Each phase's output
