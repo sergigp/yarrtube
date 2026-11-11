@@ -134,7 +134,9 @@ spec: decisions here feed OpenSpec changes later.
   away (`video_summary_generated`), so its categorization follows without
   waiting for the source's next reconcile pass.
 - The task runs in the summaries lane, so one Ollama call runs at a time. It
-  re-checks those conditions, reads the pending categories again, and asks
+  re-checks those conditions and reads the pending categories again. With
+  none left (decided or deleted since the sync) it marks the categorization
+  Done without checking Ollama or calling it. Otherwise it asks
   about all of them **in one call**: the saved (or shipped) categorization
   prompt as system message; the title, channel or playlist name, length,
   chapters and summary, then each category as `### <name>` and its AI prompt,

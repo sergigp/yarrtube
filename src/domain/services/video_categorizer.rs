@@ -31,7 +31,6 @@ enum Skip {
     NotWanted(&'static str),
     /// No category is pending for the video: nothing to ask, so it is
     /// categorized as it stands (Done), without checking the server.
-    #[allow(dead_code)]
     NothingPending,
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
@@ -184,7 +183,10 @@ impl VideoCategorizerApi for VideoCategorizer {
                 info!(video_id = %video.id, reason, "skipped video categorization");
                 Ok(VideoStepOutcome::Settled)
             }
-            Err(Skip::NothingPending) => Ok(VideoStepOutcome::Settled),
+            Err(Skip::NothingPending) => {
+                info!(video_id = %video.id, reason = "no category is pending", "skipped video categorization");
+                self.mark_categorized(video)
+            }
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
                 Ok(VideoStepOutcome::Settled)
@@ -224,6 +226,9 @@ impl VideoCategorizer {
             .context("the video has no summary")?;
         let settings = preferences.categorization.clone();
         let pending = self.pending(video, &owner)?;
+        if pending.is_empty() {
+            return Err(Skip::NothingPending);
+        }
         let context_length = settings.effective_context_length(self.prompted_categories()?);
         let job = CategorizationJob {
             preferences,
