@@ -423,7 +423,7 @@ mod tests {
             Self::with_script(download_stderr, |bin_dir| {
                 std::fs::write(bin_dir.join("diagnosed"), diagnosed_stderr).unwrap();
                 format!(
-                    "#!/bin/sh\nif [ \"$1\" = --simulate ]; then cat \"{0}/diagnosed\" >&2; else cat \"{0}/download\" >&2; fi\nexit 1\n",
+                    "#!/bin/sh\ncase \" $* \" in *\" --simulate \"*) cat \"{0}/diagnosed\" >&2 ;; *) cat \"{0}/download\" >&2 ;; esac\nexit 1\n",
                     bin_dir.display()
                 )
             })
