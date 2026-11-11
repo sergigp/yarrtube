@@ -13,6 +13,7 @@ pub mod channel_updater;
 pub mod channel_video_reconciler;
 pub mod channel_view_searcher;
 pub mod chapter_fetcher;
+pub mod daemon_health_searcher;
 pub mod directory_searcher;
 pub mod internal_video_reconciler;
 pub mod layout_migrator;
@@ -65,9 +66,10 @@ pub use channel_updater::{ChannelUpdater, ChannelUpdaterApi};
 pub use channel_video_reconciler::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
 pub use channel_view_searcher::{ChannelViewSearcher, ChannelViewSearcherApi};
 pub use chapter_fetcher::{ChapterFetcher, ChapterFetcherApi};
+pub use daemon_health_searcher::{DaemonHealthSearcher, DaemonHealthSearcherApi};
 pub use directory_searcher::{DirectorySearcher, DirectorySearcherApi};
 pub use internal_video_reconciler::{
-    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi,
+    DesiredState, FolderReconciliation, InternalVideoReconciler, InternalVideoReconcilerApi,
 };
 pub use layout_migrator::{LayoutMigrator, LayoutMigratorApi, MigrationReport};
 pub use llm_server_searcher::{LlmServerSearcher, LlmServerSearcherApi};

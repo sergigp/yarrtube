@@ -11,3 +11,18 @@ pub enum TaskLane {
     Summaries,
     Exclusive,
 }
+
+impl TaskLane {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Download => "download",
+            Self::Thumbnail => "thumbnail",
+            Self::Subtitles => "subtitles",
+            Self::VideoSync => "video_sync",
+            Self::Light => "light",
+            Self::Plex => "plex",
+            Self::Summaries => "summaries",
+            Self::Exclusive => "exclusive",
+        }
+    }
+}

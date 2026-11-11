@@ -1,6 +1,7 @@
 pub mod category;
 pub mod channel;
 pub mod channel_video;
+pub mod daemon;
 pub mod directory;
 pub mod event;
 pub mod llm_server;

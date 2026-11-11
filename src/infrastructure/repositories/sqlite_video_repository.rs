@@ -94,6 +94,9 @@ pub trait VideoRepository: Send + Sync {
         id: &VideoId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber>;
+    /// Every stored video, across all playlists and channels, in insertion
+    /// order.
+    fn list(&self) -> anyhow::Result<Vec<Video>>;
     /// Every `Downloaded` video, across all playlists and channels.
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>>;
     /// Up to `limit` `Downloaded` videos whose title contains `text`, ignoring
@@ -115,21 +118,6 @@ pub struct SqliteVideoRepository {
 impl SqliteVideoRepository {
     pub fn new(db: Database) -> Self {
         Self { db }
-    }
-
-    /// Every stored video, for tests asserting the table's whole final state;
-    /// the port itself has no use case that lists all videos.
-    #[cfg(test)]
-    pub fn list(&self) -> anyhow::Result<Vec<Video>> {
-        let ids: Vec<String> = {
-            let conn = self.db.read().unwrap();
-            let mut stmt = conn.prepare("SELECT id FROM videos ORDER BY rowid ASC")?;
-            stmt.query_map([], |row| row.get(0))?
-                .collect::<Result<_, _>>()?
-        };
-        ids.into_iter()
-            .map(|id| Ok(self.find(&VideoId::new(id)?)?.unwrap()))
-            .collect()
     }
 }
 
@@ -365,6 +353,22 @@ impl VideoRepository for SqliteVideoRepository {
             Some(recorded) => Ok(recorded),
             None => Self::next_free_episode_number(&conn, id, published_at),
         }
+    }
+
+    fn list(&self) -> anyhow::Result<Vec<Video>> {
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {VIDEO_COLUMNS} FROM videos ORDER BY rowid ASC"
+            ))
+            .context("failed to prepare list videos")?;
+        stmt.query_map([], Self::read_row)
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+            .inspect_err(|e| tracing::error!(error = %e, "failed to list videos"))
+            .context("failed to list videos")?
+            .into_iter()
+            .map(Self::row_to_video)
+            .collect()
     }
 
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>> {

@@ -1,4 +1,5 @@
-use crate::domain::event::EventFailureOutcome;
+use crate::domain::event::{EventFailureOutcome, ScheduledEvent};
+use crate::domain::shared::elapsed_seconds;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::shared::domain_events::event_repository::EventRepository;
 use crate::infrastructure::shared::error_report;
@@ -38,64 +39,10 @@ impl DomainEventsConsumer {
     }
 
     pub fn poll_once(&self) -> anyhow::Result<()> {
-        for event in self.repository.list_eligible()? {
-            let mut failure: Option<String> = None;
-
-            match self.subscribers.get(&event.event_type) {
-                Some(subscribers) => {
-                    info!(
-                        event_id = event.id,
-                        event_type = %event.event_type,
-                        subscriber_count = subscribers.len(),
-                        "dispatching event"
-                    );
-                    for subscriber in subscribers {
-                        if let Err(e) = Self::dispatch(subscriber.as_ref(), &event.payload) {
-                            // The full source chain, not just the outermost
-                            // context, so the stored error names the real cause.
-                            failure = Some(error_report::cause_chain(&e));
-                        }
-                    }
-                }
-                None => warn!(
-                    event_id = event.id,
-                    event_type = %event.event_type,
-                    "event has no registered subscribers, marking done"
-                ),
-            }
-
-            match failure {
-                Some(error) => match event.fail(
-                    error.clone(),
-                    self.clock.now(),
-                    self.base_retry_delay_seconds,
-                ) {
-                    EventFailureOutcome::Retry(retried) => {
-                        warn!(
-                            event_id = retried.id,
-                            retries = retried.retries,
-                            error,
-                            "event failed, retrying"
-                        );
-                        self.repository.update(&retried)?;
-                    }
-                    EventFailureOutcome::DeadLetter(dead) => {
-                        error!(
-                            event_id = dead.original_event_id,
-                            retries = dead.retries,
-                            error,
-                            "event failed permanently"
-                        );
-                        self.repository.dead_letter(&dead)?;
-                    }
-                },
-                None => {
-                    self.repository.delete(event.id)?;
-                    info!(event_id = event.id, "event done");
-                }
-            }
-        }
-        Ok(())
+        self.repository
+            .list_eligible()?
+            .into_iter()
+            .try_for_each(|event| self.consume(event))
     }
 
     /// Polls forever on `interval`, matching `heartbeat_loop`'s shape. Meant
@@ -109,6 +56,109 @@ impl DomainEventsConsumer {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => error!(error = %e, "poll failed"),
                 Err(e) => error!(error = %e, "poll task panicked"),
+            }
+        }
+    }
+
+    /// Dispatches `event` to every subscriber of its type, then deletes it,
+    /// or records the failed attempt; one end line either way.
+    fn consume(&self, event: ScheduledEvent) -> anyhow::Result<()> {
+        let started = self.clock.now();
+        let subscribers = self
+            .subscribers
+            .get(&event.event_type)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let failure = Self::dispatch_all(&event, subscribers);
+        let duration_seconds = elapsed_seconds(started, self.clock.now());
+        match failure {
+            Some(error) => self.record_failure(event, error, subscribers.len(), duration_seconds),
+            None => {
+                self.repository.delete(event.id)?;
+                info!(
+                    event_id = event.id,
+                    event_type = %event.event_type,
+                    payload = %event.payload,
+                    subscriber_count = subscribers.len(),
+                    outcome = "done",
+                    duration_seconds,
+                    "event finished"
+                );
+                Ok(())
+            }
+        }
+    }
+
+    /// Hands `event` to each of `subscribers`, all of them even after one
+    /// fails; the last failure's full cause chain, if any.
+    fn dispatch_all(
+        event: &ScheduledEvent,
+        subscribers: &[Arc<dyn EventSubscriber>],
+    ) -> Option<String> {
+        if subscribers.is_empty() {
+            warn!(
+                event_id = event.id,
+                event_type = %event.event_type,
+                "event has no registered subscribers, marking done"
+            );
+            return None;
+        }
+        info!(
+            event_id = event.id,
+            event_type = %event.event_type,
+            subscriber_count = subscribers.len(),
+            "dispatching event"
+        );
+        // The full source chain, not just the outermost context, so the
+        // stored error names the real cause.
+        subscribers.iter().fold(None, |failure, subscriber| {
+            Self::dispatch(subscriber.as_ref(), &event.payload)
+                .err()
+                .map(|e| error_report::cause_chain(&e))
+                .or(failure)
+        })
+    }
+
+    /// Retries `event` later, or dead-letters it once its attempts run out.
+    fn record_failure(
+        &self,
+        event: ScheduledEvent,
+        error: String,
+        subscriber_count: usize,
+        duration_seconds: f64,
+    ) -> anyhow::Result<()> {
+        let (event_type, payload) = (event.event_type.clone(), event.payload.clone());
+        match event.fail(
+            error.clone(),
+            self.clock.now(),
+            self.base_retry_delay_seconds,
+        ) {
+            EventFailureOutcome::Retry(retried) => {
+                warn!(
+                    event_id = retried.id,
+                    event_type = %event_type,
+                    payload = %payload,
+                    subscriber_count,
+                    retries = retried.retries,
+                    run_at = %retried.run_at,
+                    error,
+                    duration_seconds,
+                    "event failed, retrying"
+                );
+                self.repository.update(&retried)
+            }
+            EventFailureOutcome::DeadLetter(dead) => {
+                error!(
+                    event_id = dead.original_event_id,
+                    event_type = %event_type,
+                    payload = %payload,
+                    subscriber_count,
+                    retries = dead.retries,
+                    error,
+                    duration_seconds,
+                    "event failed permanently"
+                );
+                self.repository.dead_letter(&dead)
             }
         }
     }
@@ -131,6 +181,7 @@ impl DomainEventsConsumer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_info_lines;
     use crate::domain::channel::ChannelCreated;
     use crate::domain::event::{DeadLetteredEvent, DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistCreated;
@@ -696,6 +747,69 @@ mod tests {
     }
 
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
+
+    #[test]
+    fn it_should_log_one_line_when_an_event_finishes() {
+        let db = TestDatabase::new();
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        event_publisher.publish(&event()).unwrap();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(
+            event().event_type().to_string(),
+            vec![Arc::new(FakeSubscriber::succeeding("sub1", calls))],
+        );
+        let consumer = DomainEventsConsumer::new(
+            Arc::new(repository_at(&db, now())),
+            subscribers,
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let logs = captured_info_lines(|| consumer.poll_once().unwrap());
+
+        assert_eq!(
+            logs,
+            vec![
+                "INFO dispatching event event_id=1 event_type=playlist_created subscriber_count=1",
+                "INFO event finished event_id=1 event_type=playlist_created payload={\"playlist_id\":\"PL1\"} subscriber_count=1 outcome=\"done\" duration_seconds=0.0",
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_log_a_failed_event_with_its_fields() {
+        let db = TestDatabase::new();
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        event_publisher.publish(&event()).unwrap();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(
+            event().event_type().to_string(),
+            vec![Arc::new(FakeSubscriber::failing("sub1", calls))],
+        );
+        let event_repository = Arc::new(repository_at(&db, now()));
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let logs = captured_info_lines(|| consumer.poll_once().unwrap());
+
+        let next_run_at = event_repository.list_pending().unwrap()[0].run_at;
+        assert_eq!(
+            logs,
+            vec![
+                "INFO dispatching event event_id=1 event_type=playlist_created subscriber_count=1"
+                    .to_string(),
+                format!(
+                    "WARN event failed, retrying event_id=1 event_type=playlist_created payload={{\"playlist_id\":\"PL1\"}} subscriber_count=1 retries=1 run_at={next_run_at} error=\"sub1 failed\" duration_seconds=0.0"
+                ),
+            ]
+        );
+    }
 
     fn now() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()

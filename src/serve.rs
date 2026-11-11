@@ -1,18 +1,19 @@
 use crate::application::http::{self, ApiServices, RunningVersion, VideosRoot};
 use crate::application::{subscribers, tasks};
+use crate::domain::daemon::DaemonHealth;
 use crate::domain::services::{
     CategorizationResetter, CategoryCreator, CategoryDeleter, CategoryMemberRemover,
     CategoryUpdater, CategoryVideoCollector, CategoryViewSearcher, ChannelAvatarRestorer,
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler,
-    ChannelViewSearcher, ChapterFetcher, DirectorySearcher, InternalVideoReconciler,
-    LayoutMigrator, LlmServerSearcher, MetadataGenerator, PlaylistCreator, PlaylistDeleter,
-    PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher,
-    PlexFolderScanner, PlexLabelSyncer, PlexLabelSyncerApi, PreferencesSearcher,
-    PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover, SubtitleFetcher,
-    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategorizer, VideoCategoryAssigner,
-    VideoCategoryChoiceSearcher, VideoCategoryEditor, VideoDownloader, VideoFileDeleter,
-    VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoRetrier, VideoSearcher,
-    VideoSummarizer, VideoWatchStateUpdater,
+    ChannelViewSearcher, ChapterFetcher, DaemonHealthSearcher, DaemonHealthSearcherApi,
+    DirectorySearcher, InternalVideoReconciler, LayoutMigrator, LlmServerSearcher,
+    MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
+    PlaylistVideoReconciler, PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer,
+    PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
+    ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
+    VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
+    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
+    VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -61,7 +62,7 @@ pub(crate) const DEFAULT_YOUTUBE_API_URL: &str = "https://www.googleapis.com/you
 /// under the videos root at startup so the browser is never empty on a fresh
 /// install.
 const DEFAULT_STORAGE_DIRECTORIES: &[&str] = &["playlists", "channels"];
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(300);
 /// How long shutdown waits for in-flight blocking work before exiting.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
@@ -906,6 +907,15 @@ fn video_category_assigner(infrastructure: &InfrastructureContainer) -> VideoCat
     )
 }
 
+fn daemon_health_searcher(infrastructure: &InfrastructureContainer) -> DaemonHealthSearcher {
+    DaemonHealthSearcher::new(
+        infrastructure.task_repository.clone(),
+        infrastructure.event_repository.clone(),
+        infrastructure.video_repository.clone(),
+        infrastructure.clock.clone(),
+    )
+}
+
 fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler {
     VideoReconciler::new(
         infrastructure.video_repository.clone(),
@@ -1026,12 +1036,41 @@ async fn serve_spa(uri: Uri) -> Response {
     }
 }
 
-async fn heartbeat_loop() {
+/// Logs the daemon's heartbeat, with its queues and library counts, every
+/// `HEARTBEAT_INTERVAL`; a heartbeat whose counts can't be read is still
+/// logged, with why.
+async fn heartbeat_loop(searcher: Arc<DaemonHealthSearcher>) {
     let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
     loop {
         interval.tick().await;
-        info!("yarrtube daemon is alive");
+        let searcher = searcher.clone();
+        match tokio::task::spawn_blocking(move || searcher.search()).await {
+            Ok(Ok(health)) => log_heartbeat(&health),
+            Ok(Err(e)) => warn!(error = %e, "daemon heartbeat"),
+            Err(e) => warn!(error = %e, "daemon heartbeat"),
+        }
     }
+}
+
+fn log_heartbeat(health: &DaemonHealth) {
+    info!(
+        pending_tasks = ?health.pending_tasks,
+        running_tasks = health.running_tasks,
+        oldest_eligible_task_age_seconds = health.oldest_eligible_task_age_seconds,
+        pending_events = health.pending_events,
+        dead_lettered_tasks = health.dead_lettered_tasks,
+        dead_lettered_events = health.dead_lettered_events,
+        downloads_pending = health.downloads.pending,
+        downloads_retrying = health.downloads.retrying,
+        downloads_failed = health.downloads.failed,
+        summaries_pending = health.summaries.pending,
+        summaries_retrying = health.summaries.retrying,
+        summaries_failed = health.summaries.failed,
+        categorizations_pending = health.categorizations.pending,
+        categorizations_retrying = health.categorizations.retrying,
+        categorizations_failed = health.categorizations.failed,
+        "daemon heartbeat"
+    );
 }
 
 async fn serve_http(port: u16, api_services: ApiServices) -> Result<()> {
@@ -1058,7 +1097,9 @@ async fn run_async(
     plex_label_syncer: Option<PlexLabelSyncer>,
     shutdown: oneshot::Receiver<()>,
 ) -> ExitCode {
-    tokio::spawn(heartbeat_loop());
+    tokio::spawn(heartbeat_loop(Arc::new(daemon_health_searcher(
+        &infrastructure,
+    ))));
     let poll_interval = background_poll_interval();
     tokio::spawn(
         Arc::new(event_consumer(&infrastructure, plex, plex_label_syncer)).run(poll_interval),
