@@ -195,8 +195,10 @@ Several layers, from fast/isolated to slow/real:
 - **Rust unit tests** — inline `mod tests` in domain value objects and
   entities (`src/domain/**`). Pure logic: parsing/validation, state
   transitions, invariants. No I/O.
-- **Rust behavior tests** — inline `mod tests` in HTTP handlers,
-  subscribers, tasks and services. Exercise the real wiring (service +
+- **Rust behavior tests** — `mod tests` in HTTP handlers and tasks, kept
+  in a sibling `tests.rs` (`http/<resource>/tests.rs`,
+  `tasks/<task>/tests.rs`) so the production file stays short; inline
+  `mod tests` in subscribers and services. Exercise the real wiring (service +
   real SQLite repos via `Connection::open_in_memory()`) with `Fake*`
   doubles only at the external boundaries (YouTube API, yt-dlp,
   filesystem). Assert the full outcome: response, persisted state, and

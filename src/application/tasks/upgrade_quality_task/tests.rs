@@ -1,0 +1,1369 @@
+use super::*;
+use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+use crate::domain::channel_video::ChannelVideo;
+use crate::domain::event::{DomainEvent, ScheduledEvent};
+use crate::domain::playlist::PlaylistPath;
+use crate::domain::services::VideoOwnerFinder;
+use crate::domain::shared::{Quality, ReconcileInterval};
+use crate::domain::video::Chapters;
+use crate::domain::video::DownloadedQuality;
+use crate::domain::video::{
+    DownloadedVideo, EpisodeNumber, PlaybackPosition, QualityProbe, RetryAttempts, StepState,
+    StepStatus, Video, VideoDownloaded, YoutubeVideoId,
+};
+use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+use crate::infrastructure::repositories::sqlite_channel_repository::{
+    ChannelRepository, SqliteChannelRepository,
+};
+use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+    ChannelVideoRepository, SqliteChannelVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_video_repository::{
+    SqliteVideoRepository, VideoRepository,
+};
+use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+use crate::infrastructure::shared::domain_events::event_repository::{
+    EventRepository, SqliteEventRepository,
+};
+use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+use crate::infrastructure::shared::staging_area::StagingArea;
+use crate::infrastructure::shared::system_clock::FixedClock;
+use chrono::{DateTime, Duration, Utc};
+use std::path::PathBuf;
+
+#[test]
+fn it_should_replace_the_file_with_a_higher_quality_download() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(1080),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: Some(1080),
+                ..DownloadedQuality::done_at(Some(now()))
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        *video_file_repository.moved.lock().unwrap(),
+        vec![(
+            staging(&video).join("yt1.mp4"),
+            PathBuf::from(OUTPUT_DIR).join(FILENAME),
+        )]
+    );
+    assert_eq!(
+        *video_file_repository.deleted_dirs.lock().unwrap(),
+        vec![staging(&video)]
+    );
+    assert_eq!(
+        *video_downloader_repository.quality_calls.lock().unwrap(),
+        vec![(YT1_URL.to_string(), Quality::High)]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![ScheduledEvent {
+            id: 1,
+            event_type: "video_downloaded".to_string(),
+            payload: DomainEvent::VideoDownloaded(VideoDownloaded {
+                video_id: video.id.as_str().to_string(),
+                output_dir: OUTPUT_DIR.to_string(),
+                folder: "Season 2026".to_string(),
+            })
+            .payload()
+            .to_string(),
+            retries: 0,
+            run_at: now(),
+            created_at: now(),
+            updated_at: now(),
+            last_error: None,
+        }]
+    );
+}
+
+#[test]
+fn it_should_count_a_degraded_upgrade_as_a_failed_check() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(720),
+            sabr_notice: Some(
+                "YouTube may have enabled the SABR-only streaming experiment".to_string(),
+            ),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(now() - Duration::days(8)),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: now() + Duration::minutes(10),
+            reason: "YouTube's SABR-only streaming degraded the quality check".to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: Some(720),
+                ..DownloadedQuality::checked(Some(now()), 1)
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        *video_file_repository.moved.lock().unwrap(),
+        vec![(
+            staging(&video).join("yt1.mp4"),
+            PathBuf::from(OUTPUT_DIR).join(FILENAME),
+        )]
+    );
+    assert_eq!(
+        *video_file_repository.deleted_dirs.lock().unwrap(),
+        vec![staging(&video)]
+    );
+    assert_eq!(
+        *video_downloader_repository.quality_calls.lock().unwrap(),
+        vec![(YT1_URL.to_string(), Quality::High)]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![ScheduledEvent {
+            id: 1,
+            event_type: "video_downloaded".to_string(),
+            payload: DomainEvent::VideoDownloaded(VideoDownloaded {
+                video_id: video.id.as_str().to_string(),
+                output_dir: OUTPUT_DIR.to_string(),
+                folder: "Season 2026".to_string(),
+            })
+            .payload()
+            .to_string(),
+            retries: 0,
+            run_at: now(),
+            created_at: now(),
+            updated_at: now(),
+            last_error: None,
+        }]
+    );
+}
+
+#[test]
+fn it_should_record_the_check_if_nothing_better_is_available() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(360),
+            published_at: Some(published_yesterday()),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: video.downloaded_quality.height,
+                ..DownloadedQuality::checked(Some(now()), 0)
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_schedule_the_next_check_if_the_quality_check_fails() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::new(true)
+            .with_quality_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: now() + Duration::minutes(10),
+            reason: "HTTP Error 429: Too Many Requests".to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: video.downloaded_quality.height,
+                ..DownloadedQuality::checked(Some(now()), 1)
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_fail_the_quality_after_the_eleventh_failed_check() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::new(true)
+            .with_quality_probe(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
+    );
+    let video = Video {
+        downloaded_quality: DownloadedQuality {
+            height: Some(360),
+            ..DownloadedQuality::checked(Some(now() - Duration::days(2)), 10)
+        },
+        ..sd_video()
+    };
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                state: StepState {
+                    status: StepStatus::Failed,
+                    attempts: RetryAttempts {
+                        failed: 11,
+                        last_failed_at: Some(now()),
+                    },
+                },
+                last_checked_at: Some(now()),
+                height: video.downloaded_quality.height
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_keep_the_file_if_the_redownload_fails() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::with_failed_reason("HTTP Error 403: Forbidden")
+            .with_quality_probe(Ok(QualityProbe {
+                degraded: false,
+                height: Some(1080),
+                published_at: Some(published_yesterday()),
+            })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: now() + Duration::minutes(10),
+            reason: "yt-dlp failed to download a higher quality: HTTP Error 403: Forbidden"
+                .to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: video.downloaded_quality.height,
+                ..DownloadedQuality::checked(Some(now()), 1)
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        *video_downloader_repository.calls.lock().unwrap(),
+        vec![(YT1_URL.to_string(), Quality::High, staging(&video))]
+    );
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_keep_the_file_if_the_redownload_is_no_better() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(240),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: now() + Duration::minutes(10),
+            reason:
+                "yt-dlp downloaded no higher quality (Some(240)) than the recorded one (Some(360))"
+                    .to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: video.downloaded_quality.height,
+                ..DownloadedQuality::checked(Some(now()), 1)
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        *video_downloader_repository.calls.lock().unwrap(),
+        vec![(YT1_URL.to_string(), Quality::High, staging(&video))]
+    );
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_keep_the_file_if_the_redownload_is_no_taller() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(360),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: now() + Duration::minutes(10),
+            reason:
+                "yt-dlp downloaded no higher quality (Some(360)) than the recorded one (Some(360))"
+                    .to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: video.downloaded_quality.height,
+                ..DownloadedQuality::checked(Some(now()), 1)
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        *video_downloader_repository.calls.lock().unwrap(),
+        vec![(YT1_URL.to_string(), Quality::High, staging(&video))]
+    );
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_settle_quality_once_the_video_is_old() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(360),
+            published_at: Some(now() - Duration::days(8)),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: video.downloaded_quality.height,
+                ..DownloadedQuality::done_at(Some(now()))
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_count_a_degraded_probe_as_a_failed_check() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
+            degraded: true,
+            height: Some(360),
+            published_at: Some(now() - Duration::days(30)),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: now() + Duration::minutes(10),
+            reason: "YouTube's SABR-only streaming degraded the quality check".to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: video.downloaded_quality.height,
+                ..DownloadedQuality::checked(Some(now()), 1)
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_keep_watch_progress_recorded_while_upgrading() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    let progressed =
+        video
+            .clone()
+            .update_watch_state(PlaybackPosition::new(30).unwrap(), None, false, now());
+    let video_downloader_repository = Arc::new({
+        let video_repository = video_repository.clone();
+        let progressed = progressed.clone();
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(1080),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        }))
+        .with_on_download(move || video_repository.update(&progressed).unwrap())
+    });
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository,
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            updated_at: now(),
+            version: 2,
+            downloaded_quality: DownloadedQuality {
+                height: Some(1080),
+                ..DownloadedQuality::done_at(Some(now()))
+            },
+            ..progressed
+        }]
+    );
+}
+
+#[test]
+fn it_should_skip_the_upgrade_if_the_video_was_reset_meanwhile() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    let reset = video.clone().reset_for_redownload(now());
+    let video_downloader_repository = Arc::new({
+        let video_repository = video_repository.clone();
+        let reset = reset.clone();
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(1080),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        }))
+        .with_on_download(move || video_repository.update(&reset).unwrap())
+    });
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository,
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            ..reset
+        }]
+    );
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_skip_the_upgrade_if_the_video_was_redownloaded_meanwhile() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    let redownloaded = video.clone().mark_downloaded(
+        Quality::High,
+        "Season 2026/S2026E031501 - My Renamed Video.mp4",
+        Some("Season 2026/S2026E031501 - My Renamed Video.jpg".to_string()),
+        Some(600),
+        now(),
+    );
+    let video_downloader_repository = Arc::new({
+        let video_repository = video_repository.clone();
+        let redownloaded = redownloaded.clone();
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(1080),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        }))
+        .with_on_download(move || video_repository.update(&redownloaded).unwrap())
+    });
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository,
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            ..redownloaded
+        }]
+    );
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_skip_a_video_with_settled_quality() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        })),
+    );
+    let video = Video {
+        downloaded_quality: DownloadedQuality {
+            height: Some(360),
+            ..DownloadedQuality::done_at(None)
+        },
+        ..sd_video()
+    };
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.list().unwrap(), vec![video]);
+    assert_eq!(
+        *video_downloader_repository.quality_calls.lock().unwrap(),
+        vec![]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_upgrade_at_the_current_quality_into_the_current_show_folder_of_its_owner() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(720),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(720),
+            published_at: Some(published_yesterday()),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(
+            &my_channel()
+                .with_quality(Quality::Mid)
+                .with_path(PlaylistPath::new("Renamed Channel").unwrap()),
+        )
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            download: video
+                .clone()
+                .map_file(|file| file.with_quality(Quality::Mid))
+                .download,
+            updated_at: now(),
+            downloaded_quality: DownloadedQuality {
+                height: Some(720),
+                ..DownloadedQuality::done_at(Some(now()))
+            },
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        *video_downloader_repository.quality_calls.lock().unwrap(),
+        vec![(YT1_URL.to_string(), Quality::Mid)]
+    );
+    assert_eq!(
+        *video_downloader_repository.calls.lock().unwrap(),
+        vec![(YT1_URL.to_string(), Quality::Mid, staging(&video))]
+    );
+    assert_eq!(
+        *video_file_repository.moved.lock().unwrap(),
+        vec![(
+            staging(&video).join("yt1.mp4"),
+            PathBuf::from("/videos/Renamed Channel").join(FILENAME),
+        )]
+    );
+}
+
+#[test]
+fn it_should_skip_if_no_playlist_or_channel_holds_the_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(
+        FakeVideoDownloaderRepository::new(true).with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        })),
+    );
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.list().unwrap(), vec![video]);
+    assert_eq!(
+        *video_downloader_repository.quality_calls.lock().unwrap(),
+        vec![]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_skip_if_video_is_gone() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::new(true));
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&sd_video()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.list().unwrap(), vec![]);
+    assert_eq!(
+        *video_downloader_repository.quality_calls.lock().unwrap(),
+        vec![]
+    );
+    assert_eq!(*video_downloader_repository.calls.lock().unwrap(), vec![]);
+}
+
+const YT1_URL: &str = "https://www.youtube.com/watch?v=yt1";
+const OUTPUT_DIR: &str = "/videos/My Channel";
+const FILENAME: &str = "Season 2026/S2026E031501 - My Video.mp4";
+
+/// `yt1`, published yesterday, downloaded at 360p a day ago as episode
+/// `2026`/`031501` with its subtitles and chapters settled and half
+/// watched; its `high` quality unsettled.
+fn sd_video() -> Video {
+    let downloaded_at = now() - Duration::days(1);
+    Video {
+        chapters: Chapters {
+            found: Some(vec![]),
+            ..Chapters::done_at(None)
+        },
+        downloaded_quality: DownloadedQuality {
+            height: Some(360),
+            ..DownloadedQuality::checked(Some(downloaded_at), 0)
+        },
+        ..Video::create(
+            YoutubeVideoId::new("yt1").unwrap(),
+            "My Video",
+            downloaded_at,
+        )
+        .with_episode_number(
+            EpisodeNumber::from_columns(2026, 31501).unwrap(),
+            downloaded_at,
+        )
+        .mark_downloaded(
+            Quality::High,
+            FILENAME,
+            Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+            Some(600),
+            downloaded_at,
+        )
+        .mark_subtitles_fetched("Season 2026/S2026E031501 - My Video.en.srt", downloaded_at)
+        .with_chapters(vec![], downloaded_at)
+        .update_watch_state(
+            PlaybackPosition::new(300).unwrap(),
+            None,
+            false,
+            downloaded_at,
+        )
+    }
+}
+
+/// The re-download `yt-dlp` staged for `yt1`.
+fn staged_download() -> DownloadedVideo {
+    DownloadedVideo {
+        media_path: PathBuf::from("yt1.mp4"),
+        thumbnail_path: Some(PathBuf::from("yt1.jpg")),
+        duration_seconds: Some(600),
+        published_at: Some(published_yesterday()),
+        sabr_notice: None,
+        chapters: Some(vec![]),
+        height: None,
+    }
+}
+
+fn staging(video: &Video) -> PathBuf {
+    PathBuf::from(format!("/videos/.downloads/{}", video.id.as_str()))
+}
+
+fn task_for(video: &Video) -> Task {
+    Task::UpgradeQuality {
+        video_id: video.id.as_str().to_string(),
+    }
+}
+
+fn my_channel_id() -> ChannelHandle {
+    ChannelHandle::new("@mychannel").unwrap()
+}
+
+/// The channel holding `sd_video()`, its show folder `OUTPUT_DIR`.
+fn my_channel() -> Channel {
+    Channel::create(
+        my_channel_id(),
+        "My Channel",
+        "UC123",
+        Quality::High,
+        VideoLimit::new(10).unwrap(),
+        ReconcileInterval::default_interval(),
+        PlaylistPath::new("My Channel").unwrap(),
+        None,
+        now(),
+    )
+}
+
+fn published_yesterday() -> DateTime<Utc> {
+    now() - Duration::days(1)
+}
+
+fn now() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-03-16T10:00:00Z")
+        .unwrap()
+        .to_utc()
+}
+
+fn run(task: &UpgradeQualityTask, queued: &Task) -> Result<TaskOutcome, String> {
+    task.handle(queued).map_err(|e| e.to_string())
+}
