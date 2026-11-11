@@ -56,7 +56,7 @@ impl PlaylistViewSearcherApi for PlaylistViewSearcher {
         let playlists = self.repository.list()?;
         let videos = self.videos_by_playlist()?;
         let tasks = self.task_repository.list_non_completed()?;
-        let events = self.event_repository.list_eligible()?;
+        let events = self.event_repository.list_pending()?;
         Ok(playlists
             .into_iter()
             .map(|playlist| {

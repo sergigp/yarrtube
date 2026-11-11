@@ -227,6 +227,7 @@ mod tests {
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
+    use crate::domain::video::VideoDownloaded;
     use crate::domain::video::WatchState;
 
     use crate::domain::services::ShowFileWriter;
@@ -288,7 +289,9 @@ mod tests {
         ChannelVideoListing, FakeChannelVideosRepository,
     };
 
-    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_publisher::{
+        EventPublisher, SqliteEventPublisher,
+    };
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
@@ -307,7 +310,8 @@ mod tests {
     async fn it_should_create_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -434,7 +438,8 @@ mod tests {
     async fn it_should_fail_to_create_a_channel_with_summaries_if_ai_is_off() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         // Failing lookup: reaching YouTube would answer 502, not 409.
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
@@ -469,7 +474,8 @@ mod tests {
             let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             preferences_repository.save(&preferences).unwrap();
             let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-            let event_repository = SqliteEventRepository::new(db.database());
+            let event_repository =
+                SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
             // Failing lookup: reaching YouTube would answer 502, not 409.
             let channel_creator = ChannelCreator::new(
                 channel_repository.clone(),
@@ -502,7 +508,8 @@ mod tests {
     async fn it_should_create_a_channel_with_the_default_interval() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -545,7 +552,8 @@ mod tests {
     async fn it_should_create_a_channel_with_its_interval() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -588,7 +596,8 @@ mod tests {
     async fn it_should_create_a_channel_from_a_youtube_url() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -620,7 +629,8 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel_with_avatar())),
@@ -712,7 +722,8 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::failing());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel_with_avatar())),
@@ -740,7 +751,8 @@ mod tests {
     async fn it_should_return_the_existing_channel_if_already_created() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
@@ -771,7 +783,8 @@ mod tests {
     async fn it_should_keep_the_interval_of_an_existing_channel_on_duplicate_create() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let existing =
             channel("@somechannel").with_reconcile_interval(ReconcileInterval::new(60).unwrap());
         channel_repository.insert(&existing).unwrap();
@@ -810,7 +823,8 @@ mod tests {
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         preferences_repository.save(&categorization_on()).unwrap();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let existing = channel("@somechannel");
         channel_repository.insert(&existing).unwrap();
         let channel_creator = ChannelCreator::new(
@@ -837,7 +851,8 @@ mod tests {
     async fn it_should_return_the_existing_channel_if_handle_differs_in_case() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
@@ -862,7 +877,8 @@ mod tests {
     async fn it_should_publish_channel_created_only_once() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -1025,7 +1041,8 @@ mod tests {
     async fn it_should_fail_to_create_if_channel_not_found_on_youtube() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(None),
@@ -1051,7 +1068,8 @@ mod tests {
     async fn it_should_fail_to_create_if_youtube_lookup_fails() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             Arc::new(FailingYoutubeChannelRepository),
@@ -1078,7 +1096,8 @@ mod tests {
     async fn it_should_preview_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = SqliteChannelRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let task_repository =
             SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_previewer =
@@ -1182,7 +1201,8 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
@@ -1220,7 +1240,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         task_repository
             .schedule(
@@ -1274,7 +1295,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         task_repository
             .schedule(
@@ -1714,7 +1736,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let show_locks = Arc::new(ShowLocks::default());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let (video, channel_video) = save_channel_video(
@@ -1850,7 +1873,8 @@ mod tests {
     async fn it_should_fail_to_delete_a_missing_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
@@ -2542,7 +2566,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2574,7 +2601,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2584,6 +2614,64 @@ mod tests {
         assert_eq!(
             response,
             Ok(vec![ChannelListItemResponse {
+                work_in_progress: true,
+                ..some_channel_list_item_response()
+            }])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_channel_with_a_backing_off_downloaded_video_event_as_work_in_progress()
+     {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = save_downloaded_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "vid_downloaded",
+            0,
+        );
+        let downloaded = DomainEvent::VideoDownloaded(VideoDownloaded {
+            video_id: video.id.as_str().to_string(),
+            output_dir: "/videos/creators/somechannel".to_string(),
+            folder: "Season 2023".to_string(),
+        });
+        event_publisher(&db).publish(&downloaded).unwrap();
+        event_repository
+            .update(&ScheduledEvent {
+                retries: 1,
+                run_at: fixed_timestamp() + chrono::Duration::hours(1),
+                last_error: Some("Plex unreachable".to_string()),
+                ..pending_event(1, downloaded)
+            })
+            .unwrap();
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            event_repository,
+            "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![ChannelListItemResponse {
+                unwatched_count: 1,
                 work_in_progress: true,
                 ..some_channel_list_item_response()
             }])
@@ -2609,7 +2697,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2650,7 +2741,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2685,7 +2779,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2721,7 +2818,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2765,7 +2865,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2805,7 +2908,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2875,7 +2981,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2902,7 +3011,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let reconciler = channel_video_reconciler(
             &db,
@@ -2971,7 +3081,8 @@ mod tests {
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let (evicted, _) = save_channel_video(
             video_repository.as_ref(),
@@ -3025,7 +3136,8 @@ mod tests {
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let reconciler = channel_video_reconciler(
             &db,
@@ -3073,7 +3185,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let reconciler = channel_video_reconciler(
             &db,
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -3286,7 +3399,8 @@ mod tests {
     async fn it_should_move_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/creators/somechannel"));
         channel_repository.insert(&channel("@somechannel")).unwrap();
@@ -3335,7 +3449,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_move_a_missing_channel() {
         let db = TestDatabase::new();
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/creators/somechannel"));
         let show_mover = show_mover(&db, video_file_repository.clone());
@@ -3359,7 +3474,8 @@ mod tests {
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let video_repository = SqliteVideoRepository::new(db.database());
         let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/creators/somechannel"));
         channel_repository.insert(&channel("@somechannel")).unwrap();
@@ -3620,7 +3736,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            SqliteEventRepository::new(db.database())
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
                 .list_eligible()
                 .unwrap(),
             vec![pending_event(
@@ -3875,6 +3991,7 @@ mod tests {
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,
@@ -4248,7 +4365,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             video_file_repository,
             event_publisher(db),
             Arc::new(ShowLocks::default()),

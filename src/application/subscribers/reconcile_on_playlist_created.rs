@@ -90,7 +90,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let subscriber = ReconcileOnPlaylistCreated::new(playlist_video_reconciler(
             &db,
@@ -253,7 +254,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let subscriber = ReconcileOnPlaylistCreated::new(PlaylistVideoReconciler::new(
             playlist_repository,
@@ -304,7 +306,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let subscriber = ReconcileOnPlaylistCreated::new(playlist_video_reconciler(
             &db,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
