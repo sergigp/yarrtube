@@ -8,12 +8,13 @@
 - `src/domain/services/video_summarizer.rs`: takes an `EventPublisher`; publishes once the summary is stored and the video marked Done.
 - `src/application/subscribers/sync_video_on_video_summary_generated.rs` (new): schedules `SyncVideo` now, copy of `SyncVideoOnVideoSubtitlesFetched`.
 - `src/application/subscribers/mod.rs`: register it under `video_summary_generated`.
-- `src/serve.rs`: pass `infrastructure.event_publisher` to `VideoSummarizer::new`.
+- `src/serve.rs`: pass `infrastructure.event_publisher` to `VideoSummarizer::new` and a `CategorizationResetter` to `VideoCategorizer::new`.
 - `src/application/tasks/summarize_video_task.rs`: test helper wires a `SqliteEventPublisher`; new tests.
 - `src/domain/preferences/preferences.rs`: `changes_categorization` compares every call setting.
 - `src/application/http/preferences/mod.rs`: new test.
-- `src/domain/services/video_categorizer.rs`: `Skip::NothingPending`, checked in `prepare` before the server check.
-- `src/application/tasks/categorize_video_task.rs`: new tests.
+- `src/domain/services/video_categorizer.rs`: `Skip::NothingPending`, checked in `prepare` before the server check; takes a `CategorizationResetter` to put a given-up categorization that still has a category pending back to Pending.
+- `src/application/tasks/sync_video_task.rs`: test wiring of the new `VideoCategorizer::new` parameter.
+- `src/application/tasks/categorize_video_task.rs`: new tests; test helper wires `test_support::categorization_resetter`.
 - `doc/ARCHITECTURE.md` (step 7), `doc/AI.md` ("How a video is categorized"): the sync after a summary, the wider reset, the no-call skip.
 
 ## Types & Signatures
@@ -79,6 +80,14 @@ enum Skip {
     Unavailable(anyhow::Error),
     Failed(anyhow::Error, Box<CategorizationJob>),
 }
+pub struct VideoCategorizer { /* … */ categorization_resetter: CategorizationResetter, /* … */ }
+impl VideoCategorizer {
+    pub fn new(/* …existing… */, video_repository, categorization_resetter: CategorizationResetter) -> Self;
+    /// After a give-up: back to Pending when a category is still pending
+    /// (its `failed` verdict dropped because the settings or its prompt
+    /// changed during the attempt); the video as stored after.
+    fn reset_if_still_pending(&self, video: &Video, job: &CategorizationJob) -> anyhow::Result<Option<Video>>;
+}
 ```
 
 ## Call Stack
@@ -100,6 +109,11 @@ enum Skip {
 2. … owner, summary found → `self.pending(&video, &owner)` → empty → `Err(Skip::NothingPending)` (before `check_server`)
 3. `categorize` → `info!("skipped video categorization", reason = "no category is pending")` → `mark_categorized(&video)` → `VideoUpdater::update(&id, mark_categorized(now))` → `Ok(VideoStepOutcome::Settled)`
 
+**Last attempt overtaken by a settings change**
+1. `ask_each` → `fail_attempt(video, job, rejected, reason)` → `record_attempt_failure` (Failed) → `give_up` (each `apply_verdict_if` declines: `unchanged_since` false)
+2. → `reset_if_still_pending(video, job)` → `self.pending(video, &job.owner)` not empty → `CategorizationResetter::reset(&[video.id])` → `VideoUpdater::update(reset_categorization(now))` + `delete_failed_for_video`
+3. → `VideoStepOutcome::retry_at_or_settled(None, reason)` → `Settled`; the next sync schedules the categorization (Pending)
+
 ## Test Plan
 
 1. Behaviour tests
@@ -110,6 +124,8 @@ enum Skip {
    5. `it_should_mark_the_categorization_done_without_asking_if_nothing_is_pending` (`categorize_video_task.rs`): Retrying video (2 failed attempts), its only prompted category already has a user verdict, `FakeLlmServerRepository::unreachable()` → `Ok(TaskOutcome::Done)`, `llm.chats()` == `[]`, stored video == `Video { version: 1, categorization: StepState { Done, RetryAttempts::default() }, updated_at: later(), ..video }`.
    6. `it_should_reset_failed_verdicts_when_the_categorization_generation_settings_change` (`http/preferences/mod.rs`): for each of `categorization_context_length`, `categorization_temperature`, `categorization_thinking` changed → `failed` verdict deleted, `yes`/`no` kept, video categorization Pending (same asserts as the model-change test).
    7. `it_should_not_mark_a_category_failed_when_the_generation_settings_changed_during_its_attempt` (`categorize_video_task.rs`): temperature saved from `with_on_chat` during the last attempt, "Tech" rejected → no `failed` verdict, "Tech" pending. Expected to pass once 6 is green (same method); kept as regression.
+
+   8. `it_should_put_the_categorization_back_to_pending_when_the_settings_changed_during_its_last_attempt` (`categorize_video_task.rs`): 11th attempt, "Tech" rejected while, from `with_on_chat`, the temperature, the model, or "Tech"'s AI prompt changes (one run each) → stored video == `Video { version: 2, categorization: StepState::pending(), updated_at: later(), ..video }` and no verdicts. A new test, so the existing ones' assertions stay untouched.
 
    Toggling categorization on is already covered by `it_should_keep_failed_verdicts_when_the_same_settings_are_saved`.
 

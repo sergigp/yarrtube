@@ -67,7 +67,7 @@ A categorization SHALL re-check, when it runs, the conditions for scheduling it 
 - **THEN** the verdict for "Sicilian" is stored, none for "Tech", and "Tech" stays pending
 
 ### Requirement: Failed Verdicts Reset
-Saving a change to the Ollama URL or to any categorization setting that changes how the model is called (model, context length, temperature, thinking, prompt) SHALL delete every `failed` verdict; turning categorization on or off is not such a change. Saving a different AI prompt for a category SHALL delete that category's `failed` verdicts. The categorization of every video that had a deleted `failed` verdict SHALL be Pending; other videos' categorization SHALL be unchanged. Saving the same values SHALL change nothing. A categorization that started before such a change SHALL NOT store `failed` verdicts after it.
+Saving a change to the Ollama URL or to any categorization setting that changes how the model is called (model, context length, temperature, thinking, prompt) SHALL delete every `failed` verdict; turning categorization on or off is not such a change. Saving a different AI prompt for a category SHALL delete that category's `failed` verdicts. The categorization of every video that had a deleted `failed` verdict SHALL be Pending; other videos' categorization SHALL be unchanged. Saving the same values SHALL change nothing. A categorization that started before such a change SHALL NOT store `failed` verdicts after it; when that leaves a category pending, its categorization SHALL be Pending with no failed attempts instead of Failed.
 
 #### Scenario: New model
 - **WHEN** a video has an `failed` verdict for "Tech" and the categorization model is changed
@@ -87,8 +87,12 @@ Saving a change to the Ollama URL or to any categorization setting that changes 
 
 #### Scenario: Model changed during a last attempt
 - **WHEN** the categorization model is changed while a video's last attempt is running and "Tech" is rejected
-- **THEN** "Tech" is pending for the video again
+- **THEN** "Tech" is pending for the video again and its categorization is Pending with no failed attempts
 
 #### Scenario: Temperature changed during a last attempt
 - **WHEN** the categorization temperature is changed while a video's last attempt is running and "Tech" is rejected
-- **THEN** "Tech" is pending for the video again
+- **THEN** "Tech" is pending for the video again and its categorization is Pending with no failed attempts
+
+#### Scenario: Category prompt changed during a last attempt
+- **WHEN** "Tech"'s AI prompt is edited while a video's last attempt is running and "Tech" is rejected
+- **THEN** "Tech" is pending for the video again and its categorization is Pending with no failed attempts

@@ -47,6 +47,15 @@ minutes-long LLM call about zero categories.
   category change makes it Pending again (`CategorizationResetter`). Leaving
   it Pending or Retrying would show a categorization that never resolves,
   since the sync never schedules one with nothing pending.
+- **A last attempt overtaken by a settings change goes back to Pending.**
+  When the settings (URL, model, context length, temperature, thinking,
+  prompt) or a category's AI prompt change while a video's last attempt runs,
+  that attempt drops its `failed` verdicts but still recorded Failed, and
+  nothing ever reset it. After giving up, a categorization that still has a
+  category pending goes back to Pending (through `CategorizationResetter`), so
+  the next sync asks again with the new settings. The race predates this
+  change (model, URL, prompt), but widening `changes_categorization` makes it
+  much easier to hit, so it is fixed here.
 
 Out of scope: retrying output-limit stops, the summarizer redoing every part
 after a failure, keep_alive / model loading, attempts and backoff.
@@ -61,7 +70,8 @@ None.
 
 - `video-categorization`: "When A Video Is Categorized" (a stored summary
   syncs the video now), "Categorization Run" (nothing pending → Done with no
-  call), "Failed Verdicts Reset" (every call setting).
+  call), "Failed Verdicts Reset" (every call setting; a last attempt
+  overtaken by a change goes back to Pending).
 - `video-summaries`: "Summary Stored" (a stored summary syncs the video).
 - `preferences`: "Categorization Settings" (changing any call setting resets
   failed categorizations).
@@ -72,7 +82,7 @@ None.
   new subscriber registered in `src/application/subscribers/mod.rs`,
   `VideoSummarizer` gains an `EventPublisher` (wired in `src/serve.rs` and
   test helpers), `Preferences::changes_categorization`, `VideoCategorizer`
-  skip.
+  skip, `VideoCategorizer` gains a `CategorizationResetter`.
 - New outbox event type `video_summary_generated` (payload `{ video_id }`).
   No HTTP API, DB schema or web UI change.
 - One more `SyncVideo` per summarized video; syncs are cheap and deduped.
