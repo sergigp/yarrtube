@@ -75,7 +75,7 @@ pub use late_data_outcome::LateDataOutcome;
 pub use playback_position::PlaybackPosition;
 pub use playlist_episode_number::PlaylistEpisodeNumber;
 pub use quality_probe::QualityProbe;
-pub use retry_attempts::RetryAttempts;
+pub use retry_attempts::{RetryAttempts, UNAVAILABLE_SERVER_WAIT};
 pub use sourced_video::{SourcedVideo, VideoSource};
 pub use step_state::StepState;
 pub use step_status::StepStatus;

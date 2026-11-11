@@ -65,7 +65,9 @@ mod tests {
         CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
+    use crate::infrastructure::repositories::ollama_llm_server_repository::{
+        FakeLlmServerRepository, unreachable_error,
+    };
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -1146,12 +1148,12 @@ mod tests {
     }
 
     #[test]
-    fn it_should_count_ollama_down_as_a_failed_summary_attempt() {
+    fn it_should_wait_for_ollama_if_it_is_unreachable() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
-        let llm = Arc::new(FakeLlmServerRepository::failing());
+        let llm = Arc::new(FakeLlmServerRepository::unreachable());
         let video = subtitled_video();
         video_repository.insert(&video).unwrap();
         preferences_repository.save(&summaries_on()).unwrap();
@@ -1171,22 +1173,64 @@ mod tests {
         assert_eq!(
             result,
             Ok(TaskOutcome::RunAgainAt {
-                run_at: later() + Duration::minutes(10),
-                reason: "connection refused".to_string(),
+                run_at: later() + Duration::hours(6),
+                reason: "can't connect to Ollama: connection refused".to_string(),
             })
         );
         assert_eq!(llm.chats(), vec![]);
         assert_eq!(
             video_repository.find(&video.id).unwrap(),
-            Some(Video {
-                version: 1,
-                ..video.clone().record_summary_failure(later())
-            })
+            Some(video.clone())
         );
     }
 
     #[test]
-    fn it_should_count_a_missing_model_as_a_failed_summary_attempt() {
+    fn it_should_keep_the_failed_attempts_of_a_retrying_summary_while_waiting_for_ollama() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = Arc::new(FakeLlmServerRepository::unreachable());
+        let video = Video {
+            summary: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..subtitled_video()
+        };
+        video_repository.insert(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm,
+            files_with(SHORT_SRT),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::hours(6),
+                reason: "can't connect to Ollama: connection refused".to_string(),
+            })
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
+    }
+
+    #[test]
+    fn it_should_wait_for_ollama_if_the_model_is_missing() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -1217,8 +1261,45 @@ mod tests {
         assert_eq!(
             result,
             Ok(TaskOutcome::RunAgainAt {
-                run_at: later() + Duration::minutes(10),
+                run_at: later() + Duration::hours(6),
                 reason: "qwen3:4b isn't installed on Ollama".to_string(),
+            })
+        );
+        assert_eq!(llm.chats(), vec![]);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
+    }
+
+    #[test]
+    fn it_should_count_a_failed_server_check_as_a_failed_summary_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = Arc::new(FakeLlmServerRepository::failing());
+        let video = subtitled_video();
+        video_repository.insert(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository,
+            llm.clone(),
+            files_with(SHORT_SRT),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::minutes(10),
+                reason: "connection refused".to_string(),
             })
         );
         assert_eq!(llm.chats(), vec![]);
@@ -1487,6 +1568,50 @@ mod tests {
             ]
         );
         assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[test]
+    fn it_should_wait_for_ollama_if_it_goes_down_between_parts() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+        let llm = llm_replying(vec![reply("A."), Err(unreachable_error())]);
+        let video = subtitled_video();
+        video_repository.insert(&video).unwrap();
+        preferences_repository.save(&summaries_on()).unwrap();
+        seed_channel(&db, &video, true);
+        seed_transcript(&db, &video, "es");
+        let task = summarize_video_task(
+            &db,
+            video_repository.clone(),
+            preferences_repository,
+            summary_repository.clone(),
+            llm.clone(),
+            files_with(&srt_of(100, 60)),
+        );
+
+        let result = run(&task, &video);
+
+        assert_eq!(
+            result,
+            Ok(TaskOutcome::RunAgainAt {
+                run_at: later() + Duration::hours(6),
+                reason: "can't connect to Ollama: connection refused".to_string(),
+            })
+        );
+        assert_eq!(
+            sent_messages(&llm),
+            vec![
+                part_messages(1, 4, "0:00–29:00", &[], 0..30),
+                part_messages(2, 4, "30:00–59:00", &[], 30..60),
+            ]
+        );
+        assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(video.clone())
+        );
     }
 
     #[test]
