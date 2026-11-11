@@ -1,7 +1,8 @@
 use crate::domain::channel::ChannelDeleted;
 use crate::domain::playlist::PlaylistDeleted;
+use crate::domain::shared::retry_delay::retry_delay_seconds;
 use crate::domain::video::VideoDownloaded;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 
 const MAX_ATTEMPTS: i64 = 5;
@@ -26,6 +27,9 @@ pub struct ScheduledEvent {
     pub event_type: String,
     pub payload: String,
     pub retries: i64,
+    /// Not dispatched before this time: when it was published, or after a
+    /// failure, once its retry delay has passed.
+    pub run_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_error: Option<String>,
@@ -69,7 +73,12 @@ impl ScheduledEvent {
             .map(|payload| payload.path)
     }
 
-    pub fn fail(self, error: impl Into<String>, now: DateTime<Utc>) -> EventFailureOutcome {
+    pub fn fail(
+        self,
+        error: impl Into<String>,
+        now: DateTime<Utc>,
+        base_retry_delay_seconds: i64,
+    ) -> EventFailureOutcome {
         let error = error.into();
         let retries = self.retries + 1;
 
@@ -86,6 +95,8 @@ impl ScheduledEvent {
         } else {
             EventFailureOutcome::Retry(Self {
                 retries,
+                run_at: now
+                    + Duration::seconds(retry_delay_seconds(retries, base_retry_delay_seconds)),
                 updated_at: now,
                 last_error: Some(error),
                 ..self
@@ -115,6 +126,7 @@ mod tests {
             event_type: "playlist_created".to_string(),
             payload: "{}".to_string(),
             retries,
+            run_at: now,
             created_at: now,
             updated_at: now,
             last_error: None,
@@ -198,7 +210,7 @@ mod tests {
     fn it_should_retry_with_incremented_retries_when_below_the_attempt_limit() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
 
-        let outcome = event_with_retries(3).fail("boom", now);
+        let outcome = event_with_retries(3).fail("boom", now, 150);
 
         match outcome {
             EventFailureOutcome::Retry(retried) => {
@@ -214,7 +226,7 @@ mod tests {
     fn it_should_dead_letter_when_the_fifth_attempt_fails() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
 
-        let outcome = event_with_retries(4).fail("boom", now);
+        let outcome = event_with_retries(4).fail("boom", now, 150);
 
         match outcome {
             EventFailureOutcome::DeadLetter(dead) => {

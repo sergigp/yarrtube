@@ -997,7 +997,8 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let caption_repository = Arc::new(
             FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
@@ -1042,7 +1043,8 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video = downloaded_video();
         video_repository.insert(&video).unwrap();
         let deleting_repository = video_repository.clone();
@@ -1105,7 +1107,8 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video = downloaded_video();
         video_repository.insert(&video).unwrap();
         let reset = video.clone().reset_for_redownload(now());
@@ -1176,7 +1179,8 @@ mod tests {
         let video_transcript_repository =
             Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let video = downloaded_video();
         video_repository.insert(&video).unwrap();
         let redownloaded = video
@@ -1684,7 +1688,8 @@ mod tests {
     fn it_should_publish_that_subtitles_were_fetched() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let caption_repository = Arc::new(
             FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
                 .with_subtitles(Ok(fetched_subtitles("yt1.en.srt"))),
@@ -1810,7 +1815,8 @@ mod tests {
     fn it_should_not_publish_that_subtitles_were_fetched_if_unavailable() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let caption_repository = Arc::new(FakeCaptionRepository::with_probe(Ok(caption_probe(
             translations_only(),
         ))));
@@ -1863,7 +1869,8 @@ mod tests {
     fn it_should_not_publish_that_subtitles_were_fetched_if_the_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
         let caption_repository = Arc::new(
             FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
                 .with_subtitles(Err(anyhow::anyhow!("HTTP Error 429: Too Many Requests"))),
@@ -2050,6 +2057,7 @@ mod tests {
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: now(),
             created_at: now(),
             updated_at: now(),
             last_error: None,

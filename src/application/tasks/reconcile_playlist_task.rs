@@ -124,7 +124,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
@@ -171,7 +172,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
@@ -231,7 +233,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
@@ -294,7 +297,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let existing = Video::create(
@@ -914,7 +918,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let downloaded = Video::create(
@@ -1239,7 +1244,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let existing = my_video();
         let existing_playlist_video = save_playlist_video(
@@ -1413,7 +1419,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let thumbnail_repository = Arc::new(FakeThumbnailRepository::with_result(Some(
             fetched_thumbnail(),
         )));
@@ -1871,6 +1878,7 @@ mod tests {
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,
