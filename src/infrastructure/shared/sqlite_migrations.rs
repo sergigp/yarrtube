@@ -44,6 +44,7 @@ const VIDEO_VERSION_SQL: &str = include_str!("../../../migrations/0027_video_ver
 const VIDEO_STEP_STATUSES_SQL: &str =
     include_str!("../../../migrations/0028_video_step_statuses.sql");
 const EVENT_RUN_AT_SQL: &str = include_str!("../../../migrations/0029_event_run_at.sql");
+const LOOKUP_INDEXES_SQL: &str = include_str!("../../../migrations/0030_lookup_indexes.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(migrations())
@@ -87,6 +88,7 @@ fn migrations() -> Vec<M<'static>> {
         M::up(VIDEO_VERSION_SQL),
         M::up(VIDEO_STEP_STATUSES_SQL),
         M::up(EVENT_RUN_AT_SQL),
+        M::up(LOOKUP_INDEXES_SQL),
     ]
 }
 
@@ -206,6 +208,46 @@ mod tests {
             )
             .unwrap();
         assert_eq!(name, "Some Channel");
+    }
+
+    #[test]
+    fn it_should_create_the_lookup_indexes_on_a_fresh_database() {
+        let mut conn = Connection::open_in_memory().unwrap();
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(lookup_indexes(&conn), expected_lookup_indexes());
+    }
+
+    #[test]
+    fn it_should_add_the_lookup_indexes_when_upgrading_a_database() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 29);
+        conn.execute_batch(
+            "INSERT INTO channel_videos (channel_id, video_id, position, created_at)
+             VALUES ('@somechannel', 'vid1', 0, '2026-11-11T10:00:00+00:00');
+             INSERT INTO playlist_videos (playlist_id, video_id, position, created_at)
+             VALUES ('PL1', 'vid1', 0, '2026-11-11T10:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let memberships: (String, String) = conn
+            .query_row(
+                "SELECT c.channel_id, p.playlist_id FROM channel_videos c
+                 JOIN playlist_videos p ON p.video_id = c.video_id WHERE c.video_id = 'vid1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (lookup_indexes(&conn), memberships),
+            (
+                expected_lookup_indexes(),
+                ("@somechannel".to_string(), "PL1".to_string())
+            )
+        );
     }
 
     #[test]
@@ -1392,6 +1434,31 @@ mod tests {
             "SELECT id, {status}, {failed_attempts} FROM videos ORDER BY rowid"
         ))?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect()
+    }
+
+    /// The `(index, table)` pairs added by the lookup-indexes migration that
+    /// exist in `conn`, sorted.
+    fn lookup_indexes(conn: &Connection) -> Vec<(String, String)> {
+        conn.prepare(
+            "SELECT name, tbl_name FROM sqlite_master WHERE type = 'index'
+             AND name IN ('idx_channel_videos_video', 'idx_playlist_videos_video')
+             ORDER BY name",
+        )
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+    }
+
+    fn expected_lookup_indexes() -> Vec<(String, String)> {
+        [
+            ("idx_channel_videos_video", "channel_videos"),
+            ("idx_playlist_videos_video", "playlist_videos"),
+        ]
+        .into_iter()
+        .map(|(index, table)| (index.to_string(), table.to_string()))
         .collect()
     }
 
