@@ -50,6 +50,7 @@ impl std::error::Error for CreatePlaylistError {}
 #[derive(Debug)]
 pub enum DeletePlaylistError {
     NotFound(PlaylistId),
+    Reconciling(PlaylistId),
     Repository(anyhow::Error),
 }
 
@@ -57,6 +58,10 @@ impl fmt::Display for DeletePlaylistError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound(id) => write!(f, "playlist {id} not found"),
+            Self::Reconciling(id) => write!(
+                f,
+                "playlist {id} is being synced, try again once it finishes"
+            ),
             Self::Repository(e) => write!(f, "{e}"),
         }
     }

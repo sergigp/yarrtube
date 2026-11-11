@@ -1197,6 +1197,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1243,6 +1244,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1296,6 +1298,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1354,6 +1357,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1411,6 +1415,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1462,6 +1467,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1507,6 +1513,7 @@ mod tests {
             )),
             video_categories_repository.clone(),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1560,6 +1567,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             verdict_repository.clone(),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1622,6 +1630,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1678,6 +1687,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1721,6 +1731,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1756,6 +1767,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@missing").await;
@@ -3589,6 +3601,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(
                 unused_connection(),
             )),
+            Arc::new(ShowLocks::default()),
         )
     }
 

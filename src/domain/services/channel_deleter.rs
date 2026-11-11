@@ -12,6 +12,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::show_locks::ShowLocks;
 use std::sync::Arc;
 use tracing::info;
 
@@ -28,6 +29,7 @@ pub struct ChannelDeleter {
     task_repository: Arc<dyn TaskRepository>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    show_locks: Arc<ShowLocks>,
 }
 
 impl ChannelDeleter {
@@ -43,6 +45,7 @@ impl ChannelDeleter {
         task_repository: Arc<dyn TaskRepository>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        show_locks: Arc<ShowLocks>,
     ) -> Self {
         Self {
             repository,
@@ -55,6 +58,7 @@ impl ChannelDeleter {
             task_repository,
             video_categories_repository,
             video_category_verdict_repository,
+            show_locks,
         }
     }
 }
