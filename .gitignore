@@ -16,6 +16,9 @@
 # Container-local channel avatar storage (see serve.rs::avatars_path)
 /avatars
 
+# Local daily log files (see serve.rs::logs_path)
+/logs
+
 # Built by `npm run build` in web/, required to exist before `cargo build`
 web/dist/
 web/node_modules/
