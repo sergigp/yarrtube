@@ -9,7 +9,7 @@
 - [x] 2.1 `it_should_fail_to_delete_a_playlist_while_it_is_being_synced`: a held lock on the playlist makes the delete refuse with 409 and change nothing (adds `DeletePlaylistError::Reconciling`, `PlaylistDeleter::lock`, the 409 mapping)
 - [x] 2.2 `it_should_delete_a_playlist_while_another_source_is_being_synced`: a lock on another playlist doesn't block the delete
 - [x] 2.3 `it_should_fail_to_delete_a_channel_while_it_is_being_synced`: same as 2.1 for a channel (adds `DeleteChannelError::Reconciling`, `ChannelDeleter::lock`, the 409 mapping)
-- [ ] 2.4 `it_should_delete_a_channel_while_another_source_is_being_synced`: same as 2.2 for a channel
+- [x] 2.4 `it_should_delete_a_channel_while_another_source_is_being_synced`: same as 2.2 for a channel
 
 ## 3. Infrastructure adapters (TDD)
 

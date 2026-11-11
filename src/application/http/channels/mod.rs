@@ -1773,6 +1773,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_delete_a_channel_while_another_source_is_being_synced() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let show_locks = Arc::new(ShowLocks::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            show_locks.clone(),
+        );
+        let _reconciling = show_locks.lock(ShowKey::Channel(handle("@otherchannel")));
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_delete_the_channel_avatar() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
