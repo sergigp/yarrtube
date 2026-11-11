@@ -960,6 +960,7 @@ fn video_summarizer(infrastructure: &InfrastructureContainer) -> Arc<VideoSummar
         infrastructure.video_file_repository.clone(),
         infrastructure.llm_server_repository.clone(),
         infrastructure.video_summary_repository.clone(),
+        infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
     ))
 }
@@ -1411,6 +1412,7 @@ mod tests {
                 ("video_removed_from_channel", 1),
                 ("video_removed_from_playlist", 1),
                 ("video_subtitles_fetched", 1),
+                ("video_summary_generated", 1),
             ])
         );
     }

@@ -16,6 +16,7 @@ use crate::infrastructure::repositories::sqlite_preferences_repository::Preferen
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
+use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::{Context, anyhow};
@@ -103,6 +104,8 @@ pub struct VideoSummarizer {
     video_file_repository: Arc<dyn VideoFileRepository>,
     llm_server_repository: Arc<dyn LlmServerRepository>,
     video_summary_repository: Arc<dyn VideoSummaryRepository>,
+    #[allow(dead_code)]
+    event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     video_updater: VideoUpdater,
 }
@@ -117,6 +120,7 @@ impl VideoSummarizer {
         video_file_repository: Arc<dyn VideoFileRepository>,
         llm_server_repository: Arc<dyn LlmServerRepository>,
         video_summary_repository: Arc<dyn VideoSummaryRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -128,6 +132,7 @@ impl VideoSummarizer {
             video_file_repository,
             llm_server_repository,
             video_summary_repository,
+            event_publisher,
             clock,
         }
     }
@@ -287,6 +292,11 @@ impl VideoSummarizer {
         );
         Ok(())
     }
+
+    /// Best effort, like `VideoSubtitlesFetched`: a lost event only delays
+    /// the categorization to the next reconcile pass.
+    #[allow(dead_code)]
+    fn publish_generated(&self, _video: &Video) {}
 
     /// The stored video when the generated summary should still be stored
     /// now the minutes-long generation is done: the video still exists and

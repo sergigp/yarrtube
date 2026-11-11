@@ -86,6 +86,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
         SqliteVideoTranscriptRepository, VideoTranscriptRepository,
     };
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
@@ -2032,6 +2033,10 @@ mod tests {
                 files,
                 llm,
                 summary_repository,
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(later())),
+                )),
                 Arc::new(FixedClock(later())),
             )),
         )

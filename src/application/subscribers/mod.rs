@@ -15,6 +15,7 @@ pub mod sync_video_on_video_added_to_channel;
 pub mod sync_video_on_video_added_to_playlist;
 pub mod sync_video_on_video_downloaded;
 pub mod sync_video_on_video_subtitles_fetched;
+pub mod sync_video_on_video_summary_generated;
 
 use crate::domain::channel::{ChannelCreated, ChannelDeleted};
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
@@ -25,7 +26,7 @@ use crate::domain::services::{
     PlexLabelSyncer,
 };
 use crate::domain::show::ShowMoved;
-use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched};
+use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched, VideoSummaryGenerated};
 use crate::domain::video_category::VideoCategoriesChanged;
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -51,6 +52,7 @@ use sync_video_on_video_added_to_channel::SyncVideoOnVideoAddedToChannel;
 use sync_video_on_video_added_to_playlist::SyncVideoOnVideoAddedToPlaylist;
 use sync_video_on_video_downloaded::SyncVideoOnVideoDownloaded;
 use sync_video_on_video_subtitles_fetched::SyncVideoOnVideoSubtitlesFetched;
+use sync_video_on_video_summary_generated::SyncVideoOnVideoSummaryGenerated;
 
 /// Maps each domain event type to the subscribers that react to it, handed
 /// to `DomainEventsConsumer` at composition time.
@@ -105,6 +107,13 @@ pub fn registry(
     registry.insert(
         VideoSubtitlesFetched::EVENT_TYPE.to_string(),
         vec![Arc::new(SyncVideoOnVideoSubtitlesFetched::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
+    registry.insert(
+        VideoSummaryGenerated::EVENT_TYPE.to_string(),
+        vec![Arc::new(SyncVideoOnVideoSummaryGenerated::new(
             task_repository.clone(),
             clock.clone(),
         ))],

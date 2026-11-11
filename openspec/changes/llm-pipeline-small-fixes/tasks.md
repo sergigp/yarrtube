@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every file, type and signature from design.md: `VideoSummaryGenerated` (+ re-export, `DomainEvent` variant with type/payload arms), `VideoSummarizer` taking an `EventPublisher` (wired in `src/serve.rs` and the `summarize_video_task` test helper with a `SqliteEventPublisher`), `publish_generated` stub doing nothing, `SyncVideoOnVideoSummaryGenerated` with `handle` returning `Ok(())` registered under `video_summary_generated` in `subscribers/mod.rs`, `Skip::NothingPending` (never returned yet; `categorize` arm settling). Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
+- [x] 1.1 Create every file, type and signature from design.md: `VideoSummaryGenerated` (+ re-export, `DomainEvent` variant with type/payload arms), `VideoSummarizer` taking an `EventPublisher` (wired in `src/serve.rs` and the `summarize_video_task` test helper with a `SqliteEventPublisher`), `publish_generated` stub doing nothing, `SyncVideoOnVideoSummaryGenerated` with `handle` returning `Ok(())` registered under `video_summary_generated` in `subscribers/mod.rs`, `Skip::NothingPending` (never returned yet; `categorize` arm settling). Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
 
 ## 2. Behaviour (TDD)
 

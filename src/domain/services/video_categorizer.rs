@@ -29,6 +29,10 @@ use tracing::{error, info, warn};
 enum Skip {
     /// It shouldn't be, for now.
     NotWanted(&'static str),
+    /// No category is pending for the video: nothing to ask, so it is
+    /// categorized as it stands (Done), without checking the server.
+    #[allow(dead_code)]
+    NothingPending,
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
     /// Ollama can't be connected to or hasn't the saved model: wait for it,
@@ -180,6 +184,7 @@ impl VideoCategorizerApi for VideoCategorizer {
                 info!(video_id = %video.id, reason, "skipped video categorization");
                 Ok(VideoStepOutcome::Settled)
             }
+            Err(Skip::NothingPending) => Ok(VideoStepOutcome::Settled),
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
                 Ok(VideoStepOutcome::Settled)
