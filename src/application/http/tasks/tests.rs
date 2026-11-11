@@ -1,0 +1,1091 @@
+use super::*;
+use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+use crate::domain::channel_video::ChannelVideo;
+use crate::domain::playlist::PlaylistId;
+use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
+use crate::domain::playlist_video::PlaylistVideo;
+use crate::domain::shared::{Quality, ReconcileInterval};
+use crate::domain::task::Task;
+use crate::domain::video::{
+    Chapters, Download, DownloadedQuality, StepState, Subtitles, Thumbnail, Video, VideoId,
+    WatchState, YoutubeVideoId,
+};
+use crate::infrastructure::repositories::sqlite_channel_repository::{
+    ChannelRepository, SqliteChannelRepository,
+};
+use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+    ChannelVideoRepository, SqliteChannelVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_playlist_repository::{
+    PlaylistRepository, SqlitePlaylistRepository,
+};
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+    PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_task_repository::{
+    SqliteTaskRepository, TaskRepository,
+};
+use crate::infrastructure::repositories::sqlite_video_repository::{
+    SqliteVideoRepository, VideoRepository,
+};
+use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+use crate::infrastructure::shared::system_clock::FixedClock;
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+#[tokio::test]
+async fn it_should_list_no_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(response, Ok(vec![]));
+}
+
+#[tokio::test]
+async fn it_should_include_future_pending_tasks() {
+    let db = TestDatabase::new();
+    let future = fixed_timestamp() + chrono::Duration::seconds(60);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&Task::UpdateYtdlp, future)
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![TaskResponse {
+            run_at: future,
+            ..pending_task("update_ytdlp", &[])
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_running_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+        .unwrap();
+    let running = task_repository.list_non_completed().unwrap()[0]
+        .clone()
+        .start(fixed_timestamp());
+    task_repository.update(&running).unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![TaskResponse {
+            status: "running".to_string(),
+            ..pending_task("update_ytdlp", &[])
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_playlist_id_in_reconcile_playlist_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::ReconcilePlaylist {
+                playlist_id: "PL1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "reconcile_playlist",
+            &[("playlist_id", "PL1"), ("playlist_name", "My Playlist")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_playlist_id_if_playlist_is_gone() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::ReconcilePlaylist {
+                playlist_id: "PL1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "reconcile_playlist",
+            &[("playlist_id", "PL1")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_channel_id_in_reconcile_channel_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::ReconcileChannel {
+                channel_id: "@somechannel".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    channel_repository
+        .insert(&channel("@somechannel", "Some Channel"))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        channel_repository,
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "reconcile_channel",
+            &[
+                ("channel_id", "@somechannel"),
+                ("channel_name", "Some Channel")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_channel_id_if_channel_is_gone() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::ReconcileChannel {
+                channel_id: "@somechannel".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "reconcile_channel",
+            &[("channel_id", "@somechannel")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_video_and_playlist_in_download_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    task_repository
+        .schedule(&download_video_task("rec1"), fixed_timestamp())
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "download_video",
+            &[
+                ("video_title", "My Video"),
+                ("playlist_name", "My Playlist")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::FetchThumbnail {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "fetch_thumbnail",
+            &[
+                ("video_title", "My Video"),
+                ("playlist_name", "My Playlist")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_fetch_subtitles_task_with_video_and_playlist_names() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::FetchSubtitles {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "fetch_subtitles",
+            &[
+                ("video_title", "My Video"),
+                ("playlist_name", "My Playlist")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_fetch_chapters_task_with_video_and_playlist_names() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::FetchChapters {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "fetch_chapters",
+            &[
+                ("video_title", "My Video"),
+                ("playlist_name", "My Playlist")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_summarize_video_task_with_video_and_playlist_names() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::SummarizeVideo {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "summarize_video",
+            &[
+                ("video_title", "My Video"),
+                ("playlist_name", "My Playlist")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_summarize_video_task_with_video_and_channel_names() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::SummarizeVideo {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    channel_repository
+        .insert(&channel("@somechannel", "Some Channel"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo::create(
+            ChannelHandle::new("@somechannel").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        channel_repository,
+        video_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_video_repository,
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "summarize_video",
+            &[
+                ("video_title", "My Video"),
+                ("channel_name", "Some Channel")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_summarize_video_task_whose_video_is_gone() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::SummarizeVideo {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(response, Ok(vec![pending_task("summarize_video", &[])]));
+}
+
+#[tokio::test]
+async fn it_should_list_a_categorize_video_task_with_video_and_channel_names() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::CategorizeVideo {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    channel_repository
+        .insert(&channel("@somechannel", "Some Channel"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo::create(
+            ChannelHandle::new("@somechannel").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        channel_repository,
+        video_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_video_repository,
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "categorize_video",
+            &[
+                ("video_title", "My Video"),
+                ("channel_name", "Some Channel")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_an_upgrade_quality_task_with_its_video_context() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::UpgradeQuality {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "upgrade_quality",
+            &[
+                ("video_title", "My Video"),
+                ("playlist_name", "My Playlist")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_video_sync_with_its_video_title_and_owner_name() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    task_repository
+        .schedule(
+            &Task::SyncVideo {
+                video_id: "rec1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    playlist_repository
+        .insert(&playlist("PL1", "My Playlist"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        playlist_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "sync_video",
+            &[
+                ("video_title", "My Video"),
+                ("playlist_name", "My Playlist")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_video_and_channel_in_download_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    task_repository
+        .schedule(&download_video_task("rec1"), fixed_timestamp())
+        .unwrap();
+    channel_repository
+        .insert(&channel("@somechannel", "Some Channel"))
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo::create(
+            ChannelHandle::new("@somechannel").unwrap(),
+            VideoId::new("rec1").unwrap(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        channel_repository,
+        video_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_video_repository,
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "download_video",
+            &[
+                ("video_title", "My Video"),
+                ("channel_name", "Some Channel")
+            ]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_omit_details_if_video_is_untracked() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&download_video_task("rec1"), fixed_timestamp())
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(response, Ok(vec![pending_task("download_video", &[])]));
+}
+
+#[tokio::test]
+async fn it_should_include_filename_in_delete_video_file_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::DeleteVideoFile {
+                filename: Some("My Video.mp4".to_string()),
+                thumbnail_filename: Some("My Video.jpg".to_string()),
+                subtitle_filename: None,
+                output_dir: "/videos/music".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "delete_video_file",
+            &[("filename", "My Video.mp4")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_omit_details_if_video_has_no_filename() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::DeleteVideoFile {
+                filename: None,
+                thumbnail_filename: None,
+                subtitle_filename: None,
+                output_dir: "/videos/music".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(response, Ok(vec![pending_task("delete_video_file", &[])]));
+}
+
+#[tokio::test]
+async fn it_should_include_path_in_delete_playlist_files_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::DeletePlaylistFiles {
+                playlist_id: "PL1".to_string(),
+                path: "music/chill".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "delete_playlist_files",
+            &[("path", "music/chill")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_path_in_delete_channel_files_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::DeleteChannelFiles {
+                channel_id: "@somechannel".to_string(),
+                path: "creators/somechannel".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "delete_channel_files",
+            &[("path", "creators/somechannel")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_omit_details_for_update_ytdlp_tasks() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(response, Ok(vec![pending_task("update_ytdlp", &[])]));
+}
+
+fn download_video_task(video_id: &str) -> Task {
+    Task::DownloadVideo {
+        video_id: video_id.to_string(),
+    }
+}
+
+fn pending_task(task_type: &str, payload: &[(&str, &str)]) -> TaskResponse {
+    TaskResponse {
+        id: 1,
+        task_type: task_type.to_string(),
+        status: "pending".to_string(),
+        retries: 0,
+        run_at: fixed_timestamp(),
+        created_at: fixed_timestamp(),
+        last_error: None,
+        payload: payload
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect::<HashMap<_, _>>(),
+    }
+}
+
+fn fixed_timestamp() -> DateTime<Utc> {
+    DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+}
+
+fn playlist(id: &str, name: &str) -> Playlist {
+    Playlist::create(
+        PlaylistId::new(id).unwrap(),
+        PlaylistName::new(name).unwrap(),
+        PlaylistPath::new("my-playlist").unwrap(),
+        Quality::High,
+        PlaylistKind::YoutubeLinked,
+        false,
+        ReconcileInterval::default_interval(),
+        fixed_timestamp(),
+    )
+}
+
+fn channel(id: &str, name: &str) -> Channel {
+    Channel::create(
+        ChannelHandle::new(id).unwrap(),
+        name,
+        "UC123",
+        Quality::High,
+        VideoLimit::new(10).unwrap(),
+        ReconcileInterval::default_interval(),
+        PlaylistPath::new("creators/somechannel").unwrap(),
+        None,
+        fixed_timestamp(),
+    )
+}
+
+fn video(id: &str, title: &str) -> Video {
+    Video {
+        id: VideoId::new(id).unwrap(),
+        youtube_id: YoutubeVideoId::new("yt1").unwrap(),
+        title: title.to_string(),
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        synced_at: None,
+        episode_number: None,
+        summary: StepState::pending(),
+        categorization: StepState::pending(),
+        version: 0,
+        watch: WatchState::unwatched(),
+        subtitles: Subtitles::pending(),
+        chapters: Chapters::pending(),
+        downloaded_quality: DownloadedQuality::pending(),
+        thumbnail: Thumbnail::pending(),
+        download: Download::pending(),
+    }
+}
+
+async fn list(task_view_searcher: TaskViewSearcher) -> Result<Vec<TaskResponse>, ApiError> {
+    list_tasks(State(task_view_searcher))
+        .await
+        .map(|Json(tasks)| tasks)
+}
