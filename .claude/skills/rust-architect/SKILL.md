@@ -44,15 +44,18 @@ src/
       blocking.rs            # run_blocking
       validation.rs          # required() + shared missing-field messages
       <resource>/
-        mod.rs                # handlers only
+        mod.rs                # handlers only; ends with `#[cfg(test)] mod tests;`
         dto.rs                # request/response wire types + From<Domain> conversions
+        tests.rs              # the handlers' acceptance tests
     cli/                      # only if the project has a CLI
       mod.rs                  # Cli/Commands definitions (this is the CLI's "routing")
       <command>.rs             # one file per command's orchestration
     subscribers/              # event subscribers, one file per subscriber
       <subscriber>.rs
-    tasks/                    # scheduled/background task handlers, one file per task
-      <task>.rs
+    tasks/                    # scheduled/background task handlers, one folder per task
+      <task>/
+        mod.rs                # the task handler; ends with `#[cfg(test)] mod tests;`
+        tests.rs              # the task's acceptance tests
   infrastructure/
     repositories/            # one aggregate's dedicated port implementation
       <implementation>_<port>.rs   # trait + its implementation, together
@@ -182,7 +185,7 @@ Infrastructure tests use the real dependency, colocated with the code. Some exam
 - Networked service (Postgres, Kafka, Redis...) -> testcontainers.
 - Outbound HTTP dependency -> the real HTTP client against a fake/mock server, not a container.
 
-Keep tests in `#[cfg(test)] mod tests` in the same file as the code they test by default. Only introduce a top-level `tests/` directory (which needs a `lib.rs`, turning the project into a library + thin binary) when a project independently justifies it — not just to match a template.
+Keep tests in `#[cfg(test)] mod tests` in the same file as the code they test by default. The exception is HTTP handlers and tasks: their acceptance tests live in a sibling `tests.rs` (`<resource>/tests.rs`, `tasks/<task>/tests.rs`), declared with `#[cfg(test)] mod tests;` at the end of `mod.rs`, because those tests outweigh the production code many times over. Only introduce a top-level `tests/` directory (which needs a `lib.rs`, turning the project into a library + thin binary) when a project independently justifies it — not just to match a template.
 
 ## Testing Opinions
 
