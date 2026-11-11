@@ -19,4 +19,4 @@ None.
 
 - [x] 4.1 `e2e-tests/helpers/fixtures.js`: `deleteAllSources` retries a delete refused with 409 (poll until it succeeds, 30 s timeout), so cleanup doesn't flake while a sync runs
 - [x] 4.2 Run `scripts/run-tests.sh --only web --only rust`; fmt, clippy and tests pass
-- [ ] 4.3 Run `scripts/run-tests.sh --only e2e` (the e2e cleanup helper changed); all pass
+- [x] 4.3 Run `scripts/run-tests.sh --only e2e` (the e2e cleanup helper changed); all pass
