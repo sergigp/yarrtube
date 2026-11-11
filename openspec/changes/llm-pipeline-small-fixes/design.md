@@ -14,7 +14,7 @@
 - `src/application/http/preferences/mod.rs`: new test.
 - `src/domain/services/video_categorizer.rs`: `Skip::NothingPending`, checked in `prepare` before the server check; takes a `CategorizationResetter` to put a given-up categorization that still has a category pending back to Pending.
 - `src/application/tasks/sync_video_task.rs`: test wiring of the new `VideoCategorizer::new` parameter.
-- `src/application/tasks/categorize_video_task.rs`: new tests; test helper wires `test_support::categorization_resetter`.
+- `src/application/tasks/categorize_video_task.rs`: new tests; test helpers build a `CategorizationResetter` on the test's `later()` clock.
 - `doc/ARCHITECTURE.md` (step 7), `doc/AI.md` ("How a video is categorized"): the sync after a summary, the wider reset, the no-call skip.
 
 ## Types & Signatures

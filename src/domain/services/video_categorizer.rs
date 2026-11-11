@@ -2,8 +2,8 @@ use crate::domain::category::Category;
 use crate::domain::llm_server::{LlmReply, LlmServerUnreachable, OllamaUrl};
 use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
-    CategorizationResetter, VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder,
-    VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
+    CategorizationResetter, CategorizationResetterApi, VideoCategoryAssigner,
+    VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
     StepStatus, UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome,
@@ -124,7 +124,6 @@ pub struct VideoCategorizer {
     video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
     video_updater: VideoUpdater,
-    #[allow(dead_code)]
     categorization_resetter: CategorizationResetter,
 }
 
@@ -530,13 +529,15 @@ impl VideoCategorizer {
         reason: String,
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_attempt_failure(video)?;
-        if recorded
+        let recorded = if recorded
             .as_ref()
             .is_some_and(|video| video.categorization.status == StepStatus::Failed)
         {
             self.give_up(video, job, rejected)?;
-        }
-        let recorded = self.reset_if_still_pending(video, job, recorded)?;
+            self.reset_if_still_pending(video, job, recorded)?
+        } else {
+            recorded
+        };
         Ok(VideoStepOutcome::retry_at_or_settled(
             recorded.and_then(|video| video.categorization.next_attempt_at()),
             reason,
@@ -548,11 +549,16 @@ impl VideoCategorizer {
     /// changed during the attempt); the video as stored after.
     fn reset_if_still_pending(
         &self,
-        _video: &Video,
-        _job: &CategorizationJob,
+        video: &Video,
+        job: &CategorizationJob,
         recorded: Option<Video>,
     ) -> anyhow::Result<Option<Video>> {
-        Ok(recorded)
+        if self.pending(video, &job.owner)?.is_empty() {
+            return Ok(recorded);
+        }
+        self.categorization_resetter
+            .reset(std::slice::from_ref(&video.id))?;
+        Ok(None)
     }
 
     /// Records a run that left nothing rejected: Done.

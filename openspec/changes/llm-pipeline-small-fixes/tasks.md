@@ -4,7 +4,7 @@
 
 - [x] 1.1 Create every file, type and signature from design.md: `VideoSummaryGenerated` (+ re-export, `DomainEvent` variant with type/payload arms), `VideoSummarizer` taking an `EventPublisher` (wired in `src/serve.rs` and the `summarize_video_task` test helper with a `SqliteEventPublisher`), `publish_generated` stub doing nothing, `SyncVideoOnVideoSummaryGenerated` with `handle` returning `Ok(())` registered under `video_summary_generated` in `subscribers/mod.rs`, `Skip::NothingPending` (never returned yet; `categorize` arm settling). Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
 
-- [x] 1.2 Skeleton for the last-attempt fix: `VideoCategorizer::new` takes a `CategorizationResetter` (wired in `src/serve.rs`, `sync_video_task.rs` and `categorize_video_task.rs` via `test_support::categorization_resetter`) and `reset_if_still_pending` stub returning the recorded video unchanged. Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
+- [x] 1.2 Skeleton for the last-attempt fix: `VideoCategorizer::new` takes a `CategorizationResetter` (wired in `src/serve.rs`, and in `sync_video_task.rs` and `categorize_video_task.rs` through local test helpers) and `reset_if_still_pending` stub returning the recorded video unchanged. Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
 
 ## 2. Behaviour (TDD)
 
@@ -16,7 +16,7 @@
 - [x] 2.6 `it_should_reset_failed_verdicts_when_the_categorization_generation_settings_change` (`http/preferences/mod.rs`): context length, temperature or thinking changed → `failed` verdicts deleted, categorization Pending. Update the `doc/AI.md` bullet "Saving a new Ollama URL, categorization model or prompt…" to list every call setting.
 - [x] 2.7 `it_should_not_mark_a_category_failed_when_the_generation_settings_changed_during_its_attempt` (`categorize_video_task.rs`): temperature changed during the last attempt → no `failed` verdict, category pending (expected to pass after 2.6; keep as regression).
 
-- [ ] 2.8 `it_should_put_the_categorization_back_to_pending_when_the_settings_changed_during_its_last_attempt` (`categorize_video_task.rs`): a last attempt overtaken by a temperature, model or category prompt change leaves the categorization Pending with no failed attempts and no verdicts. Add to `doc/AI.md` (the give-up bullet) that such a run goes back to Pending.
+- [x] 2.8 `it_should_put_the_categorization_back_to_pending_when_the_settings_changed_during_its_last_attempt` (`categorize_video_task.rs`): a last attempt overtaken by a temperature, model or category prompt change leaves the categorization Pending with no failed attempts and no verdicts. Add to `doc/AI.md` (the give-up bullet) that such a run goes back to Pending.
 
 ## 3. Infrastructure adapters (TDD)
 

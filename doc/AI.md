@@ -169,7 +169,10 @@ spec: decisions here feed OpenSpec changes later.
   past the cap in the call about all 9; alone, each answered. Only what those
   single calls reject fails the task once every pending category was tried;
   the retry asks only the ones still pending. On the last attempt each
-  rejected category gets an `unavailable` verdict. Ollama unreachable, or the model not
+  rejected category gets an `unavailable` verdict, unless the categorization
+  settings or that category's prompt changed during the attempt: then no
+  verdict is written and the categorization goes back to Pending, so the next
+  sync asks again with the new settings. Ollama unreachable, or the model not
   installed, stops the run with a warning, keeps the verdicts already stored,
   spends no attempt and writes no `unavailable` verdict: the rest stay pending
   and the run is re-queued 6 hours later.

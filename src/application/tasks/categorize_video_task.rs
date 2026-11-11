@@ -1318,6 +1318,94 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
+    fn it_should_put_the_categorization_back_to_pending_when_the_settings_changed_during_its_last_attempt()
+     {
+        let changes: [fn(&TestDatabase, &Category); 3] = [
+            |db, _| {
+                SqlitePreferencesRepository::new(db.database())
+                    .save(&Preferences {
+                        categorization: CategorizationSettings {
+                            temperature: Temperature::new(0.5).unwrap(),
+                            ..categorization_on().categorization
+                        },
+                        ..categorization_on()
+                    })
+                    .unwrap()
+            },
+            |db, _| {
+                SqlitePreferencesRepository::new(db.database())
+                    .save(&Preferences {
+                        categorization: CategorizationSettings {
+                            model: CategorizationModel::new("gemma3:4b").unwrap(),
+                            ..categorization_on().categorization
+                        },
+                        ..categorization_on()
+                    })
+                    .unwrap()
+            },
+            |db, category| {
+                SqliteCategoryRepository::new(db.database())
+                    .update(
+                        &category.clone().with_ai_prompt(Some(
+                            CategoryPrompt::new("The video is about cooking.")
+                                .unwrap()
+                                .unwrap(),
+                        )),
+                    )
+                    .unwrap()
+            },
+        ];
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let tech = prompted_category("Tech");
+
+        let outcomes = changes.map(|change| {
+            let db = Arc::new(TestDatabase::new());
+            seed(&db, &video, &[&tech]);
+            let (changed_db, changed) = (db.clone(), tech.clone());
+            let llm = Arc::new(
+                FakeLlmServerRepository::new(server_with(thinking_model()))
+                    .with_replies(vec![reply("It might belong.")])
+                    .with_on_chat(move || change(&changed_db, &changed)),
+            );
+            let task = categorize_video_task(&db, llm);
+
+            let result = run(&task, &video);
+
+            let stored = SqliteVideoRepository::new(db.database())
+                .find(&video.id)
+                .unwrap();
+            let verdicts = SqliteVideoCategoryVerdictRepository::new(db.database())
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap();
+            (result, stored, verdicts)
+        });
+
+        let pending_again = Some(Video {
+            version: 2,
+            categorization: StepState::pending(),
+            updated_at: later(),
+            ..video
+        });
+        assert_eq!(
+            outcomes,
+            [
+                (Ok(TaskOutcome::Done), pending_again.clone(), vec![]),
+                (Ok(TaskOutcome::Done), pending_again.clone(), vec![]),
+                (Ok(TaskOutcome::Done), pending_again, vec![])
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_wait_for_ollama_if_it_is_unavailable_for_a_categorization() {
         let unreachable = FakeLlmServerRepository::unreachable();
         let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
@@ -1611,7 +1699,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                 ),
                 Arc::new(FixedClock(later())),
                 Arc::new(SqliteVideoRepository::new(db.database())),
-                categorization_resetter(&db),
+                categorization_resetter(db),
             )),
         )
     }
