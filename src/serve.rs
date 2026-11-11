@@ -1079,9 +1079,9 @@ async fn run_async(
 }
 
 /// Resolves on SIGTERM (`docker stop`/`podman stop`/systemd) or Ctrl+C.
-/// Inside a container yarrtube runs as PID 1, which the kernel never kills
-/// on an unhandled SIGTERM, so without this a stop always waits for its
-/// timeout and ends in SIGKILL.
+/// Run as a container's PID 1 (e.g. an image without its tini entrypoint),
+/// the kernel never kills yarrtube on an unhandled SIGTERM, so without this a
+/// stop always waits for its timeout and ends in SIGKILL.
 async fn shutdown_signal() {
     let terminate = async {
         match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
