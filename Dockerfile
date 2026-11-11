@@ -56,7 +56,7 @@ RUN case "${TARGETARCH}" in \
 
 FROM docker.io/library/debian:bookworm-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg ca-certificates gosu \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates gosu tini \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /build/target/release/yarrtube /usr/local/bin/yarrtube
@@ -79,5 +79,8 @@ ENV YARRTUBE_DB_PATH=/config/yarrtube.db \
 EXPOSE 8080
 VOLUME ["/config", "/videos"]
 
-ENTRYPOINT ["docker-entrypoint.sh"]
+# tini runs as PID 1: it forwards signals to yarrtube and reaps the orphans
+# a killed yt-dlp leaves behind (its ffmpeg/deno children), which yarrtube
+# as PID 1 would leave as zombies.
+ENTRYPOINT ["tini", "--", "docker-entrypoint.sh"]
 CMD ["yarrtube", "serve"]
