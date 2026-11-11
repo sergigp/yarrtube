@@ -50,9 +50,13 @@ mod tests {
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
-    use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, StepState, Video, VideoChapter, VideoStatus, YoutubeVideoId,
-    };
+    use crate::domain::video::Chapters;
+    use crate::domain::video::Download;
+    use crate::domain::video::DownloadedQuality;
+    use crate::domain::video::StepStatus;
+    use crate::domain::video::Subtitles;
+    use crate::domain::video::Thumbnail;
+    use crate::domain::video::{EpisodeNumber, StepState, Video, VideoChapter, YoutubeVideoId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -320,7 +324,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(fixed_timestamp() - Duration::hours(25)), 0),
+            subtitles: Subtitles::checked(Some(fixed_timestamp() - Duration::hours(25)), 0),
             ..downloaded_video()
         };
         save_channel_video(
@@ -384,7 +388,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(fixed_timestamp() - Duration::hours(3)), 0),
+            subtitles: Subtitles::checked(Some(fixed_timestamp() - Duration::hours(3)), 0),
             ..downloaded_video()
         };
         save_channel_video(
@@ -440,8 +444,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            chapters: None,
-            chapters_checks: LateDataChecks::default(),
+            chapters: Chapters::pending(),
             ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
         };
         save_channel_video(
@@ -505,11 +508,10 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            chapters: Some(vec![]),
-            chapters_checks: LateDataChecks::checked(
-                Some(fixed_timestamp() - Duration::hours(25)),
-                0,
-            ),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::checked(Some(fixed_timestamp() - Duration::hours(25)), 0)
+            },
             ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
         };
         save_channel_video(
@@ -573,7 +575,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            quality_checks: LateDataChecks::checked(
+            downloaded_quality: DownloadedQuality::checked(
                 Some(fixed_timestamp() - Duration::hours(25)),
                 0,
             ),
@@ -640,7 +642,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            quality_checks: LateDataChecks::checked(
+            downloaded_quality: DownloadedQuality::checked(
                 Some(fixed_timestamp() - Duration::minutes(10)),
                 0,
             ),
@@ -699,11 +701,10 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            chapters: Some(vec![]),
-            chapters_checks: LateDataChecks::checked(
-                Some(fixed_timestamp() - Duration::hours(3)),
-                0,
-            ),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::checked(Some(fixed_timestamp() - Duration::hours(3)), 0)
+            },
             ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
         };
         save_channel_video(
@@ -759,8 +760,10 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            chapters: Some(vec![]),
-            chapters_checks: LateDataChecks::done_at(Some(fixed_timestamp() - Duration::days(30))),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(Some(fixed_timestamp() - Duration::days(30)))
+            },
             ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
         };
         save_channel_video(
@@ -816,11 +819,14 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            chapters: Some(vec![VideoChapter {
-                start_seconds: 0,
-                end_seconds: 60,
-                title: "Intro".to_string(),
-            }]),
+            chapters: Chapters {
+                found: Some(vec![VideoChapter {
+                    start_seconds: 0,
+                    end_seconds: 60,
+                    title: "Intro".to_string(),
+                }]),
+                ..downloaded_video().chapters
+            },
             ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
         };
         save_channel_video(
@@ -1047,7 +1053,10 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            thumbnail_filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+            thumbnail: Thumbnail {
+                filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                ..Thumbnail::pending()
+            },
             ..my_video()
                 .mark_errored("HTTP Error 503", fixed_timestamp() - Duration::days(2))
                 .mark_errored("HTTP Error 503", fixed_timestamp() - Duration::days(2))
@@ -1109,13 +1118,17 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let long_ago = fixed_timestamp() - Duration::days(30);
-        let failed = LateDataChecks::checked(Some(long_ago), 11);
         let video = Video {
-            thumbnail_filename: None,
-            thumbnail: (0..11).fold(StepState::pending(), |state, _| state.fail(long_ago)),
-            subtitles: failed,
-            chapters_checks: failed,
-            quality_checks: failed,
+            subtitles: Subtitles::checked(Some(long_ago), 11),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::checked(Some(long_ago), 11)
+            },
+            downloaded_quality: DownloadedQuality::checked(Some(long_ago), 11),
+            thumbnail: Thumbnail {
+                filename: None,
+                state: (0..11).fold(StepState::pending(), |state, _| state.fail(long_ago)),
+            },
             ..downloaded_video()
         };
         seed_channel_video(&db, &video_repository, &video);
@@ -1137,9 +1150,11 @@ mod tests {
         ));
         let ten_minutes_ago = fixed_timestamp() - Duration::minutes(10);
         let video = Video {
-            thumbnail_filename: None,
-            thumbnail: StepState::pending().fail(ten_minutes_ago),
-            subtitles: LateDataChecks::checked(Some(ten_minutes_ago), 1),
+            subtitles: Subtitles::checked(Some(ten_minutes_ago), 1),
+            thumbnail: Thumbnail {
+                filename: None,
+                state: StepState::pending().fail(ten_minutes_ago),
+            },
             ..downloaded_video()
         };
         seed_channel_video(&db, &video_repository, &video);
@@ -1154,6 +1169,67 @@ mod tests {
                 pending_task(1, &fetch_thumbnail(&video)),
                 pending_task(2, &fetch_subtitles(&video)),
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_schedule_retrying_chapters_once_their_next_attempt_is_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = Video {
+            chapters: Chapters::checked(Some(fixed_timestamp() - Duration::minutes(10)), 1),
+            ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
+        };
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::FetchChapters {
+                    video_id: video.id.as_str().to_string(),
+                },
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_schedule_a_retrying_quality_check_once_its_next_attempt_is_due() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = Video {
+            downloaded_quality: DownloadedQuality::checked(
+                Some(fixed_timestamp() - Duration::minutes(10)),
+                1,
+            ),
+            ..downloaded_video().mark_subtitles_unavailable(fixed_timestamp())
+        };
+        seed_channel_video(&db, &video_repository, &video);
+        let task = sync_task(&db, video_repository.clone(), task_repository.clone());
+
+        let result = run(&task, &task_for(&video));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::UpgradeQuality {
+                    video_id: video.id.as_str().to_string(),
+                },
+            )]
         );
     }
 
@@ -1711,16 +1787,15 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(fixed_timestamp() - Duration::hours(1)), 2),
-            chapters_checks: LateDataChecks::checked(
-                Some(fixed_timestamp() - Duration::hours(1)),
-                2,
-            ),
-            downloaded_height: Some(720),
-            quality_checks: LateDataChecks::checked(
-                Some(fixed_timestamp() - Duration::hours(1)),
-                2,
-            ),
+            subtitles: Subtitles::checked(Some(fixed_timestamp() - Duration::hours(1)), 2),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::checked(Some(fixed_timestamp() - Duration::hours(1)), 2)
+            },
+            downloaded_quality: DownloadedQuality {
+                height: Some(720),
+                ..DownloadedQuality::checked(Some(fixed_timestamp() - Duration::hours(1)), 2)
+            },
             ..downloaded_video()
         };
         save_channel_video(
@@ -1764,19 +1839,24 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                status: VideoStatus::Pending,
-                quality: None,
-                filename: None,
-                thumbnail_filename: None,
-                thumbnail: StepState::pending(),
-                duration_seconds: None,
                 synced_at: None,
-                subtitles: LateDataChecks::default(),
-                subtitle_filename: None,
-                chapters_checks: LateDataChecks::default(),
-                downloaded_height: None,
-                quality_checks: LateDataChecks::default(),
                 updated_at: fixed_timestamp(),
+                subtitles: Subtitles::pending(),
+                chapters: Chapters {
+                    found: video.chapters.found.clone(),
+                    ..Chapters::pending()
+                },
+                downloaded_quality: DownloadedQuality::pending(),
+                thumbnail: Thumbnail::pending(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Pending,
+                        ..video.download.clone().state
+                    },
+                    file: None,
+                    ..video.download.clone()
+                },
                 ..video.clone()
             }]
         );
@@ -1799,10 +1879,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let video = Video {
-            filename: Some("Season 2026/S2026E031501 - My Video.mkv".to_string()),
-            ..downloaded_video()
-        };
+        let video = downloaded_video()
+            .map_file(|file| file.with_filename("Season 2026/S2026E031501 - My Video.mkv"));
         save_channel_video(
             &video_repository,
             &channel_repository,
@@ -2654,7 +2732,7 @@ mod tests {
     fn it_should_not_schedule_a_summary_without_fetched_subtitles() {
         let missing = downloaded_video();
         let unavailable = Video {
-            subtitles: LateDataChecks::unavailable_at(None),
+            subtitles: Subtitles::unavailable_at(None),
             ..downloaded_video()
         };
 
@@ -3120,7 +3198,7 @@ mod tests {
 
     fn subtitled_video() -> Video {
         Video {
-            subtitles: LateDataChecks::done(),
+            subtitles: Subtitles::done_at(None),
             ..downloaded_video()
         }
     }
@@ -3138,8 +3216,11 @@ mod tests {
     /// quality settled, so a sync schedules no chapters fetch or quality check.
     fn downloaded_video() -> Video {
         Video {
-            chapters_checks: LateDataChecks::done(),
-            quality_checks: LateDataChecks::done(),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(None)
+            },
+            downloaded_quality: DownloadedQuality::done_at(None),
             ..my_video()
                 .start_download(fixed_timestamp())
                 .mark_downloaded(

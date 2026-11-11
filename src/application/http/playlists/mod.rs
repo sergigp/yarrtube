@@ -102,6 +102,7 @@ pub async fn delete_playlist(
     match run_blocking(move || playlist_deleter.delete(id)).await? {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e @ DeletePlaylistError::NotFound(_)) => Err(ApiError::bad_request(e)),
+        Err(e @ DeletePlaylistError::Reconciling(_)) => Err(ApiError::new(StatusCode::CONFLICT, e)),
         Err(e @ DeletePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -1313,6 +1314,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1366,6 +1368,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1427,6 +1430,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1493,6 +1497,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1551,6 +1556,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1603,6 +1609,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1649,6 +1656,7 @@ mod tests {
             )),
             video_categories_repository.clone(),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1703,6 +1711,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             verdict_repository.clone(),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -1714,6 +1723,230 @@ mod tests {
                 .unwrap(),
             vec![]
         );
+    }
+
+    #[tokio::test]
+    async fn it_should_remove_the_pending_tasks_of_a_deleted_playlists_videos() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let (video, _) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid1",
+            0,
+        );
+        let video_id = video.id.as_str().to_string();
+        task_repository
+            .schedule(
+                &Task::DownloadVideo {
+                    video_id: video_id.clone(),
+                },
+                fixed_timestamp() + chrono::Duration::minutes(10),
+            )
+            .unwrap();
+        task_repository
+            .schedule(
+                &Task::FetchThumbnail {
+                    video_id: video_id.clone(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        task_repository
+            .schedule(&Task::SummarizeVideo { video_id }, fixed_timestamp())
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            playlist_video_repository.clone(),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
+        );
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_the_pending_tasks_of_another_playlists_videos() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        playlist_repository
+            .insert(&playlist("PL2", "other"))
+            .unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid1",
+            0,
+        );
+        let (other_video, _) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL2",
+            "vid2",
+            0,
+        );
+        let other_download = Task::DownloadVideo {
+            video_id: other_video.id.as_str().to_string(),
+        };
+        task_repository
+            .schedule(
+                &other_download,
+                fixed_timestamp() + chrono::Duration::minutes(10),
+            )
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            playlist_video_repository.clone(),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
+        );
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &other_download,
+                fixed_timestamp() + chrono::Duration::minutes(10),
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_delete_a_playlist_while_it_is_being_synced() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let show_locks = Arc::new(ShowLocks::default());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let (video, playlist_video) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid1",
+            0,
+        );
+        let download = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+        };
+        task_repository
+            .schedule(&download, fixed_timestamp())
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            playlist_video_repository.clone(),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            show_locks.clone(),
+        );
+        let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL1")));
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist PL1 is being synced, try again once it finishes"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL1"))
+                .unwrap(),
+            vec![playlist_video]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &download, fixed_timestamp())]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_a_playlist_while_another_source_is_being_synced() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let show_locks = Arc::new(ShowLocks::default());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            show_locks.clone(),
+        );
+        let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL2")));
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
     }
 
     #[tokio::test]
@@ -1737,6 +1970,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(playlist_deleter, "PL404").await;
@@ -4300,6 +4534,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(
                 unused_connection(),
             )),
+            Arc::new(ShowLocks::default()),
         )
     }
 

@@ -53,9 +53,11 @@ touched. The slow suites (contract, end-to-end) are not run per change: CI runs
 the end-to-end suite on every push (`--ci`), and `/audit-change` runs every
 suite, contract included, before auditing. Run the full `scripts/run-tests.sh`
 yourself only when asked or when a change touches what only those suites cover
-(the Docker image, the YouTube adapters, the e2e specs). The script checks its
-dependencies first and lists anything missing: install or build what it names
-rather than skipping the suite. On failure it prints only the failing tests and
+(the Docker image, the YouTube adapters, the e2e specs). The script installs or builds
+what the repo produces itself (`node_modules`, `web/dist`, Playwright browsers)
+when missing, so it works in a fresh worktree; missing tools (npm, cargo,
+Docker, yt-dlp, …) it lists up front: install what it names rather than
+skipping the suite. On failure it prints only the failing tests and
 the path of the full logs.
 
 ## Frontend testing (web/)

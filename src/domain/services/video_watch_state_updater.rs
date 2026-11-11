@@ -110,7 +110,7 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
                             now,
                         ))
                     })
-                    .map(|stored| watched || stored.is_some_and(|video| video.is_watched()))
+                    .map(|stored| watched || stored.is_some_and(|video| video.watch.is_watched()))
             })
             .map_err(UpdateWatchStateError::Repository)
     }
@@ -123,7 +123,7 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
             .try_for_each(|copy| {
                 self.video_updater
                     .update(&copy.id, |video| {
-                        (!video.is_watched()).then(|| video.mark_watched(now))
+                        (!video.watch.is_watched()).then(|| video.mark_watched(now))
                     })
                     .map(|_| ())
             })
@@ -188,7 +188,7 @@ impl VideoWatchStateUpdater {
             .downloaded_videos(category)
             .map_err(UpdateWatchStateError::Repository)?
             .into_iter()
-            .filter(|sourced| !sourced.video.is_watched())
+            .filter(|sourced| !sourced.video.watch.is_watched())
             .map(|sourced| sourced.video.youtube_id)
             .collect())
     }
@@ -266,7 +266,7 @@ impl VideoWatchStateUpdater {
     /// one of them is `Downloaded`.
     fn find_downloaded_copies(&self, id: &VideoId) -> Result<Vec<Video>, UpdateWatchStateError> {
         Some(self.find_copies(id)?)
-            .filter(|copies| copies.iter().any(Video::is_downloaded))
+            .filter(|copies| copies.iter().any(|video| video.download.is_downloaded()))
             .ok_or_else(|| UpdateWatchStateError::VideoNotDownloaded(id.clone()))
     }
 

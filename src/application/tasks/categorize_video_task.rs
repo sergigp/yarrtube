@@ -60,6 +60,7 @@ mod tests {
     };
     use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::Chapters;
     use crate::domain::video::{
         RetryAttempts, StepState, StepStatus, Video, VideoChapter, YoutubeVideoId,
     };
@@ -268,11 +269,14 @@ mod tests {
             ("Tech", NO),
         ]))]);
         let video = Video {
-            chapters: Some(vec![VideoChapter {
-                start_seconds: 0,
-                end_seconds: 60,
-                title: "Intro".to_string(),
-            }]),
+            chapters: Chapters {
+                found: Some(vec![VideoChapter {
+                    start_seconds: 0,
+                    end_seconds: 60,
+                    title: "Intro".to_string(),
+                }]),
+                ..summarized_video().chapters
+            },
             ..summarized_video()
         };
         seed(

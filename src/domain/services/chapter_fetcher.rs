@@ -68,7 +68,7 @@ impl ChapterFetcher {
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_check(video, None, None)?;
         Ok(VideoStepOutcome::retry_at_or_settled(
-            recorded.and_then(|video| video.chapters_checks.state.next_attempt_at()),
+            recorded.and_then(|video| video.chapters.state.next_attempt_at()),
             reason,
         ))
     }

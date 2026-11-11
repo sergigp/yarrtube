@@ -27,8 +27,10 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
-    use crate::domain::video::{LateDataChecks, VideoId, YoutubeVideoId};
-    use crate::domain::video::{PlaybackPosition, RetryAttempts, StepState, Video, VideoStatus};
+    use crate::domain::video::{
+        Chapters, Download, DownloadedQuality, StepState, Subtitles, Thumbnail, Video, VideoId,
+        WatchState, YoutubeVideoId,
+    };
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -1087,30 +1089,19 @@ mod tests {
             id: VideoId::new(id).unwrap(),
             youtube_id: YoutubeVideoId::new("yt1").unwrap(),
             title: title.to_string(),
-            status: VideoStatus::Pending,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: None,
-            filename: None,
-            thumbnail_filename: None,
-            thumbnail: StepState::pending(),
-            duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
-            watched_at: None,
-            playback_position: PlaybackPosition::start(),
             synced_at: None,
-            last_played_at: None,
             episode_number: None,
-            subtitles: LateDataChecks::default(),
-            subtitle_filename: None,
-            chapters: None,
-            chapters_checks: LateDataChecks::default(),
-            downloaded_height: None,
-            quality_checks: LateDataChecks::default(),
             summary: StepState::pending(),
             categorization: StepState::pending(),
             version: 0,
+            watch: WatchState::unwatched(),
+            subtitles: Subtitles::pending(),
+            chapters: Chapters::pending(),
+            downloaded_quality: DownloadedQuality::pending(),
+            thumbnail: Thumbnail::pending(),
+            download: Download::pending(),
         }
     }
 

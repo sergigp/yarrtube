@@ -38,9 +38,10 @@ mod tests {
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::Subtitles;
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, PlaybackPosition, RetryAttempts, StepState, StepStatus,
-        Video, VideoSubtitlesFetched, YoutubeVideoId,
+        EpisodeNumber, PlaybackPosition, RetryAttempts, StepState, StepStatus, Video,
+        VideoSubtitlesFetched, YoutubeVideoId,
     };
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionProbe, CaptionSource, CaptionTracks, FetchedSubtitles,
@@ -127,9 +128,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitle_filename: Some("Season 2026/S2026E031501 - Title.en.srt".to_string()),
-                subtitles: LateDataChecks::done_at(Some(now())),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: Some("Season 2026/S2026E031501 - Title.en.srt".to_string()),
+                    ..Subtitles::done_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -163,8 +166,8 @@ mod tests {
         );
         let video = Video {
             title: "New Title".to_string(),
-            filename: Some("Season 2026/S2026E031501 - Old Title.mp4".to_string()),
             ..downloaded_video()
+                .map_file(|file| file.with_filename("Season 2026/S2026E031501 - Old Title.mp4"))
         };
         video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
@@ -388,7 +391,7 @@ mod tests {
             translations_only(),
         ))));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
+            subtitles: Subtitles::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -430,8 +433,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::unavailable_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -451,7 +457,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 4),
+            subtitles: Subtitles::checked(Some(now() - Duration::days(1)), 4),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -493,8 +499,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::checked(Some(now()), 0),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::checked(Some(now()), 0)
+                },
                 ..video.clone()
             }]
         );
@@ -552,8 +561,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::unavailable_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -573,7 +585,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
+            subtitles: Subtitles::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -615,8 +627,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::unavailable_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -680,8 +695,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -745,8 +763,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -811,8 +832,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::checked(Some(now()), 1),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::checked(Some(now()), 1)
+                },
                 ..video.clone()
             }]
         );
@@ -832,7 +856,7 @@ mod tests {
         ))));
         let video = Video {
             created_at: now() - Duration::days(2),
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 5),
+            subtitles: Subtitles::checked(Some(now() - Duration::days(1)), 5),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -880,8 +904,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::checked(Some(now()), 6),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::checked(Some(now()), 6)
+                },
                 ..video.clone()
             }]
         );
@@ -897,7 +924,7 @@ mod tests {
         ))));
         let video = Video {
             created_at: now() - Duration::days(2),
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(1)), 10),
+            subtitles: Subtitles::checked(Some(now() - Duration::days(1)), 10),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -911,7 +938,8 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks {
+                updated_at: now(),
+                subtitles: Subtitles {
                     state: StepState {
                         status: StepStatus::Failed,
                         attempts: RetryAttempts {
@@ -920,8 +948,8 @@ mod tests {
                         },
                     },
                     last_checked_at: Some(now()),
+                    filename: video.subtitles.filename.clone()
                 },
-                updated_at: now(),
                 ..video
             }]
         );
@@ -1129,6 +1157,81 @@ mod tests {
             vec![Video {
                 version: 1,
                 ..reset
+            }]
+        );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![staging_dir(&video)]
+        );
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_discard_the_subtitles_if_the_video_was_redownloaded_under_another_name_meanwhile()
+    {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = downloaded_video();
+        video_repository.insert(&video).unwrap();
+        let redownloaded = video
+            .clone()
+            .map_file(|file| file.with_filename("Season 2026/S2026E031501 - New Title.mp4"));
+        let redownloading_repository = video_repository.clone();
+        let redownloaded_video = redownloaded.clone();
+        let caption_repository = Arc::new(
+            FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles(Ok(fetched_subtitles("yt1.en.srt")))
+                .with_on_fetch_subtitles(move || {
+                    redownloading_repository
+                        .update(&redownloaded_video)
+                        .unwrap();
+                }),
+        );
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = FetchSubtitlesTask::new(Arc::new(SubtitleFetcher::new(
+            video_repository.clone(),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            video_transcript_repository.clone(),
+            caption_repository,
+            video_file_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+        )));
+
+        let result = run(&task, &task_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                ..redownloaded
             }]
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
@@ -1649,7 +1752,7 @@ mod tests {
             ..caption_probe(translations_only())
         })));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
+            subtitles: Subtitles::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();
@@ -1691,8 +1794,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                subtitles: LateDataChecks::unavailable_at(Some(now())),
                 updated_at: now(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::unavailable_at(Some(now()))
+                },
                 ..video.clone()
             }]
         );
@@ -1709,7 +1815,7 @@ mod tests {
             translations_only(),
         ))));
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(now() - Duration::days(8)), 0),
+            subtitles: Subtitles::checked(Some(now() - Duration::days(8)), 0),
             ..downloaded_video()
         };
         video_repository.insert(&video).unwrap();

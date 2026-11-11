@@ -23,13 +23,13 @@ impl SummaryInput {
         transcript: &TimedTranscript,
         context_length: &ContextLength,
     ) -> Self {
-        let chapters = video.chapters.clone().unwrap_or_default();
+        let chapters = video.chapters.found.clone().unwrap_or_default();
         let max_chars =
             (f64::from(context_length.input_budget_tokens()) * language.chars_per_token()) as usize;
         let parts = transcript.parts(&chapters, max_chars);
         Self {
             title: video.title.clone(),
-            minutes: video.duration_seconds.unwrap_or(0) / 60,
+            minutes: video.download.duration_seconds().unwrap_or(0) / 60,
             language: language.english_name(),
             chapters,
             parts,

@@ -36,6 +36,9 @@ pub trait TaskRepository: Send + Sync {
     ) -> anyhow::Result<Option<ScheduledTask>>;
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
+    /// Deletes every pending task whose payload names `video_id`. Running
+    /// tasks are kept: they settle on their own once the video is gone.
+    fn delete_pending_for_video(&self, video_id: &VideoId) -> anyhow::Result<()>;
     /// Atomically inserts `task` into the dead-letter table and deletes the
     /// original row.
     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()>;
@@ -245,6 +248,17 @@ impl TaskRepository for SqliteTaskRepository {
         conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
             .inspect_err(|e| tracing::error!(task_id = id, error = %e, "failed to delete task"))
             .context("failed to delete task")?;
+        Ok(())
+    }
+
+    fn delete_pending_for_video(&self, video_id: &VideoId) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "DELETE FROM tasks WHERE json_extract(payload, '$.video_id') = ?1 AND status = 'pending'",
+            params![video_id.as_str()],
+        )
+        .inspect_err(|e| tracing::error!(video_id = %video_id, error = %e, "failed to delete pending tasks of video"))
+        .context("failed to delete pending tasks of video")?;
         Ok(())
     }
 
@@ -929,6 +943,62 @@ mod tests {
             .unwrap();
 
         assert_eq!(found, None);
+    }
+
+    #[test]
+    fn it_should_delete_every_pending_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&download_task("v1"), now + chrono::Duration::minutes(10))
+            .unwrap();
+        repo.schedule(
+            &Task::FetchThumbnail {
+                video_id: "v1".to_string(),
+            },
+            now,
+        )
+        .unwrap();
+
+        repo.delete_pending_for_video(&VideoId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(repo.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_not_delete_a_running_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&download_task("v1"), now).unwrap();
+        repo.claim(1, now).unwrap();
+
+        repo.delete_pending_for_video(&VideoId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &download_task("v1"), now, now).start(now)]
+        );
+    }
+
+    #[test]
+    fn it_should_not_delete_the_pending_tasks_of_another_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&download_task("v1"), now).unwrap();
+        repo.schedule(&download_task("v2"), now).unwrap();
+        repo.schedule(&task(), now).unwrap();
+
+        repo.delete_pending_for_video(&VideoId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![
+                pending_task(2, &download_task("v2"), now, now),
+                pending_task(3, &task(), now, now),
+            ]
+        );
     }
 
     #[test]

@@ -39,6 +39,7 @@ impl std::error::Error for CreateChannelError {}
 #[derive(Debug)]
 pub enum DeleteChannelError {
     NotFound(ChannelHandle),
+    Reconciling(ChannelHandle),
     Repository(anyhow::Error),
 }
 
@@ -46,6 +47,10 @@ impl fmt::Display for DeleteChannelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound(handle) => write!(f, "channel {handle} not found"),
+            Self::Reconciling(handle) => write!(
+                f,
+                "channel {handle} is being synced, try again once it finishes"
+            ),
             Self::Repository(e) => write!(f, "{e}"),
         }
     }

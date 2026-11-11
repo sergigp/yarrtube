@@ -3,6 +3,7 @@ use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistDeleted;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::DeletePlaylistError;
+use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
@@ -13,6 +14,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::show_locks::{ShowLockGuard, ShowLocks};
 use std::sync::Arc;
 use tracing::info;
 
@@ -28,6 +30,7 @@ pub struct PlaylistDeleter {
     task_repository: Arc<dyn TaskRepository>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    show_locks: Arc<ShowLocks>,
 }
 
 impl PlaylistDeleter {
@@ -42,6 +45,7 @@ impl PlaylistDeleter {
         task_repository: Arc<dyn TaskRepository>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        show_locks: Arc<ShowLocks>,
     ) -> Self {
         Self {
             repository,
@@ -53,6 +57,7 @@ impl PlaylistDeleter {
             task_repository,
             video_categories_repository,
             video_category_verdict_repository,
+            show_locks,
         }
     }
 }
@@ -63,6 +68,7 @@ pub trait PlaylistDeleterApi: Send + Sync {
 
 impl PlaylistDeleterApi for PlaylistDeleter {
     fn delete(&self, id: PlaylistId) -> Result<(), DeletePlaylistError> {
+        let _guard = self.lock(&id)?;
         let playlist = self.find_playlist(&id)?;
         self.delete_playlist_videos(&id)?;
         self.remove_pending_reconciles(&id)?;
@@ -74,6 +80,14 @@ impl PlaylistDeleterApi for PlaylistDeleter {
 }
 
 impl PlaylistDeleter {
+    /// Refuses while a reconcile of the playlist runs, so the pass can't
+    /// write videos for a playlist deleted under it.
+    fn lock(&self, id: &PlaylistId) -> Result<ShowLockGuard<'_>, DeletePlaylistError> {
+        self.show_locks
+            .try_lock(ShowKey::Playlist(id.clone()))
+            .ok_or_else(|| DeletePlaylistError::Reconciling(id.clone()))
+    }
+
     fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, DeletePlaylistError> {
         match self.repository.find(id) {
             Ok(Some(playlist)) => Ok(playlist),
@@ -83,8 +97,8 @@ impl PlaylistDeleter {
     }
 
     /// Deletes each `PlaylistVideo`'s owned `Video` row, its transcript, its
-    /// summary, its categories and its verdicts, then the `PlaylistVideo` rows
-    /// themselves.
+    /// summary, its categories, its verdicts and its pending tasks, then the
+    /// `PlaylistVideo` rows themselves.
     fn delete_playlist_videos(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
         let playlist_videos = self
             .playlist_video_repository
@@ -105,6 +119,9 @@ impl PlaylistDeleter {
                 .map_err(DeletePlaylistError::Repository)?;
             self.video_category_verdict_repository
                 .delete_for_video(&playlist_video.video_id)
+                .map_err(DeletePlaylistError::Repository)?;
+            self.task_repository
+                .delete_pending_for_video(&playlist_video.video_id)
                 .map_err(DeletePlaylistError::Repository)?;
         }
         self.playlist_video_repository

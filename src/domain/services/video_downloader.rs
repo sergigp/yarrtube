@@ -151,7 +151,7 @@ impl VideoDownloader {
             return Ok(None);
         };
         if Self::is_settled(&video) {
-            debug!(video_id = %video_id, status = video.status.as_str(), "video already settled, skipping download");
+            debug!(video_id = %video_id, status = video.download.status().as_str(), "video already settled, skipping download");
             return Ok(None);
         }
         let Some(owner) = self.video_owner_finder.find(&video)? else {
@@ -165,12 +165,13 @@ impl VideoDownloader {
     /// it is, downloading nothing now.
     fn wait_for_next_attempt(&self, video: &Video) -> Option<VideoStepOutcome> {
         let at = video
-            .next_download_at()
+            .download
+            .next_attempt_at()
             .filter(|at| *at > self.clock.now())?;
         debug!(video_id = %video.id, next_attempt_at = %at, "download not due yet, re-queueing it");
         Some(VideoStepOutcome::RetryAt {
             at,
-            reason: video.download_failure.clone().unwrap_or_default(),
+            reason: video.download.failure.clone().unwrap_or_default(),
         })
     }
 
@@ -261,7 +262,7 @@ impl VideoDownloader {
             &number,
             &video.title,
             &downloaded,
-            video.thumbnail_basename(),
+            video.thumbnail.basename(),
             output_dir,
         );
         let metadata = metadata.map(|metadata| metadata.with_thumb(files.thumb.clone()));
@@ -398,7 +399,7 @@ impl VideoDownloader {
     /// for its next attempt. Best-effort: the download is already recorded,
     /// and a video sync recovers a Retrying step without a task.
     fn requeue_quality_check(&self, video: &Video) {
-        let Some(at) = video.quality_checks.state.next_attempt_at() else {
+        let Some(at) = video.downloaded_quality.state.next_attempt_at() else {
             return;
         };
         let task = Task::UpgradeQuality {
@@ -478,7 +479,7 @@ impl VideoDownloader {
     /// Retrying, settled otherwise.
     fn next_attempt(errored: Option<Video>, reason: String) -> VideoStepOutcome {
         VideoStepOutcome::retry_at_or_settled(
-            errored.and_then(|video| video.next_download_at()),
+            errored.and_then(|video| video.download.next_attempt_at()),
             reason,
         )
     }
@@ -493,7 +494,7 @@ impl VideoDownloader {
     /// Failed or Unavailable.
     fn is_settled(video: &Video) -> bool {
         matches!(
-            video.status,
+            video.download.status(),
             VideoStatus::Downloaded | VideoStatus::Failed | VideoStatus::Unavailable
         )
     }

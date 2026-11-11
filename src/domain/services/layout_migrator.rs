@@ -194,7 +194,7 @@ impl LayoutMigrator {
             .video_repository
             .list_downloaded()?
             .into_iter()
-            .filter(Video::is_in_legacy_layout)
+            .filter(|video| video.download.is_in_legacy_layout())
             .collect())
     }
 
@@ -252,7 +252,7 @@ impl MigrationReport {
         relocation: anyhow::Result<Relocation>,
     ) -> Self {
         let in_source = |relative: &str| format!("{}/{relative}", path.as_str());
-        let recorded = in_source(video.filename.as_deref().unwrap_or_default());
+        let recorded = in_source(video.download.filename().unwrap_or_default());
         self.merge(match relocation {
             Ok(Relocation::Moved { from, to, .. }) => MigrationReport {
                 moved: vec![(in_source(&from), in_source(&to))],

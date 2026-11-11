@@ -1,6 +1,7 @@
 use crate::domain::channel::ChannelDeleted;
 use crate::domain::channel::{Channel, ChannelHandle, DeleteChannelError};
 use crate::domain::event::DomainEvent;
+use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -12,6 +13,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::show_locks::{ShowLockGuard, ShowLocks};
 use std::sync::Arc;
 use tracing::info;
 
@@ -28,6 +30,7 @@ pub struct ChannelDeleter {
     task_repository: Arc<dyn TaskRepository>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    show_locks: Arc<ShowLocks>,
 }
 
 impl ChannelDeleter {
@@ -43,6 +46,7 @@ impl ChannelDeleter {
         task_repository: Arc<dyn TaskRepository>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        show_locks: Arc<ShowLocks>,
     ) -> Self {
         Self {
             repository,
@@ -55,6 +59,7 @@ impl ChannelDeleter {
             task_repository,
             video_categories_repository,
             video_category_verdict_repository,
+            show_locks,
         }
     }
 }
@@ -67,6 +72,7 @@ pub trait ChannelDeleterApi: Send + Sync {
 
 impl ChannelDeleterApi for ChannelDeleter {
     fn delete(&self, id: ChannelHandle) -> Result<(), DeleteChannelError> {
+        let _guard = self.lock(&id)?;
         let channel = self.find_channel(&id)?;
         self.delete_channel_videos(&id)?;
         self.delete_avatar(&channel)?;
@@ -79,6 +85,14 @@ impl ChannelDeleterApi for ChannelDeleter {
 }
 
 impl ChannelDeleter {
+    /// Refuses while a reconcile of the channel runs, so the pass can't
+    /// write videos for a channel deleted under it.
+    fn lock(&self, id: &ChannelHandle) -> Result<ShowLockGuard<'_>, DeleteChannelError> {
+        self.show_locks
+            .try_lock(ShowKey::Channel(id.clone()))
+            .ok_or_else(|| DeleteChannelError::Reconciling(id.clone()))
+    }
+
     fn find_channel(&self, id: &ChannelHandle) -> Result<Channel, DeleteChannelError> {
         match self.repository.find(id) {
             Ok(Some(channel)) => Ok(channel),
@@ -88,8 +102,8 @@ impl ChannelDeleter {
     }
 
     /// Deletes each `ChannelVideo`'s owned `Video` row, its transcript, its
-    /// summary, its categories and its verdicts, then the `ChannelVideo` rows
-    /// themselves.
+    /// summary, its categories, its verdicts and its pending tasks, then the
+    /// `ChannelVideo` rows themselves.
     fn delete_channel_videos(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
         let channel_videos = self
             .channel_video_repository
@@ -110,6 +124,9 @@ impl ChannelDeleter {
                 .map_err(DeleteChannelError::Repository)?;
             self.video_category_verdict_repository
                 .delete_for_video(&channel_video.video_id)
+                .map_err(DeleteChannelError::Repository)?;
+            self.task_repository
+                .delete_pending_for_video(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
         }
         self.channel_video_repository

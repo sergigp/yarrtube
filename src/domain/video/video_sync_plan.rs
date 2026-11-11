@@ -25,18 +25,18 @@ impl VideoSyncPlan {
     ) -> Self {
         let steps = [
             (VideoSyncStep::FetchThumbnail, video.is_thumbnail_due(now)),
-            (VideoSyncStep::Download, video.is_download_due(now)),
+            (VideoSyncStep::Download, video.download.is_due(now)),
             (
                 VideoSyncStep::FetchSubtitles,
                 video.is_subtitle_fetchable() && video.subtitles.is_due(now),
             ),
             (
                 VideoSyncStep::FetchChapters,
-                video.is_chapters_fetchable() && video.chapters_checks.is_due(now),
+                video.is_chapters_fetchable() && video.chapters.is_due(now),
             ),
             (
                 VideoSyncStep::UpgradeQuality,
-                video.is_quality_checkable() && video.quality_checks.is_due(now),
+                video.is_quality_checkable() && video.downloaded_quality.is_due(now),
             ),
             (
                 VideoSyncStep::Summarize,

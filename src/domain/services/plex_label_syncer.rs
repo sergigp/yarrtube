@@ -470,8 +470,8 @@ impl PlexLabelSyncer {
             return Ok(None);
         };
         Ok(video
-            .filename
-            .as_deref()
+            .download
+            .filename()
             .map(|filename| owner.target.output_dir.join(filename))
             .and_then(|file| {
                 plex_folder_path(Path::new(&self.videos_path), &self.plex_videos_path, &file)

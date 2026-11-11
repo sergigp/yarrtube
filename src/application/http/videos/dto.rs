@@ -1,5 +1,5 @@
 use crate::domain::video::{
-    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, LateDataChecks, StepState,
+    CategoryVideoView, Download, HomeCategorySection, HomeVideoView, HomeVideos, StepState,
     StepStatus, Video, VideoChapter, VideoSource, VideoStatus, VideoView,
 };
 use chrono::{DateTime, Utc};
@@ -71,11 +71,11 @@ pub struct StepResponse {
 impl From<&Video> for VideoStepsResponse {
     fn from(video: &Video) -> Self {
         Self {
-            download: StepResponse::download(video),
-            thumbnail: StepResponse::from(video.thumbnail),
-            subtitles: StepResponse::from(video.subtitles),
-            chapters: StepResponse::from(video.chapters_checks),
-            quality: StepResponse::from(video.quality_checks),
+            download: StepResponse::download(&video.download),
+            thumbnail: StepResponse::from(video.thumbnail.state),
+            subtitles: StepResponse::from(video.subtitles.state),
+            chapters: StepResponse::from(video.chapters.state),
+            quality: StepResponse::from(video.downloaded_quality.state),
             summary: StepResponse::from(video.summary),
             categorization: StepResponse::from(video.categorization),
         }
@@ -93,24 +93,21 @@ impl From<StepState> for StepResponse {
     }
 }
 
-impl From<LateDataChecks> for StepResponse {
-    fn from(checks: LateDataChecks) -> Self {
-        Self::from(checks.state)
-    }
-}
-
 impl StepResponse {
-    fn download(video: &Video) -> Self {
-        let status = match video.status {
+    fn download(download: &Download) -> Self {
+        let status = match download.status() {
             VideoStatus::Downloaded => StepStatus::Done.as_str(),
             other => other.as_str(),
         };
-        let failing = matches!(video.status, VideoStatus::Retrying | VideoStatus::Failed);
+        let failing = matches!(
+            download.status(),
+            VideoStatus::Retrying | VideoStatus::Failed
+        );
         Self {
             status: status.to_string(),
-            failed_attempts: video.download_attempts.failed,
-            next_attempt_at: video.next_download_at(),
-            failure: video.download_failure.clone().filter(|_| failing),
+            failed_attempts: download.state.attempts.failed,
+            next_attempt_at: download.next_attempt_at(),
+            failure: download.failure.clone().filter(|_| failing),
         }
     }
 }
@@ -136,6 +133,7 @@ impl From<VideoChapter> for ChapterResponse {
 impl From<VideoView> for VideoResponse {
     fn from(view: VideoView) -> Self {
         let video = view.video;
+        let file = video.download.file.clone();
         let summary = view
             .summary
             .map(|summary| summary.text.as_str().to_string());
@@ -145,17 +143,17 @@ impl From<VideoView> for VideoResponse {
         };
         Self {
             steps: VideoStepsResponse::from(&video),
-            subtitle_language: video.subtitle_language(),
-            watched: video.is_watched(),
-            position_seconds: video.playback_position.seconds(),
+            subtitle_language: video.subtitles.language(),
+            watched: video.watch.is_watched(),
+            position_seconds: video.watch.position.seconds(),
             id: video.id.as_str().to_string(),
             youtube_id: video.youtube_id.as_str().to_string(),
             title: video.title,
-            status: video.status.as_str().to_string(),
-            quality: video.quality.map(|q| q.as_str().to_string()),
-            filename: video.filename,
-            thumbnail_filename: video.thumbnail_filename,
-            duration_seconds: video.duration_seconds,
+            status: video.download.status().as_str().to_string(),
+            quality: file.as_ref().map(|file| file.quality.as_str().to_string()),
+            filename: file.as_ref().map(|file| file.filename.clone()),
+            thumbnail_filename: video.thumbnail.filename,
+            duration_seconds: file.and_then(|file| file.duration_seconds),
             created_at: video.created_at,
             updated_at: video.updated_at,
             synced_at: video.synced_at,
@@ -163,6 +161,7 @@ impl From<VideoView> for VideoResponse {
             channel_name,
             chapters: video
                 .chapters
+                .found
                 .unwrap_or_default()
                 .into_iter()
                 .map(ChapterResponse::from)

@@ -281,8 +281,8 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::{
-        EpisodeNumber, LateDataChecks, RetryAttempts, StepState, Video, VideoChapter, VideoId,
-        VideoStatus, YoutubeVideoId,
+        Chapters, Download, DownloadedQuality, EpisodeNumber, RetryAttempts, StepState, StepStatus,
+        Subtitles, Thumbnail, Video, VideoChapter, VideoId, WatchState, YoutubeVideoId,
     };
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -1257,7 +1257,10 @@ mod tests {
             ),
             (
                 Video {
-                    playback_position: PlaybackPosition::new(42).unwrap(),
+                    watch: WatchState {
+                        position: PlaybackPosition::new(42).unwrap(),
+                        ..WatchState::unwatched()
+                    },
                     ..new_video(
                         YoutubeVideoId::new("vid_partly").unwrap(),
                         "Partly",
@@ -1622,7 +1625,10 @@ mod tests {
             channel_video_repository.as_ref(),
             "@somechannel",
             &Video {
-                playback_position: PlaybackPosition::new(42).unwrap(),
+                watch: WatchState {
+                    position: PlaybackPosition::new(42).unwrap(),
+                    ..WatchState::unwatched()
+                },
                 ..new_video(
                     YoutubeVideoId::new("vid_partly").unwrap(),
                     "Partly",
@@ -1969,10 +1975,7 @@ mod tests {
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
-            &Video {
-                duration_seconds: Some(600),
-                ..started_video("vid1", "Started Short", 120, watched_timestamp())
-            },
+            &started_video("vid1", "Started Short", 120, watched_timestamp()).lasting(Some(600)),
         );
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -2759,14 +2762,11 @@ mod tests {
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
-            &Video {
-                duration_seconds: Some(600),
-                ..new_video(
-                    YoutubeVideoId::new("vid_pending").unwrap(),
-                    "Pending",
-                    fixed_timestamp(),
-                )
-            },
+            &new_video(
+                YoutubeVideoId::new("vid_pending").unwrap(),
+                "Pending",
+                fixed_timestamp(),
+            ),
         );
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -3167,23 +3167,32 @@ mod tests {
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
+        let watched = started_video("vid_watched", "Watched", 120, watched_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
             &Video {
-                watched_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    ..watched.watch
+                },
                 created_at: DateTime::<Utc>::from_timestamp(200, 0).unwrap(),
-                ..started_video("vid_watched", "Watched", 120, watched_timestamp())
+                ..watched
             },
         );
+        let never_played =
+            started_video("vid_never_played", "Never Played", 120, watched_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
             &Video {
-                last_played_at: None,
-                ..started_video("vid_never_played", "Never Played", 120, watched_timestamp())
+                watch: WatchState {
+                    last_played_at: None,
+                    ..never_played.watch
+                },
+                ..never_played
             },
         );
         let video_searcher = VideoSearcher::new(
@@ -3848,8 +3857,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                playback_position: PlaybackPosition::new(30).unwrap(),
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    position: PlaybackPosition::new(30).unwrap(),
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
                 ..video
             }]
         );
@@ -3862,7 +3874,6 @@ mod tests {
         let downloaded = video_with_duration("vid1", Some(100));
         let downloading = Video {
             id: VideoId::new("rec-vid1-copy").unwrap(),
-            filename: Some("Season 2023/S2023E111401 - My Video.mp4".to_string()),
             episode_number: Some(EpisodeNumber::from_columns(2023, 111401).unwrap()),
             ..new_video(
                 YoutubeVideoId::new("vid1").unwrap(),
@@ -3893,14 +3904,20 @@ mod tests {
             vec![
                 Video {
                     version: 1,
-                    playback_position: PlaybackPosition::new(30).unwrap(),
-                    last_played_at: Some(watched_timestamp()),
+                    watch: WatchState {
+                        position: PlaybackPosition::new(30).unwrap(),
+                        last_played_at: Some(watched_timestamp()),
+                        ..downloaded.watch
+                    },
                     ..downloaded
                 },
                 Video {
                     version: 1,
-                    playback_position: PlaybackPosition::new(30).unwrap(),
-                    last_played_at: Some(watched_timestamp()),
+                    watch: WatchState {
+                        position: PlaybackPosition::new(30).unwrap(),
+                        last_played_at: Some(watched_timestamp()),
+                        ..downloading.watch
+                    },
                     ..downloading
                 },
             ]
@@ -3932,8 +3949,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: Some(watched_timestamp()),
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
                 ..video
             }]
         );
@@ -3944,7 +3964,10 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = Video {
-            playback_position: PlaybackPosition::new(60).unwrap(),
+            watch: WatchState {
+                position: PlaybackPosition::new(60).unwrap(),
+                ..WatchState::unwatched()
+            },
             ..video_with_duration("vid1", Some(100))
         };
         video_repository.insert(&video).unwrap();
@@ -3967,9 +3990,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: Some(watched_timestamp()),
-                playback_position: PlaybackPosition::start(),
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    position: PlaybackPosition::start(),
+                    last_played_at: Some(watched_timestamp())
+                },
                 ..video
             }]
         );
@@ -4003,8 +4028,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: Some(watched_timestamp()),
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
                 ..video
             }]
         );
@@ -4035,8 +4063,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                playback_position: PlaybackPosition::new(500).unwrap(),
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    position: PlaybackPosition::new(500).unwrap(),
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
                 ..video
             }]
         );
@@ -4070,9 +4101,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: None,
-                playback_position: PlaybackPosition::new(11).unwrap(),
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    watched_at: None,
+                    position: PlaybackPosition::new(11).unwrap(),
+                    last_played_at: Some(watched_timestamp())
+                },
                 ..video
             }]
         );
@@ -4106,7 +4139,47 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_a_watched_video_watched_when_a_rewatch_reaches_90_percent() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.insert(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+        let request = RecordProgressRequest {
+            was_watched: Some(true),
+            ..progress_request(90)
+        };
+
+        let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
+
+        assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                version: 1,
+                watch: WatchState {
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
                 ..video
             }]
         );
@@ -4162,14 +4235,20 @@ mod tests {
             vec![
                 Video {
                     version: 1,
-                    playback_position: PlaybackPosition::new(40).unwrap(),
-                    last_played_at: Some(watched_timestamp()),
+                    watch: WatchState {
+                        position: PlaybackPosition::new(40).unwrap(),
+                        last_played_at: Some(watched_timestamp()),
+                        ..channel_copy.watch
+                    },
                     ..channel_copy
                 },
                 Video {
                     version: 1,
-                    playback_position: PlaybackPosition::new(40).unwrap(),
-                    last_played_at: Some(watched_timestamp()),
+                    watch: WatchState {
+                        position: PlaybackPosition::new(40).unwrap(),
+                        last_played_at: Some(watched_timestamp()),
+                        ..playlist_copy.watch
+                    },
                     ..playlist_copy
                 },
             ]
@@ -4204,7 +4283,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                last_played_at: Some(watched_timestamp()),
+                watch: WatchState {
+                    last_played_at: Some(watched_timestamp()),
+                    ..video.watch
+                },
                 ..video
             }]
         );
@@ -4337,7 +4419,10 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = Video {
-            playback_position: PlaybackPosition::new(40).unwrap(),
+            watch: WatchState {
+                position: PlaybackPosition::new(40).unwrap(),
+                ..WatchState::unwatched()
+            },
             ..video_with_duration("vid1", Some(100))
         };
         video_repository.insert(&video).unwrap();
@@ -4359,8 +4444,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: Some(watched_timestamp()),
-                playback_position: PlaybackPosition::start(),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    position: PlaybackPosition::start(),
+                    ..video.watch
+                },
                 ..video
             }]
         );
@@ -4415,12 +4503,18 @@ mod tests {
             vec![
                 Video {
                     version: 1,
-                    watched_at: Some(watched_timestamp()),
+                    watch: WatchState {
+                        watched_at: Some(watched_timestamp()),
+                        ..channel_copy.watch
+                    },
                     ..channel_copy
                 },
                 Video {
                     version: 1,
-                    watched_at: Some(watched_timestamp()),
+                    watch: WatchState {
+                        watched_at: Some(watched_timestamp()),
+                        ..playlist_copy.watch
+                    },
                     ..playlist_copy
                 },
             ]
@@ -4451,9 +4545,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: Some(watched_timestamp()),
-                playback_position: PlaybackPosition::start(),
-                last_played_at: Some(fixed_timestamp()),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    position: PlaybackPosition::start(),
+                    last_played_at: Some(fixed_timestamp())
+                },
                 ..video
             }]
         );
@@ -5980,15 +6076,13 @@ mod tests {
             &video_repository,
             &playlist_video_repository,
             "PL1",
-            &Video {
-                duration_seconds: Some(600),
-                ..started_video(
-                    "vid1",
-                    "Started",
-                    120,
-                    watched_timestamp() - Duration::days(1),
-                )
-            },
+            &started_video(
+                "vid1",
+                "Started",
+                120,
+                watched_timestamp() - Duration::days(1),
+            )
+            .lasting(Some(600)),
         );
         save_preferences(
             &db,
@@ -6917,10 +7011,16 @@ mod tests {
             video_repository.find(&video.id).unwrap(),
             Some(Video {
                 version: 1,
-                status: VideoStatus::Pending,
-                download_attempts: RetryAttempts::default(),
-                download_failure: None,
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Pending,
+                        attempts: RetryAttempts::default()
+                    },
+                    failure: None,
+                    ..video.download.clone()
+                },
                 ..video.clone()
             })
         );
@@ -6942,7 +7042,7 @@ mod tests {
         let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
         let a_day_ago = fixed_timestamp() - Duration::days(1);
         let video = Video {
-            subtitles: LateDataChecks::unavailable_at(Some(a_day_ago)),
+            subtitles: Subtitles::unavailable_at(Some(a_day_ago)),
             ..new_video(
                 YoutubeVideoId::new("vid1").unwrap(),
                 "My Video",
@@ -6996,9 +7096,9 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let a_day_ago = fixed_timestamp() - Duration::days(1);
         let video = Video {
-            subtitles: LateDataChecks::checked(Some(a_day_ago), 11),
-            chapters_checks: LateDataChecks::checked(Some(a_day_ago), 2),
-            quality_checks: LateDataChecks::checked(Some(a_day_ago), 11),
+            subtitles: Subtitles::checked(Some(a_day_ago), 11),
+            chapters: Chapters::checked(Some(a_day_ago), 2),
+            downloaded_quality: DownloadedQuality::checked(Some(a_day_ago), 11),
             ..new_video(
                 YoutubeVideoId::new("vid1").unwrap(),
                 "My Video",
@@ -7022,13 +7122,25 @@ mod tests {
             video_repository.find(&video.id).unwrap(),
             Some(Video {
                 version: 1,
-                thumbnail: StepState::pending(),
-                subtitles: LateDataChecks::default(),
-                chapters_checks: LateDataChecks::default(),
-                quality_checks: LateDataChecks::default(),
                 summary: StepState::pending(),
                 categorization: StepState::pending(),
                 updated_at: fixed_timestamp(),
+                subtitles: Subtitles {
+                    filename: video.subtitles.filename.clone(),
+                    ..Subtitles::pending()
+                },
+                chapters: Chapters {
+                    found: video.chapters.found.clone(),
+                    ..Chapters::pending()
+                },
+                downloaded_quality: DownloadedQuality {
+                    height: video.downloaded_quality.height,
+                    ..DownloadedQuality::pending()
+                },
+                thumbnail: Thumbnail {
+                    state: StepState::pending(),
+                    ..video.thumbnail.clone()
+                },
                 ..video.clone()
             })
         );
@@ -7984,8 +8096,11 @@ mod tests {
         last_played_at: DateTime<Utc>,
     ) -> Video {
         Video {
-            playback_position: PlaybackPosition::new(position_seconds).unwrap(),
-            last_played_at: Some(last_played_at),
+            watch: WatchState {
+                position: PlaybackPosition::new(position_seconds).unwrap(),
+                last_played_at: Some(last_played_at),
+                ..WatchState::unwatched()
+            },
             ..downloaded_video(youtube_id, title, None, 100)
         }
     }
@@ -7998,10 +8113,7 @@ mod tests {
         duration_seconds: Option<i64>,
         created_at_seconds: i64,
     ) -> Video {
-        Video {
-            duration_seconds,
-            ..downloaded_video(youtube_id, title, None, created_at_seconds)
-        }
+        downloaded_video(youtube_id, title, None, created_at_seconds).lasting(duration_seconds)
     }
 
     fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {

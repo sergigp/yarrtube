@@ -67,7 +67,7 @@ impl SubtitleReader {
         owner: &VideoOwner,
     ) -> Result<WebVtt, ReadSubtitlesError> {
         let not_found = || ReadSubtitlesError::SubtitlesNotFound(video.id.clone());
-        let filename = video.subtitle_filename.as_deref().ok_or_else(not_found)?;
+        let filename = video.subtitles.filename.as_deref().ok_or_else(not_found)?;
         self.video_file_repository
             .read_to_string(&owner.target.output_dir, filename)
             .map_err(ReadSubtitlesError::Repository)?

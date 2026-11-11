@@ -102,6 +102,7 @@ pub async fn delete_channel(
     match run_blocking(move || channel_deleter.delete(id)).await? {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e @ DeleteChannelError::NotFound(_)) => Err(ApiError::bad_request(e)),
+        Err(e @ DeleteChannelError::Reconciling(_)) => Err(ApiError::new(StatusCode::CONFLICT, e)),
         Err(e @ DeleteChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
@@ -226,10 +227,11 @@ mod tests {
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
+    use crate::domain::video::WatchState;
 
     use crate::domain::services::ShowFileWriter;
 
-    use crate::domain::show::ShowMoved;
+    use crate::domain::show::{ShowKey, ShowMoved};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::YoutubeVideoId;
     use crate::domain::video::{PlaybackPosition, Video};
@@ -1196,6 +1198,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1242,6 +1245,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1295,6 +1299,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1353,6 +1358,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1410,6 +1416,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1461,6 +1468,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1506,6 +1514,7 @@ mod tests {
             )),
             video_categories_repository.clone(),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1559,6 +1568,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             verdict_repository.clone(),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1570,6 +1580,226 @@ mod tests {
                 .unwrap(),
             vec![]
         );
+    }
+
+    #[tokio::test]
+    async fn it_should_remove_the_pending_tasks_of_a_deleted_channels_videos() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let (video, _) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt1",
+            0,
+        );
+        let video_id = video.id.as_str().to_string();
+        task_repository
+            .schedule(
+                &Task::DownloadVideo {
+                    video_id: video_id.clone(),
+                },
+                fixed_timestamp() + chrono::Duration::minutes(10),
+            )
+            .unwrap();
+        task_repository
+            .schedule(
+                &Task::FetchThumbnail {
+                    video_id: video_id.clone(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        task_repository
+            .schedule(&Task::SummarizeVideo { video_id }, fixed_timestamp())
+            .unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
+        );
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_the_pending_tasks_of_another_channels_videos() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        channel_repository
+            .insert(&channel("@otherchannel"))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt1",
+            0,
+        );
+        let (other_video, _) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@otherchannel",
+            "yt2",
+            0,
+        );
+        let other_download = Task::DownloadVideo {
+            video_id: other_video.id.as_str().to_string(),
+        };
+        task_repository
+            .schedule(
+                &other_download,
+                fixed_timestamp() + chrono::Duration::minutes(10),
+            )
+            .unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
+        );
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &other_download,
+                fixed_timestamp() + chrono::Duration::minutes(10),
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_delete_a_channel_while_it_is_being_synced() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let show_locks = Arc::new(ShowLocks::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let (video, channel_video) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt1",
+            0,
+        );
+        let download = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+        };
+        task_repository
+            .schedule(&download, fixed_timestamp())
+            .unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            show_locks.clone(),
+        );
+        let _reconciling = show_locks.lock(ShowKey::Channel(handle("@somechannel")));
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "channel @somechannel is being synced, try again once it finishes"
+            ))
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![channel_video]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &download, fixed_timestamp())]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_a_channel_while_another_source_is_being_synced() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let show_locks = Arc::new(ShowLocks::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            show_locks.clone(),
+        );
+        let _reconciling = show_locks.lock(ShowKey::Channel(handle("@otherchannel")));
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
     }
 
     #[tokio::test]
@@ -1600,6 +1830,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1635,6 +1866,7 @@ mod tests {
             )),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = delete(channel_deleter, "@missing").await;
@@ -2962,8 +3194,11 @@ mod tests {
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let played_at = DateTime::<Utc>::from_timestamp(1_750_000_000, 0).unwrap();
         let video = Video {
-            playback_position: PlaybackPosition::new(40).unwrap(),
-            last_played_at: Some(played_at),
+            watch: WatchState {
+                position: PlaybackPosition::new(40).unwrap(),
+                last_played_at: Some(played_at),
+                ..WatchState::unwatched()
+            },
             ..downloaded_video("vid1")
         };
         video_repository.insert(&video).unwrap();
@@ -2993,9 +3228,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                watched_at: Some(watched_timestamp()),
-                playback_position: PlaybackPosition::start(),
-                last_played_at: Some(played_at),
+                watch: WatchState {
+                    watched_at: Some(watched_timestamp()),
+                    position: PlaybackPosition::start(),
+                    last_played_at: Some(played_at)
+                },
                 ..video
             }]
         );
@@ -3463,6 +3700,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(
                 unused_connection(),
             )),
+            Arc::new(ShowLocks::default()),
         )
     }
 

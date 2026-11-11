@@ -13,9 +13,11 @@
 # end-to-end tests run at once, each worker against its own daemon
 # (default 3). In CI (`--ci`, or `CI=true`, which GitHub Actions sets) the
 # contract tests are left out (YouTube bot-checks CI runners) and failing
-# end-to-end tests are retried. It only runs checks: dependencies, the
-# Playwright browsers and the web UI build must already be in place, and are
-# checked before anything runs. It first prints what will run and how. Each
+# end-to-end tests are retried. Tools (npm, cargo, Docker, yt-dlp, …) must be
+# installed and are checked before anything runs; what the repo itself can
+# produce (the web UI's and e2e-tests/' node_modules, the web UI build, the
+# Playwright browsers) is installed or built when missing or stale, so a
+# fresh worktree runs as is. It first prints what will run and how. Each
 # phase's output goes to a log, not the terminal:
 # a progress line while it runs, its time and tests after, and when it fails
 # just the failing tests (the logs are kept, their directory printed).
@@ -53,7 +55,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -h | --help)
-      sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -331,28 +333,21 @@ elif [[ -z "${YOUTUBE_API_KEY:-}" ]]; then
   UPGRADE_FROM_IMAGE="none"
 fi
 
-# What the selected suites need, all checked before any runs, so a missing
-# one doesn't fail the run halfway. Every problem is listed at once.
+# The tools the selected suites need, all checked before any runs, so a
+# missing one doesn't fail the run halfway. Every problem is listed at once.
+# What the repo can produce itself is left to `prepare`.
 check_dependencies() {
   local missing=()
-  need_dir() {
-    if [[ ! -d "$REPO_ROOT/$1" ]]; then
-      missing+=("$1 is missing: run '$2'")
-    fi
-  }
   need_command() {
     if ! command -v "$1" >/dev/null; then
       missing+=("$1 not found on PATH${2:+ ($2)}")
     fi
   }
-  if selected web; then
+  if selected web || selected rust || selected contract || selected e2e; then
     need_command npm
-    need_dir web/node_modules "npm --prefix web ci"
   fi
   if selected rust || selected contract; then
     need_command cargo
-    # The Rust binary embeds the built web UI.
-    need_dir web/dist "npm --prefix web ci && npm --prefix web run build"
   fi
   if selected contract; then
     if [[ -z "${YOUTUBE_API_KEY:-}" ]]; then
@@ -365,8 +360,6 @@ check_dependencies() {
   fi
   if selected e2e; then
     need_command node
-    need_dir e2e-tests/node_modules \
-      "npm --prefix e2e-tests ci && npx --prefix e2e-tests playwright install --with-deps chromium webkit"
     if ! command -v docker >/dev/null; then
       missing+=("docker not found on PATH")
     elif ! docker info >/dev/null 2>&1; then
@@ -378,6 +371,55 @@ check_dependencies() {
     printf '  ✗ %s\n' "${missing[@]}"
     exit 1
   fi
+}
+
+# A package's node_modules needs (re)installing when it is missing, older
+# than the lockfile (`npm ci` writes node_modules/.package-lock.json), or
+# lacking a dependency, e.g. the devDependencies an install under
+# NODE_ENV=production leaves out.
+node_modules_stale() {
+  local dir="$REPO_ROOT/$1"
+  [[ ! -f "$dir/node_modules/.package-lock.json" ||
+    "$dir/package-lock.json" -nt "$dir/node_modules/.package-lock.json" ]] ||
+    ! npm --prefix "$dir" ls --include=dev --depth=0 >/dev/null 2>&1
+}
+
+# Installs and builds what the selected suites need from the repo itself, so
+# a fresh worktree (where none of it exists, it's all gitignored) runs as is.
+# Each piece is skipped when already in place, as in CI, which prepares it all
+# beforehand.
+prepare() {
+  local web_install=false web_build=false e2e_install=false
+  if (selected web || selected rust || selected contract) && node_modules_stale web; then
+    web_install=true
+  fi
+  # The Rust binary embeds the built web UI.
+  if (selected rust || selected contract) && { [[ "$web_install" == true ]] || [[ ! -d "$REPO_ROOT/web/dist" ]]; }; then
+    web_build=true
+  fi
+  if selected e2e && node_modules_stale e2e-tests; then
+    e2e_install=true
+  fi
+  if [[ "$web_install" == false && "$web_build" == false ]] && ! selected e2e; then
+    return
+  fi
+  step "setup"
+  SUITE="setup"
+  if [[ "$web_install" == true ]]; then
+    run_phase "web UI dependencies" plain npm --prefix "$REPO_ROOT/web" ci --include=dev
+  fi
+  if [[ "$web_build" == true ]]; then
+    run_phase "web UI build" plain npm --prefix "$REPO_ROOT/web" run build
+  fi
+  if selected e2e; then
+    if [[ "$e2e_install" == true ]]; then
+      run_phase "e2e dependencies" plain npm --prefix "$REPO_ROOT/e2e-tests" ci --include=dev
+    fi
+    # A no-op when the browsers are already installed (they're shared by every
+    # checkout). CI installs them beforehand, with their system dependencies.
+    run_phase "Playwright browsers" plain npx --prefix "$REPO_ROOT/e2e-tests" playwright install chromium webkit
+  fi
+  SUITE=""
 }
 
 # What is about to run, and how.
@@ -649,6 +691,7 @@ e2e_fail_on_panic() {
 cd "$REPO_ROOT"
 check_dependencies
 print_plan
+prepare
 for suite in "${ALL_SUITES[@]}"; do
   if selected "$suite"; then
     SUITE="$suite"

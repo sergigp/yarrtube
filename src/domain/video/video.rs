@@ -1,26 +1,22 @@
+use super::chapters::Chapters;
+use super::download::Download;
+use super::downloaded_file::DownloadedFile;
+use super::downloaded_quality::DownloadedQuality;
 use super::episode_number::EpisodeNumber;
-use super::late_data_checks::{LateDataChecks, YOUNG_FOR};
 use super::late_data_outcome::LateDataOutcome;
 use super::playback_position::PlaybackPosition;
-use super::retry_attempts::RetryAttempts;
 use super::step_state::StepState;
 use super::step_status::StepStatus;
+use super::subtitles::Subtitles;
+use super::thumbnail::Thumbnail;
 use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
-use super::video_output_entry::is_episode_path;
 use super::video_status::VideoStatus;
+use super::watch_state::WatchState;
 use super::youtube_video_id::YoutubeVideoId;
 use crate::domain::shared::Quality;
-use chrono::{DateTime, Duration, Utc};
-
-/// How long after it was last played a started video is still offered to
-/// continue watching.
-const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
-
-/// How far past the start playback must have got for a video to count as
-/// started rather than just opened.
-const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
+use chrono::{DateTime, Utc};
 
 /// A video shorter than this (15 minutes) counts as a quick watch.
 const QUICK_WATCH_MAX_DURATION_SECONDS: i64 = 900;
@@ -35,54 +31,26 @@ pub struct Video {
     pub id: VideoId,
     pub youtube_id: YoutubeVideoId,
     pub title: String,
-    pub status: VideoStatus,
-    /// The download's consecutive failed attempts — see the `video-retries`
-    /// capability.
-    pub download_attempts: RetryAttempts,
-    /// Why the download last failed, while Retrying or Failed.
-    pub download_failure: Option<String>,
-    pub quality: Option<Quality>,
-    pub filename: Option<String>,
-    pub thumbnail_filename: Option<String>,
-    /// The thumbnail fetch's step state.
-    pub thumbnail: StepState,
-    pub duration_seconds: Option<i64>,
+    pub download: Download,
+    pub thumbnail: Thumbnail,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub watched_at: Option<DateTime<Utc>>,
-    pub playback_position: PlaybackPosition,
     pub synced_at: Option<DateTime<Utc>>,
-    pub last_played_at: Option<DateTime<Utc>>,
     /// The video's episode number within its show, assigned once by the
     /// first thumbnail fetch, download or relocation that places a file.
     pub episode_number: Option<EpisodeNumber>,
-    /// The video's subtitles' step state and checks — see the
-    /// `late-video-data` capability.
-    pub subtitles: LateDataChecks,
-    /// The episode's subtitle file, recorded once its subtitles are fetched.
-    pub subtitle_filename: Option<String>,
-    /// The video's YouTube chapters: `None` while never checked,
-    /// `Some(vec![])` once checked and found to have none.
-    pub chapters: Option<Vec<VideoChapter>>,
-    /// The checks of the video's chapters — see the `late-video-data`
-    /// capability.
-    pub chapters_checks: LateDataChecks,
-    /// The height in pixels of the downloaded file, when reported.
-    pub downloaded_height: Option<u32>,
-    /// The checks of the downloaded quality — see the `late-video-data`
-    /// capability.
-    pub quality_checks: LateDataChecks,
+    pub subtitles: Subtitles,
+    pub chapters: Chapters,
+    pub downloaded_quality: DownloadedQuality,
     pub summary: StepState,
     /// The AI categorization's step state — see the `video-categorization`
     /// capability.
     pub categorization: StepState,
+    pub watch: WatchState,
     /// Bumped by every stored update; an update only applies on top of the
     /// version it was read at — see the `video-write-consistency` capability.
     pub version: u32,
 }
-
-const WATCHED_THRESHOLD: f64 = 0.9;
-const REWATCH_RESET_THRESHOLD: f64 = 0.1;
 
 impl Video {
     pub fn create(
@@ -94,36 +62,25 @@ impl Video {
             id: VideoId::new_generated(),
             youtube_id,
             title: title.into(),
-            status: VideoStatus::Pending,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: None,
-            filename: None,
-            thumbnail_filename: None,
-            thumbnail: StepState::pending(),
-            duration_seconds: None,
+            download: Download::pending(),
+            thumbnail: Thumbnail::pending(),
             created_at: now,
             updated_at: now,
-            watched_at: None,
-            playback_position: PlaybackPosition::start(),
             synced_at: None,
-            last_played_at: None,
             episode_number: None,
-            subtitles: LateDataChecks::default(),
-            subtitle_filename: None,
-            chapters: None,
-            chapters_checks: LateDataChecks::default(),
-            downloaded_height: None,
-            quality_checks: LateDataChecks::default(),
+            subtitles: Subtitles::pending(),
+            chapters: Chapters::pending(),
+            downloaded_quality: DownloadedQuality::pending(),
             summary: StepState::pending(),
             categorization: StepState::pending(),
+            watch: WatchState::unwatched(),
             version: 0,
         }
     }
 
     pub fn start_download(self, now: DateTime<Utc>) -> Self {
         Self {
-            status: VideoStatus::InProgress,
+            download: self.download.start(),
             updated_at: now,
             ..self
         }
@@ -140,19 +97,13 @@ impl Video {
         duration_seconds: Option<i64>,
         now: DateTime<Utc>,
     ) -> Self {
-        let thumbnail_filename = thumbnail_filename.or(self.thumbnail_filename);
         Self {
-            status: VideoStatus::Downloaded,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: Some(quality),
-            filename: Some(filename.into()),
-            thumbnail: match thumbnail_filename {
-                Some(_) => self.thumbnail.succeed(),
-                None => self.thumbnail,
-            },
-            thumbnail_filename,
-            duration_seconds,
+            download: self.download.succeed(DownloadedFile {
+                filename: filename.into(),
+                quality,
+                duration_seconds,
+            }),
+            thumbnail: self.thumbnail.record_download(thumbnail_filename),
             updated_at: now,
             synced_at: Some(now),
             ..self
@@ -162,15 +113,8 @@ impl Video {
     /// Records a failed download attempt and why: Retrying, or Failed on the
     /// last allowed attempt (see the `video-retries` capability).
     pub fn mark_errored(self, reason: impl Into<String>, now: DateTime<Utc>) -> Self {
-        let download_attempts = self.download_attempts.record_failure(now);
         Self {
-            status: if download_attempts.gave_up() {
-                VideoStatus::Failed
-            } else {
-                VideoStatus::Retrying
-            },
-            download_attempts,
-            download_failure: Some(reason.into()),
+            download: self.download.fail(reason, now),
             updated_at: now,
             ..self
         }
@@ -181,52 +125,22 @@ impl Video {
     /// attempts and failure cleared.
     pub fn mark_unavailable(self, now: DateTime<Utc>) -> Self {
         Self {
-            status: VideoStatus::Unavailable,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
+            download: self.download.unavailable(),
             updated_at: now,
             ..self
         }
-    }
-
-    /// Whether a download should run at `now`: Pending or In Progress, or
-    /// Retrying with its next attempt due.
-    pub fn is_download_due(&self, now: DateTime<Utc>) -> bool {
-        match self.status {
-            VideoStatus::Pending | VideoStatus::InProgress => true,
-            VideoStatus::Retrying => self.next_download_at().is_none_or(|at| at <= now),
-            _ => false,
-        }
-    }
-
-    /// When a Retrying download's next attempt is due.
-    pub fn next_download_at(&self) -> Option<DateTime<Utc>> {
-        self.download_attempts
-            .next_attempt_at()
-            .filter(|_| self.status == VideoStatus::Retrying)
     }
 
     /// Every Retrying or Failed step back to Pending with no failed
     /// attempts — see the `video-retries` capability. Pending, In Progress,
     /// Done and Unavailable steps are left as they are.
     pub fn retry(self, now: DateTime<Utc>) -> Self {
-        let download_retried = matches!(self.status, VideoStatus::Retrying | VideoStatus::Failed);
         Self {
-            status: if download_retried {
-                VideoStatus::Pending
-            } else {
-                self.status
-            },
-            download_attempts: if download_retried {
-                RetryAttempts::default()
-            } else {
-                self.download_attempts
-            },
-            download_failure: self.download_failure.filter(|_| !download_retried),
+            download: self.download.retry(),
             thumbnail: self.thumbnail.retry(),
             subtitles: self.subtitles.retry(),
-            chapters_checks: self.chapters_checks.retry(),
-            quality_checks: self.quality_checks.retry(),
+            chapters: self.chapters.retry(),
+            downloaded_quality: self.downloaded_quality.retry(),
             summary: self.summary.retry(),
             categorization: self.categorization.retry(),
             updated_at: now,
@@ -253,12 +167,11 @@ impl Video {
 
     /// Records a thumbnail fetched independently of, and ahead of, the
     /// video's full download — see the `video-thumbnails` capability.
-    /// Touches only `thumbnail_filename`/`updated_at`, leaving `status`,
-    /// `filename`, and `quality` exactly as they were.
+    /// Touches only the thumbnail and `updated_at`, leaving the download
+    /// exactly as it was.
     pub fn with_thumbnail(self, thumbnail_filename: impl Into<String>, now: DateTime<Utc>) -> Self {
         Self {
-            thumbnail_filename: Some(thumbnail_filename.into()),
-            thumbnail: self.thumbnail.succeed(),
+            thumbnail: self.thumbnail.succeed(thumbnail_filename),
             updated_at: now,
             ..self
         }
@@ -275,19 +188,10 @@ impl Video {
 
     /// Whether a thumbnail fetch should run at `now`.
     pub fn is_thumbnail_due(&self, now: DateTime<Utc>) -> bool {
-        self.thumbnail_filename.is_none()
+        self.thumbnail.filename.is_none()
             && self.is_thumbnail_fetchable()
-            && self.status != VideoStatus::InProgress
-            && self.thumbnail.is_due(now)
-    }
-
-    /// The thumbnail's file name as an NFO references it, next to the episode.
-    pub fn thumbnail_basename(&self) -> Option<String> {
-        self.thumbnail_filename
-            .as_deref()
-            .and_then(|f| std::path::Path::new(f).file_name())
-            .and_then(|f| f.to_str())
-            .map(str::to_string)
+            && !self.download.started
+            && self.thumbnail.state.is_due(now)
     }
 
     /// Resets a video back to `Pending`, clearing its recorded filename,
@@ -297,34 +201,20 @@ impl Video {
     /// missing from disk, followed by scheduling a fresh download.
     pub fn reset_for_redownload(self, now: DateTime<Utc>) -> Self {
         Self {
-            status: VideoStatus::Pending,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: None,
-            filename: None,
-            thumbnail_filename: None,
-            thumbnail: StepState::pending(),
-            duration_seconds: None,
+            download: Download::pending(),
+            thumbnail: Thumbnail::pending(),
             updated_at: now,
             synced_at: None,
-            subtitles: LateDataChecks::default(),
-            subtitle_filename: None,
-            chapters_checks: LateDataChecks::default(),
-            downloaded_height: None,
-            quality_checks: LateDataChecks::default(),
+            subtitles: Subtitles::pending(),
+            chapters: self.chapters.reset_checks(),
+            downloaded_quality: DownloadedQuality::pending(),
             ..self
         }
     }
 
     /// Updates the watch state from how far playback got, against the
     /// recorded duration or, when none is recorded, the one the player
-    /// reported. An unwatched video becomes watched at 90%; a watched one
-    /// becomes unwatched again once a rewatch passes 10%, as long as it is
-    /// still below 90%. With no known duration an unwatched video only keeps
-    /// the position. Whatever the outcome, the video counts as played `now`.
-    /// A report is stale when its playback began with the video unwatched
-    /// (`was_watched` false) but the video is now watched: it was marked
-    /// watched since, so the video is returned unchanged, not even played.
+    /// reported — see `WatchState::record_playback`.
     pub fn update_watch_state(
         self,
         position: PlaybackPosition,
@@ -332,71 +222,33 @@ impl Video {
         was_watched: bool,
         now: DateTime<Utc>,
     ) -> Self {
-        if !was_watched && self.is_watched() {
-            return self;
-        }
-        let progress = self
-            .known_duration_seconds(reported_duration)
-            .map(|duration| position.seconds() as f64 / duration as f64);
-        let updated = match (self.is_watched(), progress) {
-            (true, Some(progress))
-                if progress > REWATCH_RESET_THRESHOLD && progress < WATCHED_THRESHOLD =>
-            {
-                Self {
-                    watched_at: None,
-                    playback_position: position,
-                    ..self
-                }
-            }
-            (true, _) => self,
-            (false, Some(progress)) if progress >= WATCHED_THRESHOLD => self.mark_watched(now),
-            (false, _) => Self {
-                playback_position: position,
-                ..self
-            },
-        };
+        let duration_seconds = self.known_duration_seconds(reported_duration);
         Self {
-            last_played_at: Some(now),
-            ..updated
+            watch: self
+                .watch
+                .record_playback(position, duration_seconds, was_watched, now),
+            ..self
         }
     }
 
     pub fn mark_watched(self, now: DateTime<Utc>) -> Self {
         Self {
-            watched_at: Some(now),
-            playback_position: PlaybackPosition::start(),
+            watch: self.watch.mark_watched(now),
             ..self
         }
     }
 
-    pub fn is_watched(&self) -> bool {
-        self.watched_at.is_some()
-    }
-
-    pub fn is_downloaded(&self) -> bool {
-        self.status == VideoStatus::Downloaded
-    }
-
     /// Downloaded and not yet watched: counted in unwatched badges.
     pub fn is_downloaded_and_unwatched(&self) -> bool {
-        self.is_downloaded() && !self.is_watched()
-    }
-
-    /// Downloaded, unwatched, position over 30s and last played within the
-    /// past 7 days of `now`: worth offering to continue watching.
-    pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {
-        !self.is_watched()
-            && self.playback_position.seconds() > IN_PROGRESS_MIN_POSITION_SECONDS
-            && self
-                .last_played_at
-                .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
+        self.download.is_downloaded() && !self.watch.is_watched()
     }
 
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.
     pub fn is_quick_watch(&self) -> bool {
-        !self.is_watched()
+        !self.watch.is_watched()
             && self
-                .duration_seconds
+                .download
+                .duration_seconds()
                 .is_some_and(|duration| duration < QUICK_WATCH_MAX_DURATION_SECONDS)
     }
 
@@ -405,7 +257,7 @@ impl Video {
     /// one, whose next download writes its own.
     pub fn is_thumbnail_fetchable(&self) -> bool {
         !matches!(
-            self.status,
+            self.download.status(),
             VideoStatus::Unavailable | VideoStatus::Retrying | VideoStatus::Failed
         )
     }
@@ -414,25 +266,21 @@ impl Video {
     /// in its season folder (a legacy-layout file has no episode path to
     /// place the subtitles next to) and its subtitles Pending or Retrying.
     pub fn is_subtitle_fetchable(&self) -> bool {
-        self.is_downloaded()
+        self.download.is_downloaded()
             && self.episode_number.is_some()
-            && !self.is_in_legacy_layout()
+            && !self.download.is_in_legacy_layout()
             && self.subtitles.is_unsettled()
     }
 
-    /// Records the fetched subtitle file: subtitles Done, checked `now`. Touches only the subtitle fields and
-    /// `updated_at`.
+    /// Records the fetched subtitle file: subtitles Done, checked `now`.
+    /// Touches only the subtitle fields and `updated_at`.
     pub fn mark_subtitles_fetched(
         self,
         subtitle_filename: impl Into<String>,
         now: DateTime<Utc>,
     ) -> Self {
         Self {
-            subtitles: LateDataChecks {
-                state: self.subtitles.state.succeed(),
-                last_checked_at: Some(now),
-            },
-            subtitle_filename: Some(subtitle_filename.into()),
+            subtitles: self.subtitles.fetched(subtitle_filename, now),
             updated_at: now,
             ..self
         }
@@ -441,22 +289,17 @@ impl Video {
     /// Whether a chapters fetch is worth attempting: Downloaded and its
     /// chapters Pending or Retrying.
     pub fn is_chapters_fetchable(&self) -> bool {
-        self.is_downloaded() && self.chapters_checks.is_unsettled()
+        self.download.is_downloaded() && self.chapters.is_unsettled()
     }
 
     /// Downloaded, subtitles Done, summary Pending or Retrying.
     pub fn is_summarizable(&self) -> bool {
-        self.is_downloaded()
+        self.download.is_downloaded()
             && self.subtitles.state.status == StepStatus::Done
             && matches!(
                 self.summary.status,
                 StepStatus::Pending | StepStatus::Retrying
             )
-    }
-
-    /// Summary Done: a video is categorized from its summary.
-    pub fn is_categorizable(&self) -> bool {
-        self.summary.status == StepStatus::Done
     }
 
     /// Whether a categorization should run at `now`: Pending or Done (a
@@ -492,21 +335,6 @@ impl Video {
         }
     }
 
-    /// Whether the categorization is Pending.
-    pub fn is_categorization_pending(&self) -> bool {
-        self.categorization.status == StepStatus::Pending
-    }
-
-    /// Whether the categorization gave up: Failed.
-    pub fn is_categorization_failed(&self) -> bool {
-        self.categorization.status == StepStatus::Failed
-    }
-
-    /// When a Retrying categorization's next attempt is due.
-    pub fn next_categorization_at(&self) -> Option<DateTime<Utc>> {
-        self.categorization.next_attempt_at()
-    }
-
     /// Records a failed categorization attempt: Retrying, or Failed on the
     /// last.
     pub fn record_categorization_failure(self, now: DateTime<Utc>) -> Self {
@@ -527,66 +355,6 @@ impl Video {
         }
     }
 
-    /// Test fixture: a download that gave up, after every allowed attempt
-    /// failed `now` with `reason`.
-    #[cfg(test)]
-    pub fn mark_download_failed(self, reason: &str, now: DateTime<Utc>) -> Self {
-        (0..super::retry_attempts::MAX_ATTEMPTS)
-            .fold(self, |video, _| video.mark_errored(reason, now))
-    }
-
-    /// Test fixture: a summary that gave up, after every allowed attempt
-    /// failed `now`.
-    #[cfg(test)]
-    pub fn mark_summary_failed(self, now: DateTime<Utc>) -> Self {
-        (0..super::retry_attempts::MAX_ATTEMPTS)
-            .fold(self, |video, _| video.record_summary_failure(now))
-    }
-
-    /// Test fixture: a categorization that gave up, after every allowed
-    /// attempt failed `now`.
-    #[cfg(test)]
-    pub fn mark_categorization_failed(self, now: DateTime<Utc>) -> Self {
-        (0..super::retry_attempts::MAX_ATTEMPTS)
-            .fold(self, |video, _| video.record_categorization_failure(now))
-    }
-
-    /// Test fixture: sets the chapters alone, without recording a check
-    /// (`record_chapters_check` is the production transition).
-    #[cfg(test)]
-    pub fn with_chapters(self, chapters: Vec<VideoChapter>, now: DateTime<Utc>) -> Self {
-        Self {
-            chapters: Some(chapters),
-            updated_at: now,
-            ..self
-        }
-    }
-
-    /// The language code the fetched subtitle file is named with (`en` for
-    /// `… .en.srt`); `None` unless the subtitles are Done.
-    pub fn subtitle_language(&self) -> Option<String> {
-        self.subtitle_filename
-            .as_deref()
-            .filter(|_| self.subtitles.state.status == StepStatus::Done)
-            .and_then(|filename| filename.strip_suffix(".srt"))
-            .and_then(|stem| stem.rsplit_once('.'))
-            .map(|(_, language)| language.to_string())
-    }
-
-    /// Test fixture: subtitles Unavailable without recording a check
-    /// (`record_subtitles_check` is the production transition).
-    #[cfg(test)]
-    pub fn mark_subtitles_unavailable(self, now: DateTime<Utc>) -> Self {
-        Self {
-            subtitles: LateDataChecks {
-                state: self.subtitles.state.unavailable(),
-                ..self.subtitles
-            },
-            updated_at: now,
-            ..self
-        }
-    }
-
     /// Records a subtitle check that found no subtitles (`Incomplete`) or
     /// failed, under the `late-video-data` policy. Touches only the subtitle
     /// fields and `updated_at`.
@@ -597,7 +365,7 @@ impl Video {
         now: DateTime<Utc>,
     ) -> Self {
         Self {
-            subtitles: self.subtitles.record(outcome, published_at, now),
+            subtitles: self.subtitles.record_check(outcome, published_at, now),
             updated_at: now,
             ..self
         }
@@ -605,22 +373,16 @@ impl Video {
 
     /// Records a chapters check: `Some` non-empty chapters are `Complete`,
     /// `Some(vec![])` `Incomplete`, `None` a failed check (keeping the
-    /// chapters already recorded, if any).
-    /// Touches only the chapters fields and `updated_at`.
+    /// chapters already recorded, if any). Touches only the chapters fields
+    /// and `updated_at`.
     pub fn record_chapters_check(
         self,
         chapters: Option<Vec<VideoChapter>>,
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = match &chapters {
-            Some(found) if !found.is_empty() => LateDataOutcome::Complete,
-            Some(_) => LateDataOutcome::Incomplete,
-            None => LateDataOutcome::Failed,
-        };
         Self {
-            chapters_checks: self.chapters_checks.record(outcome, published_at, now),
-            chapters: chapters.or(self.chapters),
+            chapters: self.chapters.record_check(chapters, published_at, now),
             updated_at: now,
             ..self
         }
@@ -638,15 +400,20 @@ impl Video {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = match height {
-            _ if degraded => LateDataOutcome::Failed,
-            Some(height) if height >= quality.target_height() => LateDataOutcome::Complete,
-            _ => LateDataOutcome::Incomplete,
-        };
+        let file = self
+            .download
+            .file
+            .clone()
+            .map(|file| file.with_quality(quality));
         Self {
-            quality: Some(quality),
-            downloaded_height: height,
-            quality_checks: self.record_quality_outcome(outcome, published_at, now),
+            download: self.download.with_file(file),
+            downloaded_quality: self.downloaded_quality.record_download(
+                quality,
+                height,
+                degraded,
+                published_at,
+                now,
+            ),
             updated_at: now,
             ..self
         }
@@ -661,12 +428,12 @@ impl Video {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
-        let outcome = match probed_height {
-            Some(_) => LateDataOutcome::Incomplete,
-            None => LateDataOutcome::Failed,
-        };
         Self {
-            quality_checks: self.record_quality_outcome(outcome, published_at, now),
+            downloaded_quality: self.downloaded_quality.record_check(
+                probed_height,
+                published_at,
+                now,
+            ),
             updated_at: now,
             ..self
         }
@@ -675,7 +442,7 @@ impl Video {
     /// Whether a quality check is worth attempting: Downloaded and its
     /// quality Pending or Retrying.
     pub fn is_quality_checkable(&self) -> bool {
-        self.is_downloaded() && self.quality_checks.is_unsettled()
+        self.download.is_downloaded() && self.downloaded_quality.is_unsettled()
     }
 
     /// Records the episode number assigned to this video.
@@ -696,39 +463,18 @@ impl Video {
         thumbnail_filename: Option<String>,
         now: DateTime<Utc>,
     ) -> Self {
+        let file = self
+            .download
+            .file
+            .clone()
+            .map(|file| file.with_filename(filename));
         Self {
-            filename: Some(filename.into()),
-            thumbnail_filename,
+            download: self.download.with_file(file),
+            thumbnail: self.thumbnail.with_filename(thumbnail_filename),
             episode_number: Some(number),
             updated_at: now,
             ..self
         }
-    }
-
-    /// Whether the video's recorded file is in the per-video-folder (or flat)
-    /// layout that predates the TV-show layout, i.e. not under a `Season `
-    /// folder.
-    pub fn is_in_legacy_layout(&self) -> bool {
-        self.filename
-            .as_deref()
-            .is_some_and(|filename| !is_episode_path(filename))
-    }
-
-    /// The quality checks after one with `outcome`: an old video's quality
-    /// that is no better is Done (kept as it is), not Unavailable.
-    fn record_quality_outcome(
-        &self,
-        outcome: LateDataOutcome,
-        published_at: DateTime<Utc>,
-        now: DateTime<Utc>,
-    ) -> LateDataChecks {
-        let outcome = match outcome {
-            LateDataOutcome::Incomplete if now - published_at >= YOUNG_FOR => {
-                LateDataOutcome::Complete
-            }
-            other => other,
-        };
-        self.quality_checks.record(outcome, published_at, now)
     }
 
     /// The recorded duration, else the reported one. The reported one is
@@ -736,7 +482,8 @@ impl Video {
     /// video's duration to a recorded 0, which counts as unknown so progress
     /// is never divided by it.
     fn known_duration_seconds(&self, reported_duration: Option<VideoDuration>) -> Option<i64> {
-        self.duration_seconds
+        self.download
+            .duration_seconds()
             .or(reported_duration.map(|duration| duration.seconds()))
             .filter(|duration| *duration > 0)
     }
@@ -745,6 +492,7 @@ impl Video {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::video::RetryAttempts;
 
     #[test]
     fn it_should_build_a_pending_video() {
@@ -752,12 +500,9 @@ mod tests {
 
         let video = Video::create(YoutubeVideoId::new("vid1").unwrap(), "My Video", now);
 
-        assert_eq!(video.status, VideoStatus::Pending);
+        assert_eq!(video.download, Download::pending());
         assert_eq!(video.title, "My Video");
-        assert_eq!(video.quality, None);
-        assert_eq!(video.filename, None);
-        assert_eq!(video.thumbnail_filename, None);
-        assert_eq!(video.duration_seconds, None);
+        assert_eq!(video.thumbnail.filename, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
     }
@@ -786,8 +531,8 @@ mod tests {
 
         let video = video().start_download(now);
 
-        assert_eq!(video.status, VideoStatus::InProgress);
-        assert_eq!(video.quality, None);
+        assert_eq!(video.download.status(), VideoStatus::InProgress);
+        assert_eq!(video.download.file, None);
         assert_eq!(video.updated_at, now);
     }
 
@@ -803,11 +548,16 @@ mod tests {
             now,
         );
 
-        assert_eq!(video.status, VideoStatus::Downloaded);
-        assert_eq!(video.quality, Some(Quality::High));
-        assert_eq!(video.filename, Some("My Video.mp4".to_string()));
-        assert_eq!(video.thumbnail_filename, Some("My Video.jpg".to_string()));
-        assert_eq!(video.duration_seconds, Some(223));
+        assert_eq!(video.download.status(), VideoStatus::Downloaded);
+        assert_eq!(
+            video.download.file,
+            Some(DownloadedFile {
+                filename: "My Video.mp4".to_string(),
+                quality: Quality::High,
+                duration_seconds: Some(223),
+            })
+        );
+        assert_eq!(video.thumbnail.filename, Some("My Video.jpg".to_string()));
         assert_eq!(video.updated_at, now);
     }
 
@@ -817,7 +567,7 @@ mod tests {
 
         let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now);
 
-        assert_eq!(video.thumbnail_filename, None);
+        assert_eq!(video.thumbnail.filename, None);
     }
 
     #[test]
@@ -826,7 +576,7 @@ mod tests {
 
         let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now);
 
-        assert_eq!(video.duration_seconds, None);
+        assert_eq!(video.download.duration_seconds(), None);
     }
 
     #[test]
@@ -836,13 +586,11 @@ mod tests {
         let video = video().with_thumbnail("My Video/My Video.jpg", now);
 
         assert_eq!(
-            video.thumbnail_filename,
+            video.thumbnail.filename,
             Some("My Video/My Video.jpg".to_string())
         );
         assert_eq!(video.updated_at, now);
-        assert_eq!(video.status, VideoStatus::Pending);
-        assert_eq!(video.filename, None);
-        assert_eq!(video.quality, None);
+        assert_eq!(video.download, Download::pending());
     }
 
     #[test]
@@ -859,11 +607,8 @@ mod tests {
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
         let reset = downloaded.reset_for_redownload(later);
 
-        assert_eq!(reset.status, VideoStatus::Pending);
-        assert_eq!(reset.quality, None);
-        assert_eq!(reset.filename, None);
-        assert_eq!(reset.thumbnail_filename, None);
-        assert_eq!(reset.duration_seconds, None);
+        assert_eq!(reset.download, Download::pending());
+        assert_eq!(reset.thumbnail.filename, None);
         assert_eq!(reset.updated_at, later);
     }
 
@@ -877,12 +622,18 @@ mod tests {
         assert_eq!(
             errored,
             Video {
-                status: VideoStatus::Retrying,
-                download_attempts: RetryAttempts {
-                    failed: 1,
-                    last_failed_at: Some(now),
+                download: Download {
+                    state: StepState {
+                        status: StepStatus::Retrying,
+                        attempts: RetryAttempts {
+                            failed: 1,
+                            last_failed_at: Some(now),
+                        },
+                    },
+                    started: false,
+                    failure: Some("HTTP Error 503".to_string()),
+                    file: None,
                 },
-                download_failure: Some("HTTP Error 503".to_string()),
                 updated_at: now,
                 ..video
             }
@@ -899,7 +650,10 @@ mod tests {
         assert_eq!(
             unavailable,
             Video {
-                status: VideoStatus::Unavailable,
+                download: Download {
+                    state: StepState::pending().unavailable(),
+                    ..Download::pending()
+                },
                 updated_at: now,
                 ..video
             }
@@ -928,7 +682,13 @@ mod tests {
     fn it_should_record_its_files_when_relocated_to_an_episode() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let number = EpisodeNumber::from_columns(1, 3).unwrap();
-        let video = video();
+        let video = video().mark_downloaded(
+            Quality::High,
+            "My Video/My Video.mp4",
+            Some("My Video/My Video.jpg".to_string()),
+            Some(223),
+            now,
+        );
 
         let relocated = video.clone().relocate_to_episode(
             number,
@@ -940,8 +700,18 @@ mod tests {
         assert_eq!(
             relocated,
             Video {
-                filename: Some("Season 1/S01E003 - My Video.mp4".to_string()),
-                thumbnail_filename: Some("Season 1/S01E003 - My Video.jpg".to_string()),
+                download: Download {
+                    file: Some(DownloadedFile {
+                        filename: "Season 1/S01E003 - My Video.mp4".to_string(),
+                        quality: Quality::High,
+                        duration_seconds: Some(223),
+                    }),
+                    ..video.download.clone()
+                },
+                thumbnail: Thumbnail {
+                    filename: Some("Season 1/S01E003 - My Video.jpg".to_string()),
+                    ..video.thumbnail.clone()
+                },
                 episode_number: Some(number),
                 updated_at: now,
                 ..video
@@ -961,11 +731,11 @@ mod tests {
         assert_eq!(
             fetched,
             Video {
-                subtitles: LateDataChecks {
+                subtitles: Subtitles {
                     state: StepState::pending().succeed(),
                     last_checked_at: Some(now),
+                    filename: Some("Season 1/S01E003 - My Video.en.srt".to_string()),
                 },
-                subtitle_filename: Some("Season 1/S01E003 - My Video.en.srt".to_string()),
                 updated_at: now,
                 ..video
             }
@@ -982,9 +752,10 @@ mod tests {
         assert_eq!(
             unavailable,
             Video {
-                subtitles: LateDataChecks {
+                subtitles: Subtitles {
                     state: StepState::pending().unavailable(),
                     last_checked_at: None,
+                    filename: None,
                 },
                 updated_at: now,
                 ..video
@@ -1010,24 +781,6 @@ mod tests {
     }
 
     #[test]
-    fn it_should_report_the_subtitle_language_from_its_filename() {
-        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let filename = "Season 1/S01E003 - My Video.en.srt";
-
-        let languages = [
-            video().mark_subtitles_fetched(filename, now),
-            video(),
-            Video {
-                subtitle_filename: Some(filename.to_string()),
-                ..video().mark_subtitles_unavailable(now)
-            },
-        ]
-        .map(|video| video.subtitle_language());
-
-        assert_eq!(languages, [Some("en".to_string()), None, None]);
-    }
-
-    #[test]
     fn it_should_clear_its_subtitles_when_reset_for_redownload() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
@@ -1046,11 +799,8 @@ mod tests {
         assert_eq!(
             reset,
             Video {
-                status: VideoStatus::Pending,
-                quality: None,
-                filename: None,
-                subtitles: LateDataChecks::default(),
-                subtitle_filename: None,
+                download: Download::pending(),
+                subtitles: Subtitles::pending(),
                 updated_at: later,
                 synced_at: None,
                 ..fetched
@@ -1063,9 +813,10 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
         let checked = Video {
-            subtitles: LateDataChecks {
+            subtitles: Subtitles {
                 state: StepState::pending().fail(now).fail(now),
                 last_checked_at: Some(now),
+                filename: None,
             },
             ..video().mark_downloaded(
                 Quality::High,
@@ -1081,10 +832,8 @@ mod tests {
         assert_eq!(
             reset,
             Video {
-                status: VideoStatus::Pending,
-                quality: None,
-                filename: None,
-                subtitles: LateDataChecks::default(),
+                download: Download::pending(),
+                subtitles: Subtitles::pending(),
                 updated_at: later,
                 synced_at: None,
                 ..checked

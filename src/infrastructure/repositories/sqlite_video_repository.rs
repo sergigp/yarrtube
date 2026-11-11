@@ -1,7 +1,8 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    ChannelEpisodeNumber, EpisodeNumber, LateDataChecks, PlaybackPosition, RetryAttempts,
-    StaleVideo, StepState, StepStatus, Video, VideoChapter, VideoStatus,
+    ChannelEpisodeNumber, Chapters, Download, DownloadedFile, DownloadedQuality, EpisodeNumber,
+    PlaybackPosition, RetryAttempts, StaleVideo, StepState, StepStatus, Subtitles, Thumbnail,
+    Video, VideoChapter, VideoStatus, WatchState,
 };
 use crate::domain::video::{VideoId, YoutubeVideoId};
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -134,6 +135,7 @@ impl SqliteVideoRepository {
 
 impl VideoRepository for SqliteVideoRepository {
     fn insert(&self, video: &Video) -> anyhow::Result<()> {
+        let file = video.download.file.as_ref();
         let conn = self.db.write()?;
         conn.execute(
             &format!(
@@ -147,39 +149,39 @@ impl VideoRepository for SqliteVideoRepository {
                 video.id.as_str(),
                 video.youtube_id.as_str(),
                 video.title,
-                video.status.as_str(),
-                video.quality.map(|q| q.as_str()),
-                video.filename,
-                video.thumbnail_filename,
-                video.duration_seconds,
+                video.download.status().as_str(),
+                file.map(|file| file.quality.as_str()),
+                file.map(|file| file.filename.as_str()),
+                video.thumbnail.filename,
+                file.and_then(|file| file.duration_seconds),
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
-                video.watched_at.map(|w| w.to_rfc3339()),
-                video.playback_position.seconds(),
+                video.watch.watched_at.map(|w| w.to_rfc3339()),
+                video.watch.position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
-                Self::encode_timestamp(video.download_attempts.last_failed_at),
-                video.last_played_at.map(|p| p.to_rfc3339()),
+                Self::encode_timestamp(video.download.state.attempts.last_failed_at),
+                video.watch.last_played_at.map(|p| p.to_rfc3339()),
                 video.episode_number.map(|n| n.season()),
                 video.episode_number.map(|n| n.episode()),
                 video.subtitles.state.status.as_str(),
-                video.subtitle_filename,
+                video.subtitles.filename,
                 Self::encode_timestamp(video.subtitles.last_checked_at),
                 video.subtitles.state.attempts.failed,
-                Self::encode_chapters(&video.chapters)?,
-                Self::encode_timestamp(video.chapters_checks.last_checked_at),
-                video.chapters_checks.state.attempts.failed,
-                video.chapters_checks.state.status.as_str(),
-                video.downloaded_height,
-                Self::encode_timestamp(video.quality_checks.last_checked_at),
-                video.quality_checks.state.attempts.failed,
-                video.quality_checks.state.status.as_str(),
+                Self::encode_chapters(&video.chapters.found)?,
+                Self::encode_timestamp(video.chapters.last_checked_at),
+                video.chapters.state.attempts.failed,
+                video.chapters.state.status.as_str(),
+                video.downloaded_quality.height,
+                Self::encode_timestamp(video.downloaded_quality.last_checked_at),
+                video.downloaded_quality.state.attempts.failed,
+                video.downloaded_quality.state.status.as_str(),
                 video.summary.status.as_str(),
                 video.version,
-                video.download_attempts.failed,
-                video.download_failure,
-                video.thumbnail.status.as_str(),
-                video.thumbnail.attempts.failed,
-                Self::encode_timestamp(video.thumbnail.attempts.last_failed_at),
+                video.download.state.attempts.failed,
+                video.download.failure,
+                video.thumbnail.state.status.as_str(),
+                video.thumbnail.state.attempts.failed,
+                Self::encode_timestamp(video.thumbnail.state.attempts.last_failed_at),
                 video.summary.attempts.failed,
                 Self::encode_timestamp(video.summary.attempts.last_failed_at),
                 video.categorization.status.as_str(),
@@ -234,6 +236,7 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn update(&self, video: &Video) -> anyhow::Result<()> {
+        let file = video.download.file.as_ref();
         let conn = self.db.write()?;
         let updated = conn.execute(
             "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitles_status = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_status = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_status = ?28, summary_status = ?29, download_failed_attempts = ?30, download_failure = ?31, thumbnail_status = ?32, thumbnail_failed_attempts = ?33, thumbnail_last_failed_at = ?34, summary_failed_attempts = ?35, summary_last_failed_at = ?36, categorization_status = ?37, categorization_failed_attempts = ?38, categorization_last_failed_at = ?39, version = version + 1
@@ -242,37 +245,37 @@ impl VideoRepository for SqliteVideoRepository {
                 video.id.as_str(),
                 video.youtube_id.as_str(),
                 video.title,
-                video.status.as_str(),
-                video.quality.map(|q| q.as_str()),
-                video.filename,
-                video.thumbnail_filename,
-                video.duration_seconds,
+                video.download.status().as_str(),
+                file.map(|file| file.quality.as_str()),
+                file.map(|file| file.filename.as_str()),
+                video.thumbnail.filename,
+                file.and_then(|file| file.duration_seconds),
                 video.updated_at.to_rfc3339(),
-                video.watched_at.map(|w| w.to_rfc3339()),
-                video.playback_position.seconds(),
+                video.watch.watched_at.map(|w| w.to_rfc3339()),
+                video.watch.position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
-                Self::encode_timestamp(video.download_attempts.last_failed_at),
-                video.last_played_at.map(|p| p.to_rfc3339()),
+                Self::encode_timestamp(video.download.state.attempts.last_failed_at),
+                video.watch.last_played_at.map(|p| p.to_rfc3339()),
                 video.episode_number.map(|n| n.season()),
                 video.episode_number.map(|n| n.episode()),
                 video.subtitles.state.status.as_str(),
-                video.subtitle_filename,
+                video.subtitles.filename,
                 Self::encode_timestamp(video.subtitles.last_checked_at),
                 video.subtitles.state.attempts.failed,
-                Self::encode_chapters(&video.chapters)?,
-                Self::encode_timestamp(video.chapters_checks.last_checked_at),
-                video.chapters_checks.state.attempts.failed,
-                video.chapters_checks.state.status.as_str(),
-                video.downloaded_height,
-                Self::encode_timestamp(video.quality_checks.last_checked_at),
-                video.quality_checks.state.attempts.failed,
-                video.quality_checks.state.status.as_str(),
+                Self::encode_chapters(&video.chapters.found)?,
+                Self::encode_timestamp(video.chapters.last_checked_at),
+                video.chapters.state.attempts.failed,
+                video.chapters.state.status.as_str(),
+                video.downloaded_quality.height,
+                Self::encode_timestamp(video.downloaded_quality.last_checked_at),
+                video.downloaded_quality.state.attempts.failed,
+                video.downloaded_quality.state.status.as_str(),
                 video.summary.status.as_str(),
-                video.download_attempts.failed,
-                video.download_failure,
-                video.thumbnail.status.as_str(),
-                video.thumbnail.attempts.failed,
-                Self::encode_timestamp(video.thumbnail.attempts.last_failed_at),
+                video.download.state.attempts.failed,
+                video.download.failure,
+                video.thumbnail.state.status.as_str(),
+                video.thumbnail.state.attempts.failed,
+                Self::encode_timestamp(video.thumbnail.state.attempts.last_failed_at),
                 video.summary.attempts.failed,
                 Self::encode_timestamp(video.summary.attempts.last_failed_at),
                 video.categorization.status.as_str(),
@@ -543,57 +546,59 @@ impl SqliteVideoRepository {
     }
 
     fn row_to_video(row: VideoRow) -> anyhow::Result<Video> {
+        let subtitles_last_checked_at =
+            Self::decode_timestamp(row.subtitles_last_checked_at, "subtitles_last_checked_at")?;
+        let chapters_last_checked_at =
+            Self::decode_timestamp(row.chapters_last_checked_at, "chapters_last_checked_at")?;
+        let quality_last_checked_at =
+            Self::decode_timestamp(row.quality_last_checked_at, "quality_last_checked_at")?;
         Ok(Video {
             id: VideoId::new(row.id)?,
             youtube_id: YoutubeVideoId::new(row.youtube_id)?,
             title: row.title,
-            status: VideoStatus::parse(&row.status)?,
-            download_attempts: RetryAttempts {
-                failed: row.download_failed_attempts,
-                last_failed_at: Self::decode_timestamp(row.last_errored_at, "last_errored_at")?,
-            },
-            download_failure: row.download_failure,
-            quality: row.quality.map(Quality::new).transpose()?,
-            filename: row.filename,
-            thumbnail_filename: row.thumbnail_filename,
-            thumbnail: Self::decode_step(
-                &row.thumbnail_status,
-                row.thumbnail_failed_attempts,
-                row.thumbnail_last_failed_at,
-                "thumbnail_last_failed_at",
+            download: Self::decode_download(
+                &row.status,
+                row.download_failed_attempts,
+                row.last_errored_at,
+                row.download_failure,
+                row.filename,
+                row.quality,
+                row.duration_seconds,
             )?,
-            duration_seconds: row.duration_seconds,
             created_at: Self::parse_timestamp(&row.created_at, "created_at")?,
             updated_at: Self::parse_timestamp(&row.updated_at, "updated_at")?,
-            watched_at: Self::decode_timestamp(row.watched_at, "watched_at")?,
-            playback_position: PlaybackPosition::new(row.playback_position_seconds)?,
             synced_at: Self::decode_timestamp(row.synced_at, "synced_at")?,
-            last_played_at: Self::decode_timestamp(row.last_played_at, "last_played_at")?,
             episode_number: Self::decode_episode_number(row.season, row.episode)?,
-            subtitles: Self::decode_checks(
-                &row.subtitles_status,
-                row.subtitles_failed_attempts,
-                row.subtitles_last_checked_at,
-                "subtitles_last_checked_at",
-            )?,
-            subtitle_filename: row.subtitle_filename,
-            chapters: row
-                .chapters
-                .map(|chapters| Self::decode_chapters(&chapters))
-                .transpose()?,
-            chapters_checks: Self::decode_checks(
-                &row.chapters_status,
-                row.chapters_failed_attempts,
-                row.chapters_last_checked_at,
-                "chapters_last_checked_at",
-            )?,
-            downloaded_height: row.downloaded_height,
-            quality_checks: Self::decode_checks(
-                &row.quality_status,
-                row.quality_failed_attempts,
-                row.quality_last_checked_at,
-                "quality_last_checked_at",
-            )?,
+            subtitles: Subtitles {
+                state: Self::decode_late_step(
+                    &row.subtitles_status,
+                    row.subtitles_failed_attempts,
+                    subtitles_last_checked_at,
+                )?,
+                last_checked_at: subtitles_last_checked_at,
+                filename: row.subtitle_filename,
+            },
+            chapters: Chapters {
+                state: Self::decode_late_step(
+                    &row.chapters_status,
+                    row.chapters_failed_attempts,
+                    chapters_last_checked_at,
+                )?,
+                last_checked_at: chapters_last_checked_at,
+                found: row
+                    .chapters
+                    .map(|chapters| Self::decode_chapters(&chapters))
+                    .transpose()?,
+            },
+            downloaded_quality: DownloadedQuality {
+                state: Self::decode_late_step(
+                    &row.quality_status,
+                    row.quality_failed_attempts,
+                    quality_last_checked_at,
+                )?,
+                last_checked_at: quality_last_checked_at,
+                height: row.downloaded_height,
+            },
             summary: Self::decode_step(
                 &row.summary_status,
                 row.summary_failed_attempts,
@@ -607,6 +612,20 @@ impl SqliteVideoRepository {
                 "categorization_last_failed_at",
             )?,
             version: row.version,
+            watch: WatchState {
+                watched_at: Self::decode_timestamp(row.watched_at, "watched_at")?,
+                position: PlaybackPosition::new(row.playback_position_seconds)?,
+                last_played_at: Self::decode_timestamp(row.last_played_at, "last_played_at")?,
+            },
+            thumbnail: Thumbnail {
+                filename: row.thumbnail_filename,
+                state: Self::decode_step(
+                    &row.thumbnail_status,
+                    row.thumbnail_failed_attempts,
+                    row.thumbnail_last_failed_at,
+                    "thumbnail_last_failed_at",
+                )?,
+            },
         })
     }
 
@@ -620,20 +639,72 @@ impl SqliteVideoRepository {
             .transpose()
     }
 
-    /// A late-data step as stored: its status, failed attempts and last
-    /// check time, which is also when its last attempt failed.
-    fn decode_checks(
+    /// A late-data step as stored: a check counts as a failed attempt's
+    /// time only while some attempt failed.
+    fn decode_late_step(
         status: &str,
         failed: u32,
-        last_checked_at: Option<String>,
-        column: &str,
-    ) -> anyhow::Result<LateDataChecks> {
-        let last_checked_at = Self::decode_timestamp(last_checked_at, column)?;
-        Ok(LateDataChecks::restored(
-            StepStatus::parse(status)?,
-            failed,
-            last_checked_at,
-        ))
+        last_checked_at: Option<DateTime<Utc>>,
+    ) -> anyhow::Result<StepState> {
+        Ok(StepState {
+            status: StepStatus::parse(status)?,
+            attempts: RetryAttempts {
+                failed,
+                last_failed_at: last_checked_at.filter(|_| failed > 0),
+            },
+        })
+    }
+
+    /// The download as stored: the status is parsed once. In Progress is
+    /// Retrying on top of failed attempts, else Pending, and is the only
+    /// status that marks the download started; Downloaded is Done.
+    fn decode_download(
+        status: &str,
+        failed: u32,
+        last_errored_at: Option<String>,
+        failure: Option<String>,
+        filename: Option<String>,
+        quality: Option<String>,
+        duration_seconds: Option<i64>,
+    ) -> anyhow::Result<Download> {
+        let status = VideoStatus::parse(status)?;
+        let step_status = match status {
+            VideoStatus::InProgress if failed > 0 => StepStatus::Retrying,
+            VideoStatus::InProgress | VideoStatus::Pending => StepStatus::Pending,
+            VideoStatus::Retrying => StepStatus::Retrying,
+            VideoStatus::Failed => StepStatus::Failed,
+            VideoStatus::Downloaded => StepStatus::Done,
+            VideoStatus::Unavailable => StepStatus::Unavailable,
+        };
+        Ok(Download {
+            state: StepState {
+                status: step_status,
+                attempts: RetryAttempts {
+                    failed,
+                    last_failed_at: Self::decode_timestamp(last_errored_at, "last_errored_at")?,
+                },
+            },
+            started: status == VideoStatus::InProgress,
+            failure,
+            file: Self::decode_downloaded_file(filename, quality, duration_seconds)?,
+        })
+    }
+
+    /// The downloaded file as stored: recorded once both its filename and
+    /// quality are.
+    fn decode_downloaded_file(
+        filename: Option<String>,
+        quality: Option<String>,
+        duration_seconds: Option<i64>,
+    ) -> anyhow::Result<Option<DownloadedFile>> {
+        Ok(match (filename, quality) {
+            (Some(filename), Some(quality)) => Some(DownloadedFile {
+                filename,
+                quality: Quality::new(quality)?,
+                duration_seconds,
+            }),
+            _ => None,
+        })
     }
 
     fn decode_step(
@@ -694,7 +765,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::video::PlaylistEpisodeNumber;
+    use crate::domain::video::{Chapters, DownloadedQuality, PlaylistEpisodeNumber, Thumbnail};
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
@@ -722,23 +793,37 @@ mod tests {
             status,
             attempts: attempts(failed),
         };
-        let checked = |status, failed| LateDataChecks {
-            state: step(status, failed),
-            last_checked_at: Some(failed_at),
-        };
         let video = Video {
-            status: VideoStatus::Retrying,
-            download_attempts: attempts(3),
-            download_failure: Some("HTTP Error 503".to_string()),
-            thumbnail: step(StepStatus::Failed, 11),
-            subtitles: checked(StepStatus::Retrying, 2),
-            chapters_checks: LateDataChecks {
-                state: StepState::pending().unavailable(),
-                last_checked_at: Some(failed_at),
+            thumbnail: Thumbnail {
+                state: step(StepStatus::Failed, 11),
+                filename: None,
             },
-            quality_checks: checked(StepStatus::Failed, 11),
+            subtitles: Subtitles {
+                state: step(StepStatus::Retrying, 2),
+                last_checked_at: Some(failed_at),
+                filename: None,
+            },
+            downloaded_quality: DownloadedQuality {
+                state: step(StepStatus::Failed, 11),
+                last_checked_at: Some(failed_at),
+                height: None,
+            },
             summary: step(StepStatus::Retrying, 1),
             categorization: step(StepStatus::Failed, 11),
+            chapters: Chapters {
+                state: StepState::pending().unavailable(),
+                last_checked_at: Some(failed_at),
+                ..Chapters::pending()
+            },
+            download: Download {
+                started: false,
+                state: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: attempts(3),
+                },
+                failure: Some("HTTP Error 503".to_string()),
+                ..video("Every step", now).download
+            },
             ..video("Every step", now)
         };
 
@@ -932,8 +1017,7 @@ mod tests {
         let found = repo.find(&video.id).unwrap().unwrap();
         assert_eq!(found.title, "First");
         assert_eq!(found.youtube_id.as_str(), "yt1");
-        assert_eq!(found.status, VideoStatus::Pending);
-        assert_eq!(found.quality, None);
+        assert_eq!(found.download, Download::pending());
     }
 
     #[test]
@@ -996,8 +1080,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.quality, Some(Quality::Mid));
-        assert_eq!(found.filename, Some("First.mp4".to_string()));
+        assert_eq!(found.download, downloaded.download);
     }
 
     #[test]
@@ -1015,7 +1098,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.thumbnail_filename, Some("First.jpg".to_string()));
+        assert_eq!(found.thumbnail.filename, Some("First.jpg".to_string()));
     }
 
     #[test]
@@ -1033,7 +1116,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.duration_seconds, Some(223));
+        assert_eq!(found.download, downloaded.download);
     }
 
     #[test]
@@ -1051,7 +1134,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.duration_seconds, None);
+        assert_eq!(found.download, downloaded.download);
     }
 
     #[test]
@@ -1097,7 +1180,7 @@ mod tests {
         repo.update(&stored.start_download(later)).unwrap();
 
         let found = repo.find(&original.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::InProgress);
+        assert_eq!(found.download.status(), VideoStatus::InProgress);
         assert_eq!(found.updated_at, later);
     }
 
@@ -1131,17 +1214,53 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_every_download_state() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let failed_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let retrying = |title| video(title, now).mark_errored("HTTP Error 503", failed_at);
+        let videos = vec![
+            video("Pending", now),
+            video("In Progress", now).start_download(now),
+            retrying("In Progress again").start_download(now),
+            retrying("Retrying"),
+            video("Failed", now).mark_download_failed("HTTP Error 503", failed_at),
+            video("Downloaded", now).mark_downloaded(
+                Quality::Mid,
+                "Season 1/S01E001 - Downloaded.mp4",
+                None,
+                Some(223),
+                now,
+            ),
+            video("Unavailable", now).mark_unavailable(now),
+        ];
+
+        videos.iter().for_each(|video| repo.insert(video).unwrap());
+
+        assert_eq!(
+            videos
+                .iter()
+                .map(|video| repo.find(&video.id).unwrap())
+                .collect::<Vec<_>>(),
+            videos.into_iter().map(Some).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn it_should_round_trip_late_data_checks() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let checked_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let checks = LateDataChecks::checked(Some(checked_at), 2);
         let video = Video {
-            subtitles: checks,
-            chapters: Some(vec![]),
-            chapters_checks: LateDataChecks::done_at(Some(checked_at)),
-            downloaded_height: Some(1080),
-            quality_checks: LateDataChecks::done_at(Some(checked_at)),
+            subtitles: Subtitles::checked(Some(checked_at), 2),
+            chapters: Chapters {
+                found: Some(vec![]),
+                ..Chapters::done_at(Some(checked_at))
+            },
+            downloaded_quality: DownloadedQuality {
+                height: Some(1080),
+                ..DownloadedQuality::done_at(Some(checked_at))
+            },
             ..video("Checked", now)
         };
 
@@ -1158,8 +1277,11 @@ mod tests {
         let original = video("First", now);
         repo.insert(&original).unwrap();
         let checked = Video {
-            subtitles: LateDataChecks::checked(Some(checked_at), 2),
             updated_at: checked_at,
+            subtitles: Subtitles {
+                filename: original.subtitles.filename.clone(),
+                ..Subtitles::checked(Some(checked_at), 2)
+            },
             ..original.clone()
         };
 
@@ -1180,8 +1302,12 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let watched_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let video = Video {
-            playback_position: PlaybackPosition::new(42).unwrap(),
-            ..video("First", now).mark_watched(watched_at)
+            watch: WatchState {
+                watched_at: Some(watched_at),
+                position: PlaybackPosition::new(42).unwrap(),
+                ..WatchState::unwatched()
+            },
+            ..video("First", now)
         };
 
         repo.insert(&video).unwrap();
@@ -1206,12 +1332,18 @@ mod tests {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let video = Video {
-            last_played_at: Some(DateTime::<Utc>::from_timestamp(100, 0).unwrap()),
+            watch: WatchState {
+                last_played_at: Some(DateTime::<Utc>::from_timestamp(100, 0).unwrap()),
+                ..WatchState::unwatched()
+            },
             ..video("First", now)
         };
         repo.insert(&video).unwrap();
         let replayed = Video {
-            last_played_at: Some(DateTime::<Utc>::from_timestamp(200, 0).unwrap()),
+            watch: WatchState {
+                last_played_at: Some(DateTime::<Utc>::from_timestamp(200, 0).unwrap()),
+                ..video.watch
+            },
             ..video.clone()
         };
 
@@ -1231,7 +1363,10 @@ mod tests {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let video = Video {
-            last_played_at: None,
+            watch: WatchState {
+                last_played_at: None,
+                ..WatchState::unwatched()
+            },
             ..video("First", now)
         };
 

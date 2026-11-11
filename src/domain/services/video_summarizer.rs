@@ -203,7 +203,7 @@ impl VideoSummarizer {
         info!(
             video_id = %video.id,
             title = %video.title,
-            video_seconds = video.duration_seconds,
+            video_seconds = video.download.duration_seconds(),
             parts = input.parts(),
             model = %job.settings.model.as_str(),
             "generating video summary"
@@ -229,7 +229,7 @@ impl VideoSummarizer {
             video_id = %video.id,
             summary = %text.as_str(),
             duration_seconds = started.elapsed().as_secs_f64(),
-            video_seconds = video.duration_seconds,
+            video_seconds = video.download.duration_seconds(),
             model = %job.settings.model.as_str(),
             "video summary generated"
         );
@@ -378,7 +378,8 @@ impl VideoSummarizer {
             .find(&video.id)?
             .context("video has no stored transcript")?;
         let filename = video
-            .subtitle_filename
+            .subtitles
+            .filename
             .as_deref()
             .context("video has no subtitle file")?;
         let srt = self

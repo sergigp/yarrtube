@@ -56,6 +56,7 @@ mod tests {
     };
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::Chapters;
     use crate::domain::video::{
         PlaybackPosition, RetryAttempts, StepState, StepStatus, Video, VideoChapter, YoutubeVideoId,
     };
@@ -2109,7 +2110,10 @@ mod tests {
 
     fn with_chapters(chapters: Vec<VideoChapter>) -> Video {
         Video {
-            chapters: Some(chapters),
+            chapters: Chapters {
+                found: Some(chapters),
+                ..subtitled_video().chapters
+            },
             ..subtitled_video()
         }
     }

@@ -9,7 +9,7 @@ use crate::domain::services::{
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, VideoStatus, YoutubeVideoId};
+use crate::domain::video::{Video, VideoId, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -381,10 +381,10 @@ impl PlaylistVideoReconciler {
                             playlist_id: playlist.id.as_str().to_string(),
                             video_id: video.id.as_str().to_string(),
                             title: video.title.clone(),
-                            filename: video.filename.clone(),
-                            thumbnail_filename: video.thumbnail_filename.clone(),
-                            subtitle_filename: video.subtitle_filename.clone(),
-                            was_downloaded: video.status == VideoStatus::Downloaded,
+                            filename: video.download.filename().map(str::to_string),
+                            thumbnail_filename: video.thumbnail.filename.clone(),
+                            subtitle_filename: video.subtitles.filename.clone(),
+                            was_downloaded: video.download.is_downloaded(),
                         },
                     ))
             })
