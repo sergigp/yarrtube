@@ -946,6 +946,26 @@ mod tests {
     }
 
     #[test]
+    fn it_should_delete_every_pending_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&download_task("v1"), now + chrono::Duration::minutes(10))
+            .unwrap();
+        repo.schedule(
+            &Task::FetchThumbnail {
+                video_id: "v1".to_string(),
+            },
+            now,
+        )
+        .unwrap();
+
+        repo.delete_pending_for_video(&VideoId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(repo.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_not_queue_a_second_summary() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);
