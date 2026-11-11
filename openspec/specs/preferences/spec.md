@@ -199,7 +199,7 @@ Until a `categorization_prompt` is saved, it SHALL read as the prompt shipped wi
 - **THEN** the daemon responds with HTTP status 200, the shipped prompt and `categorization_prompt_is_default` `true`
 
 ### Requirement: Categorization Settings
-`categorization_model` SHALL be a non-blank name of at most 200 characters, else rejected with `Categorization model must be named (got "<value>")`. `categorization_context_length` SHALL be an integer from 1024 to 131072, else rejected with `Context length must be between 1024 and 131072 (got <value>)`. `categorization_temperature` SHALL be a number from 0 to 2, else rejected with `Temperature must be between 0 and 2 (got <value>)`. `categorization_prompt` SHALL be free text that is not blank, else rejected with `Categorization prompt must not be empty`; it has no sections or variables. Each rejection is HTTP status 400. Changing a categorization setting SHALL NOT affect summaries.
+`categorization_model` SHALL be a non-blank name of at most 200 characters, else rejected with `Categorization model must be named (got "<value>")`. `categorization_context_length` SHALL be an integer from 1024 to 131072, else rejected with `Context length must be between 1024 and 131072 (got <value>)`. `categorization_temperature` SHALL be a number from 0 to 2, else rejected with `Temperature must be between 0 and 2 (got <value>)`. `categorization_prompt` SHALL be free text that is not blank, else rejected with `Categorization prompt must not be empty`; it has no sections or variables. Each rejection is HTTP status 400. Changing a categorization setting SHALL NOT affect summaries. Changing any categorization setting other than `categorization_enabled` SHALL reset failed categorizations (see "Failed Verdicts Reset" in `video-categorization`).
 
 #### Scenario: Saving categorization settings
 - **WHEN** a client sends `PATCH /api/preferences` with `categorization_enabled` `true`, `categorization_model` `"gemma3:4b"`, `categorization_context_length` `8192`, `categorization_temperature` `0.5`, `categorization_thinking` `false` and `categorization_prompt` `"Answer yes or no."`, AI being on
@@ -224,6 +224,10 @@ Until a `categorization_prompt` is saved, it SHALL read as the prompt shipped wi
 #### Scenario: Summaries left alone
 - **WHEN** a video's summary is Failed and a client changes `categorization_model`
 - **THEN** the video's summary stays Failed
+
+#### Scenario: Thinking changed after a failure
+- **WHEN** a video's categorization is Failed with a `failed` verdict and a client changes `categorization_thinking`
+- **THEN** the video's categorization is Pending and the `failed` verdict is deleted
 
 ### Requirement: Auto Categorization Context Length
 Until a `categorization_context_length` is saved, it SHALL be Auto: 1,820 tokens per category with an AI prompt, rounded up to a multiple of 1,024, at least 4,096 and at most 131,072, read as that number with `categorization_context_length_is_auto` `true`. Saving a number SHALL store it, with `_is_auto` `false`; saving `null` SHALL drop it, back to Auto. Saving other preferences SHALL NOT store it. A `4096` stored by a version before Auto, its old default, SHALL be dropped once by a migration and read as Auto; a `4096` saved since SHALL read as saved.
