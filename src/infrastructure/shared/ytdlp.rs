@@ -2587,12 +2587,26 @@ mod tests {
         );
     }
 
-    /// Whether a process with `pid` still exists (a zombie counts).
+    /// Whether `pid` is still alive two seconds from now. A zombie is dead:
+    /// an orphan killed with its group waits for whoever adopted it to reap
+    /// it, which on Linux may never happen during the test. The wait covers
+    /// SIGKILL landing asynchronously after `killpg` returns.
     #[cfg(unix)]
     fn is_running(pid: i32) -> bool {
-        // SAFETY: signal 0 sends nothing, only checks `pid` exists.
-        let signalled = unsafe { libc::kill(pid, 0) } == 0;
-        signalled || io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            let state = Command::new("ps")
+                .args(["-o", "stat=", "-p", &pid.to_string()])
+                .output()
+                .unwrap()
+                .stdout;
+            let state = String::from_utf8_lossy(&state);
+            if state.trim().is_empty() || state.trim().starts_with('Z') {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        true
     }
 
     #[cfg(unix)]
