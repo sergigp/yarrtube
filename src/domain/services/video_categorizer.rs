@@ -2,8 +2,8 @@ use crate::domain::category::Category;
 use crate::domain::llm_server::{LlmReply, LlmServerUnreachable, OllamaUrl};
 use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
 use crate::domain::services::{
-    VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
-    VideoUpdater, VideoUpdaterApi,
+    CategorizationResetter, VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder,
+    VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
     StepStatus, UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome,
@@ -124,6 +124,8 @@ pub struct VideoCategorizer {
     video_category_assigner: VideoCategoryAssigner,
     clock: Arc<dyn Clock>,
     video_updater: VideoUpdater,
+    #[allow(dead_code)]
+    categorization_resetter: CategorizationResetter,
 }
 
 impl VideoCategorizer {
@@ -138,9 +140,11 @@ impl VideoCategorizer {
         video_category_assigner: VideoCategoryAssigner,
         clock: Arc<dyn Clock>,
         video_repository: Arc<dyn VideoRepository>,
+        categorization_resetter: CategorizationResetter,
     ) -> Self {
         Self {
             video_updater: VideoUpdater::new(video_repository),
+            categorization_resetter,
             preferences_repository,
             video_owner_finder,
             category_repository,
@@ -532,10 +536,23 @@ impl VideoCategorizer {
         {
             self.give_up(video, job, rejected)?;
         }
+        let recorded = self.reset_if_still_pending(video, job, recorded)?;
         Ok(VideoStepOutcome::retry_at_or_settled(
             recorded.and_then(|video| video.categorization.next_attempt_at()),
             reason,
         ))
+    }
+
+    /// After a give-up: back to Pending when a category is still pending
+    /// (its `failed` verdict dropped because the settings or its prompt
+    /// changed during the attempt); the video as stored after.
+    fn reset_if_still_pending(
+        &self,
+        _video: &Video,
+        _job: &CategorizationJob,
+        recorded: Option<Video>,
+    ) -> anyhow::Result<Option<Video>> {
+        Ok(recorded)
     }
 
     /// Records a run that left nothing rejected: Done.

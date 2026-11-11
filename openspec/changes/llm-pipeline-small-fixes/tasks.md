@@ -4,7 +4,7 @@
 
 - [x] 1.1 Create every file, type and signature from design.md: `VideoSummaryGenerated` (+ re-export, `DomainEvent` variant with type/payload arms), `VideoSummarizer` taking an `EventPublisher` (wired in `src/serve.rs` and the `summarize_video_task` test helper with a `SqliteEventPublisher`), `publish_generated` stub doing nothing, `SyncVideoOnVideoSummaryGenerated` with `handle` returning `Ok(())` registered under `video_summary_generated` in `subscribers/mod.rs`, `Skip::NothingPending` (never returned yet; `categorize` arm settling). Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
 
-- [ ] 1.2 Skeleton for the last-attempt fix: `VideoCategorizer::new` takes a `CategorizationResetter` (wired in `src/serve.rs`, `sync_video_task.rs` and `categorize_video_task.rs` via `test_support::categorization_resetter`) and `reset_if_still_pending` stub returning the recorded video unchanged. Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
+- [x] 1.2 Skeleton for the last-attempt fix: `VideoCategorizer::new` takes a `CategorizationResetter` (wired in `src/serve.rs`, `sync_video_task.rs` and `categorize_video_task.rs` via `test_support::categorization_resetter`) and `reset_if_still_pending` stub returning the recorded video unchanged. Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
 
 ## 2. Behaviour (TDD)
 

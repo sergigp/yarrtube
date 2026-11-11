@@ -976,6 +976,7 @@ fn video_categorizer(infrastructure: &InfrastructureContainer) -> Arc<VideoCateg
         video_category_assigner(infrastructure),
         infrastructure.clock.clone(),
         infrastructure.video_repository.clone(),
+        categorization_resetter(infrastructure),
     ))
 }
 

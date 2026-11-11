@@ -58,7 +58,9 @@ mod tests {
         CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength,
         Preferences, Temperature,
     };
-    use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
+    use crate::domain::services::{
+        CategorizationResetter, VideoCategoryAssigner, VideoOwnerFinder,
+    };
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::Chapters;
     use crate::domain::video::{
@@ -988,6 +990,7 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                 ),
                 Arc::new(FixedClock(later())),
                 Arc::new(SqliteVideoRepository::new(db.database())),
+                categorization_resetter(&db),
             )),
         );
 
@@ -1608,7 +1611,18 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                 ),
                 Arc::new(FixedClock(later())),
                 Arc::new(SqliteVideoRepository::new(db.database())),
+                categorization_resetter(&db),
             )),
+        )
+    }
+
+    fn categorization_resetter(db: &TestDatabase) -> CategorizationResetter {
+        CategorizationResetter::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(FixedClock(later())),
         )
     }
 
