@@ -27,11 +27,11 @@ passes with no assertion changed in acceptance tests. One PR for all.
 
 ## 4. Download
 
-- [ ] 4.1 (human) Run the pre-flight query on the NAS database and confirm it returns 0: `SELECT count(*) FROM videos WHERE (status != 'DOWNLOADED' AND (filename IS NOT NULL OR quality IS NOT NULL OR duration_seconds IS NOT NULL)) OR (status = 'DOWNLOADED' AND (filename IS NULL OR quality IS NULL));` — if not 0, stop and revisit `Download.file` via /opsx:update
-- [ ] 4.2 Add `DownloadedFile` and `Download` (`StepState` + `started` + `failure` + `file`); replace `status`, `download_attempts`, `download_failure`, `filename`, `quality`, `duration_seconds`; delete `is_download_due`/`next_download_at` logic from `Video`; move `is_downloaded`, `is_in_legacy_layout`; `VideoStatus` derived via `Download::status()`; verify green
-- [ ] 4.3 Add the `download` value-object tests from design.md's Test Plan and `it_should_round_trip_every_download_state` in the repository; verify they pass
-- [ ] 4.4 `StepResponse::download` and `VideoResponse` read the new paths; verify every `src/application/http/**` test passes unchanged in assertions
-- [ ] 4.5 Commit "Make the download a step like the others"
+- [x] 4.1 (human) Run the pre-flight query on the NAS database and confirm it returns 0: `SELECT count(*) FROM videos WHERE (status != 'DOWNLOADED' AND (filename IS NOT NULL OR quality IS NOT NULL OR duration_seconds IS NOT NULL)) OR (status = 'DOWNLOADED' AND (filename IS NULL OR quality IS NULL));` — if not 0, stop and revisit `Download.file` via /opsx:update
+- [x] 4.2 Add `DownloadedFile` and `Download` (`StepState` + `started` + `failure` + `file`); replace `status`, `download_attempts`, `download_failure`, `filename`, `quality`, `duration_seconds`; delete `is_download_due`/`next_download_at` logic from `Video`; move `is_downloaded`, `is_in_legacy_layout`; `VideoStatus` derived via `Download::status()`; verify green
+- [x] 4.3 Add the `download` value-object tests from design.md's Test Plan and `it_should_round_trip_every_download_state` in the repository; verify they pass
+- [x] 4.4 `StepResponse::download` and `VideoResponse` read the new paths; verify every `src/application/http/**` test passes unchanged in assertions
+- [x] 4.5 Commit "Make the download a step like the others"
 
 ## 5. Verification
 

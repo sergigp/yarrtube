@@ -166,8 +166,8 @@ mod tests {
         );
         let video = Video {
             title: "New Title".to_string(),
-            filename: Some("Season 2026/S2026E031501 - Old Title.mp4".to_string()),
             ..downloaded_video()
+                .map_file(|file| file.with_filename("Season 2026/S2026E031501 - Old Title.mp4"))
         };
         video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())

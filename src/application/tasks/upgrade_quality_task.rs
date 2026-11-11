@@ -1184,7 +1184,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 1,
-                quality: Some(Quality::Mid),
+                download: video
+                    .clone()
+                    .map_file(|file| file.with_quality(Quality::Mid))
+                    .download,
                 updated_at: now(),
                 downloaded_quality: DownloadedQuality {
                     height: Some(720),

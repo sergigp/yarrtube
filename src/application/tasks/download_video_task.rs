@@ -41,6 +41,8 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::Chapters;
+    use crate::domain::video::Download;
+    use crate::domain::video::DownloadedFile;
     use crate::domain::video::DownloadedQuality;
     use crate::domain::video::DownloadedVideo;
     use crate::domain::video::EpisodeNumber;
@@ -48,11 +50,11 @@ mod tests {
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::RetryAttempts;
     use crate::domain::video::StepState;
+    use crate::domain::video::StepStatus;
     use crate::domain::video::Thumbnail;
     use crate::domain::video::Video;
     use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
-    use crate::domain::video::VideoStatus;
     use crate::domain::video::WatchState;
     use crate::domain::video::YoutubeVideoId;
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
@@ -1519,13 +1521,19 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                status: VideoStatus::Retrying,
-                download_attempts: RetryAttempts {
-                    failed: 1,
-                    last_failed_at: Some(fixed_timestamp()),
-                },
-                download_failure: Some("HTTP Error 503".to_string()),
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Retrying,
+                        attempts: RetryAttempts {
+                            failed: 1,
+                            last_failed_at: Some(fixed_timestamp()),
+                        }
+                    },
+                    failure: Some("HTTP Error 503".to_string()),
+                    ..video.download
+                },
                 ..video
             }]
         );
@@ -1553,11 +1561,17 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                download_attempts: RetryAttempts {
-                    failed: 2,
-                    last_failed_at: Some(fixed_timestamp()),
-                },
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    state: StepState {
+                        attempts: RetryAttempts {
+                            failed: 2,
+                            last_failed_at: Some(fixed_timestamp()),
+                        },
+                        ..video.download.state
+                    },
+                    ..video.download
+                },
                 ..video
             }]
         );
@@ -1585,11 +1599,17 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                download_attempts: RetryAttempts {
-                    failed: 5,
-                    last_failed_at: Some(fixed_timestamp()),
-                },
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    state: StepState {
+                        attempts: RetryAttempts {
+                            failed: 5,
+                            last_failed_at: Some(fixed_timestamp()),
+                        },
+                        ..video.download.state
+                    },
+                    ..video.download
+                },
                 ..video
             }]
         );
@@ -1611,12 +1631,18 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                status: VideoStatus::Failed,
-                download_attempts: RetryAttempts {
-                    failed: 11,
-                    last_failed_at: Some(fixed_timestamp()),
-                },
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Failed,
+                        attempts: RetryAttempts {
+                            failed: 11,
+                            last_failed_at: Some(fixed_timestamp()),
+                        }
+                    },
+                    ..video.download
+                },
                 ..video
             }]
         );
@@ -1627,12 +1653,19 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let retrying = retrying_video(2);
         let video = Video {
-            download_attempts: RetryAttempts {
-                failed: 2,
-                last_failed_at: Some(fixed_timestamp() - Duration::minutes(20)),
+            download: Download {
+                state: StepState {
+                    attempts: RetryAttempts {
+                        failed: 2,
+                        last_failed_at: Some(fixed_timestamp() - Duration::minutes(20)),
+                    },
+                    ..retrying.download.state
+                },
+                ..retrying.download.clone()
             },
-            ..retrying_video(2)
+            ..retrying
         };
         video_repository.insert(&video).unwrap();
         seed_channel_video(&db, &video);
@@ -1664,12 +1697,19 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_dir = tempfile::tempdir().unwrap();
+        let retrying = retrying_video(3);
         let video = Video {
-            download_attempts: RetryAttempts {
-                failed: 3,
-                last_failed_at: Some(fixed_timestamp() - Duration::hours(6)),
+            download: Download {
+                state: StepState {
+                    attempts: RetryAttempts {
+                        failed: 3,
+                        last_failed_at: Some(fixed_timestamp() - Duration::hours(6)),
+                    },
+                    ..retrying.download.state
+                },
+                ..retrying.download.clone()
             },
-            ..retrying_video(3)
+            ..retrying
         };
         video_repository.insert(&video).unwrap();
         seed_channel_video(&db, &video);
@@ -1697,11 +1737,16 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                status: VideoStatus::Downloaded,
-                download_attempts: RetryAttempts::default(),
-                download_failure: None,
-                quality: Some(Quality::High),
-                filename: Some("Season 2026/S2026E031501 - My Video.mp4".to_string()),
+                download: Download {
+                    state: StepState::pending().succeed(),
+                    started: false,
+                    failure: None,
+                    file: Some(DownloadedFile {
+                        filename: "Season 2026/S2026E031501 - My Video.mp4".to_string(),
+                        quality: Quality::High,
+                        duration_seconds: None,
+                    }),
+                },
                 episode_number: Some(published_episode()),
                 synced_at: Some(fixed_timestamp()),
                 updated_at: fixed_timestamp(),
@@ -2059,13 +2104,19 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                status: VideoStatus::Retrying,
-                download_attempts: RetryAttempts {
-                    failed: 1,
-                    last_failed_at: Some(fixed_timestamp()),
-                },
-                download_failure: Some("yt-dlp could not be run".to_string()),
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Retrying,
+                        attempts: RetryAttempts {
+                            failed: 1,
+                            last_failed_at: Some(fixed_timestamp()),
+                        }
+                    },
+                    failure: Some("yt-dlp could not be run".to_string()),
+                    ..video.download
+                },
                 ..video
             }]
         );
@@ -2134,10 +2185,16 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                status: VideoStatus::Unavailable,
-                download_attempts: RetryAttempts::default(),
-                download_failure: None,
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Unavailable,
+                        attempts: RetryAttempts::default()
+                    },
+                    failure: None,
+                    ..video.download
+                },
                 ..video
             }]
         );
@@ -2695,14 +2752,20 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 3,
-                status: VideoStatus::Retrying,
-                download_attempts: RetryAttempts {
-                    failed: 1,
-                    last_failed_at: Some(fixed_timestamp()),
-                },
-                download_failure: Some(reason),
                 episode_number: Some(published_episode()),
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Retrying,
+                        attempts: RetryAttempts {
+                            failed: 1,
+                            last_failed_at: Some(fixed_timestamp()),
+                        }
+                    },
+                    failure: Some(reason),
+                    ..video.download
+                },
                 ..video
             }]
         );
@@ -3417,12 +3480,18 @@ mod tests {
     /// so its next attempt is due.
     fn retrying_video(failed: u32) -> Video {
         Video {
-            status: VideoStatus::Retrying,
-            download_attempts: RetryAttempts {
-                failed,
-                last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+            download: Download {
+                started: false,
+                state: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed,
+                        last_failed_at: Some(fixed_timestamp() - Duration::days(30)),
+                    },
+                },
+                failure: Some("HTTP Error 503".to_string()),
+                ..my_video().download
             },
-            download_failure: Some("HTTP Error 503".to_string()),
             ..my_video()
         }
     }

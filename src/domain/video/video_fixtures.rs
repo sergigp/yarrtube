@@ -2,6 +2,7 @@
 //! production files so a new field doesn't sweep through them.
 
 use super::chapters::Chapters;
+use super::downloaded_file::DownloadedFile;
 use super::downloaded_quality::DownloadedQuality;
 use super::retry_attempts::{MAX_ATTEMPTS, RetryAttempts};
 use super::step_state::StepState;
@@ -40,6 +41,23 @@ impl Video {
     /// `now`.
     pub fn mark_categorization_failed(self, now: DateTime<Utc>) -> Self {
         (0..MAX_ATTEMPTS).fold(self, |video, _| video.record_categorization_failure(now))
+    }
+
+    /// A downloaded video's file changed by `change`, alone.
+    pub fn map_file(self, change: impl FnOnce(DownloadedFile) -> DownloadedFile) -> Self {
+        let file = self.download.file.clone().map(change);
+        Self {
+            download: self.download.with_file(file),
+            ..self
+        }
+    }
+
+    /// A downloaded video's file recorded as lasting `duration_seconds`.
+    pub fn lasting(self, duration_seconds: Option<i64>) -> Self {
+        self.map_file(|file| DownloadedFile {
+            duration_seconds,
+            ..file
+        })
     }
 
     /// Sets the chapters alone, without recording a check

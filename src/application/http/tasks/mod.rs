@@ -28,11 +28,12 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
     use crate::domain::video::Chapters;
+    use crate::domain::video::Download;
     use crate::domain::video::DownloadedQuality;
     use crate::domain::video::Subtitles;
     use crate::domain::video::Thumbnail;
     use crate::domain::video::WatchState;
-    use crate::domain::video::{PlaybackPosition, RetryAttempts, StepState, Video, VideoStatus};
+    use crate::domain::video::{PlaybackPosition, StepState, Video};
     use crate::domain::video::{VideoId, YoutubeVideoId};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
@@ -1092,12 +1093,6 @@ mod tests {
             id: VideoId::new(id).unwrap(),
             youtube_id: YoutubeVideoId::new("yt1").unwrap(),
             title: title.to_string(),
-            status: VideoStatus::Pending,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: None,
-            filename: None,
-            duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             synced_at: None,
@@ -1114,6 +1109,7 @@ mod tests {
             chapters: Chapters::pending(),
             downloaded_quality: DownloadedQuality::pending(),
             thumbnail: Thumbnail::pending(),
+            download: Download::pending(),
         }
     }
 

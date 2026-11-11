@@ -108,7 +108,7 @@ impl SubtitleFetcher {
         staging: &Path,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
-        let Some(filename) = video.filename.as_deref() else {
+        let Some(filename) = video.download.filename() else {
             return Ok(());
         };
         let paths = EpisodePaths::from_media(filename);
@@ -213,7 +213,10 @@ impl SubtitleFetcher {
         Ok(self
             .video_repository
             .find(&video.id)?
-            .is_some_and(|stored| stored.is_downloaded() && stored.filename == video.filename))
+            .is_some_and(|stored| {
+                stored.download.is_downloaded()
+                    && stored.download.filename() == video.download.filename()
+            }))
     }
 
     /// Best-effort, like `VideoDownloaded`: the subtitles are already

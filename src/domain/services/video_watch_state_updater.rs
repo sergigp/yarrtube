@@ -266,7 +266,7 @@ impl VideoWatchStateUpdater {
     /// one of them is `Downloaded`.
     fn find_downloaded_copies(&self, id: &VideoId) -> Result<Vec<Video>, UpdateWatchStateError> {
         Some(self.find_copies(id)?)
-            .filter(|copies| copies.iter().any(Video::is_downloaded))
+            .filter(|copies| copies.iter().any(|video| video.download.is_downloaded()))
             .ok_or_else(|| UpdateWatchStateError::VideoNotDownloaded(id.clone()))
     }
 

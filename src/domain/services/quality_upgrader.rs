@@ -178,7 +178,7 @@ impl QualityUpgrader {
         output_dir: &Path,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<()> {
-        let Some(filename) = video.filename.as_deref() else {
+        let Some(filename) = video.download.filename() else {
             return Ok(());
         };
         if !self.is_still_downloaded_as(video)? {
@@ -209,7 +209,10 @@ impl QualityUpgrader {
         Ok(self
             .video_repository
             .find(&video.id)?
-            .is_some_and(|stored| stored.is_downloaded() && stored.filename == video.filename))
+            .is_some_and(|stored| {
+                stored.download.is_downloaded()
+                    && stored.download.filename() == video.download.filename()
+            }))
     }
 
     /// The video as stored once the check is recorded on it.

@@ -281,13 +281,14 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::Chapters;
+    use crate::domain::video::Download;
     use crate::domain::video::DownloadedQuality;
+    use crate::domain::video::StepStatus;
     use crate::domain::video::Subtitles;
     use crate::domain::video::Thumbnail;
     use crate::domain::video::WatchState;
     use crate::domain::video::{
-        EpisodeNumber, RetryAttempts, StepState, Video, VideoChapter, VideoId, VideoStatus,
-        YoutubeVideoId,
+        EpisodeNumber, RetryAttempts, StepState, Video, VideoChapter, VideoId, YoutubeVideoId,
     };
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -1980,10 +1981,7 @@ mod tests {
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
-            &Video {
-                duration_seconds: Some(600),
-                ..started_video("vid1", "Started Short", 120, watched_timestamp())
-            },
+            &started_video("vid1", "Started Short", 120, watched_timestamp()).lasting(Some(600)),
         );
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -2770,14 +2768,11 @@ mod tests {
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
-            &Video {
-                duration_seconds: Some(600),
-                ..new_video(
-                    YoutubeVideoId::new("vid_pending").unwrap(),
-                    "Pending",
-                    fixed_timestamp(),
-                )
-            },
+            &new_video(
+                YoutubeVideoId::new("vid_pending").unwrap(),
+                "Pending",
+                fixed_timestamp(),
+            ),
         );
         let video_searcher = VideoSearcher::new(
             playlist_repository,
@@ -3884,7 +3879,6 @@ mod tests {
         let downloaded = video_with_duration("vid1", Some(100));
         let downloading = Video {
             id: VideoId::new("rec-vid1-copy").unwrap(),
-            filename: Some("Season 2023/S2023E111401 - My Video.mp4".to_string()),
             episode_number: Some(EpisodeNumber::from_columns(2023, 111401).unwrap()),
             ..new_video(
                 YoutubeVideoId::new("vid1").unwrap(),
@@ -6050,15 +6044,13 @@ mod tests {
             &video_repository,
             &playlist_video_repository,
             "PL1",
-            &Video {
-                duration_seconds: Some(600),
-                ..started_video(
-                    "vid1",
-                    "Started",
-                    120,
-                    watched_timestamp() - Duration::days(1),
-                )
-            },
+            &started_video(
+                "vid1",
+                "Started",
+                120,
+                watched_timestamp() - Duration::days(1),
+            )
+            .lasting(Some(600)),
         );
         save_preferences(
             &db,
@@ -6987,10 +6979,16 @@ mod tests {
             video_repository.find(&video.id).unwrap(),
             Some(Video {
                 version: 1,
-                status: VideoStatus::Pending,
-                download_attempts: RetryAttempts::default(),
-                download_failure: None,
                 updated_at: fixed_timestamp(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Pending,
+                        attempts: RetryAttempts::default()
+                    },
+                    failure: None,
+                    ..video.download.clone()
+                },
                 ..video.clone()
             })
         );
@@ -8083,10 +8081,7 @@ mod tests {
         duration_seconds: Option<i64>,
         created_at_seconds: i64,
     ) -> Video {
-        Video {
-            duration_seconds,
-            ..downloaded_video(youtube_id, title, None, created_at_seconds)
-        }
+        downloaded_video(youtube_id, title, None, created_at_seconds).lasting(duration_seconds)
     }
 
     fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {

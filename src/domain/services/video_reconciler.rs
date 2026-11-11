@@ -105,12 +105,14 @@ impl VideoReconciler {
     /// `args_for_quality`), so it is downloaded again; the pass's orphan
     /// sweep removes the stale file.
     fn reset_if_broken(&self, video: Video, target: &VideoTarget) -> anyhow::Result<Video> {
-        if video.status != VideoStatus::Downloaded || self.has_healthy_file(&video, target) {
+        if video.download.status() != VideoStatus::Downloaded
+            || self.has_healthy_file(&video, target)
+        {
             return Ok(video);
         }
         warn!(
             youtube_id = %video.youtube_id,
-            filename = video.filename.as_deref().unwrap_or(""),
+            filename = video.download.filename().unwrap_or(""),
             "downloaded video's file is missing or not mp4, resetting for redownload"
         );
         self.reset_for_redownload(video)
@@ -118,7 +120,7 @@ impl VideoReconciler {
 
     /// A video's file is healthy when it exists and is an mp4.
     fn has_healthy_file(&self, video: &Video, target: &VideoTarget) -> bool {
-        video.filename.as_deref().is_some_and(|filename| {
+        video.download.filename().is_some_and(|filename| {
             self.video_file_repository
                 .file_exists(&target.output_dir, filename)
                 && Path::new(filename)
@@ -140,7 +142,7 @@ impl VideoReconciler {
     /// thumbnail already on disk. Best effort: a failure is logged, the video
     /// is left as it is and its next sync tries again.
     fn repair_metadata(&self, video: &Video, owner: &VideoOwner) {
-        if video.status != VideoStatus::Downloaded || self.has_metadata(video) {
+        if video.download.status() != VideoStatus::Downloaded || self.has_metadata(video) {
             return;
         }
         let Some(metadata) = self
@@ -152,7 +154,7 @@ impl VideoReconciler {
         let Some(video) = self.relocate_if_legacy(video, &metadata, &owner.target) else {
             return;
         };
-        let (Some(filename), Some(number)) = (video.filename.as_deref(), video.episode_number)
+        let (Some(filename), Some(number)) = (video.download.filename(), video.episode_number)
         else {
             return;
         };
@@ -175,7 +177,7 @@ impl VideoReconciler {
         metadata: &VideoMetadata,
         target: &VideoTarget,
     ) -> Option<Video> {
-        if !video.is_in_legacy_layout() {
+        if !video.download.is_in_legacy_layout() {
             return Some(video.clone());
         }
         match self
@@ -205,7 +207,7 @@ impl VideoReconciler {
     /// `schedule_steps` then schedules. A Pending video with no download is
     /// not stranded: a new or just reset video is scheduled by this sync.
     fn warn_if_stranded(&self, video: &Video) -> anyhow::Result<()> {
-        if video.status != VideoStatus::InProgress
+        if video.download.status() != VideoStatus::InProgress
             || self
                 .task_repository
                 .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
@@ -215,7 +217,7 @@ impl VideoReconciler {
         }
         warn!(
             youtube_id = %video.youtube_id,
-            status = video.status.as_str(),
+            status = video.download.status().as_str(),
             "stranded video found, scheduling its download"
         );
         Ok(())

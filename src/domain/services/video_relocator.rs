@@ -149,9 +149,10 @@ impl VideoRelocator {
         output_dir: &Path,
     ) -> Result<(String, Numbering), Relocation> {
         let Some(from) = video
-            .filename
-            .clone()
-            .filter(|_| video.is_in_legacy_layout())
+            .download
+            .filename()
+            .map(str::to_string)
+            .filter(|_| video.download.is_in_legacy_layout())
         else {
             return Err(Relocation::AlreadyInPlace);
         };
@@ -193,7 +194,13 @@ impl VideoRelocator {
         files: &RelocatedFiles,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
-        let from = video.filename.iter().chain(&video.thumbnail.filename);
+        let from = video
+            .download
+            .file
+            .as_ref()
+            .map(|file| &file.filename)
+            .into_iter()
+            .chain(&video.thumbnail.filename);
         let to = std::iter::once(&files.filename).chain(&files.thumbnail_filename);
         from.zip(to)
             .filter(|(from, to)| !self.already_moved(from, to, output_dir))

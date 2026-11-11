@@ -1,5 +1,5 @@
 use crate::domain::category::{Category, CategoryMember};
-use crate::domain::video::{SourcedVideo, Video, VideoId, VideoSource};
+use crate::domain::video::{SourcedVideo, VideoId, VideoSource};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -208,7 +208,7 @@ impl CategoryVideoCollector {
             .video_repository
             .find_many(video_ids)?
             .into_iter()
-            .filter(Video::is_downloaded)
+            .filter(|video| video.download.is_downloaded())
             .map(|video| SourcedVideo {
                 video,
                 source: source.clone(),

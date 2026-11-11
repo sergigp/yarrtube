@@ -32,7 +32,7 @@ impl From<SourcedVideo> for HomeVideoView {
             youtube_id: video.youtube_id,
             title: video.title,
             thumbnail_filename: video.thumbnail.filename,
-            duration_seconds: video.duration_seconds,
+            duration_seconds: video.download.duration_seconds(),
             published_at: None,
             source: sourced.source,
             category_ids: Vec::new(),

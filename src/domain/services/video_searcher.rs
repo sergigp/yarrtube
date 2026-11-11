@@ -230,7 +230,7 @@ impl VideoSearcherApi for VideoSearcher {
 /// never excluded,
 /// so a lookup failure still propagates rather than being silently dropped.
 fn is_unavailable(video: &anyhow::Result<Video>) -> bool {
-    matches!(video, Ok(video) if video.status == VideoStatus::Unavailable)
+    matches!(video, Ok(video) if video.download.status() == VideoStatus::Unavailable)
 }
 
 impl VideoSearcher {
@@ -627,7 +627,7 @@ impl VideoSearcher {
                     .map(|videos| {
                         videos
                             .into_iter()
-                            .filter(|video| video.status == VideoStatus::Downloaded)
+                            .filter(|video| video.download.is_downloaded())
                             .map(|video| SourcedVideo {
                                 video,
                                 source: VideoSource::Playlist {
@@ -666,7 +666,7 @@ impl VideoSearcher {
                     .map(|videos| {
                         videos
                             .into_iter()
-                            .filter(|video| video.status == VideoStatus::Downloaded)
+                            .filter(|video| video.download.is_downloaded())
                             .map(|video| SourcedVideo {
                                 video,
                                 source: VideoSource::Channel {

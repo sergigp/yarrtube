@@ -1,8 +1,8 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    ChannelEpisodeNumber, Chapters, DownloadedQuality, EpisodeNumber, PlaybackPosition,
-    RetryAttempts, StaleVideo, StepState, StepStatus, Subtitles, Thumbnail, Video, VideoChapter,
-    VideoStatus, WatchState,
+    ChannelEpisodeNumber, Chapters, Download, DownloadedFile, DownloadedQuality, EpisodeNumber,
+    PlaybackPosition, RetryAttempts, StaleVideo, StepState, StepStatus, Subtitles, Thumbnail,
+    Video, VideoChapter, VideoStatus, WatchState,
 };
 use crate::domain::video::{VideoId, YoutubeVideoId};
 use crate::infrastructure::shared::sqlite_connection::Database;
@@ -135,6 +135,7 @@ impl SqliteVideoRepository {
 
 impl VideoRepository for SqliteVideoRepository {
     fn insert(&self, video: &Video) -> anyhow::Result<()> {
+        let file = video.download.file.as_ref();
         let conn = self.db.write()?;
         conn.execute(
             &format!(
@@ -148,17 +149,17 @@ impl VideoRepository for SqliteVideoRepository {
                 video.id.as_str(),
                 video.youtube_id.as_str(),
                 video.title,
-                video.status.as_str(),
-                video.quality.map(|q| q.as_str()),
-                video.filename,
+                video.download.status().as_str(),
+                file.map(|file| file.quality.as_str()),
+                file.map(|file| file.filename.as_str()),
                 video.thumbnail.filename,
-                video.duration_seconds,
+                file.and_then(|file| file.duration_seconds),
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
                 video.watch.watched_at.map(|w| w.to_rfc3339()),
                 video.watch.position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
-                Self::encode_timestamp(video.download_attempts.last_failed_at),
+                Self::encode_timestamp(video.download.state.attempts.last_failed_at),
                 video.watch.last_played_at.map(|p| p.to_rfc3339()),
                 video.episode_number.map(|n| n.season()),
                 video.episode_number.map(|n| n.episode()),
@@ -176,8 +177,8 @@ impl VideoRepository for SqliteVideoRepository {
                 video.downloaded_quality.state.status.as_str(),
                 video.summary.status.as_str(),
                 video.version,
-                video.download_attempts.failed,
-                video.download_failure,
+                video.download.state.attempts.failed,
+                video.download.failure,
                 video.thumbnail.state.status.as_str(),
                 video.thumbnail.state.attempts.failed,
                 Self::encode_timestamp(video.thumbnail.state.attempts.last_failed_at),
@@ -235,6 +236,7 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn update(&self, video: &Video) -> anyhow::Result<()> {
+        let file = video.download.file.as_ref();
         let conn = self.db.write()?;
         let updated = conn.execute(
             "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitles_status = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_status = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_status = ?28, summary_status = ?29, download_failed_attempts = ?30, download_failure = ?31, thumbnail_status = ?32, thumbnail_failed_attempts = ?33, thumbnail_last_failed_at = ?34, summary_failed_attempts = ?35, summary_last_failed_at = ?36, categorization_status = ?37, categorization_failed_attempts = ?38, categorization_last_failed_at = ?39, version = version + 1
@@ -243,16 +245,16 @@ impl VideoRepository for SqliteVideoRepository {
                 video.id.as_str(),
                 video.youtube_id.as_str(),
                 video.title,
-                video.status.as_str(),
-                video.quality.map(|q| q.as_str()),
-                video.filename,
+                video.download.status().as_str(),
+                file.map(|file| file.quality.as_str()),
+                file.map(|file| file.filename.as_str()),
                 video.thumbnail.filename,
-                video.duration_seconds,
+                file.and_then(|file| file.duration_seconds),
                 video.updated_at.to_rfc3339(),
                 video.watch.watched_at.map(|w| w.to_rfc3339()),
                 video.watch.position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
-                Self::encode_timestamp(video.download_attempts.last_failed_at),
+                Self::encode_timestamp(video.download.state.attempts.last_failed_at),
                 video.watch.last_played_at.map(|p| p.to_rfc3339()),
                 video.episode_number.map(|n| n.season()),
                 video.episode_number.map(|n| n.episode()),
@@ -269,8 +271,8 @@ impl VideoRepository for SqliteVideoRepository {
                 video.downloaded_quality.state.attempts.failed,
                 video.downloaded_quality.state.status.as_str(),
                 video.summary.status.as_str(),
-                video.download_attempts.failed,
-                video.download_failure,
+                video.download.state.attempts.failed,
+                video.download.failure,
                 video.thumbnail.state.status.as_str(),
                 video.thumbnail.state.attempts.failed,
                 Self::encode_timestamp(video.thumbnail.state.attempts.last_failed_at),
@@ -554,15 +556,20 @@ impl SqliteVideoRepository {
             id: VideoId::new(row.id)?,
             youtube_id: YoutubeVideoId::new(row.youtube_id)?,
             title: row.title,
-            status: VideoStatus::parse(&row.status)?,
-            download_attempts: RetryAttempts {
-                failed: row.download_failed_attempts,
-                last_failed_at: Self::decode_timestamp(row.last_errored_at, "last_errored_at")?,
+            download: Download {
+                state: Self::decode_download_step(
+                    &row.status,
+                    row.download_failed_attempts,
+                    row.last_errored_at,
+                )?,
+                started: VideoStatus::parse(&row.status)? == VideoStatus::InProgress,
+                failure: row.download_failure,
+                file: Self::decode_downloaded_file(
+                    row.filename,
+                    row.quality,
+                    row.duration_seconds,
+                )?,
             },
-            download_failure: row.download_failure,
-            quality: row.quality.map(Quality::new).transpose()?,
-            filename: row.filename,
-            duration_seconds: row.duration_seconds,
             created_at: Self::parse_timestamp(&row.created_at, "created_at")?,
             updated_at: Self::parse_timestamp(&row.updated_at, "updated_at")?,
             synced_at: Self::decode_timestamp(row.synced_at, "synced_at")?,
@@ -650,6 +657,47 @@ impl SqliteVideoRepository {
                 failed,
                 last_failed_at: last_checked_at.filter(|_| failed > 0),
             },
+        })
+    }
+
+    /// The download's step as stored: In Progress is Retrying on top of
+    /// failed attempts, else Pending; Downloaded is Done.
+    fn decode_download_step(
+        status: &str,
+        failed: u32,
+        last_errored_at: Option<String>,
+    ) -> anyhow::Result<StepState> {
+        let status = match VideoStatus::parse(status)? {
+            VideoStatus::InProgress if failed > 0 => StepStatus::Retrying,
+            VideoStatus::InProgress | VideoStatus::Pending => StepStatus::Pending,
+            VideoStatus::Retrying => StepStatus::Retrying,
+            VideoStatus::Failed => StepStatus::Failed,
+            VideoStatus::Downloaded => StepStatus::Done,
+            VideoStatus::Unavailable => StepStatus::Unavailable,
+        };
+        Ok(StepState {
+            status,
+            attempts: RetryAttempts {
+                failed,
+                last_failed_at: Self::decode_timestamp(last_errored_at, "last_errored_at")?,
+            },
+        })
+    }
+
+    /// The downloaded file as stored: recorded once both its filename and
+    /// quality are.
+    fn decode_downloaded_file(
+        filename: Option<String>,
+        quality: Option<String>,
+        duration_seconds: Option<i64>,
+    ) -> anyhow::Result<Option<DownloadedFile>> {
+        Ok(match (filename, quality) {
+            (Some(filename), Some(quality)) => Some(DownloadedFile {
+                filename,
+                quality: Quality::new(quality)?,
+                duration_seconds,
+            }),
+            _ => None,
         })
     }
 
@@ -743,9 +791,6 @@ mod tests {
             attempts: attempts(failed),
         };
         let video = Video {
-            status: VideoStatus::Retrying,
-            download_attempts: attempts(3),
-            download_failure: Some("HTTP Error 503".to_string()),
             thumbnail: Thumbnail {
                 state: step(StepStatus::Failed, 11),
                 filename: None,
@@ -766,6 +811,15 @@ mod tests {
                 state: StepState::pending().unavailable(),
                 last_checked_at: Some(failed_at),
                 ..Chapters::pending()
+            },
+            download: Download {
+                started: false,
+                state: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: attempts(3),
+                },
+                failure: Some("HTTP Error 503".to_string()),
+                ..video("Every step", now).download
             },
             ..video("Every step", now)
         };
@@ -960,8 +1014,7 @@ mod tests {
         let found = repo.find(&video.id).unwrap().unwrap();
         assert_eq!(found.title, "First");
         assert_eq!(found.youtube_id.as_str(), "yt1");
-        assert_eq!(found.status, VideoStatus::Pending);
-        assert_eq!(found.quality, None);
+        assert_eq!(found.download, Download::pending());
     }
 
     #[test]
@@ -1024,8 +1077,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.quality, Some(Quality::Mid));
-        assert_eq!(found.filename, Some("First.mp4".to_string()));
+        assert_eq!(found.download, downloaded.download);
     }
 
     #[test]
@@ -1061,7 +1113,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.duration_seconds, Some(223));
+        assert_eq!(found.download, downloaded.download);
     }
 
     #[test]
@@ -1079,7 +1131,7 @@ mod tests {
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
-        assert_eq!(found.duration_seconds, None);
+        assert_eq!(found.download, downloaded.download);
     }
 
     #[test]
@@ -1125,7 +1177,7 @@ mod tests {
         repo.update(&stored.start_download(later)).unwrap();
 
         let found = repo.find(&original.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::InProgress);
+        assert_eq!(found.download.status(), VideoStatus::InProgress);
         assert_eq!(found.updated_at, later);
     }
 
@@ -1156,6 +1208,39 @@ mod tests {
             .for_each(|video| repo.insert(video).unwrap());
 
         assert_eq!(repo.list().unwrap(), vec![unchecked, without, with]);
+    }
+
+    #[test]
+    fn it_should_round_trip_every_download_state() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let failed_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let retrying = |title| video(title, now).mark_errored("HTTP Error 503", failed_at);
+        let videos = vec![
+            video("Pending", now),
+            video("In Progress", now).start_download(now),
+            retrying("In Progress again").start_download(now),
+            retrying("Retrying"),
+            video("Failed", now).mark_download_failed("HTTP Error 503", failed_at),
+            video("Downloaded", now).mark_downloaded(
+                Quality::Mid,
+                "Season 1/S01E001 - Downloaded.mp4",
+                None,
+                Some(223),
+                now,
+            ),
+            video("Unavailable", now).mark_unavailable(now),
+        ];
+
+        videos.iter().for_each(|video| repo.insert(video).unwrap());
+
+        assert_eq!(
+            videos
+                .iter()
+                .map(|video| repo.find(&video.id).unwrap())
+                .collect::<Vec<_>>(),
+            videos.into_iter().map(Some).collect::<Vec<_>>()
+        );
     }
 
     #[test]

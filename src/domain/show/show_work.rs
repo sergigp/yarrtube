@@ -23,7 +23,7 @@ pub fn has_work_in_progress(
     now: DateTime<Utc>,
 ) -> bool {
     let show_dir = show_dir.to_string_lossy();
-    videos.iter().any(|video| video.is_download_due(now))
+    videos.iter().any(|video| video.download.is_due(now))
         || tasks
             .iter()
             .any(|task| task.task.output_dir().is_some_and(|dir| dir == show_dir))

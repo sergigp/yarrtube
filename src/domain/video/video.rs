@@ -1,9 +1,10 @@
 use super::chapters::Chapters;
+use super::download::Download;
+use super::downloaded_file::DownloadedFile;
 use super::downloaded_quality::DownloadedQuality;
 use super::episode_number::EpisodeNumber;
 use super::late_data_outcome::LateDataOutcome;
 use super::playback_position::PlaybackPosition;
-use super::retry_attempts::RetryAttempts;
 use super::step_state::StepState;
 use super::step_status::StepStatus;
 use super::subtitles::Subtitles;
@@ -11,7 +12,6 @@ use super::thumbnail::Thumbnail;
 use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
-use super::video_output_entry::is_episode_path;
 use super::video_status::VideoStatus;
 use super::watch_state::WatchState;
 use super::youtube_video_id::YoutubeVideoId;
@@ -31,16 +31,8 @@ pub struct Video {
     pub id: VideoId,
     pub youtube_id: YoutubeVideoId,
     pub title: String,
-    pub status: VideoStatus,
-    /// The download's consecutive failed attempts — see the `video-retries`
-    /// capability.
-    pub download_attempts: RetryAttempts,
-    /// Why the download last failed, while Retrying or Failed.
-    pub download_failure: Option<String>,
-    pub quality: Option<Quality>,
-    pub filename: Option<String>,
+    pub download: Download,
     pub thumbnail: Thumbnail,
-    pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub synced_at: Option<DateTime<Utc>>,
@@ -70,13 +62,8 @@ impl Video {
             id: VideoId::new_generated(),
             youtube_id,
             title: title.into(),
-            status: VideoStatus::Pending,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: None,
-            filename: None,
+            download: Download::pending(),
             thumbnail: Thumbnail::pending(),
-            duration_seconds: None,
             created_at: now,
             updated_at: now,
             synced_at: None,
@@ -93,7 +80,7 @@ impl Video {
 
     pub fn start_download(self, now: DateTime<Utc>) -> Self {
         Self {
-            status: VideoStatus::InProgress,
+            download: self.download.start(),
             updated_at: now,
             ..self
         }
@@ -111,13 +98,12 @@ impl Video {
         now: DateTime<Utc>,
     ) -> Self {
         Self {
-            status: VideoStatus::Downloaded,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: Some(quality),
-            filename: Some(filename.into()),
+            download: self.download.succeed(DownloadedFile {
+                filename: filename.into(),
+                quality,
+                duration_seconds,
+            }),
             thumbnail: self.thumbnail.record_download(thumbnail_filename),
-            duration_seconds,
             updated_at: now,
             synced_at: Some(now),
             ..self
@@ -127,15 +113,8 @@ impl Video {
     /// Records a failed download attempt and why: Retrying, or Failed on the
     /// last allowed attempt (see the `video-retries` capability).
     pub fn mark_errored(self, reason: impl Into<String>, now: DateTime<Utc>) -> Self {
-        let download_attempts = self.download_attempts.record_failure(now);
         Self {
-            status: if download_attempts.gave_up() {
-                VideoStatus::Failed
-            } else {
-                VideoStatus::Retrying
-            },
-            download_attempts,
-            download_failure: Some(reason.into()),
+            download: self.download.fail(reason, now),
             updated_at: now,
             ..self
         }
@@ -146,48 +125,18 @@ impl Video {
     /// attempts and failure cleared.
     pub fn mark_unavailable(self, now: DateTime<Utc>) -> Self {
         Self {
-            status: VideoStatus::Unavailable,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
+            download: self.download.unavailable(),
             updated_at: now,
             ..self
         }
-    }
-
-    /// Whether a download should run at `now`: Pending or In Progress, or
-    /// Retrying with its next attempt due.
-    pub fn is_download_due(&self, now: DateTime<Utc>) -> bool {
-        match self.status {
-            VideoStatus::Pending | VideoStatus::InProgress => true,
-            VideoStatus::Retrying => self.next_download_at().is_none_or(|at| at <= now),
-            _ => false,
-        }
-    }
-
-    /// When a Retrying download's next attempt is due.
-    pub fn next_download_at(&self) -> Option<DateTime<Utc>> {
-        self.download_attempts
-            .next_attempt_at()
-            .filter(|_| self.status == VideoStatus::Retrying)
     }
 
     /// Every Retrying or Failed step back to Pending with no failed
     /// attempts — see the `video-retries` capability. Pending, In Progress,
     /// Done and Unavailable steps are left as they are.
     pub fn retry(self, now: DateTime<Utc>) -> Self {
-        let download_retried = matches!(self.status, VideoStatus::Retrying | VideoStatus::Failed);
         Self {
-            status: if download_retried {
-                VideoStatus::Pending
-            } else {
-                self.status
-            },
-            download_attempts: if download_retried {
-                RetryAttempts::default()
-            } else {
-                self.download_attempts
-            },
-            download_failure: self.download_failure.filter(|_| !download_retried),
+            download: self.download.retry(),
             thumbnail: self.thumbnail.retry(),
             subtitles: self.subtitles.retry(),
             chapters: self.chapters.retry(),
@@ -241,7 +190,7 @@ impl Video {
     pub fn is_thumbnail_due(&self, now: DateTime<Utc>) -> bool {
         self.thumbnail.filename.is_none()
             && self.is_thumbnail_fetchable()
-            && self.status != VideoStatus::InProgress
+            && !self.download.started
             && self.thumbnail.state.is_due(now)
     }
 
@@ -252,13 +201,8 @@ impl Video {
     /// missing from disk, followed by scheduling a fresh download.
     pub fn reset_for_redownload(self, now: DateTime<Utc>) -> Self {
         Self {
-            status: VideoStatus::Pending,
-            download_attempts: RetryAttempts::default(),
-            download_failure: None,
-            quality: None,
-            filename: None,
+            download: Download::pending(),
             thumbnail: Thumbnail::pending(),
-            duration_seconds: None,
             updated_at: now,
             synced_at: None,
             subtitles: Subtitles::pending(),
@@ -294,20 +238,17 @@ impl Video {
         }
     }
 
-    pub fn is_downloaded(&self) -> bool {
-        self.status == VideoStatus::Downloaded
-    }
-
     /// Downloaded and not yet watched: counted in unwatched badges.
     pub fn is_downloaded_and_unwatched(&self) -> bool {
-        self.is_downloaded() && !self.watch.is_watched()
+        self.download.is_downloaded() && !self.watch.is_watched()
     }
 
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.
     pub fn is_quick_watch(&self) -> bool {
         !self.watch.is_watched()
             && self
-                .duration_seconds
+                .download
+                .duration_seconds()
                 .is_some_and(|duration| duration < QUICK_WATCH_MAX_DURATION_SECONDS)
     }
 
@@ -316,7 +257,7 @@ impl Video {
     /// one, whose next download writes its own.
     pub fn is_thumbnail_fetchable(&self) -> bool {
         !matches!(
-            self.status,
+            self.download.status(),
             VideoStatus::Unavailable | VideoStatus::Retrying | VideoStatus::Failed
         )
     }
@@ -325,9 +266,9 @@ impl Video {
     /// in its season folder (a legacy-layout file has no episode path to
     /// place the subtitles next to) and its subtitles Pending or Retrying.
     pub fn is_subtitle_fetchable(&self) -> bool {
-        self.is_downloaded()
+        self.download.is_downloaded()
             && self.episode_number.is_some()
-            && !self.is_in_legacy_layout()
+            && !self.download.is_in_legacy_layout()
             && self.subtitles.is_unsettled()
     }
 
@@ -348,12 +289,12 @@ impl Video {
     /// Whether a chapters fetch is worth attempting: Downloaded and its
     /// chapters Pending or Retrying.
     pub fn is_chapters_fetchable(&self) -> bool {
-        self.is_downloaded() && self.chapters.is_unsettled()
+        self.download.is_downloaded() && self.chapters.is_unsettled()
     }
 
     /// Downloaded, subtitles Done, summary Pending or Retrying.
     pub fn is_summarizable(&self) -> bool {
-        self.is_downloaded()
+        self.download.is_downloaded()
             && self.subtitles.state.status == StepStatus::Done
             && matches!(
                 self.summary.status,
@@ -459,8 +400,13 @@ impl Video {
         published_at: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Self {
+        let file = self
+            .download
+            .file
+            .clone()
+            .map(|file| file.with_quality(quality));
         Self {
-            quality: Some(quality),
+            download: self.download.with_file(file),
             downloaded_quality: self.downloaded_quality.record_download(
                 quality,
                 height,
@@ -496,7 +442,7 @@ impl Video {
     /// Whether a quality check is worth attempting: Downloaded and its
     /// quality Pending or Retrying.
     pub fn is_quality_checkable(&self) -> bool {
-        self.is_downloaded() && self.downloaded_quality.is_unsettled()
+        self.download.is_downloaded() && self.downloaded_quality.is_unsettled()
     }
 
     /// Records the episode number assigned to this video.
@@ -517,8 +463,13 @@ impl Video {
         thumbnail_filename: Option<String>,
         now: DateTime<Utc>,
     ) -> Self {
+        let file = self
+            .download
+            .file
+            .clone()
+            .map(|file| file.with_filename(filename));
         Self {
-            filename: Some(filename.into()),
+            download: self.download.with_file(file),
             thumbnail: self.thumbnail.with_filename(thumbnail_filename),
             episode_number: Some(number),
             updated_at: now,
@@ -526,21 +477,13 @@ impl Video {
         }
     }
 
-    /// Whether the video's recorded file is in the per-video-folder (or flat)
-    /// layout that predates the TV-show layout, i.e. not under a `Season `
-    /// folder.
-    pub fn is_in_legacy_layout(&self) -> bool {
-        self.filename
-            .as_deref()
-            .is_some_and(|filename| !is_episode_path(filename))
-    }
-
     /// The recorded duration, else the reported one. The reported one is
     /// always positive (`VideoDuration`), but yt-dlp truncates a sub-second
     /// video's duration to a recorded 0, which counts as unknown so progress
     /// is never divided by it.
     fn known_duration_seconds(&self, reported_duration: Option<VideoDuration>) -> Option<i64> {
-        self.duration_seconds
+        self.download
+            .duration_seconds()
             .or(reported_duration.map(|duration| duration.seconds()))
             .filter(|duration| *duration > 0)
     }
@@ -549,6 +492,7 @@ impl Video {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::video::RetryAttempts;
 
     #[test]
     fn it_should_build_a_pending_video() {
@@ -556,12 +500,9 @@ mod tests {
 
         let video = Video::create(YoutubeVideoId::new("vid1").unwrap(), "My Video", now);
 
-        assert_eq!(video.status, VideoStatus::Pending);
+        assert_eq!(video.download, Download::pending());
         assert_eq!(video.title, "My Video");
-        assert_eq!(video.quality, None);
-        assert_eq!(video.filename, None);
         assert_eq!(video.thumbnail.filename, None);
-        assert_eq!(video.duration_seconds, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
     }
@@ -590,8 +531,8 @@ mod tests {
 
         let video = video().start_download(now);
 
-        assert_eq!(video.status, VideoStatus::InProgress);
-        assert_eq!(video.quality, None);
+        assert_eq!(video.download.status(), VideoStatus::InProgress);
+        assert_eq!(video.download.file, None);
         assert_eq!(video.updated_at, now);
     }
 
@@ -607,11 +548,16 @@ mod tests {
             now,
         );
 
-        assert_eq!(video.status, VideoStatus::Downloaded);
-        assert_eq!(video.quality, Some(Quality::High));
-        assert_eq!(video.filename, Some("My Video.mp4".to_string()));
+        assert_eq!(video.download.status(), VideoStatus::Downloaded);
+        assert_eq!(
+            video.download.file,
+            Some(DownloadedFile {
+                filename: "My Video.mp4".to_string(),
+                quality: Quality::High,
+                duration_seconds: Some(223),
+            })
+        );
         assert_eq!(video.thumbnail.filename, Some("My Video.jpg".to_string()));
-        assert_eq!(video.duration_seconds, Some(223));
         assert_eq!(video.updated_at, now);
     }
 
@@ -630,7 +576,7 @@ mod tests {
 
         let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now);
 
-        assert_eq!(video.duration_seconds, None);
+        assert_eq!(video.download.duration_seconds(), None);
     }
 
     #[test]
@@ -644,9 +590,7 @@ mod tests {
             Some("My Video/My Video.jpg".to_string())
         );
         assert_eq!(video.updated_at, now);
-        assert_eq!(video.status, VideoStatus::Pending);
-        assert_eq!(video.filename, None);
-        assert_eq!(video.quality, None);
+        assert_eq!(video.download, Download::pending());
     }
 
     #[test]
@@ -663,11 +607,8 @@ mod tests {
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
         let reset = downloaded.reset_for_redownload(later);
 
-        assert_eq!(reset.status, VideoStatus::Pending);
-        assert_eq!(reset.quality, None);
-        assert_eq!(reset.filename, None);
+        assert_eq!(reset.download, Download::pending());
         assert_eq!(reset.thumbnail.filename, None);
-        assert_eq!(reset.duration_seconds, None);
         assert_eq!(reset.updated_at, later);
     }
 
@@ -681,12 +622,18 @@ mod tests {
         assert_eq!(
             errored,
             Video {
-                status: VideoStatus::Retrying,
-                download_attempts: RetryAttempts {
-                    failed: 1,
-                    last_failed_at: Some(now),
+                download: Download {
+                    state: StepState {
+                        status: StepStatus::Retrying,
+                        attempts: RetryAttempts {
+                            failed: 1,
+                            last_failed_at: Some(now),
+                        },
+                    },
+                    started: false,
+                    failure: Some("HTTP Error 503".to_string()),
+                    file: None,
                 },
-                download_failure: Some("HTTP Error 503".to_string()),
                 updated_at: now,
                 ..video
             }
@@ -703,7 +650,10 @@ mod tests {
         assert_eq!(
             unavailable,
             Video {
-                status: VideoStatus::Unavailable,
+                download: Download {
+                    state: StepState::pending().unavailable(),
+                    ..Download::pending()
+                },
                 updated_at: now,
                 ..video
             }
@@ -732,7 +682,13 @@ mod tests {
     fn it_should_record_its_files_when_relocated_to_an_episode() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let number = EpisodeNumber::from_columns(1, 3).unwrap();
-        let video = video();
+        let video = video().mark_downloaded(
+            Quality::High,
+            "My Video/My Video.mp4",
+            Some("My Video/My Video.jpg".to_string()),
+            Some(223),
+            now,
+        );
 
         let relocated = video.clone().relocate_to_episode(
             number,
@@ -744,7 +700,14 @@ mod tests {
         assert_eq!(
             relocated,
             Video {
-                filename: Some("Season 1/S01E003 - My Video.mp4".to_string()),
+                download: Download {
+                    file: Some(DownloadedFile {
+                        filename: "Season 1/S01E003 - My Video.mp4".to_string(),
+                        quality: Quality::High,
+                        duration_seconds: Some(223),
+                    }),
+                    ..video.download.clone()
+                },
                 thumbnail: Thumbnail {
                     filename: Some("Season 1/S01E003 - My Video.jpg".to_string()),
                     ..video.thumbnail.clone()
@@ -836,9 +799,7 @@ mod tests {
         assert_eq!(
             reset,
             Video {
-                status: VideoStatus::Pending,
-                quality: None,
-                filename: None,
+                download: Download::pending(),
                 subtitles: Subtitles::pending(),
                 updated_at: later,
                 synced_at: None,
@@ -871,9 +832,7 @@ mod tests {
         assert_eq!(
             reset,
             Video {
-                status: VideoStatus::Pending,
-                quality: None,
-                filename: None,
+                download: Download::pending(),
                 subtitles: Subtitles::pending(),
                 updated_at: later,
                 synced_at: None,

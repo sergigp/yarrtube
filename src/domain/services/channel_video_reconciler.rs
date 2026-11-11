@@ -8,7 +8,7 @@ use crate::domain::services::{
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, VideoStatus, YoutubeVideoId};
+use crate::domain::video::{Video, VideoId, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -371,10 +371,10 @@ impl ChannelVideoReconciler {
                             channel_id: channel.id.as_str().to_string(),
                             video_id: video.id.as_str().to_string(),
                             title: video.title.clone(),
-                            filename: video.filename.clone(),
+                            filename: video.download.filename().map(str::to_string),
                             thumbnail_filename: video.thumbnail.filename.clone(),
                             subtitle_filename: video.subtitles.filename.clone(),
-                            was_downloaded: video.status == VideoStatus::Downloaded,
+                            was_downloaded: video.download.is_downloaded(),
                         },
                     ))
             })

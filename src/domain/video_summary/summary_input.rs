@@ -29,7 +29,7 @@ impl SummaryInput {
         let parts = transcript.parts(&chapters, max_chars);
         Self {
             title: video.title.clone(),
-            minutes: video.duration_seconds.unwrap_or(0) / 60,
+            minutes: video.download.duration_seconds().unwrap_or(0) / 60,
             language: language.english_name(),
             chapters,
             parts,

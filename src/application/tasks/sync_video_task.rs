@@ -51,12 +51,12 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Chapters;
+    use crate::domain::video::Download;
     use crate::domain::video::DownloadedQuality;
+    use crate::domain::video::StepStatus;
     use crate::domain::video::Subtitles;
     use crate::domain::video::Thumbnail;
-    use crate::domain::video::{
-        EpisodeNumber, StepState, Video, VideoChapter, VideoStatus, YoutubeVideoId,
-    };
+    use crate::domain::video::{EpisodeNumber, StepState, Video, VideoChapter, YoutubeVideoId};
     use crate::domain::video_category::{
         Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
     };
@@ -1778,10 +1778,6 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 version: 2,
-                status: VideoStatus::Pending,
-                quality: None,
-                filename: None,
-                duration_seconds: None,
                 synced_at: None,
                 updated_at: fixed_timestamp(),
                 subtitles: Subtitles::pending(),
@@ -1791,6 +1787,15 @@ mod tests {
                 },
                 downloaded_quality: DownloadedQuality::pending(),
                 thumbnail: Thumbnail::pending(),
+                download: Download {
+                    started: false,
+                    state: StepState {
+                        status: StepStatus::Pending,
+                        ..video.download.clone().state
+                    },
+                    file: None,
+                    ..video.download.clone()
+                },
                 ..video.clone()
             }]
         );
@@ -1813,10 +1818,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let video = Video {
-            filename: Some("Season 2026/S2026E031501 - My Video.mkv".to_string()),
-            ..downloaded_video()
-        };
+        let video = downloaded_video()
+            .map_file(|file| file.with_filename("Season 2026/S2026E031501 - My Video.mkv"));
         save_channel_video(
             &video_repository,
             &channel_repository,
