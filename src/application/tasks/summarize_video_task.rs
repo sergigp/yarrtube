@@ -58,9 +58,9 @@ mod tests {
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::Chapters;
-    use crate::domain::video::VideoSummaryGenerated;
     use crate::domain::video::{
-        PlaybackPosition, RetryAttempts, StepState, StepStatus, Video, VideoChapter, YoutubeVideoId,
+        PlaybackPosition, RetryAttempts, StepState, StepStatus, Video, VideoChapter,
+        VideoSummaryGenerated, YoutubeVideoId,
     };
     use crate::domain::video_summary::{SummaryMessages, SummaryText, VideoSummary};
     use crate::domain::video_transcript::{

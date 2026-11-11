@@ -122,9 +122,10 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    by map-reduce when the transcript doesn't fit, and stores the result
    (`video_summaries`), then publishes `VideoSummaryGenerated`, whose
    `SyncVideoOnVideoSummaryGenerated` schedules a `SyncVideo` so the video's
-   categorization doesn't wait for the next pass. `VideoSearcher` returns it with the playlist, channel
-   and category listings for the detail pane, hiding it unless AI and summaries
-   are on and the video's own source opted in. See [AI features](AI.md).
+   categorization doesn't wait for the next pass. `VideoSearcher` returns it
+   with the playlist, channel and category listings for the detail pane,
+   hiding it unless AI and summaries are on and the video's own source opted
+   in. See [AI features](AI.md).
 
 ```mermaid
 sequenceDiagram

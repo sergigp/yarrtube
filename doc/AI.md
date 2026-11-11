@@ -175,8 +175,8 @@ spec: decisions here feed OpenSpec changes later.
   and the run is re-queued 6 hours later.
 - Saving a new Ollama URL or categorization model, context length,
   temperature, thinking or prompt (not just turning categorization on or off)
-  deletes every `unavailable` verdict; a new AI prompt for a category deletes that
-  category's. `yes` and `no` verdicts are final: editing or clearing a
+  deletes every `unavailable` verdict; a new AI prompt for a category deletes
+  that category's. `yes` and `no` verdicts are final: editing or clearing a
   category's prompt, turning a source's categorization off, or turning AI off
   keeps them, and the categories they give.
 - Deleting a category deletes its verdicts; removing a video, or deleting its

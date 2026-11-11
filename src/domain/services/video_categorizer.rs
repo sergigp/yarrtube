@@ -25,7 +25,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, warn};
 
-/// Why a video isn't categorized now. Nothing about it changes.
+/// Why the model isn't asked about a video now. Nothing about the video
+/// changes, except that with nothing pending it is marked categorized.
 enum Skip {
     /// It shouldn't be, for now.
     NotWanted(&'static str),
@@ -184,7 +185,11 @@ impl VideoCategorizerApi for VideoCategorizer {
                 Ok(VideoStepOutcome::Settled)
             }
             Err(Skip::NothingPending) => {
-                info!(video_id = %video.id, reason = "no category is pending", "skipped video categorization");
+                info!(
+                    video_id = %video.id,
+                    reason = "no category is pending",
+                    "skipped video categorization"
+                );
                 self.mark_categorized(video)
             }
             Err(Skip::Blocked(reason)) => {
@@ -361,7 +366,7 @@ impl VideoCategorizer {
         rejected: Vec<(&'a Category, String)>,
     ) -> Result<Vec<(&'a Category, String)>, Stop> {
         let rejected = match job.pending.len() {
-            0 | 1 => rejected,
+            1 => rejected,
             _ => rejected
                 .into_iter()
                 .map(|(category, reason)| {

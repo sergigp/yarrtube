@@ -601,6 +601,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_failed_verdicts_when_the_shipped_categorization_prompt_is_saved() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        let failed = verdict("tech", Verdict::Failed);
+        verdict_repository.save(&failed).unwrap();
+        let preferences_updater = PreferencesUpdater::new(
+            repository,
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            verdict_repository.clone(),
+            Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            categorization_resetter(db.database()),
+        );
+        let request = UpdatePreferencesRequest {
+            categorization_prompt: Some(Some(CategorizationPrompt::shipped().as_str().to_string())),
+            ..UpdatePreferencesRequest::default()
+        };
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(
+            verdict_repository.find_many(&[verdict_video_id()]).unwrap(),
+            vec![failed]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
