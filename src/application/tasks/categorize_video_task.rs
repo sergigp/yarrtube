@@ -1270,6 +1270,51 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
     }
 
     #[test]
+    fn it_should_not_mark_a_category_failed_when_the_generation_settings_changed_during_its_attempt()
+     {
+        let db = Arc::new(TestDatabase::new());
+        let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+        let video = Video {
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 10,
+                    last_failed_at: Some(fixed_timestamp()),
+                },
+            },
+            ..summarized_video()
+        };
+        let tech = prompted_category("Tech");
+        seed(&db, &video, &[&tech]);
+        let changed_db = db.clone();
+        let llm = Arc::new(
+            FakeLlmServerRepository::new(server_with(thinking_model()))
+                .with_replies(vec![reply("It might belong.")])
+                .with_on_chat(move || {
+                    SqlitePreferencesRepository::new(changed_db.database())
+                        .save(&Preferences {
+                            categorization: CategorizationSettings {
+                                temperature: Temperature::new(0.5).unwrap(),
+                                ..categorization_on().categorization
+                            },
+                            ..categorization_on()
+                        })
+                        .unwrap()
+                }),
+        );
+        let task = categorize_video_task(&db, llm);
+
+        run(&task, &video).unwrap();
+
+        assert_eq!(
+            verdict_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![]
+        );
+    }
+
+    #[test]
     fn it_should_wait_for_ollama_if_it_is_unavailable_for_a_categorization() {
         let unreachable = FakeLlmServerRepository::unreachable();
         let model_missing = FakeLlmServerRepository::new(server_with(LlmModel {
