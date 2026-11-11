@@ -12,6 +12,10 @@ const RETRY_DELAYS: [Duration; 4] = [
     Duration::hours(24),
 ];
 
+/// How long a summary or categorization waits for an unavailable Ollama,
+/// without spending an attempt — see the `video-retries` capability.
+pub const UNAVAILABLE_SERVER_WAIT: Duration = Duration::hours(6);
+
 /// How long a step waits after its `failed`-th consecutive failure.
 pub fn retry_delay(failed: u32) -> Duration {
     let index = (failed.max(1) - 1).min(RETRY_DELAYS.len() as u32 - 1);

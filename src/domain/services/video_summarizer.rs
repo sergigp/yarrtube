@@ -1,9 +1,11 @@
-use crate::domain::llm_server::{LlmChat, MIN_CHAT_TIMEOUT, OllamaUrl};
+use crate::domain::llm_server::{
+    LlmChat, LlmModel, LlmServerUnreachable, MIN_CHAT_TIMEOUT, OllamaUrl,
+};
 use crate::domain::preferences::{SummaryPrompt, SummarySettings};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{Video, VideoOwner, VideoStepOutcome};
+use crate::domain::video::{UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome};
 use crate::domain::video_summary::{
     PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
 };
@@ -36,21 +38,50 @@ enum Skip {
     NotWanted(&'static str),
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
-    /// Ollama can't be reached or hasn't the saved model: a failed attempt.
-    Unreachable(anyhow::Error),
+    /// Ollama can't be connected to or hasn't the saved model: wait for it,
+    /// no attempt spent.
+    Unavailable(anyhow::Error),
+    /// The server check connected but failed: a failed attempt.
+    Failed(anyhow::Error),
 }
 
 /// Why a generation failed.
 enum Failure {
+    /// Ollama can't be connected to during a call: wait for it, no attempt
+    /// spent.
+    Unavailable(anyhow::Error),
     /// The server's fault: a later sync can try again.
     Server(anyhow::Error),
     /// This video didn't get a summary out of the settings as they are.
     Rejected(anyhow::Error),
 }
 
+impl Failure {
+    /// What a failed chat call means: Ollama unavailable, or its fault.
+    fn from_chat_error(error: anyhow::Error) -> Self {
+        if error.is::<LlmServerUnreachable>() {
+            Self::Unavailable(error)
+        } else {
+            Self::Server(error)
+        }
+    }
+}
+
 impl From<anyhow::Error> for Failure {
     fn from(error: anyhow::Error) -> Self {
         Self::Rejected(error)
+    }
+}
+
+impl Skip {
+    /// What a failed server check means: Ollama unavailable, or a failed
+    /// attempt.
+    fn from_server_error(error: anyhow::Error) -> Self {
+        if error.is::<LlmServerUnreachable>() {
+            Self::Unavailable(error)
+        } else {
+            Self::Failed(error)
+        }
     }
 }
 
@@ -103,10 +134,11 @@ impl VideoSummarizer {
 }
 
 pub trait VideoSummarizerApi: Send + Sync {
-    /// See the `video-summaries` capability. A rejected call, a server fault,
-    /// an unreadable transcript, Ollama unreachable or the model missing is a
-    /// failed attempt, recorded on the video and re-queued under the
-    /// `video-retries` policy.
+    /// See the `video-summaries` capability. A rejected call, a server fault
+    /// or an unreadable transcript is a failed attempt, recorded on the video
+    /// and re-queued under the `video-retries` policy. Ollama that can't be
+    /// connected to, or hasn't the model, re-queues it later without touching
+    /// the video.
     fn summarize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
@@ -122,7 +154,8 @@ impl VideoSummarizerApi for VideoSummarizer {
                 warn!(video_id = %video.id, %reason, "couldn't summarize video");
                 Ok(VideoStepOutcome::Settled)
             }
-            Err(Skip::Unreachable(reason)) => {
+            Err(Skip::Unavailable(reason)) => Ok(self.wait_for_server(video, reason)),
+            Err(Skip::Failed(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't summarize video");
                 self.record_failure(video, error_report::cause_chain(&reason))
             }
@@ -149,14 +182,7 @@ impl VideoSummarizer {
         if !owner.summaries_enabled {
             return Err(Skip::NotWanted("its channel or playlist has summaries off"));
         }
-        let server = self
-            .llm_server_repository
-            .find(&url)
-            .map_err(Skip::Unreachable)?;
-        let model = server
-            .model(settings.model.as_str())
-            .with_context(|| format!("{} isn't installed on Ollama", settings.model.as_str()))
-            .map_err(Skip::Unreachable)?;
+        let model = self.check_server(&url, &settings)?;
         let thinking = settings.thinking && model.thinking;
         let prompt = settings
             .effective_prompt()
@@ -171,9 +197,35 @@ impl VideoSummarizer {
         })
     }
 
+    /// The saved model on the server at `url`, unless Ollama can't be
+    /// connected to or hasn't it (wait) or the check fails (a failed attempt).
+    fn check_server(&self, url: &OllamaUrl, settings: &SummarySettings) -> Result<LlmModel, Skip> {
+        let server = self
+            .llm_server_repository
+            .find(url)
+            .map_err(Skip::from_server_error)?;
+        let model = settings.model.as_str();
+        server
+            .model(model)
+            .cloned()
+            .with_context(|| format!("{model} isn't installed on Ollama"))
+            .map_err(Skip::Unavailable)
+    }
+
+    /// Re-queues the summary once Ollama may be back, leaving the video as
+    /// it is: no attempt spent.
+    fn wait_for_server(&self, video: &Video, reason: anyhow::Error) -> VideoStepOutcome {
+        warn!(video_id = %video.id, %reason, "Ollama is unavailable, waiting to summarize video");
+        VideoStepOutcome::RetryAt {
+            at: self.clock.now() + UNAVAILABLE_SERVER_WAIT,
+            reason: error_report::cause_chain(&reason),
+        }
+    }
+
     fn generate(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<VideoStepOutcome> {
         match self.try_generate(video, job) {
             Ok(()) => Ok(VideoStepOutcome::Settled),
+            Err(Failure::Unavailable(reason)) => Ok(self.wait_for_server(video, reason)),
             Err(Failure::Server(cause) | Failure::Rejected(cause)) => {
                 error!(video_id = %video.id, error = format!("{cause:#}"), "failed to summarize video");
                 self.record_failure(video, error_report::cause_chain(&cause))
@@ -347,7 +399,7 @@ impl VideoSummarizer {
                     timeout: MIN_CHAT_TIMEOUT,
                 },
             )
-            .map_err(Failure::Server)?;
+            .map_err(Failure::from_chat_error)?;
         info!(
             video_id = %video.id,
             call,
