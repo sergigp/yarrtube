@@ -119,8 +119,42 @@ impl Task {
     /// time, and a task with a key is not scheduled twice while one is
     /// pending (or running, see `dedupes_running`).
     pub fn exclusivity_key(&self) -> Option<String> {
-        self.keyed_video_id()
-            .map(|video_id| format!("video:{video_id}"))
+        self.video_id().map(|video_id| format!("video:{video_id}"))
+    }
+
+    /// The video this task is about, if any; every task about one video
+    /// except `delete_video_file`, which only carries its files.
+    pub fn video_id(&self) -> Option<&str> {
+        match self {
+            Self::DownloadVideo { video_id }
+            | Self::FetchThumbnail { video_id }
+            | Self::FetchSubtitles { video_id }
+            | Self::SyncVideo { video_id }
+            | Self::FetchChapters { video_id }
+            | Self::SummarizeVideo { video_id }
+            | Self::CategorizeVideo { video_id }
+            | Self::UpgradeQuality { video_id } => Some(video_id),
+            _ => None,
+        }
+    }
+
+    /// The channel this task is about, if any.
+    pub fn channel_id(&self) -> Option<&str> {
+        match self {
+            Self::ReconcileChannel { channel_id } | Self::DeleteChannelFiles { channel_id, .. } => {
+                Some(channel_id)
+            }
+            _ => None,
+        }
+    }
+
+    /// The playlist this task is about, if any.
+    pub fn playlist_id(&self) -> Option<&str> {
+        match self {
+            Self::ReconcilePlaylist { playlist_id }
+            | Self::DeletePlaylistFiles { playlist_id, .. } => Some(playlist_id),
+            _ => None,
+        }
     }
 
     /// Whether scheduling a keyed task is skipped while one of the same type
@@ -164,20 +198,6 @@ impl Task {
             Self::DeletePlaylistFiles { path, .. } | Self::DeleteChannelFiles { path, .. } => {
                 Some(path)
             }
-            _ => None,
-        }
-    }
-
-    fn keyed_video_id(&self) -> Option<&str> {
-        match self {
-            Self::DownloadVideo { video_id }
-            | Self::FetchThumbnail { video_id }
-            | Self::FetchSubtitles { video_id }
-            | Self::SyncVideo { video_id }
-            | Self::FetchChapters { video_id }
-            | Self::SummarizeVideo { video_id }
-            | Self::CategorizeVideo { video_id }
-            | Self::UpgradeQuality { video_id } => Some(video_id),
             _ => None,
         }
     }

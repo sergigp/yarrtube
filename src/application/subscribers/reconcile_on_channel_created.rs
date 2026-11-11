@@ -60,7 +60,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::SqliteVideoCategoryVerdictRepository;
 
-    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_summary_repository::SqliteVideoSummaryRepository;
     use crate::infrastructure::repositories::sqlite_video_transcript_repository::SqliteVideoTranscriptRepository;
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;

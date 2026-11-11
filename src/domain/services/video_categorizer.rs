@@ -9,7 +9,8 @@ use crate::domain::video::{
     StepStatus, UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome,
 };
 use crate::domain::video_category::{
-    CategorizationAnswer, CategorizationQuestion, VideoCategoryVerdict, pending_categories,
+    CategorizationAnswer, CategorizationQuestion, CategorizationTally, VideoCategoryVerdict,
+    pending_categories,
 };
 use crate::domain::video_summary::SummaryText;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
@@ -298,6 +299,7 @@ impl VideoCategorizer {
             Err(Stop::Server(reason)) => return self.fail_everything(video, job, reason),
             Err(Stop::Failed(error)) => return Err(error),
         };
+        self.log_tally(video, job, rejected.len())?;
         match Self::fail_if_rejected(&rejected) {
             Ok(()) => self.mark_categorized(video),
             Err(cause) => {
@@ -335,7 +337,7 @@ impl VideoCategorizer {
                 &question.chat(&job.settings, job.context_length, job.thinking),
             )
             .map_err(Stop::from_chat_error)?;
-        Self::log_call(video, categories, call, &reply, started);
+        Self::log_call(video, categories, call, job.thinking, &reply, started);
         let rejection = match (&reply.refusal, reply.stopped_at_limit) {
             (Some(refusal), _) => Some(format!("Ollama refused the call: {refusal}")),
             (None, true) => Some(format!(
@@ -437,6 +439,7 @@ impl VideoCategorizer {
         video: &Video,
         categories: &[Category],
         call: Call,
+        thinking: bool,
         reply: &LlmReply,
         started: Instant,
     ) {
@@ -449,11 +452,36 @@ impl VideoCategorizer {
             video_id = %video.id,
             categories = %names,
             fallback = matches!(call, Call::Fallback),
+            thinking,
             input_tokens = reply.input_tokens,
             output_tokens = reply.output_tokens,
+            stopped_at_limit = reply.stopped_at_limit,
             duration_seconds = started.elapsed().as_secs_f64(),
             "asked the model"
         );
+    }
+
+    /// One line counting what the run asked and got, from the verdicts it
+    /// stored.
+    fn log_tally(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        rejected: usize,
+    ) -> anyhow::Result<()> {
+        let verdicts = self
+            .video_category_verdict_repository
+            .find_many(std::slice::from_ref(&video.id))?;
+        let tally = CategorizationTally::new(&job.pending, &verdicts, rejected);
+        info!(
+            video_id = %video.id,
+            asked = tally.asked,
+            yes = tally.yes,
+            no = tally.no,
+            rejected = tally.rejected,
+            "categorized video"
+        );
+        Ok(())
     }
 
     fn log_falling_back(video: &Video, category: &Category, reason: &str) {

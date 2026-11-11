@@ -25,7 +25,10 @@ impl TaskHandler for SyncVideoTask {
         let video_id = VideoId::new(video_id.clone())?;
         self.video_reconciler
             .reconcile(&video_id)
-            .map(|()| TaskOutcome::Done)
+            .map(|changes| match changes.is_empty() {
+                true => TaskOutcome::Unchanged,
+                false => TaskOutcome::Done,
+            })
     }
 }
 

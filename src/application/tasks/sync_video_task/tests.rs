@@ -1,5 +1,5 @@
 use super::*;
-use crate::application::tasks::log_capture::captured_log_messages;
+use crate::application::tasks::log_capture::{captured_info_lines, captured_log_messages};
 use crate::domain::category::{
     Category, CategoryColor, CategoryMember, CategoryName, CategoryPrompt,
 };
@@ -144,6 +144,41 @@ fn it_should_schedule_the_download_and_thumbnail_of_a_new_channel_video() {
                 &Task::DownloadVideo {
                     video_id: video.id.as_str().to_string(),
                 },
+            ),
+        ]
+    );
+}
+
+#[test]
+fn it_should_log_the_steps_it_schedules() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = my_video();
+    seed_channel_video(&db, &video_repository, &video);
+    let task = sync_task(&db, video_repository, task_repository);
+
+    let mut result = Err(String::new());
+    let logs = captured_info_lines(|| result = run(&task, &task_for(&video)));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        logs,
+        vec![
+            format!(
+                "INFO scheduled task task_id=1 task_type=\"fetch_thumbnail\" run_at={}",
+                fixed_timestamp()
+            ),
+            format!(
+                "INFO scheduled task task_id=2 task_type=\"download_video\" run_at={}",
+                fixed_timestamp()
+            ),
+            format!(
+                "INFO synced video video_id={} steps_due=[FetchThumbnail, Download] reset_for_redownload=false metadata_repaired=false relocated=false",
+                video.id
             ),
         ]
     );
@@ -397,7 +432,7 @@ fn it_should_not_schedule_subtitles_checked_less_than_a_day_ago() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -654,7 +689,7 @@ fn it_should_not_schedule_a_quality_check_right_after_download() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -713,7 +748,7 @@ fn it_should_not_schedule_chapters_checked_less_than_a_day_ago() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -772,7 +807,7 @@ fn it_should_not_schedule_settled_chapters() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -835,12 +870,12 @@ fn it_should_not_schedule_a_chapters_fetch_if_already_checked() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
 #[test]
-fn it_should_schedule_nothing_for_a_fully_synced_video() {
+fn it_should_report_nothing_changed_if_the_video_needs_nothing() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -889,9 +924,11 @@ fn it_should_schedule_nothing_for_a_fully_synced_video() {
         video_categorizer(db.database()),
     ));
 
-    let result = run(&task, &task_for(&video));
+    let mut result = Err(String::new());
+    let logs = captured_log_messages(|| result = run(&task, &task_for(&video)));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
+    assert_eq!(synced_video_lines(&logs), Vec::<&String>::new());
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -1066,7 +1103,7 @@ fn it_should_not_schedule_steps_that_are_not_due() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(
         video_repository.list().unwrap(),
         vec![Video {
@@ -1104,7 +1141,7 @@ fn it_should_not_schedule_failed_steps() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -1248,7 +1285,7 @@ fn it_should_schedule_nothing_for_a_settled_errored_video() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(
         video_repository.list().unwrap(),
         vec![Video {
@@ -1594,7 +1631,7 @@ fn it_should_leave_a_new_video_of_an_uncategorized_playlist_uncategorized() {
 }
 
 #[test]
-fn it_should_skip_if_video_is_gone() {
+fn it_should_report_nothing_changed_if_the_video_is_gone() {
     let db = TestDatabase::new();
     let task_repository = Arc::new(SqliteTaskRepository::new(
         db.database(),
@@ -1630,7 +1667,7 @@ fn it_should_skip_if_video_is_gone() {
 
     let result = run(&task, &task_for(&my_video()));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -1674,8 +1711,132 @@ fn it_should_skip_if_video_has_no_owner() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_log_a_reset_for_redownload() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = downloaded_video();
+    save_channel_video(
+        &video_repository,
+        &channel_repository,
+        &channel_video_repository,
+        &video,
+    );
+    let task = SyncVideoTask::new(VideoReconciler::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        task_repository.clone(),
+        Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(MetadataGenerator::new(
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(VideoRelocator::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        video_category_assigner(db.database()),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        video_categorizer(db.database()),
+    ));
+
+    let mut result = Err(String::new());
+    let logs = captured_info_lines(|| result = run(&task, &task_for(&video)));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        synced_video_lines(&logs),
+        vec![&format!(
+            "INFO synced video video_id={} steps_due=[FetchThumbnail, Download] reset_for_redownload=true metadata_repaired=false relocated=false",
+            video.id
+        )]
+    );
+}
+
+#[test]
+fn it_should_log_a_metadata_repair() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+    let videos_root = tempfile::tempdir().unwrap();
+    let channel_dir = videos_root.path().join("creators/somechannel");
+    std::fs::create_dir_all(channel_dir.join("Season 2026")).unwrap();
+    let video = downloaded_video();
+    save_channel_video(
+        &video_repository,
+        &channel_repository,
+        &channel_video_repository,
+        &video,
+    );
+    let task = SyncVideoTask::new(VideoReconciler::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            videos_root.path().to_string_lossy(),
+        )),
+        task_repository.clone(),
+        Arc::new(FakeVideoFileRepository::with_listing(vec![
+            DOWNLOADED_FILENAME.to_string(),
+        ])),
+        video_metadata_repository.clone(),
+        Arc::new(MetadataGenerator::new(
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(VideoRelocator::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            video_metadata_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        video_category_assigner(db.database()),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        video_categorizer(db.database()),
+    ));
+
+    let mut result = Err(String::new());
+    let logs = captured_info_lines(|| result = run(&task, &task_for(&video)));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        synced_video_lines(&logs),
+        vec![&format!(
+            "INFO synced video video_id={} steps_due=[FetchSubtitles] reset_for_redownload=false metadata_repaired=true relocated=false",
+            video.id
+        )]
+    );
 }
 
 #[test]
@@ -1951,7 +2112,7 @@ fn it_should_never_recover_an_excluded_video() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(
         video_repository.list().unwrap(),
         vec![Video {
@@ -2649,7 +2810,7 @@ fn it_should_not_schedule_a_summary_when_the_source_opted_out() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -2862,7 +3023,7 @@ fn it_should_not_schedule_a_categorization_when_the_source_has_categorization_of
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -2950,7 +3111,7 @@ fn it_should_not_schedule_a_categorization_when_every_category_has_a_verdict() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -2983,7 +3144,7 @@ fn it_should_not_count_a_category_given_by_the_source_or_without_a_prompt_as_pen
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -3048,7 +3209,7 @@ fn it_should_not_schedule_a_categorization_that_failed_recently() {
 
     let result = run(&task, &task_for(&video));
 
-    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
@@ -3450,6 +3611,13 @@ fn fixed_timestamp() -> DateTime<Utc> {
 
 fn a_day_ago() -> DateTime<Utc> {
     fixed_timestamp() - Duration::hours(24)
+}
+
+/// The `synced video` entries among captured messages or lines.
+fn synced_video_lines(logs: &[String]) -> Vec<&String> {
+    logs.iter()
+        .filter(|log| log.as_str() == "synced video" || log.starts_with("INFO synced video "))
+        .collect()
 }
 
 fn run(task: &SyncVideoTask, queued: &Task) -> Result<TaskOutcome, String> {

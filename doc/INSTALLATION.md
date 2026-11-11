@@ -123,6 +123,32 @@ grep -h ERROR /path/on/host/config/logs/yarrtube.*.log
 tail -f /path/on/host/config/logs/yarrtube.$(date -u +%F).log
 ```
 
+Lines worth grepping for:
+
+- `task finished`: one per task run, with its id, type, the video, channel
+  or playlist it's about, `outcome` (`done`, `unchanged` when it changed
+  nothing, e.g. a sync of a video that needed nothing, or `requeued` with
+  the next `run_at` and `reason`), `run_seconds`, and `queued_seconds` (how
+  long it waited past its scheduled time). A failed run logs
+  `task failed, retrying` (warning) or `task failed permanently` (error)
+  instead, with the same fields and the error.
+- `event finished`: one per domain event, with its type, payload, subscriber
+  count and duration; failures as `event failed, retrying` /
+  `event failed permanently`.
+- `reconciled channel` / `reconciled playlist`: one per reconcile pass, with
+  the videos listed on YouTube, added, removed, syncs requested, orphan files
+  deleted, and how long the listing and the pass took.
+- `synced video`: what a video's sync did (steps due, reset for
+  redownload, metadata repaired, relocated); absent when it did nothing.
+- `daemon heartbeat`: every 5 minutes, pending tasks per lane, running
+  tasks, the oldest due task's wait, pending events, dead-lettered tasks and
+  events, and videos pending, retrying and failed per download, summary and
+  categorization.
+
+```bash
+grep -h 'task finished' /path/on/host/config/logs/yarrtube.*.log | grep -v 'outcome="unchanged"'
+```
+
 ## Videos on disk
 
 Each playlist and channel is saved as a TV show (layout in

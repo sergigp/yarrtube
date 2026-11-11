@@ -26,6 +26,16 @@ pub struct DesiredState {
     pub video_ids: Vec<VideoId>,
 }
 
+/// What bringing a folder in line with the database did, for the pass's
+/// summary line.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FolderReconciliation {
+    /// Video syncs requested, one per desired video (each scheduled unless
+    /// one is already pending).
+    pub syncs_requested: usize,
+    pub orphans_deleted: usize,
+}
+
 /// Reconciles our database with our filesystem: brings a playlist's or
 /// channel's output folder in line with the videos recorded for it. It is
 /// the second step of a reconcile pass, after the membership sync that
@@ -63,14 +73,18 @@ pub trait InternalVideoReconcilerApi: Send + Sync {
     /// Schedules the video sync of every video of `desired` (a `sync_video`
     /// task, run under the video's task key), then deletes orphaned files.
     /// The stale file of a video its sync resets is swept by the next pass.
-    fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()>;
+    fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<FolderReconciliation>;
 }
 
 impl InternalVideoReconcilerApi for InternalVideoReconciler {
-    fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()> {
-        self.schedule_syncs(desired)?;
+    fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<FolderReconciliation> {
+        let syncs_requested = self.schedule_syncs(desired)?;
         let actual = self.read_actual_state(desired)?;
-        self.delete_orphaned_files(&actual)
+        let orphans_deleted = self.delete_orphaned_files(&actual)?;
+        Ok(FolderReconciliation {
+            syncs_requested,
+            orphans_deleted,
+        })
     }
 }
 
@@ -93,8 +107,9 @@ impl InternalVideoReconciler {
 
     /// Schedules the sync of every video of `desired`, including those the
     /// same pass just added: the safety net for a step lost on a crash or
-    /// never scheduled. A sync already pending is not scheduled twice.
-    fn schedule_syncs(&self, desired: &DesiredState) -> anyhow::Result<()> {
+    /// never scheduled. A sync already pending is not scheduled twice. How
+    /// many were requested.
+    fn schedule_syncs(&self, desired: &DesiredState) -> anyhow::Result<usize> {
         desired.video_ids.iter().try_for_each(|id| {
             self.task_repository.schedule(
                 &Task::SyncVideo {
@@ -102,25 +117,26 @@ impl InternalVideoReconciler {
                 },
                 self.clock.now(),
             )
-        })
+        })?;
+        Ok(desired.video_ids.len())
     }
 
     /// Deletes every entry of the output folder that is neither a show file,
-    /// a season folder, nor a file of a stored video.
-    fn delete_orphaned_files(&self, actual: &ActualState) -> anyhow::Result<()> {
-        for file in &actual.files {
-            if actual.is_protected(file) {
-                continue;
-            }
-            if self
-                .video_file_repository
-                .delete(&actual.output_dir, file)?
-            {
-                info!(file, "deleted orphaned file during reconciliation");
-            }
-        }
-
-        Ok(())
+    /// a season folder, nor a file of a stored video; how many it deleted.
+    fn delete_orphaned_files(&self, actual: &ActualState) -> anyhow::Result<usize> {
+        actual
+            .files
+            .iter()
+            .filter(|file| !actual.is_protected(file))
+            .try_fold(0, |deleted, file| {
+                let removed = self
+                    .video_file_repository
+                    .delete(&actual.output_dir, file)?;
+                if removed {
+                    info!(file, "deleted orphaned file during reconciliation");
+                }
+                Ok(deleted + usize::from(removed))
+            })
     }
 }
 
@@ -506,6 +522,9 @@ mod tests {
         reconciler: &InternalVideoReconciler,
         desired: &DesiredState,
     ) -> Result<(), String> {
-        reconciler.reconcile(desired).map_err(|e| e.to_string())
+        reconciler
+            .reconcile(desired)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 }

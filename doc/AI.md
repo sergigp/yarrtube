@@ -114,8 +114,10 @@ spec: decisions here feed OpenSpec changes later.
   summaries will fail, each logged at error level with its reason, until it is
   raised.
 - Everything is logged at info level: each call sent, with the video's id and
-  title but not the prompt, each answer, how long each call and the whole
-  summary took, and the video's length. Failures are logged at error level.
+  title but not the prompt, each answer with its tokens, whether thinking was
+  asked for and whether it hit the output limit, how long each call and the
+  whole summary took, and the video's length. Failures are logged at error
+  level.
 
 ### How a video is categorized
 
@@ -201,8 +203,11 @@ spec: decisions here feed OpenSpec changes later.
   `categorization_enabled`). **Re-evaluate** in a category's settings is
   disabled while its prompt has unsaved edits, since the AI asks with the
   saved one. `GET /api/categories` reports each category's `ai_verdict_count`.
-- Each verdict is logged at info level with the video, category, verdict,
-  reason, tokens and duration; skips at info, rejected calls at error.
+- Each call is logged at info level with its categories, tokens, whether
+  thinking was asked for, whether it hit the output limit, and duration;
+  each verdict with the video, category, verdict and reason; each run ends
+  with `categorized video` counting the categories asked, answered yes,
+  answered no and rejected. Skips at info, rejected calls at error.
 
 ### How a summary is shown
 

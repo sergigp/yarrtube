@@ -31,6 +31,16 @@ pub(crate) fn captured_log_lines(body: impl FnOnce()) -> Vec<String> {
         .collect()
 }
 
+/// Like `captured_log_lines`, leaving out debug and trace events, so an
+/// assertion holds whether or not a line is later demoted to debug.
+pub(crate) fn captured_info_lines(body: impl FnOnce()) -> Vec<String> {
+    captured_events(body)
+        .into_iter()
+        .filter(|event| event.level <= tracing::Level::INFO)
+        .map(|event| event.line)
+        .collect()
+}
+
 fn captured_events(body: impl FnOnce()) -> Vec<CapturedEvent> {
     install_capture_subscriber();
     let outer = CAPTURED.with(|captured| captured.replace(Some(Vec::new())));
@@ -42,6 +52,7 @@ fn captured_events(body: impl FnOnce()) -> Vec<CapturedEvent> {
 
 /// One event: its `message` field alone, and the whole entry.
 struct CapturedEvent {
+    level: tracing::Level,
     message: String,
     line: String,
 }
@@ -96,6 +107,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CaptureLayer {
             event.record(&mut visitor);
             if let Some(events) = captured.borrow_mut().as_mut() {
                 events.push(CapturedEvent {
+                    level: *event.metadata().level(),
                     line: format!(
                         "{} {}{}",
                         event.metadata().level(),

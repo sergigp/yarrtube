@@ -1935,6 +1935,8 @@ fn it_should_log_each_call_without_its_prompt_and_its_answer_and_duration() {
     assert!(answered.starts_with("INFO "));
     assert!(answered.contains("answer=Three games."));
     assert!(answered.contains("input_tokens=100"));
+    assert!(answered.contains("output_tokens=0"));
+    assert!(answered.contains("thinking=true"));
     assert!(answered.contains("duration_seconds="));
 }
 

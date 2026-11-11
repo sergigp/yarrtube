@@ -4,9 +4,10 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
-    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, ShowFileWriter,
-    ShowFileWriterApi, VideoUpdater, VideoUpdaterApi,
+    DesiredState, FolderReconciliation, InternalVideoReconciler, InternalVideoReconcilerApi,
+    ShowFileWriter, ShowFileWriterApi, VideoUpdater, VideoUpdaterApi,
 };
+use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, YoutubeVideoId};
@@ -171,6 +172,7 @@ impl PlaylistVideoReconciler {
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<()> {
         let _span = info_span!("reconcile_playlist", playlist_id = %playlist.id).entered();
+        let started = self.clock.now();
         info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
 
         // Best effort: a show file that can't be written must not stop the
@@ -178,9 +180,37 @@ impl PlaylistVideoReconciler {
         if let Err(e) = self.show_file_writer.write_playlist_show(playlist) {
             warn!(playlist_id = %playlist.id, error = %e, "failed to write show files");
         }
-        self.sync_membership_with_youtube(playlist, on_listing_failure)?;
+        let membership = self.sync_membership_with_youtube(playlist, on_listing_failure)?;
         let desired = self.desired_state(playlist)?;
-        self.internal_video_reconciler.reconcile(&desired)
+        let folder = self.internal_video_reconciler.reconcile(&desired)?;
+        Self::log_pass(
+            playlist,
+            &membership,
+            &folder,
+            elapsed_seconds(started, self.clock.now()),
+        );
+        Ok(())
+    }
+
+    /// The pass's summary line.
+    fn log_pass(
+        playlist: &Playlist,
+        membership: &MembershipChanges,
+        folder: &FolderReconciliation,
+        duration_seconds: f64,
+    ) {
+        info!(
+            playlist_id = %playlist.id,
+            kind = %playlist.kind,
+            listed = membership.listed,
+            added = membership.added,
+            removed = membership.removed,
+            syncs_requested = folder.syncs_requested,
+            orphans_deleted = folder.orphans_deleted,
+            listing_seconds = membership.listing_seconds,
+            duration_seconds,
+            "reconciled playlist"
+        );
     }
 
     /// Brings the stored membership in line with YouTube's playlist items:
@@ -193,9 +223,15 @@ impl PlaylistVideoReconciler {
         &self,
         playlist: &Playlist,
         on_listing_failure: ListingFailure,
-    ) -> anyhow::Result<()> {
-        let Some(current_videos) = self.list_current_videos(playlist, on_listing_failure)? else {
-            return Ok(());
+    ) -> anyhow::Result<MembershipChanges> {
+        let listing_started = self.clock.now();
+        let listing = self.list_current_videos(playlist, on_listing_failure)?;
+        let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
+        let Some(current_videos) = listing else {
+            return Ok(MembershipChanges {
+                listing_seconds,
+                ..MembershipChanges::default()
+            });
         };
         let stored_videos = self.list_stored_videos(playlist)?;
         let now = self.clock.now();
@@ -212,13 +248,15 @@ impl PlaylistVideoReconciler {
             })
             .collect();
         let mut numbering = playlist.clone();
+        let mut added = 0;
         for current in Self::in_position_order(&current_videos) {
             match known_videos.get(&current.youtube_id) {
                 None => {
                     let youtube_id = YoutubeVideoId::new(&current.youtube_id)?;
-                    let (numbered, added) = self.add_video(numbering, youtube_id, current, now)?;
+                    let (numbered, video) = self.add_video(numbering, youtube_id, current, now)?;
                     numbering = numbered;
-                    known_videos.insert(current.youtube_id.clone(), added);
+                    known_videos.insert(current.youtube_id.clone(), video);
+                    added += 1;
                 }
                 Some((existing, video)) => {
                     self.refresh_known_video(existing, video, current, now)?
@@ -230,9 +268,14 @@ impl PlaylistVideoReconciler {
             .iter()
             .map(|current| current.youtube_id.as_str())
             .collect();
-        self.remove_videos_not_in(playlist, &stored_videos, &current_youtube_ids)?;
+        let removed = self.remove_videos_not_in(playlist, &stored_videos, &current_youtube_ids)?;
 
-        Ok(())
+        Ok(MembershipChanges {
+            listed: Some(current_videos.len()),
+            added,
+            removed,
+            listing_seconds,
+        })
     }
 
     /// The playlist's current items. When they can't be listed, e.g. the
@@ -357,12 +400,12 @@ impl PlaylistVideoReconciler {
         playlist: &Playlist,
         stored_videos: &[(PlaylistVideo, Video)],
         current_youtube_ids: &HashSet<&str>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<usize> {
         stored_videos
             .iter()
             .map(|(_, video)| video)
             .filter(|video| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .try_for_each(|video| {
+            .try_fold(0, |removed, video| {
                 info!(
                     playlist_id = %playlist.id,
                     youtube_id = %video.youtube_id,
@@ -386,7 +429,8 @@ impl PlaylistVideoReconciler {
                             subtitle_filename: video.subtitles.filename.clone(),
                             was_downloaded: video.download.is_downloaded(),
                         },
-                    ))
+                    ))?;
+                Ok(removed + 1)
             })
     }
 

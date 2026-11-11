@@ -3,9 +3,11 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
-    ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
-    InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi, VideoUpdater, VideoUpdaterApi,
+    ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, FolderReconciliation,
+    InternalVideoReconciler, InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi,
+    VideoUpdater, VideoUpdaterApi,
 };
+use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, YoutubeVideoId};
@@ -172,6 +174,7 @@ impl ChannelVideoReconciler {
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<()> {
         let _span = info_span!("reconcile_channel", channel_id = %channel.id).entered();
+        let started = self.clock.now();
         info!(channel_id = %channel.id, "reconciling channel");
 
         let channel = &self.channel_avatar_restorer.restore_missing(channel);
@@ -180,9 +183,36 @@ impl ChannelVideoReconciler {
         if let Err(e) = self.show_file_writer.write_channel_show(channel) {
             warn!(channel_id = %channel.id, error = %e, "failed to write show files");
         }
-        self.sync_membership_with_youtube(channel, on_listing_failure)?;
+        let membership = self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
-        self.internal_video_reconciler.reconcile(&desired)
+        let folder = self.internal_video_reconciler.reconcile(&desired)?;
+        Self::log_pass(
+            channel,
+            &membership,
+            &folder,
+            elapsed_seconds(started, self.clock.now()),
+        );
+        Ok(())
+    }
+
+    /// The pass's summary line.
+    fn log_pass(
+        channel: &Channel,
+        membership: &MembershipChanges,
+        folder: &FolderReconciliation,
+        duration_seconds: f64,
+    ) {
+        info!(
+            channel_id = %channel.id,
+            listed = membership.listed,
+            added = membership.added,
+            removed = membership.removed,
+            syncs_requested = folder.syncs_requested,
+            orphans_deleted = folder.orphans_deleted,
+            listing_seconds = membership.listing_seconds,
+            duration_seconds,
+            "reconciled channel"
+        );
     }
 
     /// Brings the stored membership in line with the channel's current
@@ -196,9 +226,15 @@ impl ChannelVideoReconciler {
         &self,
         channel: &Channel,
         on_listing_failure: ListingFailure,
-    ) -> anyhow::Result<()> {
-        let Some(current_videos) = self.list_current_videos(channel, on_listing_failure)? else {
-            return Ok(());
+    ) -> anyhow::Result<MembershipChanges> {
+        let listing_started = self.clock.now();
+        let listing = self.list_current_videos(channel, on_listing_failure)?;
+        let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
+        let Some(current_videos) = listing else {
+            return Ok(MembershipChanges {
+                listing_seconds,
+                ..MembershipChanges::default()
+            });
         };
         let stored_videos = self.list_stored_videos(channel)?;
         let now = self.clock.now();
@@ -214,12 +250,14 @@ impl ChannelVideoReconciler {
                 )
             })
             .collect();
+        let mut added = 0;
         for current in &current_videos {
             match known_videos.get(&current.youtube_id) {
                 None => {
                     let youtube_id = YoutubeVideoId::new(&current.youtube_id)?;
-                    let added = self.add_video(channel, youtube_id, current, now)?;
-                    known_videos.insert(current.youtube_id.clone(), added);
+                    let video = self.add_video(channel, youtube_id, current, now)?;
+                    known_videos.insert(current.youtube_id.clone(), video);
+                    added += 1;
                 }
                 Some((existing, video)) => {
                     self.refresh_known_video(existing, video, current, now)?
@@ -231,9 +269,14 @@ impl ChannelVideoReconciler {
             .iter()
             .map(|current| current.youtube_id.as_str())
             .collect();
-        self.remove_videos_not_in(channel, &stored_videos, &current_youtube_ids)?;
+        let removed = self.remove_videos_not_in(channel, &stored_videos, &current_youtube_ids)?;
 
-        Ok(())
+        Ok(MembershipChanges {
+            listed: Some(current_videos.len()),
+            added,
+            removed,
+            listing_seconds,
+        })
     }
 
     /// The channel's current most recent uploads. When they can't be listed
@@ -347,12 +390,12 @@ impl ChannelVideoReconciler {
         channel: &Channel,
         stored_videos: &[(ChannelVideo, Video)],
         current_youtube_ids: &HashSet<&str>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<usize> {
         stored_videos
             .iter()
             .map(|(_, video)| video)
             .filter(|video| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .try_for_each(|video| {
+            .try_fold(0, |removed, video| {
                 info!(
                     channel_id = %channel.id,
                     youtube_id = %video.youtube_id,
@@ -376,7 +419,8 @@ impl ChannelVideoReconciler {
                             subtitle_filename: video.subtitles.filename.clone(),
                             was_downloaded: video.download.is_downloaded(),
                         },
-                    ))
+                    ))?;
+                Ok(removed + 1)
             })
     }
 
