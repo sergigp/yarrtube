@@ -23,6 +23,8 @@ pub trait EventRepository: Send + Sync {
     /// Atomically inserts `event` into the dead-letter table and deletes the
     /// original row.
     fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()>;
+    /// Every dead-lettered event, oldest first.
+    fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredEvent>>;
 }
 
 const SELECT_COLUMNS: &str =
@@ -73,39 +75,6 @@ impl SqliteEventRepository {
         )
         .optional()
         .context("failed to find event")
-    }
-
-    /// Every row in the dead-letter table, which `EventRepository` cannot read.
-    #[cfg(test)]
-    pub fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredEvent>> {
-        let conn = self.db.read()?;
-        let mut stmt = conn
-            .prepare(
-                "SELECT original_event_id, event_type, payload, retries, last_error, created_at, failed_at
-                 FROM domain_events_dead_letter ORDER BY id ASC",
-            )
-            .context("failed to prepare dead-lettered events query")?;
-        let rows = stmt
-            .query_map([], |row| {
-                let created_at: String = row.get(5)?;
-                let failed_at: String = row.get(6)?;
-                Ok(DeadLetteredEvent {
-                    original_event_id: row.get(0)?,
-                    event_type: row.get(1)?,
-                    payload: row.get(2)?,
-                    retries: row.get(3)?,
-                    last_error: row.get(4)?,
-                    created_at: DateTime::parse_from_rfc3339(&created_at)
-                        .unwrap()
-                        .with_timezone(&Utc),
-                    failed_at: DateTime::parse_from_rfc3339(&failed_at)
-                        .unwrap()
-                        .with_timezone(&Utc),
-                })
-            })
-            .context("failed to list dead-lettered events")?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .context("failed to read dead-lettered event row")
     }
 }
 
@@ -191,6 +160,31 @@ impl EventRepository for SqliteEventRepository {
         tx.commit()
             .context("failed to commit dead-letter transaction")?;
         Ok(())
+    }
+
+    fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredEvent>> {
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT original_event_id, event_type, payload, retries, last_error, created_at, failed_at
+                 FROM domain_events_dead_letter ORDER BY id ASC",
+            )
+            .context("failed to prepare dead-lettered events query")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(DeadLetteredEvent {
+                    original_event_id: row.get(0)?,
+                    event_type: row.get(1)?,
+                    payload: row.get(2)?,
+                    retries: row.get(3)?,
+                    last_error: row.get(4)?,
+                    created_at: timestamp(row, 5)?,
+                    failed_at: timestamp(row, 6)?,
+                })
+            })
+            .context("failed to list dead-lettered events")?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .context("failed to read dead-lettered event row")
     }
 }
 

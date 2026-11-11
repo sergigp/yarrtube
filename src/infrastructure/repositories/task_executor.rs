@@ -1,9 +1,11 @@
+use crate::domain::shared::elapsed_seconds;
 use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane, TaskOutcome};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::panic_message::panic_message;
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -181,7 +183,7 @@ impl TaskExecutor {
             .filter(|task| !in_progress.contains(&task.id))
             .try_for_each(|task| {
                 warn!(task_id = task.id, error, "recovering task left running");
-                self.record_failure(task, anyhow::anyhow!(error.to_string()))
+                self.record_failure(task, anyhow::anyhow!(error.to_string()), None)
             })
     }
 
@@ -228,12 +230,13 @@ impl TaskExecutor {
         state: &mut SchedulerState,
         task: &ScheduledTask,
     ) -> anyhow::Result<Option<JoinHandle<()>>> {
-        let Some(running) = self.repository.claim(task.id, self.clock.now())? else {
+        let claimed_at = self.clock.now();
+        let Some(running) = self.repository.claim(task.id, claimed_at)? else {
             return Ok(None);
         };
         let slot = Slot::for_task(&running);
         state.start(&slot);
-        Ok(Some(self.spawn(running, slot)))
+        Ok(Some(self.spawn(running, slot, claimed_at)))
     }
 
     fn capacity(&self, lane: TaskLane) -> usize {
@@ -246,14 +249,19 @@ impl TaskExecutor {
     /// Runs `running` on the blocking pool, then frees its slot (lane and
     /// key) and wakes the scheduler so it is refilled straight away. The slot
     /// is freed by a guard, so it is released even if something panics.
-    fn spawn(self: &Arc<Self>, running: ScheduledTask, slot: Slot) -> JoinHandle<()> {
+    fn spawn(
+        self: &Arc<Self>,
+        running: ScheduledTask,
+        slot: Slot,
+        claimed_at: DateTime<Utc>,
+    ) -> JoinHandle<()> {
         let release = SlotRelease {
             executor: Arc::clone(self),
             slot,
         };
         tokio::task::spawn_blocking(move || {
             let id = running.id;
-            if let Err(e) = release.executor.execute(running) {
+            if let Err(e) = release.executor.execute(running, claimed_at) {
                 error!(task_id = id, error = %e, "failed to record task outcome");
             }
         })
@@ -262,26 +270,63 @@ impl TaskExecutor {
     /// Dispatches a claimed task and records its outcome: deleted when done,
     /// pending again when its handler asks to run it again later, retried or
     /// dead-lettered on failure.
-    fn execute(&self, running: ScheduledTask) -> anyhow::Result<()> {
+    fn execute(&self, running: ScheduledTask, claimed_at: DateTime<Utc>) -> anyhow::Result<()> {
         let id = running.id;
         info!(
             task_id = id,
             task_type = running.task.task_type(),
             "dispatching task"
         );
-        match self.dispatch(&running) {
-            Ok(TaskOutcome::Done) => {
-                self.repository.delete(id)?;
-                info!(task_id = id, "task done");
-                Ok(())
-            }
-            Ok(TaskOutcome::RunAgainAt { run_at, reason }) => {
-                info!(task_id = id, run_at = %run_at, reason, "task re-queued");
-                self.repository
-                    .update(&running.run_again_at(run_at, reason, self.clock.now()))
-            }
-            Err(e) => self.record_failure(running, e),
+        let outcome = match self.dispatch(&running) {
+            Ok(outcome) => outcome,
+            Err(e) => return self.record_failure(running, e, Some(claimed_at)),
+        };
+        self.record_outcome(&running, &outcome)?;
+        self.log_finished(&running, &outcome, claimed_at);
+        Ok(())
+    }
+
+    /// Deletes a done task; stores one to run again as pending at its new
+    /// run time.
+    fn record_outcome(&self, running: &ScheduledTask, outcome: &TaskOutcome) -> anyhow::Result<()> {
+        match outcome {
+            TaskOutcome::Done | TaskOutcome::Unchanged => self.repository.delete(running.id),
+            TaskOutcome::RunAgainAt { run_at, reason } => self.repository.update(
+                &running
+                    .clone()
+                    .run_again_at(*run_at, reason.clone(), self.clock.now()),
+            ),
         }
+    }
+
+    /// The attempt's end line: what it was about, how it ended, how long it
+    /// ran and how long it waited past its run time.
+    fn log_finished(
+        &self,
+        running: &ScheduledTask,
+        outcome: &TaskOutcome,
+        claimed_at: DateTime<Utc>,
+    ) {
+        let (outcome, run_at, reason) = match outcome {
+            TaskOutcome::Done => ("done", None, None),
+            TaskOutcome::Unchanged => ("unchanged", None, None),
+            TaskOutcome::RunAgainAt { run_at, reason } => {
+                ("requeued", Some(run_at), Some(reason.as_str()))
+            }
+        };
+        info!(
+            task_id = running.id,
+            task_type = running.task.task_type(),
+            video_id = running.task.video_id(),
+            channel_id = running.task.channel_id(),
+            playlist_id = running.task.playlist_id(),
+            outcome,
+            run_at = run_at.map(tracing::field::display),
+            reason,
+            run_seconds = elapsed_seconds(claimed_at, self.clock.now()),
+            queued_seconds = elapsed_seconds(running.run_at, claimed_at),
+            "task finished"
+        );
     }
 
     /// A handler that panics counts as a failed attempt, like one that
@@ -310,8 +355,18 @@ impl TaskExecutor {
         )
     }
 
-    fn record_failure(&self, running: ScheduledTask, error: anyhow::Error) -> anyhow::Result<()> {
+    fn record_failure(
+        &self,
+        running: ScheduledTask,
+        error: anyhow::Error,
+        claimed_at: Option<DateTime<Utc>>,
+    ) -> anyhow::Result<()> {
         let id = running.id;
+        let task = running.task.clone();
+        let run_seconds =
+            claimed_at.map(|claimed_at| elapsed_seconds(claimed_at, self.clock.now()));
+        let queued_seconds =
+            claimed_at.map(|claimed_at| elapsed_seconds(running.run_at, claimed_at));
         // Render the full source chain (`why`), not just the outermost
         // context, so the retry/dead-letter line — and the stored
         // `last_error` the tasks UI shows — names the real cause.
@@ -324,9 +379,15 @@ impl TaskExecutor {
             TaskFailureOutcome::Retry(retried) => {
                 warn!(
                     task_id = id,
+                    task_type = task.task_type(),
+                    video_id = task.video_id(),
+                    channel_id = task.channel_id(),
+                    playlist_id = task.playlist_id(),
                     retries = retried.retries,
                     run_at = %retried.run_at,
                     error,
+                    run_seconds,
+                    queued_seconds,
                     "task failed, retrying"
                 );
                 self.repository.update(&retried)
@@ -334,8 +395,14 @@ impl TaskExecutor {
             TaskFailureOutcome::DeadLetter(dead) => {
                 error!(
                     task_id = id,
+                    task_type = task.task_type(),
+                    video_id = task.video_id(),
+                    channel_id = task.channel_id(),
+                    playlist_id = task.playlist_id(),
                     retries = dead.retries,
                     error,
+                    run_seconds,
+                    queued_seconds,
                     "task failed permanently"
                 );
                 self.repository.dead_letter(&dead)
@@ -361,6 +428,7 @@ impl Drop for SlotRelease {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_info_lines;
     use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
@@ -1351,6 +1419,143 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_log_one_line_when_a_task_finishes() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        task_repository
+            .schedule(&task(), now() - chrono::Duration::minutes(5))
+            .unwrap();
+        let running = task_repository.claim(1, now()).unwrap().unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(Arc::new(FakeHandler::succeeding())),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        );
+
+        let mut result = Err(String::new());
+        let logs = captured_info_lines(|| {
+            result = executor.execute(running, now()).map_err(|e| e.to_string())
+        });
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            logs,
+            vec![
+                "INFO dispatching task task_id=1 task_type=\"reconcile_playlist\"",
+                "INFO task finished task_id=1 task_type=\"reconcile_playlist\" playlist_id=\"PL1\" outcome=\"done\" run_seconds=0.0 queued_seconds=300.0",
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_log_a_finished_task_that_changed_nothing_as_unchanged() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        task_repository.schedule(&task(), now()).unwrap();
+        let running = task_repository.claim(1, now()).unwrap().unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(Arc::new(FakeHandler::completing_with(
+                TaskOutcome::Unchanged,
+            ))),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        );
+
+        let mut result = Err(String::new());
+        let logs = captured_info_lines(|| {
+            result = executor.execute(running, now()).map_err(|e| e.to_string())
+        });
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            Vec::<ScheduledTask>::new()
+        );
+        assert_eq!(
+            finished_lines(&logs),
+            vec![
+                "INFO task finished task_id=1 task_type=\"reconcile_playlist\" playlist_id=\"PL1\" outcome=\"unchanged\" run_seconds=0.0 queued_seconds=0.0",
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_log_the_next_run_of_a_requeued_task() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        task_repository.schedule(&task(), now()).unwrap();
+        let running = task_repository.claim(1, now()).unwrap().unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(Arc::new(FakeHandler::completing_with(
+                TaskOutcome::RunAgainAt {
+                    run_at: now() + chrono::Duration::minutes(10),
+                    reason: "HTTP Error 503".to_string(),
+                },
+            ))),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        );
+
+        let logs = captured_info_lines(|| executor.execute(running, now()).unwrap());
+
+        assert_eq!(
+            finished_lines(&logs),
+            vec![format!(
+                "INFO task finished task_id=1 task_type=\"reconcile_playlist\" playlist_id=\"PL1\" outcome=\"requeued\" run_at={} reason=\"HTTP Error 503\" run_seconds=0.0 queued_seconds=0.0",
+                now() + chrono::Duration::minutes(10)
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_log_a_retry_with_the_task_fields() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        task_repository
+            .schedule(&task(), now() - chrono::Duration::minutes(5))
+            .unwrap();
+        let running = task_repository.claim(1, now()).unwrap().unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(Arc::new(FakeHandler::failing())),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        );
+
+        let logs = captured_info_lines(|| executor.execute(running, now()).unwrap());
+
+        let next_run_at = task_repository.list_non_completed().unwrap()[0].run_at;
+        assert_eq!(
+            logs,
+            vec![
+                "INFO dispatching task task_id=1 task_type=\"reconcile_playlist\"".to_string(),
+                format!(
+                    "WARN task failed, retrying task_id=1 task_type=\"reconcile_playlist\" playlist_id=\"PL1\" retries=1 run_at={next_run_at} error=\"handler failed\" run_seconds=0.0 queued_seconds=300.0",
+                ),
+            ]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -1464,6 +1669,14 @@ mod tests {
             created_at: now(),
             failed_at: now(),
         }
+    }
+
+    /// The `task finished` lines among captured lines.
+    fn finished_lines(logs: &[String]) -> Vec<String> {
+        logs.iter()
+            .filter(|line| line.starts_with("INFO task finished "))
+            .cloned()
+            .collect()
     }
 
     fn registry(handler: Arc<FakeHandler>) -> HandlerRegistry {

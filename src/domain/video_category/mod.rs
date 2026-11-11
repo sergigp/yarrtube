@@ -1,4 +1,5 @@
 pub mod categorization_question;
+pub mod categorization_tally;
 pub mod errors;
 pub mod events;
 pub mod pending_categories;
@@ -8,6 +9,7 @@ pub mod video_category_choices;
 pub mod video_category_verdict;
 
 pub use categorization_question::{CategorizationAnswer, CategorizationQuestion};
+pub use categorization_tally::CategorizationTally;
 pub use errors::EditVideoCategoriesError;
 pub use events::VideoCategoriesChanged;
 pub use pending_categories::pending_categories;

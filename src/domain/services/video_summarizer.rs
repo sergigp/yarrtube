@@ -404,7 +404,9 @@ impl VideoSummarizer {
             video_id = %video.id,
             call,
             answer = %reply.content,
+            thinking = job.thinking,
             input_tokens = reply.input_tokens,
+            output_tokens = reply.output_tokens,
             stopped_at_limit = reply.stopped_at_limit,
             duration_seconds = started.elapsed().as_secs_f64(),
             "model answered"

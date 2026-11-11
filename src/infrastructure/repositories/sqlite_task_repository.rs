@@ -42,6 +42,8 @@ pub trait TaskRepository: Send + Sync {
     /// Atomically inserts `task` into the dead-letter table and deletes the
     /// original row.
     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()>;
+    /// Every dead-lettered task, oldest first.
+    fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredTask>>;
 }
 
 const SELECT_COLUMNS: &str =
@@ -83,38 +85,6 @@ impl SqliteTaskRepository {
         )
         .optional()
         .context("failed to find task")
-    }
-
-    /// Every row in the dead-letter table, which `TaskRepository` cannot read.
-    #[cfg(test)]
-    pub fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredTask>> {
-        let conn = self.db.read()?;
-        let mut stmt = conn
-            .prepare(
-                "SELECT original_task_id, task_type, payload, retries, last_error, created_at, failed_at
-                 FROM tasks_dead_letter ORDER BY id ASC",
-            )
-            .context("failed to prepare dead-lettered tasks query")?;
-        let rows = stmt
-            .query_map([], |row| {
-                let created_at: String = row.get(5)?;
-                let failed_at: String = row.get(6)?;
-                Ok(DeadLetteredTask {
-                    original_task_id: row.get(0)?,
-                    task: decode_task(row.get(1)?, row.get(2)?),
-                    retries: row.get(3)?,
-                    last_error: row.get(4)?,
-                    created_at: DateTime::parse_from_rfc3339(&created_at)
-                        .unwrap()
-                        .with_timezone(&Utc),
-                    failed_at: DateTime::parse_from_rfc3339(&failed_at)
-                        .unwrap()
-                        .with_timezone(&Utc),
-                })
-            })
-            .context("failed to list dead-lettered tasks")?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .context("failed to read dead-lettered task row")
     }
 }
 
@@ -318,6 +288,21 @@ impl TaskRepository for SqliteTaskRepository {
             .context("failed to commit dead-letter transaction")?;
         Ok(())
     }
+
+    fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredTask>> {
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT original_task_id, task_type, payload, retries, last_error, created_at, failed_at
+                 FROM tasks_dead_letter ORDER BY id ASC",
+            )
+            .context("failed to prepare dead-lettered tasks query")?;
+        let rows = stmt
+            .query_map([], row_to_dead_lettered_task)
+            .context("failed to list dead-lettered tasks")?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .context("failed to read dead-lettered task row")
+    }
 }
 
 fn row_to_scheduled_task(row: &Row) -> rusqlite::Result<ScheduledTask> {
@@ -365,6 +350,26 @@ fn row_to_scheduled_task(row: &Row) -> rusqlite::Result<ScheduledTask> {
             .with_timezone(&Utc),
         last_error: row.get(8)?,
     })
+}
+
+fn row_to_dead_lettered_task(row: &Row) -> rusqlite::Result<DeadLetteredTask> {
+    Ok(DeadLetteredTask {
+        original_task_id: row.get(0)?,
+        task: decode_task(row.get(1)?, row.get(2)?),
+        retries: row.get(3)?,
+        last_error: row.get(4)?,
+        created_at: timestamp_at(row, 5)?,
+        failed_at: timestamp_at(row, 6)?,
+    })
+}
+
+fn timestamp_at(row: &Row, idx: usize) -> rusqlite::Result<DateTime<Utc>> {
+    let value: String = row.get(idx)?;
+    DateTime::parse_from_rfc3339(&value)
+        .map(|parsed| parsed.with_timezone(&Utc))
+        .map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(idx, rusqlite::types::Type::Text, Box::new(e))
+        })
 }
 
 /// The `WHERE` clause guarding `schedule`'s insert: a task with an

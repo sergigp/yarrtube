@@ -34,6 +34,7 @@ impl TaskHandler for ReconcilePlaylistTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_info_lines;
     use crate::domain::category::CategoryId;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
@@ -159,6 +160,54 @@ mod tests {
         assert_eq!(
             result,
             Err("unexpected update_ytdlp task for this handler".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_log_a_pass_summary() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository {
+            delete_result: std::sync::Mutex::new(Some(Ok(true))),
+            ..FakeVideoFileRepository::with_listing(vec!["stray.mkv".to_string()])
+        });
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &Video::create(
+                YoutubeVideoId::new("vid_old").unwrap(),
+                "Old",
+                fixed_timestamp(),
+            ),
+            0,
+        );
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository,
+            playlist_video_repository,
+            vec![playlist_item("vid_new", "New", 0)],
+            task_repository,
+            video_file_repository,
+        ));
+
+        let mut result = Err(String::new());
+        let logs = captured_info_lines(|| result = run(&task, &task_for("PL1")));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            pass_lines(&logs),
+            vec![
+                "INFO reconciling playlist playlist_id=PL1 kind=youtube_linked",
+                "INFO reconciled playlist playlist_id=PL1 kind=youtube_linked listed=1 added=1 removed=1 syncs_requested=1 orphans_deleted=1 listing_seconds=0.0 duration_seconds=0.0",
+            ]
         );
     }
 
@@ -1893,6 +1942,17 @@ mod tests {
         Task::ReconcilePlaylist {
             playlist_id: playlist_id.to_string(),
         }
+    }
+
+    /// The pass's start and summary lines among captured lines.
+    fn pass_lines(logs: &[String]) -> Vec<&str> {
+        logs.iter()
+            .map(String::as_str)
+            .filter(|line| {
+                line.starts_with("INFO reconciling playlist ")
+                    || line.starts_with("INFO reconciled playlist ")
+            })
+            .collect()
     }
 
     fn run(task: &ReconcilePlaylistTask, queued: &Task) -> Result<TaskOutcome, String> {

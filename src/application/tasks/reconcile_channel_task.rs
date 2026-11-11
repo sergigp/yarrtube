@@ -34,6 +34,7 @@ impl TaskHandler for ReconcileChannelTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_info_lines;
     use crate::domain::category::{
         Category, CategoryColor, CategoryId, CategoryMember, CategoryName,
     };
@@ -157,6 +158,94 @@ mod tests {
         );
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_log_a_pass_summary() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository {
+            delete_result: std::sync::Mutex::new(Some(Ok(true))),
+            ..FakeVideoFileRepository::with_listing(vec!["stray.mkv".to_string()])
+        });
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &Video::create(
+                YoutubeVideoId::new("yt_old").unwrap(),
+                "Old",
+                fixed_timestamp(),
+            ),
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository,
+            channel_video_repository,
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt_new", "New", 0),
+            ])),
+            task_repository,
+            video_file_repository,
+        ));
+
+        let mut result = Err(String::new());
+        let logs = captured_info_lines(|| result = run(&task, &task_for("@somechannel")));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            pass_lines(&logs),
+            vec![
+                "INFO reconciling channel channel_id=@somechannel",
+                "INFO reconciled channel channel_id=@somechannel listed=1 added=1 removed=1 syncs_requested=1 orphans_deleted=1 listing_seconds=0.0 duration_seconds=0.0",
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_log_a_pass_summary_if_listing_fails() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &my_video(),
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository,
+            channel_video_repository,
+            Arc::new(FakeChannelVideosRepository::failing()),
+            task_repository,
+            Arc::new(FakeVideoFileRepository::default()),
+        ));
+
+        let mut result = Err(String::new());
+        let logs = captured_info_lines(|| result = run(&task, &task_for("@somechannel")));
+
+        assert_eq!(result, Ok(TaskOutcome::Done));
+        assert_eq!(
+            pass_lines(&logs),
+            vec![
+                "INFO reconciling channel channel_id=@somechannel",
+                "INFO reconciled channel channel_id=@somechannel added=0 removed=0 syncs_requested=1 orphans_deleted=0 listing_seconds=0.0 duration_seconds=0.0",
+            ]
+        );
     }
 
     #[test]
@@ -2653,6 +2742,17 @@ mod tests {
         Task::ReconcileChannel {
             channel_id: channel_id.to_string(),
         }
+    }
+
+    /// The pass's start and summary lines among captured lines.
+    fn pass_lines(logs: &[String]) -> Vec<&str> {
+        logs.iter()
+            .map(String::as_str)
+            .filter(|line| {
+                line.starts_with("INFO reconciling channel ")
+                    || line.starts_with("INFO reconciled channel ")
+            })
+            .collect()
     }
 
     fn run(task: &ReconcileChannelTask, queued: &Task) -> Result<TaskOutcome, String> {

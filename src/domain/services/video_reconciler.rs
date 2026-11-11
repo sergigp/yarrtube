@@ -5,7 +5,8 @@ use crate::domain::services::{
     VideoRelocator, VideoRelocatorApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
-    StepStatus, Video, VideoId, VideoOwner, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
+    StepStatus, Video, VideoId, VideoOwner, VideoStatus, VideoSyncChanges, VideoSyncPlan,
+    VideoSyncStep, VideoTarget, nfo_path_for,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -16,7 +17,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{info, warn};
 
 const DOWNLOAD_VIDEO_TASK_TYPE: &str = "download_video";
 
@@ -77,45 +78,67 @@ pub trait VideoReconcilerApi: Send + Sync {
     /// categories, broken-file reset, metadata repair,
     /// stranded warning, then schedules every step still needed. No-op if
     /// the video or its owner is gone. Idempotent.
-    fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<()>;
+    fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<VideoSyncChanges>;
 }
 
 impl VideoReconcilerApi for VideoReconciler {
-    fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<()> {
+    fn reconcile(&self, video_id: &VideoId) -> anyhow::Result<VideoSyncChanges> {
         let Some(video) = self.video_repository.find(video_id)? else {
-            return Ok(());
+            return Ok(VideoSyncChanges::default());
         };
         let Some(owner) = self.video_owner_finder.find(&video)? else {
-            return Ok(());
+            return Ok(VideoSyncChanges::default());
         };
         self.video_category_assigner
             .assign_video(&video.id, &owner.source)?;
-        let video = self.reset_if_broken(video, &owner.target)?;
-        self.repair_metadata(&video, &owner);
+        let (video, reset_for_redownload) = self.reset_if_broken(video, &owner.target)?;
+        let repairs = self.repair_metadata(&video, &owner);
         self.warn_if_stranded(&video)?;
         let summaries_wanted = video.is_summarizable() && self.summaries_wanted(&owner)?;
         let categorization_wanted = self.categorization_wanted(&video, &owner)?;
-        self.schedule_steps(&video, summaries_wanted, categorization_wanted)
+        let steps_due = self.schedule_steps(&video, summaries_wanted, categorization_wanted)?;
+        let changes = VideoSyncChanges {
+            steps_due,
+            reset_for_redownload,
+            ..repairs
+        };
+        Self::log_changes(&video, &changes);
+        Ok(changes)
     }
 }
 
 impl VideoReconciler {
+    /// One line saying what the sync did; nothing when it did nothing.
+    fn log_changes(video: &Video, changes: &VideoSyncChanges) {
+        if changes.is_empty() {
+            return;
+        }
+        info!(
+            video_id = %video.id,
+            steps_due = ?changes.steps_due,
+            reset_for_redownload = changes.reset_for_redownload,
+            metadata_repaired = changes.metadata_repaired,
+            relocated = changes.relocated,
+            "synced video"
+        );
+    }
+
     /// Resets a `Downloaded` video whose file is missing or not mp4 (a stale
     /// container downloaded before yt-dlp always remuxed to mp4, see
     /// `args_for_quality`), so it is downloaded again; the pass's orphan
     /// sweep removes the stale file.
-    fn reset_if_broken(&self, video: Video, target: &VideoTarget) -> anyhow::Result<Video> {
+    fn reset_if_broken(&self, video: Video, target: &VideoTarget) -> anyhow::Result<(Video, bool)> {
         if video.download.status() != VideoStatus::Downloaded
             || self.has_healthy_file(&video, target)
         {
-            return Ok(video);
+            return Ok((video, false));
         }
         warn!(
             youtube_id = %video.youtube_id,
             filename = video.download.filename().unwrap_or(""),
             "downloaded video's file is missing or not mp4, resetting for redownload"
         );
-        self.reset_for_redownload(video)
+        Ok((self.reset_for_redownload(video)?, true))
     }
 
     /// A video's file is healthy when it exists and is an mp4.
@@ -140,51 +163,68 @@ impl VideoReconciler {
     /// Regenerates the metadata of a `Downloaded` video that has none, the
     /// same way `VideoDownloader` does at download time, referencing the
     /// thumbnail already on disk. Best effort: a failure is logged, the video
-    /// is left as it is and its next sync tries again.
-    fn repair_metadata(&self, video: &Video, owner: &VideoOwner) {
+    /// is left as it is and its next sync tries again. What it did, as
+    /// `metadata_repaired` and `relocated`.
+    fn repair_metadata(&self, video: &Video, owner: &VideoOwner) -> VideoSyncChanges {
         if video.download.status() != VideoStatus::Downloaded || self.has_metadata(video) {
-            return;
+            return VideoSyncChanges::default();
         }
         let Some(metadata) = self
             .metadata_generator
             .generate(video, owner.sort_position, None)
         else {
-            return;
+            return VideoSyncChanges::default();
         };
-        let Some(video) = self.relocate_if_legacy(video, &metadata, &owner.target) else {
-            return;
-        };
-        let (Some(filename), Some(number)) = (video.download.filename(), video.episode_number)
+        let Some((video, relocated)) = self.relocate_if_legacy(video, &metadata, &owner.target)
         else {
-            return;
+            return VideoSyncChanges::default();
         };
-        let metadata = metadata.with_thumb(video.thumbnail.basename());
-        let nfo_path = owner.target.output_dir.join(nfo_path_for(filename));
-        if let Err(e) = self
-            .video_metadata_repository
-            .save(&video.id, &metadata, &number, &nfo_path)
-        {
-            warn!(video_id = %video.id, error = %e, "failed to save video metadata during sync");
+        VideoSyncChanges {
+            metadata_repaired: self.save_metadata(&video, metadata, &owner.target),
+            relocated,
+            ..VideoSyncChanges::default()
         }
     }
 
+    /// Saves `video`'s regenerated metadata next to its file; whether it was
+    /// saved.
+    fn save_metadata(&self, video: &Video, metadata: VideoMetadata, target: &VideoTarget) -> bool {
+        let (Some(filename), Some(number)) = (video.download.filename(), video.episode_number)
+        else {
+            return false;
+        };
+        let metadata = metadata.with_thumb(video.thumbnail.basename());
+        let nfo_path = target.output_dir.join(nfo_path_for(filename));
+        self.video_metadata_repository
+            .save(&video.id, &metadata, &number, &nfo_path)
+            .inspect_err(|e| {
+                warn!(video_id = %video.id, error = %e, "failed to save video metadata during sync")
+            })
+            .is_ok()
+    }
+
     /// `video` itself when already in its season folder, else `video` as
-    /// stored once relocated there, now that its publish time is known;
-    /// `None` when the relocation failed or moved nothing.
+    /// stored once relocated there, now that its publish time is known, with
+    /// whether it moved; `None` when the relocation failed or moved nothing.
     fn relocate_if_legacy(
         &self,
         video: &Video,
         metadata: &VideoMetadata,
         target: &VideoTarget,
-    ) -> Option<Video> {
+    ) -> Option<(Video, bool)> {
         if !video.download.is_in_legacy_layout() {
-            return Some(video.clone());
+            return Some((video.clone(), false));
         }
         match self
             .video_relocator
             .relocate(video, Some(metadata.published_at), &target.output_dir)
         {
-            Ok(Relocation::Moved { .. }) => self.video_repository.find(&video.id).ok().flatten(),
+            Ok(Relocation::Moved { .. }) => self
+                .video_repository
+                .find(&video.id)
+                .ok()
+                .flatten()
+                .map(|moved| (moved, true)),
             Ok(_) => None,
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to relocate legacy video during sync");
@@ -241,23 +281,25 @@ impl VideoReconciler {
             && !self.video_categorizer.pending(video, owner)?.is_empty())
     }
 
+    /// Schedules every step `video` has due (`TaskRepository` skips one
+    /// already queued); the steps due.
     fn schedule_steps(
         &self,
         video: &Video,
         summaries_wanted: bool,
         categorization_wanted: bool,
-    ) -> anyhow::Result<()> {
-        VideoSyncPlan::for_video(
+    ) -> anyhow::Result<Vec<VideoSyncStep>> {
+        let steps = VideoSyncPlan::for_video(
             video,
             summaries_wanted,
             categorization_wanted,
             self.clock.now(),
         )
-        .steps
-        .iter()
-        .try_for_each(|step| {
+        .steps;
+        steps.iter().try_for_each(|step| {
             self.task_repository
                 .schedule(&step.task_for(video), self.clock.now())
-        })
+        })?;
+        Ok(steps)
     }
 }

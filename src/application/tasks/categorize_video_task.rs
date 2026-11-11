@@ -44,7 +44,7 @@ impl TaskHandler for CategorizeVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::tasks::log_capture::captured_log_lines;
+    use crate::application::tasks::log_capture::{captured_info_lines, captured_log_lines};
     use crate::domain::category::{Category, CategoryColor, CategoryName, CategoryPrompt};
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
@@ -1431,6 +1431,8 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         assert!(first_call.contains("fallback=false"));
         assert!(first_call.contains("input_tokens=100"));
         assert!(first_call.contains("output_tokens=200"));
+        assert!(first_call.contains("thinking=true"));
+        assert!(first_call.contains("stopped_at_limit=false"));
         assert!(first_call.contains("duration_seconds="));
         assert!(fallback_call.starts_with("INFO asked the model"));
         assert!(fallback_call.contains("fallback=true"));
@@ -1441,6 +1443,71 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
         assert!(rejected.starts_with("ERROR "));
         assert!(rejected.contains("category=Tech"));
         assert!(rejected.contains("reason=its answer isn't usable"));
+    }
+
+    #[test]
+    fn it_should_log_a_run_summary() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[
+                &prompted_category("Sicilian"),
+                &prompted_category("Tech"),
+                &prompted_category("Food"),
+            ],
+        );
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![reply(&answers(&[
+                ("Sicilian", YES),
+                ("Tech", NO),
+                ("Food", NO),
+            ]))]),
+        );
+
+        let lines = captured_info_lines(|| {
+            run(&task, &video).unwrap();
+        });
+
+        assert_eq!(
+            summary_lines(&lines),
+            vec![format!(
+                "INFO categorized video video_id={} asked=3 yes=1 no=2 rejected=0",
+                video.id
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_count_rejected_categories_in_the_run_summary() {
+        let db = TestDatabase::new();
+        let video = summarized_video();
+        seed(
+            &db,
+            &video,
+            &[&prompted_category("Sicilian"), &prompted_category("Tech")],
+        );
+        let task = categorize_video_task(
+            &db,
+            llm_replying(vec![
+                reply(&answers(&[("Sicilian", YES)])),
+                reply("It might belong."),
+            ]),
+        );
+
+        let lines = captured_info_lines(|| {
+            run(&task, &video).unwrap();
+        });
+
+        assert_eq!(
+            summary_lines(&lines),
+            vec![format!(
+                "INFO categorized video video_id={} asked=2 yes=1 no=0 rejected=1",
+                video.id
+            )]
+        );
     }
 
     #[test]
@@ -1481,6 +1548,15 @@ Sure: {"Sicilian": {"reason": "A Sicilian game.", "belongs": true}}"#;
                 video.id
             ))
         );
+    }
+
+    /// The run's summary lines among captured lines.
+    fn summary_lines(lines: &[String]) -> Vec<String> {
+        lines
+            .iter()
+            .filter(|line| line.starts_with("INFO categorized video "))
+            .cloned()
+            .collect()
     }
 
     /// The task over `db`, asking `llm`.

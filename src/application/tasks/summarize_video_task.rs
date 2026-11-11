@@ -1902,6 +1902,8 @@ mod tests {
         assert!(answered.starts_with("INFO "));
         assert!(answered.contains("answer=Three games."));
         assert!(answered.contains("input_tokens=100"));
+        assert!(answered.contains("output_tokens=0"));
+        assert!(answered.contains("thinking=true"));
         assert!(answered.contains("duration_seconds="));
     }
 
