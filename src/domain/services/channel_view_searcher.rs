@@ -56,7 +56,7 @@ impl ChannelViewSearcherApi for ChannelViewSearcher {
         let channels = self.repository.list()?;
         let videos = self.videos_by_channel()?;
         let tasks = self.task_repository.list_non_completed()?;
-        let events = self.event_repository.list_eligible()?;
+        let events = self.event_repository.list_pending()?;
         Ok(channels
             .into_iter()
             .map(|channel| {

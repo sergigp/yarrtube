@@ -365,7 +365,8 @@ mod tests {
         let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@Hikaru"))
             .unwrap();
@@ -1280,7 +1281,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@chess")).unwrap();
         let first = downloaded_video("vid1");
         let second = pending_video("vid2");
@@ -1822,7 +1824,8 @@ mod tests {
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
         let video_repository = SqliteVideoRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@chess")).unwrap();
         let video = downloaded_video("vid1");
         save_channel_video(
@@ -2149,7 +2152,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess"))
             .unwrap();
@@ -2221,7 +2225,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         SqliteChannelRepository::new(db.database())
             .insert(&channel("@GothamChess"))
             .unwrap();
@@ -2549,7 +2554,8 @@ mod tests {
         let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@GothamChess")).unwrap();
         let first = pending_video("vid1");
         let second = downloaded_video("vid2");
@@ -2616,7 +2622,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@GothamChess")).unwrap();
         let video = downloaded_video("vid1");
         save_channel_video(
@@ -2687,7 +2694,8 @@ mod tests {
         let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@GothamChess")).unwrap();
         let (kept, dropped) = (downloaded_video("vid1"), downloaded_video("vid2"));
         [&kept, &dropped].into_iter().for_each(|video| {
@@ -2765,7 +2773,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@GothamChess")).unwrap();
         let video = downloaded_video("vid1");
         save_channel_video(
@@ -2913,7 +2922,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@GothamChess")).unwrap();
         let video = downloaded_video("vid1");
         save_channel_video(
@@ -2982,7 +2992,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let video_categories_repository =
             Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         channel_repository.insert(&channel("@GothamChess")).unwrap();
         let video = downloaded_video("vid1");
         save_channel_video(
@@ -3294,7 +3305,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            SqliteEventRepository::new(db.database())
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
                 .list_eligible()
                 .unwrap(),
             vec![categories_changed_event(1, &[&first])]
@@ -3690,6 +3701,7 @@ mod tests {
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,

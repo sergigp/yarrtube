@@ -95,7 +95,8 @@ mod tests {
     fn it_should_save_a_downloaded_video_as_an_episode_in_its_season_folder() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let videos_dir = tempfile::tempdir().unwrap();
         let output_dir = videos_dir.path().join("creators/somechannel");
@@ -1420,7 +1421,8 @@ mod tests {
     fn it_should_retry_a_failed_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video = my_video();
         video_repository.insert(&video).unwrap();
         SqliteChannelRepository::new(db.database())
@@ -2346,7 +2348,8 @@ mod tests {
     fn it_should_skip_if_no_playlist_or_channel_holds_the_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let video = my_video();
@@ -2485,7 +2488,8 @@ mod tests {
     fn it_should_discard_the_download_when_the_video_was_deleted_meanwhile() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let videos_dir = tempfile::tempdir().unwrap();
         let video = my_video();
@@ -3609,6 +3613,7 @@ mod tests {
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,

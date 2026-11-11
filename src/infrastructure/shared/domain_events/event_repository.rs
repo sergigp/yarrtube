@@ -2,6 +2,7 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::event::{DeadLetteredEvent, ScheduledEvent};
 use crate::infrastructure::shared::sqlite_connection::Database;
+use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
@@ -9,12 +10,14 @@ use rusqlite::Connection;
 #[cfg(test)]
 use rusqlite::OptionalExtension;
 use rusqlite::{Row, params};
-#[cfg(test)]
 use std::sync::Arc;
 
 pub trait EventRepository: Send + Sync {
-    /// Pending events ready to dispatch.
+    /// Pending events whose `run_at` has passed, in publication (id) order.
     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledEvent>>;
+    /// Every pending event, backing off or not, in publication (id) order.
+    /// What anything other than dispatch means by "not handled yet".
+    fn list_pending(&self) -> anyhow::Result<Vec<ScheduledEvent>>;
     fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
     /// Atomically inserts `event` into the dead-letter table and deletes the
@@ -22,45 +25,40 @@ pub trait EventRepository: Send + Sync {
     fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()>;
 }
 
-const SELECT_COLUMNS: &str = "id, event_type, payload, retries, created_at, updated_at, last_error";
+const SELECT_COLUMNS: &str =
+    "id, event_type, payload, retries, created_at, updated_at, last_error, run_at";
 
 fn row_to_scheduled_event(row: &Row) -> rusqlite::Result<ScheduledEvent> {
-    let created_at: String = row.get(4)?;
-    let updated_at: String = row.get(5)?;
     Ok(ScheduledEvent {
         id: row.get(0)?,
         event_type: row.get(1)?,
         payload: row.get(2)?,
         retries: row.get(3)?,
-        created_at: DateTime::parse_from_rfc3339(&created_at)
-            .map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    4,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })?
-            .with_timezone(&Utc),
-        updated_at: DateTime::parse_from_rfc3339(&updated_at)
-            .map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    5,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })?
-            .with_timezone(&Utc),
+        run_at: timestamp(row, 7)?,
+        created_at: timestamp(row, 4)?,
+        updated_at: timestamp(row, 5)?,
         last_error: row.get(6)?,
     })
 }
 
+/// The RFC 3339 timestamp stored in column `idx`.
+fn timestamp(row: &Row, idx: usize) -> rusqlite::Result<DateTime<Utc>> {
+    let value: String = row.get(idx)?;
+    DateTime::parse_from_rfc3339(&value)
+        .map(|parsed| parsed.with_timezone(&Utc))
+        .map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(idx, rusqlite::types::Type::Text, Box::new(e))
+        })
+}
+
 pub struct SqliteEventRepository {
     db: Database,
+    clock: Arc<dyn Clock>,
 }
 
 impl SqliteEventRepository {
-    pub fn new(db: Database) -> Self {
-        Self { db }
+    pub fn new(db: Database, clock: Arc<dyn Clock>) -> Self {
+        Self { db, clock }
     }
 }
 
@@ -116,25 +114,43 @@ impl EventRepository for SqliteEventRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(&format!(
-                "SELECT {SELECT_COLUMNS} FROM events WHERE status = 'pending' ORDER BY id ASC"
+                "SELECT {SELECT_COLUMNS} FROM events WHERE status = 'pending' AND run_at <= ?1 ORDER BY id ASC"
             ))
             .context("failed to prepare list-eligible-events query")?;
         let rows = stmt
-            .query_map([], row_to_scheduled_event)
+            .query_map(
+                params![self.clock.now().to_rfc3339()],
+                row_to_scheduled_event,
+            )
             .context("failed to list eligible events")?;
         rows.collect::<Result<Vec<_>, _>>()
             .context("failed to read eligible event row")
     }
 
+    fn list_pending(&self) -> anyhow::Result<Vec<ScheduledEvent>> {
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {SELECT_COLUMNS} FROM events WHERE status = 'pending' ORDER BY id ASC"
+            ))
+            .context("failed to prepare list-pending-events query")?;
+        let rows = stmt
+            .query_map([], row_to_scheduled_event)
+            .context("failed to list pending events")?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .context("failed to read pending event row")
+    }
+
     fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE events SET retries = ?2, updated_at = ?3, last_error = ?4 WHERE id = ?1",
+            "UPDATE events SET retries = ?2, updated_at = ?3, last_error = ?4, run_at = ?5 WHERE id = ?1",
             params![
                 event.id,
                 event.retries,
                 event.updated_at.to_rfc3339(),
                 event.last_error,
+                event.run_at.to_rfc3339(),
             ],
         )
         .context("failed to update event")?;
@@ -199,7 +215,7 @@ mod tests {
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
         let conn = Database::single(conn);
         let publisher = SqliteEventPublisher::new(conn.clone(), Arc::new(FixedClock(now())));
-        let repo = SqliteEventRepository::new(conn);
+        let repo = SqliteEventRepository::new(conn, Arc::new(FixedClock(now())));
         publisher.publish(&event()).unwrap();
         let id = repo.list_eligible().unwrap()[0].id;
         (repo, id)
@@ -208,7 +224,7 @@ mod tests {
     fn repo() -> SqliteEventRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqliteEventRepository::new(Database::single(conn))
+        SqliteEventRepository::new(Database::single(conn), Arc::new(FixedClock(now())))
     }
 
     fn event() -> DomainEvent {
@@ -219,10 +235,11 @@ mod tests {
 
     /// Mirrors what `DomainEventsConsumer` does on a dispatch failure: read
     /// the event, let it decide retry vs. dead-letter, then persist that
-    /// decision.
+    /// decision. A zero base delay keeps a retried event due immediately:
+    /// these tests are about the retry counter, not the delay.
     fn apply_failure(repo: &SqliteEventRepository, id: i64, error: &str) {
         let scheduled = repo.find(id).unwrap().unwrap();
-        match scheduled.fail(error, now()) {
+        match scheduled.fail(error, now(), 0) {
             EventFailureOutcome::Retry(retried) => repo.update(&retried).unwrap(),
             EventFailureOutcome::DeadLetter(dead) => repo.dead_letter(&dead).unwrap(),
         }
@@ -242,14 +259,62 @@ mod tests {
     }
 
     #[test]
-    fn it_should_list_an_inserted_event_as_eligible() {
+    fn it_should_list_a_newly_published_event_as_eligible() {
         let (repo, id) = repo_with_one_pending_event();
 
         let eligible = repo.list_eligible().unwrap();
-        assert_eq!(eligible.len(), 1);
-        let found = repo.find(id).unwrap().unwrap();
-        assert_eq!(found.event_type, "playlist_created");
-        assert_eq!(found.payload, event().payload().to_string());
+
+        assert_eq!(
+            eligible,
+            vec![ScheduledEvent {
+                id,
+                event_type: "playlist_created".to_string(),
+                payload: event().payload().to_string(),
+                retries: 0,
+                run_at: now(),
+                created_at: now(),
+                updated_at: now(),
+                last_error: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_not_list_an_event_whose_run_at_is_in_the_future() {
+        let (repo, id) = repo_with_one_pending_event();
+        let one_second_later = now() + chrono::Duration::seconds(1);
+        let scheduled = repo.find(id).unwrap().unwrap();
+        let backing_off = ScheduledEvent {
+            run_at: one_second_later,
+            ..scheduled
+        };
+        repo.update(&backing_off).unwrap();
+
+        let eligible_now = repo.list_eligible().unwrap();
+        let eligible_later =
+            SqliteEventRepository::new(repo.db.clone(), Arc::new(FixedClock(one_second_later)))
+                .list_eligible()
+                .unwrap();
+
+        assert_eq!(eligible_now, Vec::<ScheduledEvent>::new());
+        assert_eq!(eligible_later, vec![backing_off]);
+    }
+
+    #[test]
+    fn it_should_list_a_backing_off_event_as_pending() {
+        let (repo, id) = repo_with_one_pending_event();
+        let scheduled = repo.find(id).unwrap().unwrap();
+        let backing_off = ScheduledEvent {
+            run_at: now() + chrono::Duration::seconds(1),
+            ..scheduled
+        };
+        repo.update(&backing_off).unwrap();
+
+        let eligible = repo.list_eligible().unwrap();
+        let pending = repo.list_pending().unwrap();
+
+        assert_eq!(eligible, Vec::<ScheduledEvent>::new());
+        assert_eq!(pending, vec![backing_off]);
     }
 
     #[test]

@@ -621,7 +621,7 @@ mod tests {
         assert_eq!(
             found.run_at,
             now + chrono::Duration::seconds(
-                crate::domain::task::scheduled_task::retry_delay_seconds(
+                crate::domain::shared::retry_delay::retry_delay_seconds(
                     1,
                     TEST_BASE_RETRY_DELAY_SECONDS
                 )

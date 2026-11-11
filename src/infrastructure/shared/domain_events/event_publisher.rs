@@ -35,8 +35,8 @@ fn insert_pending_row(
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
     conn.execute(
-        "INSERT INTO events (event_type, payload, status, retries, created_at, updated_at, last_error)
-         VALUES (?1, ?2, 'pending', 0, ?3, ?3, NULL)",
+        "INSERT INTO events (event_type, payload, status, retries, run_at, created_at, updated_at, last_error)
+         VALUES (?1, ?2, 'pending', 0, ?3, ?3, ?3, NULL)",
         params![
             event.event_type(),
             event.payload().to_string(),

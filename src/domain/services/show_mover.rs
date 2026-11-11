@@ -214,7 +214,7 @@ impl ShowMover {
             .map_err(MoveShowError::Repository)?;
         let events = self
             .event_repository
-            .list_eligible()
+            .list_pending()
             .map_err(MoveShowError::Repository)?;
         if has_work_in_progress(&videos, &tasks, &events, show_dir, self.clock.now()) {
             return Err(MoveShowError::WorkInProgress);
@@ -242,7 +242,7 @@ impl ShowMover {
             .map_err(MoveShowError::Repository)?;
         let events = self
             .event_repository
-            .list_eligible()
+            .list_pending()
             .map_err(MoveShowError::Repository)?;
         Ok(tasks
             .iter()

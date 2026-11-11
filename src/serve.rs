@@ -703,6 +703,7 @@ fn event_consumer(
         infrastructure.event_repository.clone(),
         event_subscribers(infrastructure, plex, plex_label_syncer),
         infrastructure.clock.clone(),
+        retry_base_delay_seconds(),
     )
 }
 

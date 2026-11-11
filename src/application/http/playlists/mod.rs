@@ -417,7 +417,8 @@ mod tests {
     async fn it_should_fail_to_create_a_playlist_with_summaries_if_ai_is_off() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         // Failing lookup: reaching YouTube would answer 502, not 409.
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
@@ -451,7 +452,8 @@ mod tests {
             let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
             preferences_repository.save(&preferences).unwrap();
             let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-            let event_repository = SqliteEventRepository::new(db.database());
+            let event_repository =
+                SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
             // Failing lookup: reaching YouTube would answer 502, not 409.
             let playlist_creator = PlaylistCreator::new(
                 playlist_repository.clone(),
@@ -483,7 +485,8 @@ mod tests {
     async fn it_should_create_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -549,7 +552,8 @@ mod tests {
     async fn it_should_create_a_playlist_with_the_default_interval() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -593,7 +597,8 @@ mod tests {
     async fn it_should_create_a_playlist_with_its_interval() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -637,7 +642,8 @@ mod tests {
     async fn it_should_create_a_playlist_from_a_youtube_url() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -672,7 +678,8 @@ mod tests {
     async fn it_should_create_a_playlist_shown_on_home_by_default() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -716,7 +723,8 @@ mod tests {
     async fn it_should_create_a_playlist_excluded_from_home() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -760,7 +768,8 @@ mod tests {
     async fn it_should_name_the_playlist_after_its_id_if_youtube_title_blank() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -803,7 +812,8 @@ mod tests {
     async fn it_should_create_a_playlist_with_a_title_unsafe_for_filesystems() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -846,7 +856,8 @@ mod tests {
     async fn it_should_return_the_existing_playlist_if_already_created() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -882,7 +893,8 @@ mod tests {
     async fn it_should_keep_the_interval_of_an_existing_playlist_on_duplicate_create() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let existing = playlist("PL1", DEFAULT_PATH)
             .with_reconcile_interval(ReconcileInterval::new(60).unwrap());
         playlist_repository.insert(&existing).unwrap();
@@ -922,7 +934,8 @@ mod tests {
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
         preferences_repository.save(&categorization_on()).unwrap();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let existing = playlist("PL1", DEFAULT_PATH);
         playlist_repository.insert(&existing).unwrap();
         let playlist_creator = PlaylistCreator::new(
@@ -953,7 +966,8 @@ mod tests {
     async fn it_should_keep_exclude_from_home_of_an_existing_playlist_on_duplicate_create() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -988,7 +1002,8 @@ mod tests {
     async fn it_should_publish_playlist_created_only_once() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -1115,7 +1130,8 @@ mod tests {
     async fn it_should_fail_to_create_if_path_already_in_use() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", "shared/path"))
             .unwrap();
@@ -1152,7 +1168,8 @@ mod tests {
     async fn it_should_fail_to_create_if_playlist_not_found_on_youtube() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { resolved: None }),
@@ -1177,7 +1194,8 @@ mod tests {
     async fn it_should_fail_to_create_if_youtube_lookup_fails() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FailingYoutubePlaylistRepository),
@@ -1203,7 +1221,8 @@ mod tests {
     async fn it_should_preview_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = SqlitePlaylistRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let task_repository = task_repository(&db);
         let playlist_previewer = PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository {
             resolved: Some(resolved_playlist()),
@@ -1297,7 +1316,8 @@ mod tests {
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -1342,7 +1362,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -1404,7 +1425,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -1859,7 +1881,8 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let show_locks = Arc::new(ShowLocks::default());
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
@@ -1953,7 +1976,8 @@ mod tests {
     async fn it_should_fail_to_delete_a_missing_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -2009,7 +2033,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2037,7 +2064,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2074,7 +2104,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2108,7 +2141,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2139,7 +2175,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2173,7 +2212,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2213,7 +2255,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2285,7 +2330,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2336,7 +2384,10 @@ mod tests {
             playlist_video_repository,
             video_repository,
             task_repository(&db),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2388,7 +2439,10 @@ mod tests {
             playlist_video_repository,
             video_repository,
             task_repository,
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2429,7 +2483,62 @@ mod tests {
             playlist_video_repository,
             video_repository,
             task_repository(&db),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![PlaylistListItemResponse {
+                unwatched_count: 1,
+                work_in_progress: true,
+                ..playlist_list_item_response("PL1", "music/busy")
+            }])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_playlist_with_a_backing_off_downloaded_video_event_as_work_in_progress()
+     {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository
+            .insert(&playlist("PL1", "music/busy"))
+            .unwrap();
+        let video = save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        event_publisher(&db)
+            .publish(&video_downloaded(&video, "music/busy"))
+            .unwrap();
+        event_repository
+            .update(&backing_off_event(
+                1,
+                video_downloaded(&video, "music/busy"),
+            ))
+            .unwrap();
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            video_repository,
+            task_repository(&db),
+            event_repository,
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -2470,7 +2579,10 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             "/videos",
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -3133,7 +3245,8 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -3195,7 +3308,8 @@ mod tests {
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -3249,7 +3363,8 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -3339,7 +3454,8 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -3406,7 +3522,8 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let playlist_video_reconciler = playlist_video_reconciler(
             &db,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
@@ -3565,7 +3682,8 @@ mod tests {
     async fn it_should_move_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -3762,7 +3880,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_move_a_missing_playlist() {
         let db = TestDatabase::new();
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         let show_mover = show_mover(&db, video_file_repository.clone());
@@ -3784,7 +3903,8 @@ mod tests {
     async fn it_should_fail_to_move_to_the_same_path() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -3814,7 +3934,8 @@ mod tests {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let channel_repository = SqliteChannelRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -3846,7 +3967,8 @@ mod tests {
     async fn it_should_fail_to_move_into_its_own_path() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music"));
         playlist_repository
@@ -3875,7 +3997,8 @@ mod tests {
     async fn it_should_fail_to_move_inside_another_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/lofi"));
         playlist_repository
@@ -3910,7 +4033,8 @@ mod tests {
     async fn it_should_fail_to_move_if_destination_exists_on_disk() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(
             FakeVideoFileRepository::default()
                 .with_dir("/videos/music/chill")
@@ -3943,7 +4067,8 @@ mod tests {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -3980,12 +4105,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_move_into_the_folder_of_a_source_whose_deletion_is_backing_off() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        event_publisher(&db)
+            .publish(&playlist_deleted("PL2", "archive"))
+            .unwrap();
+        let backing_off = backing_off_event(1, playlist_deleted("PL2", "archive"));
+        event_repository.update(&backing_off).unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("archive/b")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "path \"archive/b\" overlaps the path of a playlist or channel"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(event_repository.list_pending().unwrap(), vec![backing_off]);
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_move_into_the_folder_of_a_source_whose_deletion_is_not_yet_handled()
     {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4023,7 +4186,8 @@ mod tests {
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4069,7 +4233,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4116,7 +4281,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4163,7 +4329,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4214,7 +4381,8 @@ mod tests {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4257,7 +4425,8 @@ mod tests {
         let video_repository = SqliteVideoRepository::new(db.database());
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4297,10 +4466,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_move_if_a_downloaded_video_event_is_backing_off() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let task_repository = task_repository(&db);
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let video = save_downloaded_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        event_publisher(&db)
+            .publish(&video_downloaded(&video, "music/chill"))
+            .unwrap();
+        let backing_off = backing_off_event(1, video_downloaded(&video, "music/chill"));
+        event_repository.update(&backing_off).unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist or channel still has work in progress, try again once its downloads finish"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(event_repository.list_pending().unwrap(), vec![backing_off]);
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_move_while_reconciling() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         let show_locks = Arc::new(ShowLocks::default());
@@ -4314,7 +4530,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
             task_repository(&db),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             video_file_repository.clone(),
             event_publisher(&db),
             show_locks.clone(),
@@ -4344,7 +4563,8 @@ mod tests {
     async fn it_should_fail_to_move_if_rename_fails() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository = Arc::new(
             FakeVideoFileRepository::with_failing_renames().with_dir("/videos/music/chill"),
         );
@@ -4373,7 +4593,8 @@ mod tests {
     async fn it_should_rename_back_if_recording_the_path_fails() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
-        let event_repository = SqliteEventRepository::new(db.database());
+        let event_repository =
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let video_file_repository =
             Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
         playlist_repository
@@ -4388,7 +4609,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
             task_repository(&db),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             video_file_repository.clone(),
             event_publisher(&db),
             Arc::new(ShowLocks::default()),
@@ -4476,7 +4700,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            SqliteEventRepository::new(db.database())
+            SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
                 .list_eligible()
                 .unwrap(),
             vec![pending_event(
@@ -4717,12 +4941,24 @@ mod tests {
 
     /// The outbox row `SqliteEventPublisher` writes for `event`, as read back
     /// before the consumer has dispatched it.
+    /// The `id`th published event after one failed attempt: waiting out its
+    /// retry delay, an hour from `fixed_timestamp()`.
+    fn backing_off_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+        ScheduledEvent {
+            retries: 1,
+            run_at: fixed_timestamp() + chrono::Duration::hours(1),
+            last_error: Some("Plex unreachable".to_string()),
+            ..pending_event(id, event)
+        }
+    }
+
     fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
         ScheduledEvent {
             id,
             event_type: event.event_type().to_string(),
             payload: event.payload().to_string(),
             retries: 0,
+            run_at: fixed_timestamp(),
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
             last_error: None,
@@ -5098,7 +5334,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
             task_repository(db),
-            Arc::new(SqliteEventRepository::new(db.database())),
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             video_file_repository,
             event_publisher(db),
             Arc::new(ShowLocks::default()),
@@ -5153,7 +5392,10 @@ mod tests {
                 unused_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteEventRepository::new(unused_connection())),
+            Arc::new(SqliteEventRepository::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FakeVideoFileRepository::default()),
             unused_event_publisher(),
             Arc::new(ShowLocks::default()),
