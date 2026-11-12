@@ -1952,6 +1952,69 @@ fn it_should_fail_the_summary_if_the_input_runs_over_the_budget_again() {
 }
 
 #[test]
+fn it_should_fail_the_summary_if_the_prompt_exceeds_the_context_again() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        Ok(LlmReply::refused_as_too_long(
+            "the input length exceeds the context length",
+        )),
+        Ok(LlmReply::refused_as_too_long(
+            "request (12400 tokens) exceeds the available context size (12288 tokens), try increasing it",
+        )),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(&srt_of(28, 60)),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + Duration::minutes(10),
+            reason: "Ollama refused the call: request (12400 tokens) exceeds the available context size (12288 tokens), try increasing it"
+                .to_string(),
+        })
+    );
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            whole_messages(&transcript_lines(0..28)),
+            part_messages(1, 2, "0:00–19:00", &[], 0..20),
+        ]
+    );
+    assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            summary: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
 fn it_should_count_a_refused_prompt_as_a_failed_summary_attempt() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
