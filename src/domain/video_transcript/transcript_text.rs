@@ -51,14 +51,15 @@ pub(super) fn is_cue_index(line: &str) -> bool {
 /// `line`'s caption text: `\N` splits it, `\h` is a space, tags stripped,
 /// spaces collapsed, each trimmed, empty ones dropped.
 pub(super) fn caption_lines(line: &str) -> Vec<String> {
-    let text = strip_tags(&line.replace("\\h", " "))
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    match text.is_empty() {
-        true => vec![],
-        false => vec![text],
-    }
+    line.split("\\N")
+        .map(|piece| {
+            strip_tags(&piece.replace("\\h", " "))
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .filter(|text| !text.is_empty())
+        .collect()
 }
 
 /// `line` without its tag-like markup (`<i>`, `</i>`, `<font ...>`, `<c>`,

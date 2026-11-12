@@ -16,7 +16,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `fetch_subtitles_task::it_should_store_hard_spaces_as_spaces_in_the_transcript`: `\h` becomes a space, spaces are collapsed and the line trimmed in the stored transcript. Verify: the test passes, along with `cargo test --locked`.
-- [ ] 2.2 `fetch_subtitles_task::it_should_store_a_forced_line_break_as_a_line_break`: `\N` splits a caption line into two stored lines. Verify: the test passes, along with `cargo test --locked`.
+- [x] 2.2 `fetch_subtitles_task::it_should_store_a_forced_line_break_as_a_line_break`: `\N` splits a caption line into two stored lines. Verify: the test passes, along with `cargo test --locked`.
 - [ ] 2.3 `summarize_video_task::it_should_send_the_transcript_without_hard_spaces`: the timed lines read from the `.srt` reach the user message clean. Verify: the test passes, along with `cargo test --locked`.
 - [ ] 2.4 `summarize_video_task::it_should_cut_in_parts_when_the_prompt_pushes_the_call_over_the_budget`: the whole call is budgeted on `whole().chars()`, not the transcript. Adjust existing boundary tests only where the prompt overhead now shifts their cut, keeping what each asserts. Verify: the test passes, along with `cargo test --locked`.
 - [ ] 2.5 `summarize_video_task::it_should_keep_every_part_call_within_the_budget`: the part transcript limit is `max_chars` minus the map messages' overhead. Verify: the test passes, along with `cargo test --locked`.
