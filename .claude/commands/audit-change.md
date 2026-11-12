@@ -25,11 +25,15 @@ Always announce: "Auditing change: <name>" and how to override.
 
 **Steps**
 
-0. **Run all tests**
-   Run all tests, including smoke/end-to-end suites if the project has them. All must
-   pass to continue. If a test fails, investigate, stop the audit and ask the user. If
-   the failing test is a smoke test, rerun it twice to rule out flakiness. A test that
-   eventually passes is a `flaky-test` finding, severity `critical`, decide lane.
+0. **Run all tests, with the mutation run alongside**
+   First do steps 1–2 (resolve the change, write the patch file), then start the
+   mutation run of step 3e as a background command, then run all tests in the
+   foreground, including smoke/end-to-end suites if the project has them. The two
+   are the audit's slowest parts and need nothing from each other. All tests must
+   pass to continue. If a test fails, stop the mutation run, investigate, stop the
+   audit and ask the user. If the failing test is a smoke test, rerun it twice to
+   rule out flakiness. A test that eventually passes is a `flaky-test` finding,
+   severity `critical`, decide lane; keep the mutation run going then.
 
 1. **Resolve the change and its artifacts**
 
@@ -55,8 +59,8 @@ Always announce: "Auditing change: <name>" and how to override.
      files for uncommitted work). Every later step reads this file; nobody re-derives
      the range.
 
-3. **Run review passes in parallel.** Start the mutation run (e) as a background
-   command first, then launch passes a–d as separate subagents in a single message.
+3. **Run review passes in parallel.** The mutation run (e) is already running in
+   the background since step 0; launch passes a–d as separate subagents in a single message.
    Give each subagent the change name, the artifact content already read in step 1,
    and the **patch file path** from step 2 — the patch is the review
    target, they must not run git to rediscover it.
@@ -98,8 +102,9 @@ Always announce: "Auditing change: <name>" and how to override.
    same explicit range from step 2, in review-only mode (do not let it apply fixes
    itself — step 6 owns the apply step and its gates). `category: simplification`.
 
-   e. **Test strength (mutation testing)** — run as a background Bash command, not a
-   subagent, so no agent idles on it:
+   e. **Test strength (mutation testing)** — started in step 0 as a background Bash
+   command, not a subagent, so no agent idles on it. It builds in its own copy of
+   the tree, so it doesn't contend with the step 0 tests for the cargo lock:
 
    ```bash
    cargo mutants --in-diff <scratchpad>/change.patch --jobs <cores/2> --output <scratchpad>/mutants
