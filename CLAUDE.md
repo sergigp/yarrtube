@@ -26,8 +26,8 @@ only by pushing a `vX.Y.Z` tag by hand; the tag is the version
 ## Commands
 
 ```bash
-scripts/run-tests.sh --all            # every suite: lint, unit-web, unit-rust, contract, e2e
-scripts/run-tests.sh --lint --unit-rust   # suites combine; one flag per suite (see --help)
+scripts/run-tests.sh --all            # every suite: lint, web, rust, contract, e2e
+scripts/run-tests.sh --lint --rust    # suites combine; one flag per suite (see --help)
 cargo build --release                 # build
 cargo test --locked                   # Rust unit/integration tests only
 cargo test <substring>                # run a single test / module by name filter
@@ -52,16 +52,16 @@ npm run build       # produces dist/, embedded into the binary by cargo build
 | Flag | Runs |
 |---|---|
 | `--lint` | web typecheck + eslint, `cargo fmt --check`, clippy |
-| `--unit-web` | Vitest |
-| `--unit-rust` | `cargo test` |
+| `--web` | Vitest |
+| `--rust` | `cargo test` |
 | `--contract` | adapters against the real yt-dlp / YouTube API |
 | `--e2e` | Docker image + Playwright against a fake YouTube |
 | `--all` | every suite |
 | `--ci` | what CI runs: every suite but contract, failing e2e tests retried |
 
 Before calling a change done, run the fast suites:
-`scripts/run-tests.sh --lint --unit-web --unit-rust`, or just `--lint` plus
-the unit suite of the side you touched (e.g. `--lint --unit-web`). The slow
+`scripts/run-tests.sh --lint --web --rust`, or just `--lint` plus
+the suite of the side you touched (e.g. `--lint --web`). The slow
 suites (contract, end-to-end) are not run per change: CI runs `--ci` on
 every push, and
 `/audit-change` runs every suite, contract included, before auditing. Run

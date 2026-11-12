@@ -2,8 +2,8 @@
 # Runs the test suites, the same way locally and in CI:
 #   --lint       static checks: the web UI's typecheck and lint, Rust
 #                formatting and clippy
-#   --unit-web   the web UI's tests (Vitest)
-#   --unit-rust  the Rust tests (`cargo test`)
+#   --web        the web UI's tests (Vitest)
+#   --rust       the Rust tests (`cargo test`)
 #   --contract   the YouTube contract tests: adapters against the real yt-dlp
 #                and YouTube Data API (needs yt-dlp, ffprobe, YOUTUBE_API_KEY)
 #   --e2e        the end-to-end suite: the Docker image driven through real
@@ -15,7 +15,7 @@
 # Usage: scripts/run-tests.sh <suite flag>... [--workers <N>]
 #
 # At least one suite flag is required; they combine (e.g. `--lint
-# --unit-rust`). `--workers` sets how many end-to-end tests run at once, each
+# --rust`). `--workers` sets how many end-to-end tests run at once, each
 # worker against its own daemon (default 3). Tools (npm, cargo, Docker, yt-dlp, …) must be
 # installed and are checked before anything runs; what the repo itself can
 # produce (the web UI's and e2e-tests/' node_modules, the web UI build, the
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ALL_SUITES=(lint unit-web unit-rust contract e2e)
+ALL_SUITES=(lint web rust contract e2e)
 
 usage() {
   sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
@@ -38,7 +38,7 @@ REQUESTED=()
 WORKERS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --lint | --unit-web | --unit-rust | --contract | --e2e)
+    --lint | --web | --rust | --contract | --e2e)
       REQUESTED+=("${1#--}")
       shift
       ;;
@@ -48,7 +48,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ci)
       CI_MODE=true
-      REQUESTED+=(lint unit-web unit-rust e2e)
+      REQUESTED+=(lint web rust e2e)
       shift
       ;;
     --workers)
@@ -72,7 +72,7 @@ done
 
 if [[ ${#REQUESTED[@]} -eq 0 ]]; then
   echo "no suite selected: pass --all, --ci or one or more of --lint," >&2
-  echo "--unit-web, --unit-rust, --contract, --e2e (see --help)" >&2
+  echo "--web, --rust, --contract, --e2e (see --help)" >&2
   exit 1
 fi
 
@@ -354,7 +354,7 @@ check_dependencies() {
   }
   # Every suite needs npm: the Rust binary embeds the built web UI.
   need_command npm
-  if selected lint || selected unit-rust || selected contract; then
+  if selected lint || selected rust || selected contract; then
     need_command cargo
   fi
   if selected contract; then
@@ -398,11 +398,11 @@ node_modules_stale() {
 # beforehand.
 prepare() {
   local web_install=false web_build=false e2e_install=false
-  if (selected lint || selected unit-web || selected unit-rust || selected contract) && node_modules_stale web; then
+  if (selected lint || selected web || selected rust || selected contract) && node_modules_stale web; then
     web_install=true
   fi
   # The Rust binary embeds the built web UI, so even clippy needs it.
-  if (selected lint || selected unit-rust || selected contract) && { [[ "$web_install" == true ]] || [[ ! -d "$REPO_ROOT/web/dist" ]]; }; then
+  if (selected lint || selected rust || selected contract) && { [[ "$web_install" == true ]] || [[ ! -d "$REPO_ROOT/web/dist" ]]; }; then
     web_build=true
   fi
   if selected e2e && node_modules_stale e2e-tests; then
@@ -464,16 +464,16 @@ run_lint() {
   run_phase "clippy" cargo-build cargo clippy --all-targets --all-features --locked -- -D warnings
 }
 
-run_unit_web() {
-  step "web UI unit tests"
+run_web() {
+  step "web UI tests"
   # Vitest's default reporter lists each test file as it finishes (others,
   # picked when it detects an agent or CI, only the failing ones), which the
   # progress line counts.
   run_phase "tests" vitest npm --prefix "$REPO_ROOT/web" run test -- --reporter=default
 }
 
-run_unit_rust() {
-  step "Rust unit tests"
+run_rust() {
+  step "Rust tests"
   run_phase "tests" cargo cargo test --locked
 }
 
@@ -708,8 +708,8 @@ for suite in "${ALL_SUITES[@]}"; do
     SUITE="$suite"
     case "$suite" in
       lint) run_lint ;;
-      unit-web) run_unit_web ;;
-      unit-rust) run_unit_rust ;;
+      web) run_web ;;
+      rust) run_rust ;;
       contract) run_contract ;;
       e2e) (run_e2e) ;;
     esac

@@ -88,7 +88,7 @@ rules:
       replaces skeleton stub code in a real adapter via one red-green-refactor cycle.
 
       ## 4. Verification
-      The fast suites: scripts/run-tests.sh --lint --unit-web --unit-rust.
+      The fast suites: scripts/run-tests.sh --lint --web --rust.
       The slow suites (contract, end-to-end) run in CI and in /audit-change, not here;
       only when the change adds or changes e2e specs, add a task to run --e2e.
       When the change is user-visible, add a "Manual (agent)" task for the checks the

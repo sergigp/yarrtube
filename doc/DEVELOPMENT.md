@@ -98,8 +98,8 @@ One script runs every test suite, locally and in CI:
 
 ```bash
 scripts/run-tests.sh --all                 # everything
-scripts/run-tests.sh --lint --unit-rust    # suites combine: --lint, --unit-web,
-                                           # --unit-rust, --contract, --e2e
+scripts/run-tests.sh --lint --rust         # suites combine: --lint, --web,
+                                           # --rust, --contract, --e2e
 scripts/run-tests.sh --ci                  # what CI runs: all but --contract
 scripts/run-tests.sh --e2e --workers 2     # end-to-end tests at once (default 3)
 ```
