@@ -727,6 +727,59 @@ fn it_should_keep_reducing_until_the_answers_fit() {
 }
 
 #[test]
+fn it_should_reduce_in_groups_when_the_reduce_prompt_pushes_the_answers_over_the_budget() {
+    // At 8192 the budget is ~20400 characters: three 6300-character answers
+    // fit it alone, but not with the reduce messages around them.
+    let answer = "x".repeat(6300);
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        reply(&answer),
+        reply(&answer),
+        reply(&answer),
+        reply("Both."),
+        reply("All of it."),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&with_summaries(|settings| SummarySettings {
+            context_length: ContextLength::new(8192).unwrap(),
+            ..settings
+        }))
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(&srt_of(45, 60)),
+    );
+
+    run(&task, &video).unwrap();
+
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            part_messages(1, 3, "0:00–17:00", &[], 0..18),
+            part_messages(2, 3, "18:00–35:00", &[], 18..36),
+            part_messages(3, 3, "36:00–44:00", &[], 36..45),
+            reduce_messages(&[], &[("0:00–17:00", &answer), ("18:00–35:00", &answer)]),
+            reduce_messages(&[], &[("0:00–35:00", "Both."), ("36:00–44:00", &answer)]),
+        ]
+    );
+    assert_eq!(
+        summary_repository.find(&video.id).unwrap(),
+        Some(stored_summary(&video, "All of it."))
+    );
+}
+
+#[test]
 fn it_should_list_a_chapter_starting_on_the_parts_last_line() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

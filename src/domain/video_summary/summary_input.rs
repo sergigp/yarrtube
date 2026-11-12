@@ -104,9 +104,9 @@ impl SummaryInput {
         self.reduce_with(answers, String::new())
     }
 
-    /// Whether `answers` and the chapters fit the budget together.
+    /// Whether the reduce of `answers`, with the chapters, fits the budget.
     pub fn reduce_fits(&self, answers: &[PartAnswer]) -> bool {
-        Self::chars(answers) + chapter_list(&self.chapters).chars().count() <= self.max_chars
+        self.reduce(answers).chars() <= self.max_chars
     }
 
     /// `answers` as consecutive groups within the budget, of at least two
@@ -180,14 +180,8 @@ impl SummaryInput {
     }
 
     fn joins(&self, group: &[PartAnswer], answer: &PartAnswer) -> bool {
-        Self::chars(group) + answer.summary.as_str().chars().count() <= self.max_chars
-    }
-
-    fn chars(answers: &[PartAnswer]) -> usize {
-        answers
-            .iter()
-            .map(|answer| answer.summary.as_str().chars().count())
-            .sum()
+        let joined = [group, std::slice::from_ref(answer)].concat();
+        self.reduce_group(&joined).chars() <= self.max_chars
     }
 
     fn reduce_with(&self, answers: &[PartAnswer], chapters: String) -> SummaryMessages {
