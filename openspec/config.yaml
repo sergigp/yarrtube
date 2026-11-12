@@ -46,6 +46,23 @@ rules:
     - |
       On design.md add these sections that will be used as an overview of the design. Don't add anything else,
       we want to keep this short and simple
+      ## Diagrams
+      Mermaid diagrams for the human reviewer. They are drawn from the sections
+      below and add nothing to them: those sections stay complete on their own.
+      - `classDiagram` of the new/changed types from ## Types & Signatures and
+        their relationships (ports and their implementations, ownership,
+        dependencies), plus the unchanged types they touch.
+      - One `sequenceDiagram` per flow in ## Call Stack, with the call
+        parameters on the arrows and error paths as `alt` blocks.
+      - Only when a status or lifecycle changes: a `stateDiagram-v2` of it after
+        the change.
+      - Only when the SQLite schema changes: an `erDiagram` of the touched tables.
+      In the class and state diagrams, mark what the change adds, changes or
+      removes with these classes, and leave untouched elements plain:
+      classDef new fill:#d4f5d4,stroke:#2e7d32
+      classDef changed fill:#fff1c2,stroke:#b58900
+      classDef removed fill:#f8d4d4,stroke:#c62828,stroke-dasharray:4
+      At most ~15 nodes per diagram; split it rather than grow it.
       ## Types & Signatures
       Code blocks defining the new/changed types and method signatures only —
       no implementation bodies. Start each block with its file path as a
@@ -64,6 +81,18 @@ rules:
       non-obvious and needs one sentence to avoid it being "fixed" later
     - Follow /rust-architect's layering and naming conventions when naming
       files, types, and methods in the contract
+    - Whenever ## Types & Signatures or ## Call Stack change, update
+      ## Diagrams in the same edit so they never disagree
+  proposal:
+    - |
+      Keep `## Impact`'s text list, and below it add a Mermaid `flowchart LR`
+      for the human reviewer: the modules/components the change touches, grouped by layer
+      in `subgraph`s, plus the unchanged callers of anything it changes (that
+      is where side effects land). Mark nodes with the same classes as design.md:
+      classDef new fill:#d4f5d4,stroke:#2e7d32
+      classDef changed fill:#fff1c2,stroke:#b58900
+      classDef removed fill:#f8d4d4,stroke:#c62828,stroke-dasharray:4
+      Leave untouched callers plain. At most ~15 nodes.
   tasks:
     - |
       Structure tasks.md as a vertical slice built outside-in. Do NOT group tasks by
