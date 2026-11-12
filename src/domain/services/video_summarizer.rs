@@ -2,7 +2,7 @@ use crate::domain::event::DomainEvent;
 use crate::domain::llm_server::{
     LlmChat, LlmModel, LlmServerUnreachable, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
-use crate::domain::preferences::{SummaryPrompt, SummarySettings};
+use crate::domain::preferences::{ContextLength, SummaryPrompt, SummarySettings};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
@@ -12,7 +12,7 @@ use crate::domain::video::{
 use crate::domain::video_summary::{
     PartAnswer, SummaryInput, SummaryMessages, SummaryText, VideoSummary,
 };
-use crate::domain::video_transcript::TimedTranscript;
+use crate::domain::video_transcript::{CaptionLanguage, TimedTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
@@ -49,6 +49,17 @@ enum Skip {
     Failed(anyhow::Error),
 }
 
+/// A call that stopped at the context limit on more input than the budget.
+struct Overrun {
+    call: String,
+    /// None when Ollama refused the call: it reports no count then.
+    input_tokens: Option<u32>,
+    /// The call's messages' characters over its input tokens.
+    chars_per_token: f64,
+    /// The usual "ran out of context" error, if it isn't cut again.
+    reason: anyhow::Error,
+}
+
 /// Why a generation failed.
 enum Failure {
     /// Ollama can't be connected to during a call: wait for it, no attempt
@@ -58,6 +69,8 @@ enum Failure {
     Server(anyhow::Error),
     /// This video didn't get a summary out of the settings as they are.
     Rejected(anyhow::Error),
+    /// The input ran over the budget: cut it smaller, once.
+    OverBudget(Overrun),
 }
 
 impl Failure {
@@ -233,7 +246,11 @@ impl VideoSummarizer {
         match self.try_generate(video, job) {
             Ok(()) => Ok(VideoStepOutcome::Settled),
             Err(Failure::Unavailable(reason)) => Ok(self.wait_for_server(video, reason)),
-            Err(Failure::Server(cause) | Failure::Rejected(cause)) => {
+            Err(
+                Failure::Server(cause)
+                | Failure::Rejected(cause)
+                | Failure::OverBudget(Overrun { reason: cause, .. }),
+            ) => {
                 error!(video_id = %video.id, error = format!("{cause:#}"), "failed to summarize video");
                 self.record_failure(video, error_report::cause_chain(&cause))
             }
@@ -258,16 +275,8 @@ impl VideoSummarizer {
 
     fn try_generate(&self, video: &Video, job: &SummaryJob) -> Result<(), Failure> {
         let started = Instant::now();
-        let input = self.summary_input(video, job)?;
-        info!(
-            video_id = %video.id,
-            title = %video.title,
-            video_seconds = video.download.duration_seconds(),
-            parts = input.parts(),
-            model = %job.settings.model.as_str(),
-            "generating video summary"
-        );
-        let text = self.write_summary(video, &input, job)?;
+        let (language, transcript) = self.transcript(video, job)?;
+        let text = self.write_summary_cut_smaller_once(video, job, &language, &transcript)?;
         if self.still_wanted(video)?.is_none() {
             info!(video_id = %video.id, "video no longer wants a summary, dropping the generated one");
             return Ok(());
@@ -348,12 +357,12 @@ impl VideoSummarizer {
     ) -> Result<SummaryText, Failure> {
         let parts = input.parts();
         if parts == 1 {
-            return self.ask(video, job, "whole", input.whole(&job.prompt));
+            return self.ask(video, job, input, "whole", input.whole());
         }
         let answers = (0..parts)
             .map(|index| {
                 let call = format!("part {} of {parts}", index + 1);
-                self.ask(video, job, &call, input.part(&job.prompt, index))
+                self.ask(video, job, input, &call, input.part(index))
             })
             .collect::<Result<Vec<_>, _>>()?;
         self.reduced(video, input, job, input.answers(answers))
@@ -369,7 +378,7 @@ impl VideoSummarizer {
         answers: Vec<PartAnswer>,
     ) -> Result<SummaryText, Failure> {
         if answers.len() == 1 || input.reduce_fits(&answers) {
-            return self.ask(video, job, "reduce", input.reduce(&job.prompt, &answers));
+            return self.ask(video, job, input, "reduce", input.reduce(&answers));
         }
         let groups = input.reduce_groups(&answers);
         let total = groups.len();
@@ -380,8 +389,8 @@ impl VideoSummarizer {
                 [only] => Ok(only.clone()),
                 _ => {
                     let call = format!("reduce group {} of {total}", index + 1);
-                    let messages = input.reduce_group(&job.prompt, group);
-                    self.ask(video, job, &call, messages)
+                    let messages = input.reduce_group(group);
+                    self.ask(video, job, input, &call, messages)
                         .map(|summary| PartAnswer::merged(group, summary))
                 }
             })
@@ -393,6 +402,7 @@ impl VideoSummarizer {
         &self,
         video: &Video,
         job: &SummaryJob,
+        input: &SummaryInput,
         call: &str,
         messages: SummaryMessages,
     ) -> Result<SummaryText, Failure> {
@@ -404,6 +414,7 @@ impl VideoSummarizer {
         );
         let started = Instant::now();
         let context_length = job.settings.context_length;
+        let message_chars = messages.chars();
         let reply = self
             .llm_server_repository
             .chat(
@@ -433,7 +444,10 @@ impl VideoSummarizer {
             "model answered"
         );
         if let Some(refusal) = reply.refusal {
-            return Err(anyhow!("Ollama refused the call: {refusal}").into());
+            return Err(match reply.exceeded_context {
+                true => Self::exceeded_context(call, &context_length, message_chars, &refusal),
+                false => anyhow!("Ollama refused the call: {refusal}").into(),
+            });
         }
         if reply.stopped_at_limit {
             warn!(
@@ -445,18 +459,131 @@ impl VideoSummarizer {
                 thinking_tail = %reply.thinking_tail(),
                 "the model stopped at the output limit"
             );
-            return Err(anyhow!(
-                "the model ran out of context ({} tokens: {} of input, {} left to think and answer)",
-                context_length.value(),
+            return Err(Self::out_of_context(
+                call,
+                input,
+                &context_length,
+                message_chars,
                 reply.input_tokens,
-                context_length.value().saturating_sub(reply.input_tokens)
-            )
-            .into());
+            ));
         }
         SummaryText::from_answer(&reply.content).map_err(|e| anyhow::Error::new(e).into())
     }
 
-    fn summary_input(&self, video: &Video, job: &SummaryJob) -> anyhow::Result<SummaryInput> {
+    /// `write_summary`; on an overrun, once more cut at its measured ratio.
+    fn write_summary_cut_smaller_once(
+        &self,
+        video: &Video,
+        job: &SummaryJob,
+        language: &CaptionLanguage,
+        transcript: &TimedTranscript,
+    ) -> Result<SummaryText, Failure> {
+        let input =
+            self.summary_input(video, job, language, transcript, language.chars_per_token());
+        Self::log_generating(video, job, &input);
+        match self.write_summary(video, &input, job) {
+            Err(Failure::OverBudget(overrun)) => {
+                Self::log_cut_smaller(video, &input, &overrun);
+                let smaller =
+                    self.summary_input(video, job, language, transcript, overrun.chars_per_token);
+                Self::log_generating(video, job, &smaller);
+                self.write_summary(video, &smaller, job)
+            }
+            written => written,
+        }
+    }
+
+    fn log_cut_smaller(video: &Video, input: &SummaryInput, overrun: &Overrun) {
+        info!(
+            video_id = %video.id,
+            call = %overrun.call,
+            input_tokens = %overrun
+                .input_tokens
+                .map_or_else(|| "over the context length".to_string(), |tokens| tokens.to_string()),
+            budget_tokens = input.budget_tokens(),
+            chars_per_token = overrun.chars_per_token,
+            "input over the budget, cutting the transcript smaller"
+        );
+    }
+
+    /// A call that stopped at the context limit: over the budget, it can be
+    /// cut smaller; within it, the model ran out of room.
+    fn out_of_context(
+        call: &str,
+        input: &SummaryInput,
+        context_length: &ContextLength,
+        message_chars: usize,
+        input_tokens: u32,
+    ) -> Failure {
+        let reason = anyhow!(
+            "the model ran out of context ({} tokens: {} of input, {} left to think and answer)",
+            context_length.value(),
+            input_tokens,
+            context_length.value().saturating_sub(input_tokens)
+        );
+        match input.over_budget(input_tokens) {
+            true => Failure::OverBudget(Overrun {
+                call: call.to_string(),
+                input_tokens: Some(input_tokens),
+                chars_per_token: message_chars as f64 / f64::from(input_tokens),
+                reason,
+            }),
+            false => Failure::Rejected(reason),
+        }
+    }
+
+    /// A call Ollama refused because the prompt exceeds the context length:
+    /// the real ratio is under its characters over the context length.
+    fn exceeded_context(
+        call: &str,
+        context_length: &ContextLength,
+        message_chars: usize,
+        refusal: &str,
+    ) -> Failure {
+        Failure::OverBudget(Overrun {
+            call: call.to_string(),
+            input_tokens: None,
+            chars_per_token: message_chars as f64 / f64::from(context_length.value()),
+            reason: anyhow!("Ollama refused the call: {refusal}"),
+        })
+    }
+
+    fn summary_input(
+        &self,
+        video: &Video,
+        job: &SummaryJob,
+        language: &CaptionLanguage,
+        transcript: &TimedTranscript,
+        chars_per_token: f64,
+    ) -> SummaryInput {
+        SummaryInput::new(
+            video,
+            language,
+            transcript,
+            &job.settings.context_length,
+            &job.prompt,
+            chars_per_token,
+        )
+    }
+
+    fn log_generating(video: &Video, job: &SummaryJob, input: &SummaryInput) {
+        info!(
+            video_id = %video.id,
+            title = %video.title,
+            video_seconds = video.download.duration_seconds(),
+            parts = input.parts(),
+            model = %job.settings.model.as_str(),
+            "generating video summary"
+        );
+    }
+
+    /// The video's transcript language and its timed lines, from the
+    /// subtitle file.
+    fn transcript(
+        &self,
+        video: &Video,
+        job: &SummaryJob,
+    ) -> anyhow::Result<(CaptionLanguage, TimedTranscript)> {
         let transcript = self
             .video_transcript_repository
             .find(&video.id)?
@@ -472,11 +599,6 @@ impl VideoSummarizer {
             .context("video's subtitle file is gone")?;
         let timed = TimedTranscript::from_srt(&srt);
         anyhow::ensure!(!timed.is_empty(), "video's subtitle file has no text");
-        Ok(SummaryInput::new(
-            video,
-            &transcript.language,
-            &timed,
-            &job.settings.context_length,
-        ))
+        Ok((transcript.language, timed))
     }
 }

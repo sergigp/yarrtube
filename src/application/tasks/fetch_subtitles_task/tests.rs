@@ -267,6 +267,74 @@ fn it_should_record_auto_generated_captions_as_automatic() {
 }
 
 #[test]
+fn it_should_store_hard_spaces_as_spaces_in_the_transcript() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_transcript_repository = Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+    let caption_repository = Arc::new(
+        FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions()))).with_subtitles(
+            Ok(FetchedSubtitles {
+                srt: "1\n00:00:00,000 --> 00:00:02,000\nplay the\\hJabava\\h\nLondon\\h\\h\n"
+                    .to_string(),
+                ..fetched_subtitles("yt1.en.srt")
+            }),
+        ),
+    );
+    let video = downloaded_video();
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = subtitles_task(&db, video_repository.clone(), caption_repository);
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_transcript_repository.find(&video.id).unwrap(),
+        Some(VideoTranscript {
+            video_id: video.id.clone(),
+            language: CaptionLanguage::new("en").unwrap(),
+            source: CaptionSource::Manual,
+            text: TranscriptText::new("play the Jabava\nLondon"),
+            created_at: now(),
+        })
+    );
+}
+
+#[test]
+fn it_should_store_a_forced_line_break_as_a_line_break() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video_transcript_repository = Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+    let caption_repository = Arc::new(
+        FakeCaptionRepository::with_probe(Ok(caption_probe(english_captions()))).with_subtitles(
+            Ok(FetchedSubtitles {
+                srt: "1\n00:00:00,000 --> 00:00:02,000\nfirst line\\Nsecond\\h\\hline\n"
+                    .to_string(),
+                ..fetched_subtitles("yt1.en.srt")
+            }),
+        ),
+    );
+    let video = downloaded_video();
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = subtitles_task(&db, video_repository.clone(), caption_repository);
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_transcript_repository.find(&video.id).unwrap(),
+        Some(VideoTranscript {
+            video_id: video.id.clone(),
+            language: CaptionLanguage::new("en").unwrap(),
+            source: CaptionSource::Manual,
+            text: TranscriptText::new("first line\nsecond line"),
+            created_at: now(),
+        })
+    );
+}
+
+#[test]
 fn it_should_name_a_regional_track_with_its_base_language() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

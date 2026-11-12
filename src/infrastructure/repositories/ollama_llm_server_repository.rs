@@ -80,7 +80,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             sent => sent.map_err(Self::send_error)?,
         };
         if response.status() == StatusCode::BAD_REQUEST {
-            return Ok(LlmReply::refused(Self::refusal(response)?));
+            return Ok(Self::refused(Self::refusal(response)?));
         }
         let response: ChatResponse = response
             .error_for_status()?
@@ -93,6 +93,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             output_tokens: response.eval_count,
             stopped_at_limit: response.done_reason.as_deref() == Some("length"),
             refusal: None,
+            exceeded_context: false,
         })
     }
 }
@@ -115,6 +116,21 @@ impl OllamaLlmServerRepository {
             error.context(LlmServerUnreachable)
         } else {
             error
+        }
+    }
+
+    /// A refusal as `error`, too long when Ollama says the prompt exceeds
+    /// the context.
+    fn refused(error: String) -> LlmReply {
+        let too_long = [
+            "exceeds the available context size",
+            "exceeds the context length",
+        ]
+        .iter()
+        .any(|wording| error.contains(wording));
+        match too_long {
+            true => LlmReply::refused_as_too_long(error),
+            false => LlmReply::refused(error),
         }
     }
 
@@ -405,6 +421,7 @@ mod tests {
                 output_tokens: 250,
                 stopped_at_limit: false,
                 refusal: None,
+                exceeded_context: false,
             }
         );
     }
@@ -432,6 +449,7 @@ mod tests {
                 output_tokens: 3072,
                 stopped_at_limit: true,
                 refusal: None,
+                exceeded_context: false,
             }
         );
     }
@@ -457,6 +475,25 @@ mod tests {
         let _chat = server
             .mock("POST", "/api/chat")
             .with_status(400)
+            .with_body(r#"{"error": "invalid format: expected \"json\" or a JSON schema"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused("invalid format: expected \"json\" or a JSON schema")
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_as_too_long_when_the_prompt_exceeds_the_context() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_status(400)
             .with_body(r#"{"error": "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"}"#)
             .create();
 
@@ -466,9 +503,28 @@ mod tests {
 
         assert_eq!(
             reply,
-            LlmReply::refused(
+            LlmReply::refused_as_too_long(
                 "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"
             )
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_as_too_long_when_the_input_length_exceeds_the_context() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_status(400)
+            .with_body(r#"{"error": "the input length exceeds the context length"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused_as_too_long("the input length exceeds the context length")
         );
     }
 
