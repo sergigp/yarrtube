@@ -79,6 +79,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             output_tokens: response.eval_count,
             stopped_at_limit: response.done_reason.as_deref() == Some("length"),
             refusal: None,
+            exceeded_context: false,
         })
     }
 }
@@ -387,6 +388,7 @@ mod tests {
                 output_tokens: 250,
                 stopped_at_limit: false,
                 refusal: None,
+                exceeded_context: false,
             }
         );
     }

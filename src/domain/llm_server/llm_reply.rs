@@ -7,6 +7,8 @@ pub struct LlmReply {
     pub stopped_at_limit: bool,
     /// Why the server wouldn't answer this request, if it wouldn't.
     pub refusal: Option<String>,
+    /// The refusal is because the prompt exceeds the context length.
+    pub exceeded_context: bool,
 }
 
 impl LlmReply {
@@ -17,6 +19,15 @@ impl LlmReply {
             output_tokens: 0,
             stopped_at_limit: false,
             refusal: Some(reason.into()),
+            exceeded_context: false,
+        }
+    }
+
+    /// Refused because the prompt exceeds the context length.
+    pub fn refused_as_too_long(reason: impl Into<String>) -> Self {
+        Self {
+            exceeded_context: true,
+            ..Self::refused(reason)
         }
     }
 }

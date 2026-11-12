@@ -12,7 +12,7 @@
   - Update existing test helpers (`whole_messages`, `part_messages`, …) to the new signatures only.
 
   Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
-- [ ] 1.2 Skeleton for the refusal-as-overrun revision: `LlmReply.exceeded_context` (false everywhere it's built today) and `LlmReply::refused_as_too_long`; `Overrun.input_tokens: Option<u32>` (`Some` where it's set today), logged as the count; `VideoSummarizer::exceeded_context` returning `Failure::Rejected` for now, not yet called. Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
+- [x] 1.2 Skeleton for the refusal-as-overrun revision: `LlmReply.exceeded_context` (false everywhere it's built today) and `LlmReply::refused_as_too_long`; `Overrun.input_tokens: Option<u32>` (`Some` where it's set today), logged as the count; `VideoSummarizer::exceeded_context` returning `Failure::Rejected` for now, not yet called. Done when `cargo build` succeeds and `cargo test --locked` passes unchanged.
 
 ## 2. Behaviour (TDD)
 

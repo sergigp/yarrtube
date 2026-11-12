@@ -52,7 +52,8 @@ enum Skip {
 /// A call that stopped at the context limit on more input than the budget.
 struct Overrun {
     call: String,
-    input_tokens: u32,
+    /// None when Ollama refused the call: it reports no count then.
+    input_tokens: Option<u32>,
     /// The call's messages' characters over its input tokens.
     chars_per_token: f64,
     /// The usual "ran out of context" error, if it isn't cut again.
@@ -484,7 +485,9 @@ impl VideoSummarizer {
         info!(
             video_id = %video.id,
             call = %overrun.call,
-            input_tokens = overrun.input_tokens,
+            input_tokens = %overrun
+                .input_tokens
+                .map_or_else(String::new, |tokens| tokens.to_string()),
             budget_tokens = input.budget_tokens(),
             chars_per_token = overrun.chars_per_token,
             "input over the budget, cutting the transcript smaller"
@@ -509,12 +512,23 @@ impl VideoSummarizer {
         match input.over_budget(input_tokens) {
             true => Failure::OverBudget(Overrun {
                 call: call.to_string(),
-                input_tokens,
+                input_tokens: Some(input_tokens),
                 chars_per_token: message_chars as f64 / f64::from(input_tokens),
                 reason,
             }),
             false => Failure::Rejected(reason),
         }
+    }
+
+    /// A call Ollama refused because the prompt exceeds the context length:
+    /// the real ratio is under its characters over the context length.
+    fn exceeded_context(
+        _call: &str,
+        _context_length: &ContextLength,
+        _message_chars: usize,
+        refusal: &str,
+    ) -> Failure {
+        Failure::Rejected(anyhow!("Ollama refused the call: {refusal}"))
     }
 
     fn summary_input(
