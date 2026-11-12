@@ -16,6 +16,26 @@ Known weaknesses: videos with several parts (the chess stream with three
 games is still summarized wrong); opens with "The video…" now and then
 (strip it in code). About 5 min per video on the M2 Air, ~12 videos an hour.
 
+## 2026-11-12 · budget the whole prompt, re-cut once on an overrun
+
+A chess video (`Jobava London Guide…`) failed its map call "part 1 of 2" 4
+times: 11,932 input tokens on 12,288, budget 9,000. Reproduced exactly with
+local `qwen3:4b` from the real `.srt`:
+
+- `\h` escapes (subtitle hard spaces), left at nearly every line end, cost
+  ~2.2k tokens on that part (11,711 transcript tokens with them, 9,503
+  without). In prod, 27 of 241 manual and 4 of 417 auto-generated transcripts
+  had them.
+- Clean chess English runs at 3.75 chars/token (4.3 assumed); Spanish parts
+  measured 3.21–3.44 (3.4 assumed).
+- The prompt around the transcript, uncounted until now, was ~220 tokens.
+
+Now: escapes are cleaned, the budget counts each call's whole messages, and a
+call that stops at the limit with input over the budget is cut again once at
+its measured chars/token. The two summaries that failed on 2026-11-05 (7,997
+and 9,470 input tokens) fit the budget: they hit the old 3,288-token output
+cap, not this.
+
 ## 2026-11-05 · output limited only by the free context
 
 Production capped output at what the input budget left (3288 of 12288) and

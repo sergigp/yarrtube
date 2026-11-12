@@ -100,7 +100,7 @@ Summary (summarize task):
    2. → `write_summary(video, &input, job)` → `ask(video, job, &input, call, input.whole() | input.part(i) | input.reduce(..))`
       - `ask`: `reply.stopped_at_limit && input.over_budget(reply.input_tokens)` → `Err(Failure::OverBudget(Overrun { chars_per_token: messages.chars() / reply.input_tokens, .. }))`
       - `ask`: `stopped_at_limit` within budget → `Err(Failure::Rejected(..))`, as today
-   3. On `Failure::OverBudget(overrun)`: `info!(call, input_tokens, budget_tokens, chars_per_token, "input over the budget, cutting the transcript smaller")`, then → `summary_input(.., overrun.chars_per_token)` → `write_summary(..)`. A second `OverBudget` → `Failure::Rejected(overrun.reason)`
+   3. On `Failure::OverBudget(overrun)`: `info!(call, input_tokens, budget_tokens, chars_per_token, "input over the budget, cutting the transcript smaller")`, then → `summary_input(.., overrun.chars_per_token)` → `write_summary(..)`. A second `OverBudget` is failed by `generate` like a rejection, with `overrun.reason`
 5. → store the summary, as today
 
 Transcript stored (fetch subtitles task):

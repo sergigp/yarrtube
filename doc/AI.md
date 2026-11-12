@@ -94,11 +94,21 @@ spec: decisions here feed OpenSpec changes later.
   task (`update_ytdlp`, hourly), and whatever waits behind it, until it ends.
 - The task checks all that again when it runs, then fills the prompt with the
   video's title, duration, language, chapters and transcript. Timed lines come
-  from the `.srt` on disk: the stored transcript has no timings.
-- A transcript over ~73% of the context length is cut into parts, at chapter
-  starts when it can be, and summarized by map-reduce. Size is estimated at 4.3
-  characters per token for English, 1.5 for Japanese, Chinese and Korean, and
-  3.4 otherwise. Answers that don't fit one reduce are reduced in groups first.
+  from the `.srt` on disk: the stored transcript has no timings. Both are
+  cleaned the same way: subtitle escape codes become what they stand for
+  (`\h`, a hard space, a space; `\N` a line break).
+- A call whose messages (system and user, prompt included, not just the
+  transcript) are over ~73% of the context length is cut into parts, at
+  chapter starts when it can be, and summarized by map-reduce. Size is
+  estimated at 4.3 characters per token for English, 1.5 for Japanese, Chinese
+  and Korean, and 3.4 otherwise. Answers whose reduce messages don't fit are
+  reduced in groups first.
+- Content can tokenize worse than its language's estimate (chess notation,
+  numbers). When a call stops at the context limit and Ollama reports more
+  input tokens than the budget, the summary starts over once, in the same run,
+  cut at that call's measured characters per token (its messages' characters
+  over its input tokens), and that re-cut is logged. A second overrun, or a
+  stop at the limit within the budget, fails the attempt.
 - Ollama unreachable (can't connect), or the model not installed, stops the
   run without spending one of the video's attempts: it is re-queued 6 hours
   later, as many times as it takes.
