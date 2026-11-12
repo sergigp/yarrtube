@@ -1,0 +1,7 @@
+[env]
+# SQLite keeps memory statistics by default, which puts every allocation of
+# every connection in the process behind one global mutex. The test suite
+# opens a fresh database per test, many tests at once, and spent most of its
+# time queued on that mutex (~60 s instead of ~7 s). Nothing reads the
+# statistics. Rebuilds the bundled SQLite (libsqlite3-sys) when changed.
+LIBSQLITE3_FLAGS = "-DSQLITE_DEFAULT_MEMSTATUS=0"
