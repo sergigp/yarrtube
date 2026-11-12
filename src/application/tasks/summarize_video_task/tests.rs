@@ -250,6 +250,35 @@ fn it_should_send_the_shipped_prompt_filled_with_the_videos_data() {
 }
 
 #[test]
+fn it_should_send_the_transcript_without_hard_spaces() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![reply("Three games.")]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository,
+        llm.clone(),
+        files_with("1\n00:00:00,000 --> 00:00:02,000\nplay the Jabava\\h\nLondon\\h\\h\n"),
+    );
+
+    run(&task, &video).unwrap();
+
+    assert_eq!(
+        sent_messages(&llm),
+        vec![whole_messages("play the Jabava\nLondon")]
+    );
+}
+
+#[test]
 fn it_should_send_the_saved_prompt_when_there_is_one() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
