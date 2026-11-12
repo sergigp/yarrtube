@@ -568,7 +568,7 @@ fn it_should_ask_for_thinking_only_when_the_model_supports_it() {
 
 #[test]
 fn it_should_summarize_a_long_transcript_in_parts_then_reduce() {
-    // Each line is 1000 characters, so 30 lines cut into parts of ~30600.
+    // Each line is 1000 characters: parts of 29 fit ~30600 with the prompt.
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -593,11 +593,11 @@ fn it_should_summarize_a_long_transcript_in_parts_then_reduce() {
     assert_eq!(
         sent_messages(&llm),
         vec![
-            part_messages(1, 2, "0:00–29:00", &[], 0..30),
-            part_messages(2, 2, "30:00–44:00", &[], 30..45),
+            part_messages(1, 2, "0:00–28:00", &[], 0..29),
+            part_messages(2, 2, "29:00–44:00", &[], 29..45),
             SummaryMessages {
                 system: REDUCE_SYSTEM.to_string(),
-                user: "Title: Sicilian\nDuration: 30 minutes\n\nPart summaries, in order:\n\nPart 1 (0:00–29:00):\nFirst.\n\nPart 2 (30:00–44:00):\nSecond.\n\nNow write the final summary of the whole video in Spanish, 3 to 5 sentences.".to_string(),
+                user: "Title: Sicilian\nDuration: 30 minutes\n\nPart summaries, in order:\n\nPart 1 (0:00–28:00):\nFirst.\n\nPart 2 (29:00–44:00):\nSecond.\n\nNow write the final summary of the whole video in Spanish, 3 to 5 sentences.".to_string(),
             },
         ]
     );
@@ -647,16 +647,16 @@ fn it_should_reduce_answers_in_groups_when_they_do_not_fit() {
     assert_eq!(
         sent_messages(&llm),
         vec![
-            part_messages(1, 3, "0:00–19:00", &["0:00 Game 1"], 0..20),
-            part_messages(2, 3, "20:00–39:00", &["0:00 Game 1"], 20..40),
-            part_messages(3, 3, "40:00–44:00", &["0:00 Game 1"], 40..45),
+            part_messages(1, 3, "0:00–17:00", &["0:00 Game 1"], 0..18),
+            part_messages(2, 3, "18:00–35:00", &["0:00 Game 1"], 18..36),
+            part_messages(3, 3, "36:00–44:00", &["0:00 Game 1"], 36..45),
             reduce_messages(
                 &[],
-                &[("0:00–19:00", &long_answer), ("20:00–39:00", &long_answer)]
+                &[("0:00–17:00", &long_answer), ("18:00–35:00", &long_answer)]
             ),
             reduce_messages(
                 &["0:00 Game 1"],
-                &[("0:00–39:00", "Both."), ("40:00–44:00", &long_answer)]
+                &[("0:00–35:00", "Both."), ("36:00–44:00", &long_answer)]
             ),
         ]
     );
@@ -706,16 +706,16 @@ fn it_should_keep_reducing_until_the_answers_fit() {
     assert_eq!(
         sent_messages(&llm),
         vec![
-            part_messages(1, 3, "0:00–19:00", &[], 0..20),
-            part_messages(2, 3, "20:00–39:00", &[], 20..40),
-            part_messages(3, 3, "40:00–44:00", &[], 40..45),
+            part_messages(1, 3, "0:00–17:00", &[], 0..18),
+            part_messages(2, 3, "18:00–35:00", &[], 18..36),
+            part_messages(3, 3, "36:00–44:00", &[], 36..45),
             reduce_messages(
                 &[],
-                &[("0:00–19:00", &long_answer), ("20:00–39:00", &long_answer)]
+                &[("0:00–17:00", &long_answer), ("18:00–35:00", &long_answer)]
             ),
             reduce_messages(
                 &[],
-                &[("0:00–39:00", &long_answer), ("40:00–44:00", &long_answer)]
+                &[("0:00–35:00", &long_answer), ("36:00–44:00", &long_answer)]
             ),
             reduce_messages(&[], &[("0:00–44:00", "Both.")]),
         ]
@@ -734,9 +734,9 @@ fn it_should_list_a_chapter_starting_on_the_parts_last_line() {
     let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
     let llm = llm_replying(vec![reply("First."), reply("Second."), reply("All of it.")]);
     let video = with_chapters(vec![
-        chapter(0, 1740, "Game 1"),
-        chapter(1740, 1800, "Short"),
-        chapter(1800, 2700, "Game 2"),
+        chapter(0, 1620, "Game 1"),
+        chapter(1620, 1680, "Short"),
+        chapter(1680, 2700, "Game 2"),
     ]);
     video_repository.insert(&video).unwrap();
     preferences_repository.save(&summaries_on()).unwrap();
@@ -756,11 +756,11 @@ fn it_should_list_a_chapter_starting_on_the_parts_last_line() {
     assert_eq!(
         sent_messages(&llm),
         vec![
-            part_messages(1, 2, "0:00–29:00", &["0:00 Game 1", "29:00 Short"], 0..30),
-            part_messages(2, 2, "30:00–44:00", &["30:00 Game 2"], 30..45),
+            part_messages(1, 2, "0:00–27:00", &["0:00 Game 1", "27:00 Short"], 0..28),
+            part_messages(2, 2, "28:00–44:00", &["28:00 Game 2"], 28..45),
             reduce_messages(
-                &["0:00 Game 1", "29:00 Short", "30:00 Game 2"],
-                &[("0:00–29:00", "First."), ("30:00–44:00", "Second.")]
+                &["0:00 Game 1", "27:00 Short", "28:00 Game 2"],
+                &[("0:00–27:00", "First."), ("28:00–44:00", "Second.")]
             ),
         ]
     );
@@ -850,17 +850,17 @@ fn it_should_cut_by_size_without_chapters() {
     assert_eq!(
         sent_messages(&llm),
         vec![
-            part_messages(1, 4, "0:00–29:00", &[], 0..30),
-            part_messages(2, 4, "30:00–59:00", &[], 30..60),
-            part_messages(3, 4, "1:00:00–1:29:00", &[], 60..90),
-            part_messages(4, 4, "1:30:00–1:39:00", &[], 90..100),
+            part_messages(1, 4, "0:00–28:00", &[], 0..29),
+            part_messages(2, 4, "29:00–57:00", &[], 29..58),
+            part_messages(3, 4, "58:00–1:26:00", &[], 58..87),
+            part_messages(4, 4, "1:27:00–1:39:00", &[], 87..100),
             reduce_messages(
                 &[],
                 &[
-                    ("0:00–29:00", "A."),
-                    ("30:00–59:00", "B."),
-                    ("1:00:00–1:29:00", "C."),
-                    ("1:30:00–1:39:00", "D.")
+                    ("0:00–28:00", "A."),
+                    ("29:00–57:00", "B."),
+                    ("58:00–1:26:00", "C."),
+                    ("1:27:00–1:39:00", "D.")
                 ]
             ),
         ]
@@ -894,14 +894,14 @@ fn it_should_cut_a_chapter_too_long_on_its_own_by_size() {
         sent_messages(&llm),
         vec![
             part_messages(1, 3, "0:00–4:00", &["0:00 Short"], 0..5),
-            part_messages(2, 3, "5:00–34:00", &["5:00 Long"], 5..35),
-            part_messages(3, 3, "35:00–44:00", &["5:00 Long"], 35..45),
+            part_messages(2, 3, "5:00–32:00", &["5:00 Long"], 5..33),
+            part_messages(3, 3, "33:00–44:00", &["5:00 Long"], 33..45),
             reduce_messages(
                 &["0:00 Short", "5:00 Long"],
                 &[
                     ("0:00–4:00", "A."),
-                    ("5:00–34:00", "B."),
-                    ("35:00–44:00", "C.")
+                    ("5:00–32:00", "B."),
+                    ("33:00–44:00", "C.")
                 ]
             ),
         ]
@@ -947,9 +947,9 @@ fn it_should_scale_the_budget_with_the_context_length() {
     assert_eq!(
         messages_with(6144, vec![reply("A."), reply("B."), reply("All.")]),
         vec![
-            part_messages(1, 2, "0:00–14:00", &[], 0..15),
-            part_messages(2, 2, "15:00–19:00", &[], 15..20),
-            reduce_messages(&[], &[("0:00–14:00", "A."), ("15:00–19:00", "B.")]),
+            part_messages(1, 2, "0:00–12:00", &[], 0..13),
+            part_messages(2, 2, "13:00–19:00", &[], 13..20),
+            reduce_messages(&[], &[("0:00–12:00", "A."), ("13:00–19:00", "B.")]),
         ]
     );
 }
@@ -993,9 +993,44 @@ fn it_should_estimate_english_at_more_characters_per_token() {
     assert_eq!(
         messages_with("es"),
         vec![
-            part_messages(1, 2, "0:00–29:00", &[], 0..30),
-            part_messages(2, 2, "30:00–33:00", &[], 30..34),
-            reduce_messages(&[], &[("0:00–29:00", "A."), ("30:00–33:00", "B.")]),
+            part_messages(1, 2, "0:00–28:00", &[], 0..29),
+            part_messages(2, 2, "29:00–33:00", &[], 29..34),
+            reduce_messages(&[], &[("0:00–28:00", "A."), ("29:00–33:00", "B.")]),
+        ]
+    );
+}
+
+#[test]
+fn it_should_cut_in_parts_when_the_prompt_pushes_the_call_over_the_budget() {
+    // 30 lines of 1000 characters: under 30600, the budget, on their own,
+    // but over it with the system and user messages around them.
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![reply("A."), reply("B."), reply("All.")]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository,
+        llm.clone(),
+        files_with(&srt_of(30, 60)),
+    );
+
+    run(&task, &video).unwrap();
+
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            part_messages(1, 2, "0:00–28:00", &[], 0..29),
+            part_messages(2, 2, "29:00–29:00", &[], 29..30),
+            reduce_messages(&[], &[("0:00–28:00", "A."), ("29:00–29:00", "B.")]),
         ]
     );
 }
@@ -1586,8 +1621,8 @@ fn it_should_stop_at_the_first_failed_part() {
     assert_eq!(
         sent_messages(&llm),
         vec![
-            part_messages(1, 4, "0:00–29:00", &[], 0..30),
-            part_messages(2, 4, "30:00–59:00", &[], 30..60),
+            part_messages(1, 4, "0:00–28:00", &[], 0..29),
+            part_messages(2, 4, "29:00–57:00", &[], 29..58),
         ]
     );
     assert_eq!(summary_repository.find(&video.id).unwrap(), None);
@@ -1626,8 +1661,8 @@ fn it_should_wait_for_ollama_if_it_goes_down_between_parts() {
     assert_eq!(
         sent_messages(&llm),
         vec![
-            part_messages(1, 4, "0:00–29:00", &[], 0..30),
-            part_messages(2, 4, "30:00–59:00", &[], 30..60),
+            part_messages(1, 4, "0:00–28:00", &[], 0..29),
+            part_messages(2, 4, "29:00–57:00", &[], 29..58),
         ]
     );
     assert_eq!(summary_repository.find(&video.id).unwrap(), None);

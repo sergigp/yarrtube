@@ -30,16 +30,20 @@ impl SummaryInput {
         let chapters = video.chapters.found.clone().unwrap_or_default();
         let budget_tokens = context_length.input_budget_tokens();
         let max_chars = (f64::from(budget_tokens) * chars_per_token) as usize;
-        let parts = transcript.parts(&chapters, max_chars);
-        Self {
+        let empty = Self {
             title: video.title.clone(),
             minutes: video.download.duration_seconds().unwrap_or(0) / 60,
             language: language.english_name(),
             chapters,
-            parts,
+            parts: Vec::new(),
             prompt: prompt.clone(),
             budget_tokens,
             max_chars,
+        };
+        let transcript_chars = max_chars.saturating_sub(empty.prompt_chars());
+        Self {
+            parts: transcript.parts(&empty.chapters, transcript_chars),
+            ..empty
         }
     }
 
@@ -131,6 +135,11 @@ impl SummaryInput {
 
     pub fn budget_tokens(&self) -> u32 {
         self.budget_tokens
+    }
+
+    /// What the messages around the transcript take, in characters.
+    fn prompt_chars(&self) -> usize {
+        self.whole().chars()
     }
 
     fn joins(&self, group: &[PartAnswer], answer: &PartAnswer) -> bool {
