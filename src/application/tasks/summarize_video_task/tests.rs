@@ -2323,6 +2323,49 @@ fn it_should_log_the_summary_total_time_and_video_length() {
 }
 
 #[test]
+fn it_should_log_the_cut_smaller_with_the_measured_ratio() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        over_the_budget(11932),
+        reply("A."),
+        reply("B."),
+        reply("C."),
+        reply("All of it."),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository,
+        llm,
+        files_with(&srt_of(45, 60)),
+    );
+
+    let lines = captured_log_lines(|| {
+        run(&task, &video).unwrap();
+    });
+
+    let cut = lines
+        .iter()
+        .find(|line| line.contains("cutting the transcript smaller"))
+        .unwrap();
+    assert!(cut.starts_with("INFO "));
+    assert!(cut.contains(&format!("video_id={}", video.id)));
+    assert!(cut.contains("call=part 1 of 2"));
+    assert!(cut.contains("input_tokens=11932"));
+    assert!(cut.contains("budget_tokens=9000"));
+    assert!(cut.contains("chars_per_token=2.46"));
+}
+
+#[test]
 fn it_should_log_why_a_generation_was_skipped_or_failed() {
     let skipped_db = TestDatabase::new();
     let skipped_video_repository = Arc::new(SqliteVideoRepository::new(skipped_db.database()));

@@ -24,7 +24,7 @@
 - [x] 2.7 `summarize_video_task::it_should_cut_smaller_when_a_part_runs_over_the_budget`: `over_budget` is real, `ask` returns `OverBudget`, and `write_summary_cut_smaller_once` rebuilds the input at the measured ratio and starts over. Verify: the test passes, along with `cargo test --locked`.
 - [x] 2.8 `summarize_video_task::it_should_cut_in_parts_when_the_whole_transcript_runs_over_the_budget`: an overrun on the whole call leads to parts + reduce on the second pass. Verify: the test passes, along with `cargo test --locked`.
 - [x] 2.9 `summarize_video_task::it_should_fail_the_summary_if_the_input_runs_over_the_budget_again`: a second-pass `OverBudget` becomes `Rejected` with the "ran out of context" reason. Verify: the test passes, along with `cargo test --locked`.
-- [ ] 2.10 `summarize_video_task::it_should_log_the_cut_smaller_with_the_measured_ratio`: the info log names the call, input tokens, budget and chars/token. Verify: the test passes, along with `cargo test --locked`.
+- [x] 2.10 `summarize_video_task::it_should_log_the_cut_smaller_with_the_measured_ratio`: the info log names the call, input tokens, budget and chars/token. Verify: the test passes, along with `cargo test --locked`.
 - [ ] 2.11 Update `doc/AI.md` "How a summary is generated" with the escape codes cleaned, the budget on whole messages, and the single re-cut at the measured ratio (logged). Add a dated entry to `evals/summaries/decisions.md` with the measured ratios: 11,932 reproduced, `\h` costing about 2.2k tokens, chess English at 3.75, Spanish at 3.21–3.44. Verify: both docs describe the behaviour in the specs.
 
 ## 3. Infrastructure adapters (TDD)

@@ -469,12 +469,24 @@ impl VideoSummarizer {
             self.summary_input(video, job, language, transcript, language.chars_per_token());
         match self.write_summary(video, &input, job) {
             Err(Failure::OverBudget(overrun)) => {
+                Self::log_cut_smaller(video, &input, &overrun);
                 let smaller =
                     self.summary_input(video, job, language, transcript, overrun.chars_per_token);
                 self.write_summary(video, &smaller, job)
             }
             written => written,
         }
+    }
+
+    fn log_cut_smaller(video: &Video, input: &SummaryInput, overrun: &Overrun) {
+        info!(
+            video_id = %video.id,
+            call = %overrun.call,
+            input_tokens = overrun.input_tokens,
+            budget_tokens = input.budget_tokens(),
+            chars_per_token = overrun.chars_per_token,
+            "input over the budget, cutting the transcript smaller"
+        );
     }
 
     /// A call that stopped at the context limit: over the budget, it can be
