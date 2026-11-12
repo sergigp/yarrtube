@@ -36,7 +36,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 Ollama adapter: `it_should_report_a_refusal_as_too_long_when_the_prompt_exceeds_the_context` (retarget `it_should_report_a_refusal_on_a_bad_request` to another 400 error first). Verify: the test passes, along with `cargo test --locked`.
+- [x] 3.1 Ollama adapter: `it_should_report_a_refusal_as_too_long_when_the_prompt_exceeds_the_context` (retarget `it_should_report_a_refusal_on_a_bad_request` to another 400 error first). Verify: the test passes, along with `cargo test --locked`.
 - [ ] 3.2 Ollama adapter: `it_should_report_a_refusal_as_too_long_when_the_input_length_exceeds_the_context`. Verify: the test passes, along with `cargo test --locked`.
 
 ## 4. Verification

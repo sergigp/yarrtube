@@ -67,7 +67,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             sent => sent.map_err(Self::send_error)?,
         };
         if response.status() == StatusCode::BAD_REQUEST {
-            return Ok(LlmReply::refused(Self::refusal(response)?));
+            return Ok(Self::refused(Self::refusal(response)?));
         }
         let response: ChatResponse = response
             .error_for_status()?
@@ -102,6 +102,15 @@ impl OllamaLlmServerRepository {
             error.context(LlmServerUnreachable)
         } else {
             error
+        }
+    }
+
+    /// A refusal as `error`, too long when Ollama says the prompt exceeds
+    /// the context.
+    fn refused(error: String) -> LlmReply {
+        match error.contains("exceeds the available context size") {
+            true => LlmReply::refused_as_too_long(error),
+            false => LlmReply::refused(error),
         }
     }
 
@@ -414,6 +423,25 @@ mod tests {
         let _chat = server
             .mock("POST", "/api/chat")
             .with_status(400)
+            .with_body(r#"{"error": "invalid format: expected \"json\" or a JSON schema"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused("invalid format: expected \"json\" or a JSON schema")
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_as_too_long_when_the_prompt_exceeds_the_context() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_status(400)
             .with_body(r#"{"error": "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"}"#)
             .create();
 
@@ -423,7 +451,7 @@ mod tests {
 
         assert_eq!(
             reply,
-            LlmReply::refused(
+            LlmReply::refused_as_too_long(
                 "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"
             )
         );
