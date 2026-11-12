@@ -30,7 +30,7 @@
 - [x] 2.13 `summarize_video_task::it_should_reduce_more_than_two_answers_in_a_group_when_they_fit` (added by the audit): a group takes as many answers as fit.
 - [x] 2.14 `summarize_video_task::it_should_cut_smaller_when_the_prompt_exceeds_the_context`: `ask` turns a refusal with `exceeded_context` into `OverBudget` through `exceeded_context`, at `messages.chars() / context_length`. Verify: the test passes, along with `cargo test --locked`.
 - [x] 2.15 `summarize_video_task::it_should_fail_the_summary_if_the_prompt_exceeds_the_context_again`: a second refusal as too long fails the attempt with Ollama's reason. Verify: the test passes, along with `cargo test --locked`.
-- [ ] 2.16 `summarize_video_task::it_should_log_the_cut_smaller_after_a_prompt_over_the_context`: `log_cut_smaller` shows `input_tokens=over the context length` when there's no count. Verify: the test passes, along with `cargo test --locked`.
+- [x] 2.16 `summarize_video_task::it_should_log_the_cut_smaller_after_a_prompt_over_the_context`: `log_cut_smaller` shows `input_tokens=over the context length` when there's no count. Verify: the test passes, along with `cargo test --locked`.
 - [ ] 2.17 Update `doc/AI.md` "How a summary is generated": a prompt Ollama refuses as over the context length is cut smaller once too. Verify: the doc matches the spec.
 - [x] 2.11 Update `doc/AI.md` "How a summary is generated" with the escape codes cleaned, the budget on whole messages, and the single re-cut at the measured ratio (logged). Add a dated entry to `evals/summaries/decisions.md` with the measured ratios: 11,932 reproduced, `\h` costing about 2.2k tokens, chess English at 3.75, Spanish at 3.21–3.44. Verify: both docs describe the behaviour in the specs.
 

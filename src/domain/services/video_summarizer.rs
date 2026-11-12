@@ -490,7 +490,7 @@ impl VideoSummarizer {
             call = %overrun.call,
             input_tokens = %overrun
                 .input_tokens
-                .map_or_else(String::new, |tokens| tokens.to_string()),
+                .map_or_else(|| "over the context length".to_string(), |tokens| tokens.to_string()),
             budget_tokens = input.budget_tokens(),
             chars_per_token = overrun.chars_per_token,
             "input over the budget, cutting the transcript smaller"

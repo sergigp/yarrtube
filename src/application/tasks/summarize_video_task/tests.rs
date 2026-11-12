@@ -2602,6 +2602,50 @@ fn it_should_log_the_cut_smaller_with_the_measured_ratio() {
 }
 
 #[test]
+fn it_should_log_the_cut_smaller_after_a_prompt_over_the_context() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        Ok(LlmReply::refused_as_too_long(
+            "the input length exceeds the context length",
+        )),
+        reply("A."),
+        reply("B."),
+        reply("All of it."),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository,
+        llm,
+        files_with(&srt_of(28, 60)),
+    );
+
+    let lines = captured_log_lines(|| {
+        run(&task, &video).unwrap();
+    });
+
+    let cut = lines
+        .iter()
+        .find(|line| line.contains("cutting the transcript smaller"))
+        .unwrap();
+    assert!(cut.starts_with("INFO "));
+    assert!(cut.contains(&format!("video_id={}", video.id)));
+    assert!(cut.contains("call=whole"));
+    assert!(cut.contains("input_tokens=over the context length"));
+    assert!(cut.contains("budget_tokens=9000"));
+    assert!(cut.contains("chars_per_token=2.39"));
+}
+
+#[test]
 fn it_should_log_why_a_generation_was_skipped_or_failed() {
     let skipped_db = TestDatabase::new();
     let skipped_video_repository = Arc::new(SqliteVideoRepository::new(skipped_db.database()));
