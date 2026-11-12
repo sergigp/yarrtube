@@ -73,7 +73,7 @@ Failure to create a directory SHALL NOT prevent the daemon from starting: the da
 - **THEN** a client listing the videos root sees the default parent directories
 
 ### Requirement: Heartbeat Logging
-The system SHALL log a heartbeat message every 5 minutes for as long as the daemon is running, to provide a visible signal that the process is alive. The heartbeat SHALL carry the number of pending tasks per lane, the number of running tasks, the age of the oldest eligible pending task, the number of pending events, the number of dead-lettered tasks and events, and the number of videos pending, retrying and failed for each of download, summary and categorization. A heartbeat whose counts cannot be read SHALL still be logged, with the read failure.
+The system SHALL log a heartbeat message every 5 minutes for as long as the daemon is running, to provide a visible signal that the process is alive. The heartbeat SHALL carry the number of pending tasks per lane, the number of running tasks, the age of the oldest eligible pending task, the number of pending events, the number of dead-lettered tasks and events, the number of videos pending, retrying and failed for the download, the number of pending summary and categorization tasks due to run (what waits for the AI; one queued for later, a retry or a wait for Ollama, is not counted), and the number of videos retrying and failed for each of summary and categorization. A heartbeat whose counts cannot be read SHALL still be logged, with the read failure.
 
 #### Scenario: Daemon running past one interval
 - **WHEN** the daemon has been running longer than one heartbeat interval
@@ -82,6 +82,10 @@ The system SHALL log a heartbeat message every 5 minutes for as long as the daem
 #### Scenario: Heartbeat reports the queue and the library
 - **WHEN** a heartbeat is logged while two download tasks and one sync task are pending, one task is running, one event is pending, one task is dead-lettered and one video's download is retrying
 - **THEN** the heartbeat carries those counts, the age of the oldest eligible pending task, and zero for every other count
+
+#### Scenario: AI backlog counts queued tasks
+- **WHEN** a heartbeat is logged while 3 videos have a Pending summary, one summary task and two categorization tasks are pending and due, one categorization task is pending for tomorrow, and one categorization task is running
+- **THEN** the heartbeat reports 1 summary and 2 categorizations queued
 
 #### Scenario: Counts cannot be read
 - **WHEN** reading the heartbeat's counts fails, for example because the database is unavailable

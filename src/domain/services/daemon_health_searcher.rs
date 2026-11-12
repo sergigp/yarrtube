@@ -1,4 +1,4 @@
-use crate::domain::daemon::{DaemonHealth, StepCounts};
+use crate::domain::daemon::{AiStepCounts, DaemonHealth, StepCounts};
 use crate::domain::task::{ScheduledTask, TaskStatus};
 use crate::domain::video::{StepStatus, Video, VideoStatus};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -34,8 +34,8 @@ impl DaemonHealthSearcher {
 }
 
 pub trait DaemonHealthSearcherApi: Send + Sync {
-    /// The task and event queues, their dead letters, and the library's
-    /// videos by step status, as they are now.
+    /// The task and event queues, their dead letters, the library's videos
+    /// by step status and the AI tasks queued, as they are now.
     fn search(&self) -> anyhow::Result<DaemonHealth>;
 }
 
@@ -51,9 +51,15 @@ impl DaemonHealthSearcherApi for DaemonHealthSearcher {
             dead_lettered_tasks: self.task_repository.list_dead_lettered()?.len(),
             dead_lettered_events: self.event_repository.list_dead_lettered()?.len(),
             downloads: Self::step_counts(videos.iter().map(Self::download_status)),
-            summaries: Self::step_counts(videos.iter().map(|video| video.summary.status)),
-            categorizations: Self::step_counts(
-                videos.iter().map(|video| video.categorization.status),
+            summaries: self.ai_step_counts(
+                &tasks,
+                "summarize_video",
+                Self::step_counts(videos.iter().map(|video| video.summary.status)),
+            ),
+            categorizations: self.ai_step_counts(
+                &tasks,
+                "categorize_video",
+                Self::step_counts(videos.iter().map(|video| video.categorization.status)),
             ),
         })
     }
@@ -92,6 +98,30 @@ impl DaemonHealthSearcher {
             VideoStatus::Retrying => Some(StepStatus::Retrying),
             VideoStatus::Failed => Some(StepStatus::Failed),
             _ => None,
+        }
+    }
+
+    /// An AI step's counts: the pending tasks of `task_type` due to run now
+    /// (a retry or a wait for Ollama queued for later isn't waiting for the
+    /// AI yet), and the videos retrying or failed for it.
+    fn ai_step_counts(
+        &self,
+        tasks: &[ScheduledTask],
+        task_type: &str,
+        videos: StepCounts,
+    ) -> AiStepCounts {
+        let now = self.clock.now();
+        AiStepCounts {
+            queued: tasks
+                .iter()
+                .filter(|task| {
+                    task.status == TaskStatus::Pending
+                        && task.run_at <= now
+                        && task.task.task_type() == task_type
+                })
+                .count(),
+            retrying: videos.retrying,
+            failed: videos.failed,
         }
     }
 
@@ -207,16 +237,69 @@ mod tests {
                     retrying: 1,
                     failed: 0,
                 },
-                summaries: StepCounts {
-                    pending: 1,
+                summaries: AiStepCounts {
+                    queued: 0,
                     retrying: 0,
                     failed: 1,
                 },
-                categorizations: StepCounts {
-                    pending: 2,
+                categorizations: AiStepCounts {
+                    queued: 0,
                     retrying: 0,
                     failed: 0,
                 },
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_count_ai_tasks_due_not_pending_videos() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        ["yt1", "yt2", "yt3"].iter().for_each(|youtube_id| {
+            store(
+                &video_repository,
+                &downloaded_video(youtube_id, &format!("{youtube_id}.mp4"), now()),
+            )
+        });
+        task_repository.schedule(&summarize("a"), now()).unwrap();
+        task_repository.schedule(&categorize("b"), now()).unwrap();
+        task_repository.schedule(&categorize("c"), now()).unwrap();
+        task_repository.schedule(&categorize("d"), now()).unwrap();
+        task_repository.claim(4, now()).unwrap();
+        task_repository
+            .schedule(&categorize("e"), now() + Duration::hours(24))
+            .unwrap();
+        let searcher = DaemonHealthSearcher::new(
+            task_repository,
+            Arc::new(SqliteEventRepository::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            video_repository,
+            Arc::new(FixedClock(now())),
+        );
+
+        let health = searcher.search();
+
+        assert_eq!(
+            health.map_err(|e| e.to_string()),
+            Ok(DaemonHealth {
+                pending_tasks: BTreeMap::from([("summaries", 4)]),
+                running_tasks: 1,
+                oldest_eligible_task_age_seconds: Some(0),
+                summaries: AiStepCounts {
+                    queued: 1,
+                    ..AiStepCounts::default()
+                },
+                categorizations: AiStepCounts {
+                    queued: 2,
+                    ..AiStepCounts::default()
+                },
+                ..DaemonHealth::default()
             })
         );
     }
@@ -266,6 +349,18 @@ mod tests {
 
     fn sync(video_id: &str) -> Task {
         Task::SyncVideo {
+            video_id: video_id.to_string(),
+        }
+    }
+
+    fn summarize(video_id: &str) -> Task {
+        Task::SummarizeVideo {
+            video_id: video_id.to_string(),
+        }
+    }
+
+    fn categorize(video_id: &str) -> Task {
+        Task::CategorizeVideo {
             video_id: video_id.to_string(),
         }
     }
