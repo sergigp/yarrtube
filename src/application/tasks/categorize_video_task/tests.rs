@@ -2538,6 +2538,7 @@ fn reply(content: &str) -> anyhow::Result<LlmReply> {
         output_tokens: 200,
         stopped_at_limit: false,
         refusal: None,
+        exceeded_context: false,
     })
 }
 

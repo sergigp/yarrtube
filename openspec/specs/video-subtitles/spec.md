@@ -110,7 +110,7 @@ When the Plex scan integration is enabled (see `plex-library-scan`), the system 
 - **THEN** the video's subtitle state stays Fetched, and the failure is logged and retried
 
 ### Requirement: Transcript Stored
-A successful subtitle fetch SHALL store the video's transcript: the captions' plain text, without cue numbers, timings or formatting tags and with lines repeated by rolling auto-generated captions collapsed, together with its language and whether it came from uploaded (manual) or auto-generated captions. Only a cue's number line, its timing line and markup tags (e.g. `<i>`, `</i>`, `<font …>`, inline `<00:01:02.345>` timestamps) SHALL be removed; every other caption text SHALL be kept, including lines made only of digits, a literal `<` and text containing `-->`. A video SHALL have at most one transcript, and it SHALL be deleted whenever the video's record is deleted, including when its whole playlist or channel is deleted.
+A successful subtitle fetch SHALL store the video's transcript: the captions' plain text, without cue numbers, timings or formatting tags and with lines repeated by rolling auto-generated captions collapsed, together with its language and whether it came from uploaded (manual) or auto-generated captions. Only a cue's number line, its timing line and markup tags (e.g. `<i>`, `</i>`, `<font …>`, inline `<00:01:02.345>` timestamps) SHALL be removed, and subtitle escape codes SHALL be replaced by what they stand for: `\h` (hard space) by a space and `\N` (forced line break) by a line break, with runs of spaces collapsed into one. Every other caption text SHALL be kept, including lines made only of digits, a literal `<` and text containing `-->`. A video SHALL have at most one transcript, and it SHALL be deleted whenever the video's record is deleted, including when its whole playlist or channel is deleted.
 
 #### Scenario: Auto-generated rolling captions
 - **WHEN** a fetched auto-generated track repeats each line across consecutive cues as it scrolls
@@ -127,6 +127,14 @@ A successful subtitle fetch SHALL store the video's transcript: the captions' pl
 #### Scenario: Caption text that looks like markup
 - **WHEN** a fetched track has cues whose text is `2024`, `if x < 5` and `use x --> y`
 - **THEN** the stored transcript contains those three lines unchanged
+
+#### Scenario: Hard spaces
+- **WHEN** a fetched track has a cue whose lines are `play the Jabava\h` and `London\h\h`
+- **THEN** the stored transcript contains the lines `play the Jabava` and `London`
+
+#### Scenario: Forced line break
+- **WHEN** a fetched track has a cue whose text is `first line\Nsecond\h\hline`
+- **THEN** the stored transcript contains the lines `first line` and `second line`
 
 ### Requirement: Subtitle Fetch Is Best Effort
 A subtitle fetch SHALL run as its own scheduled task, separately from the video download. Its failure SHALL NOT fail the task and SHALL NOT change the video's download status or any download field; the fetch is re-queued under the `video-retries` policy instead. A subtitle fetch for a video that is not Downloaded, has no episode number, is still stored in the previous per-video-folder layout (it gets subtitles once `migrate-layout` has moved it into its season folder), or whose subtitles are neither Pending nor Retrying SHALL make no changes and SHALL NOT contact the downloader. A fetch SHALL place nothing when, by the time its subtitles are downloaded, the video is no longer Downloaded with the same recorded filename.

@@ -16,8 +16,7 @@ impl TranscriptText {
         let mut text: Vec<String> = lines
             .split(|line| line.is_empty())
             .flat_map(cue_text)
-            .map(|line| strip_tags(line))
-            .filter(|line| !line.is_empty())
+            .flat_map(|line| caption_lines(line))
             .collect();
         text.dedup();
         Self(text.join("\n"))
@@ -47,6 +46,20 @@ pub(super) fn without_first_if<'a>(
 
 pub(super) fn is_cue_index(line: &str) -> bool {
     !line.is_empty() && line.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// `line`'s caption text: `\N` splits it, `\h` is a space, tags stripped,
+/// spaces collapsed, each trimmed, empty ones dropped.
+pub(super) fn caption_lines(line: &str) -> Vec<String> {
+    line.split("\\N")
+        .map(|piece| {
+            strip_tags(&piece.replace("\\h", " "))
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .filter(|text| !text.is_empty())
+        .collect()
 }
 
 /// `line` without its tag-like markup (`<i>`, `</i>`, `<font ...>`, `<c>`,
