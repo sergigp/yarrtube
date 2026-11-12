@@ -105,10 +105,12 @@ spec: decisions here feed OpenSpec changes later.
   reduced in groups first.
 - Content can tokenize worse than its language's estimate (chess notation,
   numbers). When a call stops at the context limit and Ollama reports more
-  input tokens than the budget, the summary starts over once, in the same run,
+  input tokens than the budget, or Ollama refuses it because the prompt
+  exceeds the context length, the summary starts over once, in the same run,
   cut at that call's measured characters per token (its messages' characters
-  over its input tokens), and that re-cut is logged. A second overrun, or a
-  stop at the limit within the budget, fails the attempt.
+  over its input tokens, or over the context length when refused), and that
+  re-cut is logged. A second overrun, or a stop at the limit within the
+  budget, fails the attempt.
 - Ollama unreachable (can't connect), or the model not installed, stops the
   run without spending one of the video's attempts: it is re-queued 6 hours
   later, as many times as it takes.
