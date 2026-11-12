@@ -2,7 +2,7 @@ use crate::domain::event::DomainEvent;
 use crate::domain::llm_server::{
     LlmChat, LlmModel, LlmServerUnreachable, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
-use crate::domain::preferences::{SummaryPrompt, SummarySettings};
+use crate::domain::preferences::{ContextLength, SummaryPrompt, SummarySettings};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
@@ -401,7 +401,7 @@ impl VideoSummarizer {
         &self,
         video: &Video,
         job: &SummaryJob,
-        _input: &SummaryInput,
+        input: &SummaryInput,
         call: &str,
         messages: SummaryMessages,
     ) -> Result<SummaryText, Failure> {
@@ -413,6 +413,7 @@ impl VideoSummarizer {
         );
         let started = Instant::now();
         let context_length = job.settings.context_length;
+        let message_chars = messages.chars();
         let reply = self
             .llm_server_repository
             .chat(
@@ -445,13 +446,13 @@ impl VideoSummarizer {
             return Err(anyhow!("Ollama refused the call: {refusal}").into());
         }
         if reply.stopped_at_limit {
-            return Err(anyhow!(
-                "the model ran out of context ({} tokens: {} of input, {} left to think and answer)",
-                context_length.value(),
+            return Err(Self::out_of_context(
+                call,
+                input,
+                &context_length,
+                message_chars,
                 reply.input_tokens,
-                context_length.value().saturating_sub(reply.input_tokens)
-            )
-            .into());
+            ));
         }
         SummaryText::from_answer(&reply.content).map_err(|e| anyhow::Error::new(e).into())
     }
@@ -466,7 +467,40 @@ impl VideoSummarizer {
     ) -> Result<SummaryText, Failure> {
         let input =
             self.summary_input(video, job, language, transcript, language.chars_per_token());
-        self.write_summary(video, &input, job)
+        match self.write_summary(video, &input, job) {
+            Err(Failure::OverBudget(overrun)) => {
+                let smaller =
+                    self.summary_input(video, job, language, transcript, overrun.chars_per_token);
+                self.write_summary(video, &smaller, job)
+            }
+            written => written,
+        }
+    }
+
+    /// A call that stopped at the context limit: over the budget, it can be
+    /// cut smaller; within it, the model ran out of room.
+    fn out_of_context(
+        call: &str,
+        input: &SummaryInput,
+        context_length: &ContextLength,
+        message_chars: usize,
+        input_tokens: u32,
+    ) -> Failure {
+        let reason = anyhow!(
+            "the model ran out of context ({} tokens: {} of input, {} left to think and answer)",
+            context_length.value(),
+            input_tokens,
+            context_length.value().saturating_sub(input_tokens)
+        );
+        match input.over_budget(input_tokens) {
+            true => Failure::OverBudget(Overrun {
+                call: call.to_string(),
+                input_tokens,
+                chars_per_token: message_chars as f64 / f64::from(input_tokens),
+                reason,
+            }),
+            false => Failure::Rejected(reason),
+        }
     }
 
     fn summary_input(

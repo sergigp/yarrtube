@@ -1141,6 +1141,73 @@ fn it_should_keep_every_part_call_within_the_budget() {
 }
 
 #[test]
+fn it_should_cut_smaller_when_a_part_runs_over_the_budget() {
+    // The first part's ~29400 characters of messages take 11932 tokens,
+    // ~2.47 a token: the budget of 9000 then holds ~22200 characters.
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        over_the_budget(11932),
+        reply("A."),
+        reply("B."),
+        reply("C."),
+        reply("All of it."),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(&srt_of(45, 60)),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            part_messages(1, 2, "0:00–28:00", &[], 0..29),
+            part_messages(1, 3, "0:00–19:00", &[], 0..20),
+            part_messages(2, 3, "20:00–39:00", &[], 20..40),
+            part_messages(3, 3, "40:00–44:00", &[], 40..45),
+            reduce_messages(
+                &[],
+                &[
+                    ("0:00–19:00", "A."),
+                    ("20:00–39:00", "B."),
+                    ("40:00–44:00", "C.")
+                ]
+            ),
+        ]
+    );
+    assert_eq!(
+        summary_repository.find(&video.id).unwrap(),
+        Some(stored_summary(&video, "All of it."))
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            summary: StepState {
+                status: StepStatus::Done,
+                attempts: RetryAttempts::default(),
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
 fn it_should_skip_if_summaries_are_unavailable() {
     let video = subtitled_video();
     let changed: Vec<(Vec<LlmChat>, Option<Video>)> = [
@@ -2532,6 +2599,15 @@ fn reply(content: &str) -> anyhow::Result<LlmReply> {
         output_tokens: 0,
         stopped_at_limit: false,
         refusal: None,
+    })
+}
+
+/// A call that stopped at the context limit on `input_tokens` of input.
+fn over_the_budget(input_tokens: u32) -> anyhow::Result<LlmReply> {
+    Ok(LlmReply {
+        input_tokens,
+        stopped_at_limit: true,
+        ..reply("Three games and").unwrap()
     })
 }
 

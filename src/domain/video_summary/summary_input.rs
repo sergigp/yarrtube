@@ -124,8 +124,8 @@ impl SummaryInput {
     }
 
     /// Whether `input_tokens`, as Ollama reported them, are over the budget.
-    pub fn over_budget(&self, _input_tokens: u32) -> bool {
-        false
+    pub fn over_budget(&self, input_tokens: u32) -> bool {
+        input_tokens > self.budget_tokens
     }
 
     pub fn budget_tokens(&self) -> u32 {
