@@ -9,8 +9,8 @@ use crate::domain::video::{
     StepStatus, UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome,
 };
 use crate::domain::video_category::{
-    CategorizationAnswer, CategorizationQuestion, CategorizationTally, VideoCategoryVerdict,
-    pending_categories,
+    CategorizationAnswer, CategorizationQuestion, CategorizationTally, Verdict,
+    VideoCategoryVerdict, pending_categories,
 };
 use crate::domain::video_summary::SummaryText;
 use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
@@ -32,7 +32,8 @@ enum Skip {
     /// It shouldn't be, for now.
     NotWanted(&'static str),
     /// No category is pending for the video: nothing to ask, so it is
-    /// categorized as it stands (Done), without checking the server.
+    /// categorized as it stands (Done, or Failed when a category was given
+    /// up), without checking the server.
     NothingPending,
     /// It should be, but something outside the video stops it.
     Blocked(anyhow::Error),
@@ -68,6 +69,47 @@ impl From<anyhow::Error> for Skip {
 enum Call {
     First,
     Fallback,
+}
+
+/// How a call thinks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Thinking {
+    /// As the job asks (its settings and the model).
+    AsAsked,
+    /// Off: a call with thinking about these categories stopped at the
+    /// output limit.
+    Dropped,
+}
+
+/// A category without an answer from one call, with why.
+struct Rejection<'a> {
+    category: &'a Category,
+    reason: String,
+    kind: RejectionKind,
+}
+
+impl Rejection<'_> {
+    /// How the category is asked again alone: without thinking once a call
+    /// about it dropped thinking.
+    fn thinking(&self) -> Thinking {
+        match self.kind {
+            RejectionKind::WithoutThinking => Thinking::Dropped,
+            RejectionKind::Retryable | RejectionKind::ThinkingRanOut => Thinking::AsAsked,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RejectionKind {
+    /// Refused, past its timeout, unusable, or at the limit without having
+    /// thought: alone in the fallback, then a later attempt.
+    Retryable,
+    /// Its call thought and stopped at the output limit: asked again
+    /// without thinking.
+    ThinkingRanOut,
+    /// Rejected by a call made with `Thinking::Dropped`: alone without
+    /// thinking if the call was about several, else given up now.
+    WithoutThinking,
 }
 
 /// Why the categorization stops before trying every category.
@@ -162,10 +204,13 @@ pub trait VideoCategorizerApi: Send + Sync {
     /// by `owner`'s source, without a verdict for it.
     fn pending(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<Vec<Category>>;
     /// Asks the model about each category pending when it runs, storing
-    /// each verdict as it comes. A run with any category rejected is a
-    /// failed attempt under the `video-retries` policy. Ollama that can't be
-    /// connected to, or hasn't the model, re-queues it later without touching
-    /// the video or writing `failed` verdicts.
+    /// each verdict as it comes. A call that thinks and stops at the output
+    /// limit is asked once more without thinking; a category that call
+    /// rejects is given up at once (a `failed` verdict). A run with any
+    /// other category rejected is a failed attempt under the `video-retries`
+    /// policy. Ollama that can't be connected to, or hasn't the model,
+    /// re-queues it later without touching the video or writing `failed`
+    /// verdicts.
     fn categorize(&self, video: &Video) -> anyhow::Result<VideoStepOutcome>;
 }
 
@@ -194,7 +239,7 @@ impl VideoCategorizerApi for VideoCategorizer {
                     reason = "no category is pending",
                     "skipped video categorization"
                 );
-                self.mark_categorized(video)
+                self.finish(video)
             }
             Err(Skip::Blocked(reason)) => {
                 warn!(video_id = %video.id, %reason, "couldn't categorize video");
@@ -289,9 +334,10 @@ impl VideoCategorizer {
             .count())
     }
 
-    /// Asks about every pending category; any rejected, or a server fault
-    /// stopping it, is a failed attempt. Ollama becoming unreachable stops
-    /// it to wait, keeping the verdicts already stored.
+    /// Asks about every pending category; one rejected without thinking is
+    /// given up at once, any other rejected, or a server fault stopping it,
+    /// is a failed attempt. Ollama becoming unreachable stops it to wait,
+    /// keeping the verdicts already stored.
     fn ask_each(&self, video: &Video, job: &CategorizationJob) -> anyhow::Result<VideoStepOutcome> {
         let rejected = match self.rejected_categories(video, job) {
             Ok(rejected) => rejected,
@@ -300,21 +346,28 @@ impl VideoCategorizer {
             Err(Stop::Failed(error)) => return Err(error),
         };
         self.log_tally(video, job, rejected.len())?;
-        match Self::fail_if_rejected(&rejected) {
-            Ok(()) => self.mark_categorized(video),
+        let (given_up, retryable): (Vec<_>, Vec<_>) = rejected
+            .into_iter()
+            .partition(|rejection| rejection.kind == RejectionKind::WithoutThinking);
+        self.give_up(video, job, &given_up)?;
+        match Self::fail_if_rejected(&retryable) {
+            Ok(()) => self.settle(video, job, !given_up.is_empty()),
             Err(cause) => {
-                self.fail_attempt(video, job, &rejected, error_report::cause_chain(&cause))
+                self.fail_attempt(video, job, &retryable, error_report::cause_chain(&cause))
             }
         }
     }
 
-    /// Asks about each pending category in turn; the ones rejected, with why.
+    /// Asks about each pending category in turn, once more without thinking
+    /// after a call thought past the limit; the ones rejected, with why.
     fn rejected_categories<'a>(
         &self,
         video: &Video,
         job: &'a CategorizationJob,
-    ) -> Result<Vec<(&'a Category, String)>, Stop> {
-        let rejected = self.ask(video, job, &job.pending, Call::First)?;
+    ) -> Result<Vec<Rejection<'a>>, Stop> {
+        let rejected = self.ask(video, job, &job.pending, Call::First, Thinking::AsAsked)?;
+        let rejected =
+            self.retry_without_thinking(video, job, &job.pending, rejected, Call::First)?;
         self.fall_back(video, job, rejected)
     }
 
@@ -326,28 +379,32 @@ impl VideoCategorizer {
         job: &CategorizationJob,
         categories: &'a [Category],
         call: Call,
-    ) -> Result<Vec<(&'a Category, String)>, Stop> {
+        thinking: Thinking,
+    ) -> Result<Vec<Rejection<'a>>, Stop> {
         let started = Instant::now();
+        let dropped = thinking == Thinking::Dropped;
+        let thinks = job.thinking && !dropped;
         let question =
             CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, categories);
         let reply = self
             .llm_server_repository
             .chat(
                 &job.url,
-                &question.chat(&job.settings, job.context_length, job.thinking),
+                &question.chat(&job.settings, job.context_length, thinks),
             )
             .map_err(Stop::from_chat_error)?;
-        Self::log_call(video, categories, call, job.thinking, &reply, started);
-        let rejection = match (&reply.refusal, reply.stopped_at_limit) {
-            (Some(refusal), _) => Some(format!("Ollama refused the call: {refusal}")),
-            (None, true) => Some(format!(
-                "it hit the {}-token output limit",
-                question.max_output_tokens(job.context_length)
-            )),
-            (None, false) => None,
+        Self::log_call(video, categories, call, thinking, thinks, &reply, started);
+        if reply.stopped_at_limit {
+            Self::log_limit_stop(video, categories, thinks, &reply);
+        }
+        let rejected_kind = if dropped {
+            RejectionKind::WithoutThinking
+        } else {
+            RejectionKind::Retryable
         };
-        if let Some(reason) = rejection {
-            return Ok(Self::rejected_all(categories, &reason));
+        let rejection = Self::call_rejection(&reply, &question, job, thinks, rejected_kind);
+        if let Some((reason, kind)) = rejection {
+            return Ok(Self::rejected_all(categories, &reason, kind));
         }
         categories
             .iter()
@@ -357,7 +414,11 @@ impl VideoCategorizer {
                     .store(video, job, category, answer)
                     .err()
                     .map(|error| Err(Stop::Failed(error))),
-                None => Some(Ok((category, "its answer isn't usable".to_string()))),
+                None => Some(Ok(Rejection {
+                    category,
+                    reason: "its answer isn't usable".to_string(),
+                    kind: rejected_kind,
+                })),
             })
             .collect()
     }
@@ -368,24 +429,50 @@ impl VideoCategorizer {
         &self,
         video: &Video,
         job: &CategorizationJob,
-        rejected: Vec<(&'a Category, String)>,
-    ) -> Result<Vec<(&'a Category, String)>, Stop> {
+        rejected: Vec<Rejection<'a>>,
+    ) -> Result<Vec<Rejection<'a>>, Stop> {
         let rejected = match job.pending.len() {
             1 => rejected,
             _ => rejected
                 .into_iter()
-                .map(|(category, reason)| {
-                    Self::log_falling_back(video, category, &reason);
-                    self.ask(video, job, std::slice::from_ref(category), Call::Fallback)
+                .map(|rejection| {
+                    Self::log_falling_back(video, rejection.category, &rejection.reason);
+                    let alone = std::slice::from_ref(rejection.category);
+                    let rejected =
+                        self.ask(video, job, alone, Call::Fallback, rejection.thinking())?;
+                    self.retry_without_thinking(video, job, alone, rejected, Call::Fallback)
                 })
                 .collect::<Result<Vec<_>, Stop>>()?
                 .into_iter()
                 .flatten()
                 .collect(),
         };
-        rejected
+        rejected.iter().for_each(|rejection| match rejection.kind {
+            RejectionKind::WithoutThinking => Self::log_given_up(video, rejection),
+            RejectionKind::Retryable | RejectionKind::ThinkingRanOut => {
+                Self::log_rejected(video, rejection.category, &rejection.reason)
+            }
+        });
+        Ok(rejected)
+    }
+
+    /// `categories` asked once more, in one call without thinking, when
+    /// the call about them thought and stopped at the output limit
+    /// (`rejected` is then every one of them); else `rejected` unchanged.
+    fn retry_without_thinking<'a>(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        categories: &'a [Category],
+        rejected: Vec<Rejection<'a>>,
+        call: Call,
+    ) -> Result<Vec<Rejection<'a>>, Stop> {
+        if rejected
             .iter()
-            .for_each(|(category, reason)| Self::log_rejected(video, category, reason));
+            .any(|rejection| rejection.kind == RejectionKind::ThinkingRanOut)
+        {
+            return self.ask(video, job, categories, call, Thinking::Dropped);
+        }
         Ok(rejected)
     }
 
@@ -427,11 +514,48 @@ impl VideoCategorizer {
         Ok(())
     }
 
+    /// Why the whole call is rejected, and how, if it is: refused, or
+    /// stopped at the output limit (`ThinkingRanOut` when it thought).
+    fn call_rejection(
+        reply: &LlmReply,
+        question: &CategorizationQuestion,
+        job: &CategorizationJob,
+        thinks: bool,
+        rejected_kind: RejectionKind,
+    ) -> Option<(String, RejectionKind)> {
+        let limit_kind = if thinks {
+            RejectionKind::ThinkingRanOut
+        } else {
+            rejected_kind
+        };
+        match (&reply.refusal, reply.stopped_at_limit) {
+            (Some(refusal), _) => {
+                Some((format!("Ollama refused the call: {refusal}"), rejected_kind))
+            }
+            (None, true) => Some((
+                format!(
+                    "it hit the {}-token output limit",
+                    question.max_output_tokens(job.context_length)
+                ),
+                limit_kind,
+            )),
+            (None, false) => None,
+        }
+    }
+
     /// Every one of `categories`, rejected for `reason`.
-    fn rejected_all<'a>(categories: &'a [Category], reason: &str) -> Vec<(&'a Category, String)> {
+    fn rejected_all<'a>(
+        categories: &'a [Category],
+        reason: &str,
+        kind: RejectionKind,
+    ) -> Vec<Rejection<'a>> {
         categories
             .iter()
-            .map(|category| (category, reason.to_string()))
+            .map(|category| Rejection {
+                category,
+                reason: reason.to_string(),
+                kind,
+            })
             .collect()
     }
 
@@ -439,20 +563,17 @@ impl VideoCategorizer {
         video: &Video,
         categories: &[Category],
         call: Call,
-        thinking: bool,
+        thinking: Thinking,
+        thinks: bool,
         reply: &LlmReply,
         started: Instant,
     ) {
-        let names = categories
-            .iter()
-            .map(|category| category.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
         info!(
             video_id = %video.id,
-            categories = %names,
+            categories = %Self::names(categories),
             fallback = matches!(call, Call::Fallback),
-            thinking,
+            thinking = thinks,
+            retry_without_thinking = thinking == Thinking::Dropped,
             input_tokens = reply.input_tokens,
             output_tokens = reply.output_tokens,
             stopped_at_limit = reply.stopped_at_limit,
@@ -482,6 +603,40 @@ impl VideoCategorizer {
             "categorized video"
         );
         Ok(())
+    }
+
+    /// `categories`' names, comma-separated.
+    fn names(categories: &[Category]) -> String {
+        categories
+            .iter()
+            .map(|category| category.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// How a call that stopped at the output limit spent its output.
+    fn log_limit_stop(video: &Video, categories: &[Category], thinking: bool, reply: &LlmReply) {
+        warn!(
+            video_id = %video.id,
+            categories = %Self::names(categories),
+            thinking,
+            thinking_chars = reply.thinking.chars().count(),
+            answer_chars = reply.content.chars().count(),
+            thinking_tail = %reply.thinking_tail(),
+            "the model stopped at the output limit"
+        );
+    }
+
+    fn log_given_up(video: &Video, rejection: &Rejection) {
+        error!(
+            video_id = %video.id,
+            category = %rejection.category.name.as_str(),
+            reason = %format!(
+                "it thought past the output limit, then without thinking {}",
+                rejection.reason
+            ),
+            "gave up on a category"
+        );
     }
 
     fn log_falling_back(video: &Video, category: &Category, reason: &str) {
@@ -542,7 +697,7 @@ impl VideoCategorizer {
     ) -> anyhow::Result<VideoStepOutcome> {
         warn!(video_id = %video.id, %reason, "couldn't categorize video");
         let reason = error_report::cause_chain(&reason);
-        let rejected = Self::rejected_all(&job.pending, &reason);
+        let rejected = Self::rejected_all(&job.pending, &reason, RejectionKind::Retryable);
         self.fail_attempt(video, job, &rejected, reason)
     }
 
@@ -553,7 +708,7 @@ impl VideoCategorizer {
         &self,
         video: &Video,
         job: &CategorizationJob,
-        rejected: &[(&Category, String)],
+        rejected: &[Rejection],
         reason: String,
     ) -> anyhow::Result<VideoStepOutcome> {
         let recorded = self.record_attempt_failure(video)?;
@@ -589,6 +744,49 @@ impl VideoCategorizer {
         Ok(None)
     }
 
+    /// After a run that left nothing to retry: Done, or Failed when the
+    /// video holds a `failed` verdict (Pending if one given up was dropped).
+    fn settle(
+        &self,
+        video: &Video,
+        job: &CategorizationJob,
+        gave_up: bool,
+    ) -> anyhow::Result<VideoStepOutcome> {
+        if gave_up && !self.pending(video, &job.owner)?.is_empty() {
+            self.categorization_resetter
+                .reset(std::slice::from_ref(&video.id))?;
+            return Ok(VideoStepOutcome::Settled);
+        }
+        self.finish(video)
+    }
+
+    /// Records a run that left nothing to ask: Failed when the video holds a
+    /// `failed` verdict, else Done.
+    fn finish(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
+        if self.holds_failed_verdict(video)? {
+            self.mark_given_up(video)
+        } else {
+            self.mark_categorized(video)
+        }
+    }
+
+    /// Records a run that left only categories given up on: Failed.
+    fn mark_given_up(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
+        let now = self.clock.now();
+        self.video_updater
+            .update(&video.id, |video| Some(video.give_up_categorization(now)))?;
+        Ok(VideoStepOutcome::Settled)
+    }
+
+    /// Whether the AI gave up on any of `video`'s pairs.
+    fn holds_failed_verdict(&self, video: &Video) -> anyhow::Result<bool> {
+        Ok(self
+            .video_category_verdict_repository
+            .find_many(std::slice::from_ref(&video.id))?
+            .iter()
+            .any(|verdict| verdict.verdict == Verdict::Failed))
+    }
+
     /// Records a run that left nothing rejected: Done.
     fn mark_categorized(&self, video: &Video) -> anyhow::Result<VideoStepOutcome> {
         let now = self.clock.now();
@@ -612,10 +810,10 @@ impl VideoCategorizer {
         &self,
         video: &Video,
         job: &CategorizationJob,
-        rejected: &[(&Category, String)],
+        rejected: &[Rejection],
     ) -> anyhow::Result<()> {
         let now = self.clock.now();
-        rejected.iter().try_for_each(|(category, _)| {
+        rejected.iter().try_for_each(|Rejection { category, .. }| {
             let verdict = VideoCategoryVerdict::failed(
                 video.id.clone(),
                 category.id.clone(),
@@ -631,13 +829,19 @@ impl VideoCategorizer {
     }
 
     /// An error naming each of `rejected`, with why; `Ok` when none was.
-    fn fail_if_rejected(rejected: &[(&Category, String)]) -> anyhow::Result<()> {
+    fn fail_if_rejected(rejected: &[Rejection]) -> anyhow::Result<()> {
         if rejected.is_empty() {
             return Ok(());
         }
         let causes = rejected
             .iter()
-            .map(|(category, reason)| format!("{} ({reason})", category.name.as_str()))
+            .map(|rejection| {
+                format!(
+                    "{} ({})",
+                    rejection.category.name.as_str(),
+                    rejection.reason
+                )
+            })
             .collect::<Vec<_>>()
             .join(", ");
         Err(anyhow!("the model couldn't answer for {causes}"))

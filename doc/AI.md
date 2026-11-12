@@ -116,13 +116,19 @@ spec: decisions here feed OpenSpec changes later.
 - Everything is logged at info level: each call sent, with the video's id and
   title but not the prompt, each answer with its tokens, whether thinking was
   asked for and whether it hit the output limit, how long each call and the
-  whole summary took, and the video's length. Failures are logged at error
-  level.
+  whole summary took, and the video's length. A call that hits the limit also
+  logs a warning with `thinking_chars`, `answer_chars` and `thinking_tail`, as
+  for categorization. Failures are logged at error level.
+- Open: summaries that run out of room. Prod (2026-11-12) has one whose input
+  took 11,932 of 12,288 tokens though the budget is ~9,000, leaving 356 to
+  think and answer: the input estimate, not thinking, is the cause there.
+  Retrying without thinking isn't applied to summaries until that is
+  understood.
 
 ### How a video is categorized
 
 - Each (video, category) pair gets at most one **verdict**: `yes`, `no` or
-  `unavailable`, stored in `video_category_verdicts` with the model, its
+  `failed` (the AI gave up on the pair), stored in `video_category_verdicts` with the model, its
   one-sentence reason and when. A pair with a verdict is never asked again,
   so reconcile passes don't repeat hours of calls.
 - A video's categories are its source's categories plus every category with a
@@ -165,22 +171,41 @@ spec: decisions here feed OpenSpec changes later.
   category's name, a boolean `belongs` and a `reason`. A category whose entry
   is missing or has no boolean `belongs` has no usable answer.
 - **Fallback**: when a call about several categories is rejected (output limit
-  hit, refused, past its timeout) or leaves some without a usable answer, each
+  hit without thinking, refused, past its timeout; a limit hit with thinking
+  goes through "Retry without thinking" below first) or leaves some without a
+  usable answer, each
   of those is asked again in its own call, in the same run, logged at warning
   level. In the eval one video in 58 (a stream with six chess openings) looped
-  past the cap in the call about all 9; alone, each answered. Only what those
+  past the cap in the call about all 9; alone, each answered. With thinking,
+  that case is now answered by one call without thinking instead. Only what those
   single calls reject fails the task once every pending category was tried;
   the retry asks only the ones still pending. On the last attempt each
-  rejected category gets an `unavailable` verdict, unless the categorization
+  rejected category gets a `failed` verdict, unless the categorization
   settings or that category's prompt changed during the attempt: then no
   verdict is written and the categorization goes back to Pending, so the next
   sync asks again with the new settings. Ollama unreachable, or the model not
   installed, stops the run with a warning, keeps the verdicts already stored,
-  spends no attempt and writes no `unavailable` verdict: the rest stay pending
+  spends no attempt and writes no `failed` verdict: the rest stay pending
   and the run is re-queued 6 hours later.
+- **Retry without thinking**: a call with thinking that stops at the output
+  limit has usually spent the whole cap thinking before writing a ~100-token
+  answer (prod, 2026-11-11: 3 calls in 27, ~5.5 minutes each). At temperature
+  0 a retry repeats it exactly, so the same categories are asked once more, in
+  the same run, in one call without thinking, before any fallback. For several
+  categories: all of them with thinking (limit), all of them without, then
+  each still unanswered alone without thinking (at most 2 + N calls). For one
+  category, or a fallback call that hits the limit: that category alone
+  without thinking (one more call). A category rejected by such a call gets a
+  `failed` verdict in that run rather than spending its remaining attempts:
+  a later attempt would only replay the same calls. With nothing else left to
+  retry the categorization is then Failed, and a later run that answers the
+  rest but finds a `failed` verdict also ends Failed, so Retry applies. A limit
+  hit without thinking, or by a model that can't think, keeps the fallback and
+  retry policy above. A verdict records only the model, not whether it was
+  answered with thinking.
 - Saving a new Ollama URL or categorization model, context length,
   temperature, thinking or prompt (not just turning categorization on or off)
-  deletes every `unavailable` verdict; a new AI prompt for a category deletes
+  deletes every `failed` verdict; a new AI prompt for a category deletes
   that category's. `yes` and `no` verdicts are final: editing or clearing a
   category's prompt, turning a source's categorization off, or turning AI off
   keeps them, and the categories they give.
@@ -191,7 +216,7 @@ spec: decisions here feed OpenSpec changes later.
   /api/videos/{id}/categories/{category_id}`), replacing the AI's; a
   category the video's source is a member of can't be set (409). A pair with
   a user verdict is never pending, so the AI never asks about it.
-- **Re-running** deletes AI verdicts (`yes`, `no` and `unavailable`) and keeps
+- **Re-running** deletes AI verdicts (`yes`, `no` and `failed`) and keeps
   user ones, then recomputes the categories of the videos that had one, in one
   `video_categories_changed`: per video (`DELETE /api/videos/{id}/ai-verdicts`,
   then its sync), per channel or playlist (`DELETE
@@ -204,7 +229,13 @@ spec: decisions here feed OpenSpec changes later.
   disabled while its prompt has unsaved edits, since the AI asks with the
   saved one. `GET /api/categories` reports each category's `ai_verdict_count`.
 - Each call is logged at info level with its categories, tokens, whether
-  thinking was asked for, whether it hit the output limit, and duration;
+  thinking was asked for, whether it is the call without thinking after a
+  limit stop (`retry_without_thinking`), whether it hit the output limit, and
+  duration. A call that hits the limit also logs a warning with how its output
+  was spent: `thinking_chars`, `answer_chars` (Ollama's `eval_count` doesn't
+  split thinking from answer) and `thinking_tail`, the thinking's last 300
+  characters, to tell a circling model from a long answer. A category given up
+  at once is logged at error level;
   each verdict with the video, category, verdict and reason; each run ends
   with `categorized video` counting the categories asked, answered yes,
   answered no and rejected. Skips at info, rejected calls at error.

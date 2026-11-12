@@ -436,6 +436,15 @@ impl VideoSummarizer {
             return Err(anyhow!("Ollama refused the call: {refusal}").into());
         }
         if reply.stopped_at_limit {
+            warn!(
+                video_id = %video.id,
+                call,
+                thinking = job.thinking,
+                thinking_chars = reply.thinking.chars().count(),
+                answer_chars = reply.content.chars().count(),
+                thinking_tail = %reply.thinking_tail(),
+                "the model stopped at the output limit"
+            );
             return Err(anyhow!(
                 "the model ran out of context ({} tokens: {} of input, {} left to think and answer)",
                 context_length.value(),

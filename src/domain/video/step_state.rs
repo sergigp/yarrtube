@@ -46,6 +46,14 @@ impl StepState {
         Self { status, attempts }
     }
 
+    /// One more failed attempt, failed `now`, and Failed whatever the count.
+    pub fn give_up(self, now: DateTime<Utc>) -> Self {
+        Self {
+            status: StepStatus::Failed,
+            attempts: self.attempts.record_failure(now),
+        }
+    }
+
     /// A Retrying or Failed step back to Pending; any other unchanged.
     pub fn retry(self) -> Self {
         match self.status {

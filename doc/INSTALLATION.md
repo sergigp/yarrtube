@@ -142,8 +142,10 @@ Lines worth grepping for:
   redownload, metadata repaired, relocated); absent when it did nothing.
 - `daemon heartbeat`: every 5 minutes, pending tasks per lane, running
   tasks, the oldest due task's wait, pending events, dead-lettered tasks and
-  events, and videos pending, retrying and failed per download, summary and
-  categorization.
+  events, videos pending, retrying and failed for the download, and for
+  summaries and categorizations the tasks due to run on the AI
+  (`summaries_queued`, `categorizations_queued`; a retry or a wait for
+  Ollama queued for later isn't counted) and the videos retrying and failed.
 
 ```bash
 grep -h 'task finished' /path/on/host/config/logs/yarrtube.*.log | grep -v 'outcome="unchanged"'

@@ -75,6 +75,7 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             .context("/api/chat didn't answer as Ollama does")?;
         Ok(LlmReply {
             content: response.message.content,
+            thinking: response.message.thinking,
             input_tokens: response.prompt_eval_count,
             output_tokens: response.eval_count,
             stopped_at_limit: response.done_reason.as_deref() == Some("length"),
@@ -210,6 +211,9 @@ struct ChatResponse {
 #[derive(Deserialize)]
 struct ChatMessage {
     content: String,
+    /// Only when the chat asked for thinking.
+    #[serde(default)]
+    thinking: String,
 }
 
 #[derive(Deserialize)]
@@ -383,9 +387,37 @@ mod tests {
             reply,
             LlmReply {
                 content: "Three games.".to_string(),
+                thinking: String::new(),
                 input_tokens: 120,
                 output_tokens: 250,
                 stopped_at_limit: false,
+                refusal: None,
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_read_the_thinking() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_body(
+                r#"{"message": {"content": "", "thinking": "Is it Tech? Maybe."}, "done_reason": "length", "prompt_eval_count": 120, "eval_count": 3072}"#,
+            )
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply {
+                content: String::new(),
+                thinking: "Is it Tech? Maybe.".to_string(),
+                input_tokens: 120,
+                output_tokens: 3072,
+                stopped_at_limit: true,
                 refusal: None,
             }
         );
