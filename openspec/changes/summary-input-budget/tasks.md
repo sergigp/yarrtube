@@ -42,7 +42,7 @@
 ## 4. Verification
 
 - [x] 4.1 `scripts/run-tests.sh --only rust` passes: fmt, clippy, tests. The change has no web side.
-- [ ] 4.4 After the refusal-as-overrun revision: `scripts/run-tests.sh --only rust` passes.
+- [x] 4.4 After the refusal-as-overrun revision: `scripts/run-tests.sh --only rust` passes.
 - [ ] 4.2 Manual (agent): run `scripts/run-local.sh --port <free port> --fresh-videos` against the local Ollama with `qwen3:4b`, seed a source with summaries on and the chess `.srt` (`/private/tmp/claude-501/-Users-sergigp--herdr-worktrees-yarrtube-summary-input-overrun/6bd9f37f-6005-45a5-9621-85635ee5d27d/scratchpad/srt/chess.en.srt`) as its subtitles, and let the summary run. Expected: in the logs, every call's `input_tokens` is ≤ 9,000, or one "cutting the transcript smaller" line then all calls ≤ 9,000, and the summary is stored. Then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.3 Manual (human): after the `:edge` image is on the NAS, confirm chess video `eef9c810-4b8e-46e9-9591-0a68d82da349` (Retrying, next attempt 2026-11-13 05:53 UTC) ends Done, and that its log lines show the input within budget.
 
