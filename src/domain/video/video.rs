@@ -345,6 +345,16 @@ impl Video {
         }
     }
 
+    /// Records a categorization that gave up before its last attempt: one
+    /// more failed attempt, and Failed.
+    pub fn give_up_categorization(self, now: DateTime<Utc>) -> Self {
+        Self {
+            categorization: self.categorization.give_up(now),
+            updated_at: now,
+            ..self
+        }
+    }
+
     /// Categorization back to Pending (a category was added or its verdicts
     /// removed), its failed attempts cleared.
     pub fn reset_categorization(self, now: DateTime<Utc>) -> Self {

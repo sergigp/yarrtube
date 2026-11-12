@@ -1065,10 +1065,10 @@ fn log_heartbeat(health: &DaemonHealth) {
         downloads_pending = health.downloads.pending,
         downloads_retrying = health.downloads.retrying,
         downloads_failed = health.downloads.failed,
-        summaries_pending = health.summaries.pending,
+        summaries_queued = health.summaries.queued,
         summaries_retrying = health.summaries.retrying,
         summaries_failed = health.summaries.failed,
-        categorizations_pending = health.categorizations.pending,
+        categorizations_queued = health.categorizations.queued,
         categorizations_retrying = health.categorizations.retrying,
         categorizations_failed = health.categorizations.failed,
         "daemon heartbeat"
