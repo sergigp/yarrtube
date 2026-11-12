@@ -69,14 +69,18 @@ When the reduce call's whole messages (system and user, with the chapters and ev
 - **THEN** groups of them are reduced first
 
 ### Requirement: Incomplete Answers Rejected
-A call SHALL be rejected when its answer is empty once cleaned, when Ollama stopped at the context limit (unless its input ran over the budget for the first time in this generation, see "Input Over The Budget Cut Smaller"), when Ollama refuses the prompt as too long, or when it runs past the 30-minute timeout. A rejected call SHALL fail the whole generation, storing nothing.
+A call SHALL be rejected when its answer is empty once cleaned, when Ollama stopped at the context limit, when Ollama refuses the prompt, or when it runs past the 30-minute timeout, except the first time in a generation that its input ran over the budget or past the context length (see "Input Over The Budget Cut Smaller"). A rejected call SHALL fail the whole generation, storing nothing.
 
 #### Scenario: Stopped at the output cap
 - **WHEN** Ollama reports it stopped because of the length limit, with input tokens within the budget
 - **THEN** no summary is stored and the generation fails
 
 #### Scenario: Prompt too long
-- **WHEN** Ollama answers 400 because the prompt exceeds the context length
+- **WHEN** Ollama answers 400 because the prompt exceeds the context length, on the second pass of a generation
+- **THEN** no summary is stored and the generation fails
+
+#### Scenario: Refused for another reason
+- **WHEN** Ollama answers 400 for a reason other than the prompt's length
 - **THEN** no summary is stored and the generation fails
 
 #### Scenario: Reasoning only
@@ -88,7 +92,7 @@ A call SHALL be rejected when its answer is empty once cleaned, when Ollama stop
 - **THEN** no further calls are made, no summary is stored and the generation fails
 
 ### Requirement: Summary Generation Logged
-Generation SHALL be logged at info level from start to end: the start with the video and its length in seconds; each call with its full system and user messages, then its full answer, tokens and duration; a re-cut after an input over the budget with the call, its input tokens, the budget and the characters per token measured; and the end with the summary, total duration, video length and model. Skips SHALL be logged with their reason at info level, and failures at error level with the specific reason: the context, input tokens and room left when the context ran out, or Ollama's refusal.
+Generation SHALL be logged at info level from start to end: the start with the video and its length in seconds; each call with its full system and user messages, then its full answer, tokens and duration; a re-cut after an input over the budget with the call, its input tokens (or that it exceeded the context length), the budget and the characters per token measured; and the end with the summary, total duration, video length and model. Skips SHALL be logged with their reason at info level, and failures at error level with the specific reason: the context, input tokens and room left when the context ran out, or Ollama's refusal.
 
 #### Scenario: Successful generation
 - **WHEN** a 30-minute video is summarized in one call at info verbosity
@@ -114,10 +118,14 @@ Generation SHALL be logged at info level from start to end: the start with the v
 - **WHEN** a call with 11932 input tokens on a budget of 9000 stops at the context limit and the generation is cut again
 - **THEN** the logs name the call, the 11932 input tokens, the 9000 budget and the characters per token measured, at info level
 
+#### Scenario: Cut smaller after a prompt over the context
+- **WHEN** Ollama refuses a call because the prompt exceeds the context length and the generation is cut again
+- **THEN** the logs name the call, that its input exceeded the context length, the 9000 budget and the characters per token estimated, at info level
+
 ## ADDED Requirements
 
 ### Requirement: Input Over The Budget Cut Smaller
-When a call stops at the context limit and Ollama reports more input tokens than the budget, the generation SHALL start over once, in the same run, with sizes estimated at that call's measured characters per token (its messages' characters over its input tokens) instead of the language's. The earlier answers SHALL be discarded. A second overrun, or a stop at the limit with input within the budget, SHALL be rejected.
+When a call stops at the context limit reporting more input tokens than the budget, or Ollama refuses it because the prompt exceeds the context length, the generation SHALL start over once, in the same run, estimating sizes at that call's characters over its input tokens (over the context length when refused) instead of the language's ratio, discarding earlier answers. A second overrun SHALL be rejected.
 
 #### Scenario: Part over the budget
 - **WHEN** a transcript's first part stops at the context limit reporting 11932 input tokens on a budget of 9000
@@ -130,6 +138,10 @@ When a call stops at the context limit and Ollama reports more input tokens than
 #### Scenario: Over the budget again
 - **WHEN** a call of the second pass also stops at the context limit reporting more input tokens than the budget
 - **THEN** no summary is stored and the generation fails
+
+#### Scenario: Prompt over the whole context
+- **WHEN** Ollama refuses a call because the prompt exceeds the context length of 12288
+- **THEN** the transcript is cut again into parts estimated at that call's characters over 12288, every call is made again, and the summary is stored
 
 #### Scenario: Out of room within the budget
 - **WHEN** a call stops at the context limit reporting input tokens within the budget
