@@ -1208,6 +1208,52 @@ fn it_should_cut_smaller_when_a_part_runs_over_the_budget() {
 }
 
 #[test]
+fn it_should_cut_in_parts_when_the_whole_transcript_runs_over_the_budget() {
+    // The one call's ~26450 characters of messages take 11000 tokens, ~2.4
+    // a token: the budget of 9000 then holds ~21650 characters.
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        over_the_budget(11000),
+        reply("A."),
+        reply("B."),
+        reply("All of it."),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(&srt_of(25, 60)),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            whole_messages(&transcript_lines(0..25)),
+            part_messages(1, 2, "0:00–19:00", &[], 0..20),
+            part_messages(2, 2, "20:00–24:00", &[], 20..25),
+            reduce_messages(&[], &[("0:00–19:00", "A."), ("20:00–24:00", "B.")]),
+        ]
+    );
+    assert_eq!(
+        summary_repository.find(&video.id).unwrap(),
+        Some(stored_summary(&video, "All of it."))
+    );
+}
+
+#[test]
 fn it_should_skip_if_summaries_are_unavailable() {
     let video = subtitled_video();
     let changed: Vec<(Vec<LlmChat>, Option<Video>)> = [
