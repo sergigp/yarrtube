@@ -461,7 +461,7 @@ mod tests {
 }
 
 /// Against the real `yt-dlp` and YouTube: run with
-/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
@@ -473,7 +473,7 @@ mod youtube_contract_tests {
     use chrono::DateTime;
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_download_a_playable_mp4() {
         let staging_dir = unique_temp_dir("contract-download");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
@@ -516,7 +516,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_download_a_video_with_its_chapters_embedded() {
         let staging_dir = unique_temp_dir("contract-download-chapters");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
@@ -541,25 +541,25 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_download_at_1080p_for_high_quality() {
         assert_eq!(downloaded_height(Quality::High), 1080);
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_download_at_720p_for_mid_quality() {
         assert_eq!(downloaded_height(Quality::Mid), 720);
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_download_at_480p_for_low_quality() {
         assert_eq!(downloaded_height(Quality::Low), 480);
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_probe_the_height_a_quality_would_download() {
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
 
@@ -586,7 +586,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_fail_to_download_a_missing_video() {
         let staging_dir = unique_temp_dir("contract-download-missing");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
@@ -608,7 +608,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_diagnose_no_failure_for_a_playable_video() {
         let reason = ytdlp::diagnose(&ytdlp_path(), &video_url(SHORT_VIDEO_ID)).unwrap();
 

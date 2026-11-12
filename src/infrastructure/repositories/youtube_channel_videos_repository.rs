@@ -120,14 +120,14 @@ impl ChannelVideosRepository for FakeChannelVideosRepository {
 }
 
 /// Against the real `yt-dlp` and YouTube: run with
-/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
     use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, ytdlp_path};
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_list_the_newest_channel_videos() {
         let repository = YtDlpChannelVideosRepository::new(ytdlp_path());
 

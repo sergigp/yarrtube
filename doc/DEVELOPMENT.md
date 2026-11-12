@@ -97,14 +97,16 @@ against the mocked API, so the suite finishes in seconds.
 One script runs every test suite, locally and in CI:
 
 ```bash
-scripts/run-tests.sh                 # everything
-scripts/run-tests.sh --only e2e      # one suite: web, rust, contract or e2e
-scripts/run-tests.sh --ci            # what CI runs (also when CI=true)
-scripts/run-tests.sh --workers 2     # end-to-end tests at once (default 3)
+scripts/run-tests.sh --all                 # everything
+scripts/run-tests.sh --lint --unit-rust    # suites combine: --lint, --unit-web,
+                                           # --unit-rust, --contract, --e2e
+scripts/run-tests.sh --ci                  # what CI runs: all but --contract
+scripts/run-tests.sh --e2e --workers 2     # end-to-end tests at once (default 3)
 ```
 
-The suites are the web UI's checks, Rust formatting, clippy and tests, the
-YouTube contract tests and the end-to-end suite (`e2e-tests/`, see its
+At least one suite flag (or `--all`, or `--ci`) is required. The suites are lint (the
+web UI's typecheck and eslint, Rust formatting and clippy), the web UI's
+unit tests, the Rust tests, the YouTube contract tests and the end-to-end suite (`e2e-tests/`, see its
 README: the Docker image driven through real browsers against a fake
 YouTube). CI runs all of them except the contract tests, which need the real
 YouTube, on every pull request and push to `main`. Tools (`npm`, `cargo`,
@@ -116,8 +118,8 @@ so it runs as is in a fresh clone or worktree. Each
 end-to-end worker runs its own container on its own ports, so the suite runs
 in parallel and worktrees can run it at the same time. Before running
 anything it checks every selected suite's tools, listing all that are
-missing, and prints what will run: the suites, CI mode (`--ci` or
-`CI=true`: no contract tests, failing end-to-end tests retried) and the
+missing, and prints what will run: the suites, CI mode (`--ci`
+only, not the `CI` variable: failing end-to-end tests retried) and the
 end-to-end workers and upgrade check. Each phase's output
 goes to a log rather than the terminal: a progress line while it runs, its
 time and test counts once done, and on failure only the failing tests with
@@ -130,7 +132,7 @@ captions, channel listings, and the Data API's playlists, videos, channels
 and avatars) have tests against the real thing, in modules named
 `youtube_contract_tests` next to each adapter. They're `#[ignore]`d, so
 `cargo test` and CI skip them; run them with
-`scripts/run-tests.sh --only contract`. It needs `yt-dlp` and `ffprobe` on `PATH` (or `YTDLP_PATH`), the network,
+`scripts/run-tests.sh --contract`. It needs `yt-dlp` and `ffprobe` on `PATH` (or `YTDLP_PATH`), the network,
 and `YOUTUBE_API_KEY` (from the environment or `.env`), and takes about ten
 seconds. Run it after upgrading `yt-dlp` or when downloads start failing,
 to tell a change on YouTube's side from a bug of ours. The fixtures (a short

@@ -147,7 +147,7 @@ mod tests {
 }
 
 /// Against the real `yt-dlp` and YouTube: run with
-/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
@@ -156,7 +156,7 @@ mod youtube_contract_tests {
     use chrono::DateTime;
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_fetch_only_the_thumbnail() {
         let staging_dir = unique_temp_dir("contract-thumbnail");
         let repository = YtDlpThumbnailRepository::new(ytdlp_path());
