@@ -467,11 +467,13 @@ impl VideoSummarizer {
     ) -> Result<SummaryText, Failure> {
         let input =
             self.summary_input(video, job, language, transcript, language.chars_per_token());
+        Self::log_generating(video, job, &input);
         match self.write_summary(video, &input, job) {
             Err(Failure::OverBudget(overrun)) => {
                 Self::log_cut_smaller(video, &input, &overrun);
                 let smaller =
                     self.summary_input(video, job, language, transcript, overrun.chars_per_token);
+                Self::log_generating(video, job, &smaller);
                 self.write_summary(video, &smaller, job)
             }
             written => written,
@@ -523,14 +525,17 @@ impl VideoSummarizer {
         transcript: &TimedTranscript,
         chars_per_token: f64,
     ) -> SummaryInput {
-        let input = SummaryInput::new(
+        SummaryInput::new(
             video,
             language,
             transcript,
             &job.settings.context_length,
             &job.prompt,
             chars_per_token,
-        );
+        )
+    }
+
+    fn log_generating(video: &Video, job: &SummaryJob, input: &SummaryInput) {
         info!(
             video_id = %video.id,
             title = %video.title,
@@ -539,7 +544,6 @@ impl VideoSummarizer {
             model = %job.settings.model.as_str(),
             "generating video summary"
         );
-        input
     }
 
     /// The video's transcript language and its timed lines, from the

@@ -780,6 +780,68 @@ fn it_should_reduce_in_groups_when_the_reduce_prompt_pushes_the_answers_over_the
 }
 
 #[test]
+fn it_should_reduce_more_than_two_answers_in_a_group_when_they_fit() {
+    // At 8192 the budget is ~20400 characters: the reduce messages of three
+    // 5000-character answers take ~16600, of four ~21600.
+    let answer = "x".repeat(5000);
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        reply(&answer),
+        reply(&answer),
+        reply(&answer),
+        reply(&answer),
+        reply("Three."),
+        reply("All of it."),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&with_summaries(|settings| SummarySettings {
+            context_length: ContextLength::new(8192).unwrap(),
+            ..settings
+        }))
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(&srt_of(60, 60)),
+    );
+
+    run(&task, &video).unwrap();
+
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            part_messages(1, 4, "0:00–17:00", &[], 0..18),
+            part_messages(2, 4, "18:00–35:00", &[], 18..36),
+            part_messages(3, 4, "36:00–53:00", &[], 36..54),
+            part_messages(4, 4, "54:00–59:00", &[], 54..60),
+            reduce_messages(
+                &[],
+                &[
+                    ("0:00–17:00", &answer),
+                    ("18:00–35:00", &answer),
+                    ("36:00–53:00", &answer)
+                ]
+            ),
+            reduce_messages(&[], &[("0:00–53:00", "Three."), ("54:00–59:00", &answer)]),
+        ]
+    );
+    assert_eq!(
+        summary_repository.find(&video.id).unwrap(),
+        Some(stored_summary(&video, "All of it."))
+    );
+}
+
+#[test]
 fn it_should_list_a_chapter_starting_on_the_parts_last_line() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1718,6 +1780,57 @@ fn it_should_schedule_the_next_attempt_if_the_summary_is_rejected() {
             },
             updated_at: later(),
             ..video.clone()
+        })
+    );
+}
+
+#[test]
+fn it_should_schedule_the_next_attempt_if_the_input_is_exactly_the_budget() {
+    // 9000 input tokens is the budget at 12288, not over it: no cut smaller.
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![over_the_budget(9000)]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + Duration::minutes(10),
+            reason: "the model ran out of context (12288 tokens: 9000 of input, 3288 left to think and answer)"
+                .to_string(),
+        })
+    );
+    assert_eq!(sent_messages(&llm), vec![whole_messages("Hola a todos")]);
+    assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            summary: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
         })
     );
 }
