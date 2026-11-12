@@ -2559,6 +2559,51 @@ fn it_should_log_the_summary_total_time_and_video_length() {
 }
 
 #[test]
+fn it_should_log_how_the_output_was_spent_when_a_summary_call_stops_at_the_limit() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let thinking = "Hmm. ".repeat(2400);
+    let llm = llm_replying(vec![Ok(LlmReply {
+        thinking: thinking.clone(),
+        stopped_at_limit: true,
+        ..reply("Three games and").unwrap()
+    })]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        llm,
+        files_with(SHORT_SRT),
+    );
+
+    let lines = captured_log_lines(|| {
+        run(&task, &video).unwrap();
+    });
+
+    let limit_stops = lines
+        .iter()
+        .filter(|line| line.starts_with("WARN the model stopped at the output limit "))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        limit_stops,
+        [format!(
+            "WARN the model stopped at the output limit video_id={} call=\"whole\" \
+             thinking=true thinking_chars=12000 answer_chars=15 thinking_tail={}",
+            video.id,
+            &thinking[thinking.len() - 300..]
+        )]
+    );
+}
+
+#[test]
 fn it_should_log_the_cut_smaller_with_the_measured_ratio() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -3020,6 +3065,7 @@ fn server_with(model: LlmModel) -> LlmServer {
 fn reply(content: &str) -> anyhow::Result<LlmReply> {
     Ok(LlmReply {
         content: content.to_string(),
+        thinking: String::new(),
         input_tokens: 100,
         output_tokens: 0,
         stopped_at_limit: false,

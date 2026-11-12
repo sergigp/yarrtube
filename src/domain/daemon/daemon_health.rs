@@ -8,6 +8,15 @@ pub struct StepCounts {
     pub failed: usize,
 }
 
+/// An AI step: its tasks due to run, waiting for the AI, and the videos
+/// retrying or failed for it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AiStepCounts {
+    pub queued: usize,
+    pub retrying: usize,
+    pub failed: usize,
+}
+
 /// What the daemon's heartbeat reports — see the `daemon` capability: the
 /// task and event queues, their dead letters, and the library's videos by
 /// step status.
@@ -23,6 +32,6 @@ pub struct DaemonHealth {
     pub dead_lettered_tasks: usize,
     pub dead_lettered_events: usize,
     pub downloads: StepCounts,
-    pub summaries: StepCounts,
-    pub categorizations: StepCounts,
+    pub summaries: AiStepCounts,
+    pub categorizations: AiStepCounts,
 }

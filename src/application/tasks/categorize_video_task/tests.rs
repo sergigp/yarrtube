@@ -441,7 +441,7 @@ fn it_should_ask_each_category_alone_when_the_call_hits_the_output_limit() {
         prompted_category("Tech"),
     );
     seed(&db, &video, &[&chess, &sicilian, &tech]);
-    let llm = llm_replying(vec![
+    let llm = non_thinking_llm_replying(vec![
         Ok(LlmReply {
             stopped_at_limit: true,
             ..reply("").unwrap()
@@ -514,7 +514,7 @@ fn it_should_not_fall_back_for_a_single_category() {
     let db = TestDatabase::new();
     let video = summarized_video();
     seed(&db, &video, &[&prompted_category("Sicilian")]);
-    let llm = llm_replying(vec![Ok(LlmReply {
+    let llm = non_thinking_llm_replying(vec![Ok(LlmReply {
         stopped_at_limit: true,
         ..reply("").unwrap()
     })]);
@@ -1643,7 +1643,7 @@ fn it_should_log_the_fallback() {
     );
     let task = categorize_video_task(
         &db,
-        llm_replying(vec![
+        non_thinking_llm_replying(vec![
             Ok(LlmReply {
                 stopped_at_limit: true,
                 ..reply("").unwrap()
@@ -1660,6 +1660,7 @@ fn it_should_log_the_fallback() {
     let fallbacks = lines
         .iter()
         .filter(|line| line.starts_with("WARN ") || line.starts_with("ERROR "))
+        .filter(|line| !line.contains("stopped at the output limit"))
         .cloned()
         .collect::<Vec<_>>();
     assert_eq!(
@@ -1669,6 +1670,556 @@ fn it_should_log_the_fallback() {
                  video_id={} category={name} reason=it hit the 3072-token output limit",
             video.id
         ))
+    );
+}
+
+#[test]
+fn it_should_ask_again_without_thinking_if_a_single_category_call_thought_past_the_limit() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    let tech = prompted_category("Tech");
+    seed(&db, &video, &[&tech]);
+    let llm = llm_replying(vec![
+        thought_past_the_limit(),
+        reply(&answers(&[("Tech", NO)])),
+    ]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(asked_categories(&llm), vec![vec!["Tech"], vec!["Tech"]]);
+    assert_eq!(thinking_asked(&llm), vec![true, false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![ai_verdict(&video, &tech, Verdict::No, "A chess game.")]
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Done,
+                attempts: RetryAttempts::default(),
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
+fn it_should_ask_every_category_again_without_thinking_if_the_call_thought_past_the_limit() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video = summarized_video();
+    let (ai, tech) = (prompted_category("AI"), prompted_category("Tech"));
+    seed(&db, &video, &[&ai, &tech]);
+    let llm = llm_replying(vec![
+        thought_past_the_limit(),
+        reply(&answers(&[("AI", YES), ("Tech", NO)])),
+    ]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        asked_categories(&llm),
+        vec![vec!["AI", "Tech"], vec!["AI", "Tech"]]
+    );
+    assert_eq!(thinking_asked(&llm), vec![true, false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        by_category([
+            ai_verdict(&video, &ai, Verdict::Yes, "A Sicilian game."),
+            ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+        ])
+    );
+}
+
+#[test]
+fn it_should_ask_alone_without_thinking_what_the_call_without_thinking_left_unanswered() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video = summarized_video();
+    let (chess, sicilian, tech) = (
+        prompted_category("Chess"),
+        prompted_category("Sicilian"),
+        prompted_category("Tech"),
+    );
+    seed(&db, &video, &[&chess, &sicilian, &tech]);
+    let llm = llm_replying(vec![
+        thought_past_the_limit(),
+        reply(&answers(&[("Chess", YES), ("Sicilian", YES)])),
+        reply(&answers(&[("Tech", NO)])),
+    ]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        asked_categories(&llm),
+        vec![
+            vec!["Chess", "Sicilian", "Tech"],
+            vec!["Chess", "Sicilian", "Tech"],
+            vec!["Tech"]
+        ]
+    );
+    assert_eq!(thinking_asked(&llm), vec![true, false, false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        by_category([
+            ai_verdict(&video, &chess, Verdict::Yes, "A Sicilian game."),
+            ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+            ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+        ])
+    );
+}
+
+#[test]
+fn it_should_ask_again_without_thinking_if_a_fallback_call_thought_past_the_limit() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video = summarized_video();
+    let (sicilian, tech) = (prompted_category("Sicilian"), prompted_category("Tech"));
+    seed(&db, &video, &[&sicilian, &tech]);
+    let llm = llm_replying(vec![
+        reply(&answers(&[("Sicilian", YES)])),
+        thought_past_the_limit(),
+        reply(&answers(&[("Tech", NO)])),
+    ]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        asked_categories(&llm),
+        vec![vec!["Sicilian", "Tech"], vec!["Tech"], vec!["Tech"]]
+    );
+    assert_eq!(thinking_asked(&llm), vec![true, true, false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        by_category([
+            ai_verdict(&video, &sicilian, Verdict::Yes, "A Sicilian game."),
+            ai_verdict(&video, &tech, Verdict::No, "A chess game."),
+        ])
+    );
+}
+
+#[test]
+fn it_should_give_up_at_once_if_the_call_without_thinking_is_rejected() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    let tech = prompted_category("Tech");
+    seed(&db, &video, &[&tech]);
+    let llm = llm_replying(vec![thought_past_the_limit(), stopped_at_the_limit()]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(thinking_asked(&llm), vec![true, false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![failed_verdict(&video, &tech)]
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Failed,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
+fn it_should_give_up_one_category_and_retry_another_in_the_same_run() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    let (food, tech) = (prompted_category("Food"), prompted_category("Tech"));
+    seed(&db, &video, &[&food, &tech]);
+    let llm = llm_replying(vec![
+        reply("It might belong."),
+        reply("It might belong."),
+        thought_past_the_limit(),
+        stopped_at_the_limit(),
+    ]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::minutes(10),
+            reason: "the model couldn't answer for Food (its answer isn't usable)".to_string(),
+        })
+    );
+    assert_eq!(
+        asked_categories(&llm),
+        vec![
+            vec!["Food", "Tech"],
+            vec!["Food"],
+            vec!["Tech"],
+            vec!["Tech"]
+        ]
+    );
+    assert_eq!(thinking_asked(&llm), vec![true, true, true, false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![failed_verdict(&video, &tech)]
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
+fn it_should_mark_the_categorization_failed_if_a_category_was_given_up_before() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = Video {
+        categorization: StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 1,
+                last_failed_at: Some(fixed_timestamp()),
+            },
+        },
+        ..summarized_video()
+    };
+    let (food, tech) = (prompted_category("Food"), prompted_category("Tech"));
+    seed(&db, &video, &[&food, &tech]);
+    verdict_repository
+        .save(&failed_verdict(&video, &tech))
+        .unwrap();
+    let task = categorize_video_task(&db, llm_replying(vec![reply(&answers(&[("Food", NO)]))]));
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        by_category([
+            ai_verdict(&video, &food, Verdict::No, "A chess game."),
+            failed_verdict(&video, &tech),
+        ])
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Failed,
+                attempts: RetryAttempts {
+                    failed: 2,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
+fn it_should_not_give_up_a_category_if_the_settings_changed_during_its_call_without_thinking() {
+    let db = Arc::new(TestDatabase::new());
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    let tech = prompted_category("Tech");
+    seed(&db, &video, &[&tech]);
+    let changed_db = db.clone();
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(server_with(thinking_model()))
+            .with_replies(vec![thought_past_the_limit(), stopped_at_the_limit()])
+            .with_on_chat(move || {
+                SqlitePreferencesRepository::new(changed_db.database())
+                    .save(&Preferences {
+                        categorization: CategorizationSettings {
+                            model: CategorizationModel::new("gemma3:4b").unwrap(),
+                            ..categorization_on().categorization
+                        },
+                        ..categorization_on()
+                    })
+                    .unwrap()
+            }),
+    );
+    let task = categorize_video_task(&db, llm);
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState::pending(),
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
+fn it_should_retry_later_if_a_call_without_thinking_hit_the_limit() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            categorization: CategorizationSettings {
+                thinking: false,
+                ..categorization_on().categorization
+            },
+            ..categorization_on()
+        })
+        .unwrap();
+    let llm = llm_replying(vec![stopped_at_the_limit()]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::minutes(10),
+            reason: "the model couldn't answer for Tech (it hit the 3072-token output limit)"
+                .to_string(),
+        })
+    );
+    assert_eq!(thinking_asked(&llm), vec![false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
+fn it_should_log_whether_each_call_thought_and_retried_without_thinking() {
+    let db = TestDatabase::new();
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    let task = categorize_video_task(
+        &db,
+        llm_replying(vec![
+            thought_past_the_limit(),
+            reply(&answers(&[("Tech", NO)])),
+        ]),
+    );
+
+    let lines = captured_log_lines(|| {
+        run(&task, &video).unwrap();
+    });
+
+    let calls = lines
+        .iter()
+        .filter(|line| line.starts_with("INFO asked the model "))
+        .map(|line| line.split(" duration_seconds=").next().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        calls,
+        [
+            ("true", "false", 3072, "true"),
+            ("false", "true", 200, "false")
+        ]
+        .map(|(thinking, retry, output_tokens, stopped)| format!(
+            "INFO asked the model video_id={} categories=Tech fallback=false \
+             thinking={thinking} retry_without_thinking={retry} input_tokens=100 \
+             output_tokens={output_tokens} stopped_at_limit={stopped}",
+            video.id
+        ))
+    );
+}
+
+#[test]
+fn it_should_log_how_the_output_was_spent_when_a_call_stops_at_the_limit() {
+    let db = TestDatabase::new();
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    let task = categorize_video_task(
+        &db,
+        llm_replying(vec![thought_past_the_limit(), stopped_at_the_limit()]),
+    );
+
+    let lines = captured_log_lines(|| {
+        run(&task, &video).unwrap();
+    });
+
+    let limit_stops = lines
+        .iter()
+        .filter(|line| line.starts_with("WARN the model stopped at the output limit "))
+        .cloned()
+        .collect::<Vec<_>>();
+    let thinking = thought_past_the_limit().unwrap().thinking;
+    assert_eq!(
+        limit_stops,
+        [
+            format!(
+                "WARN the model stopped at the output limit video_id={} categories=Tech \
+                 thinking=true thinking_chars=9000 answer_chars=0 thinking_tail={}",
+                video.id,
+                &thinking[thinking.len() - 300..]
+            ),
+            format!(
+                "WARN the model stopped at the output limit video_id={} categories=Tech \
+                 thinking=false thinking_chars=0 answer_chars=32 thinking_tail=",
+                video.id
+            ),
+        ]
+    );
+}
+
+#[test]
+fn it_should_log_a_category_given_up_at_once() {
+    let db = TestDatabase::new();
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    let task = categorize_video_task(
+        &db,
+        llm_replying(vec![thought_past_the_limit(), stopped_at_the_limit()]),
+    );
+
+    let lines = captured_log_lines(|| {
+        run(&task, &video).unwrap();
+    });
+
+    let errors = lines
+        .iter()
+        .filter(|line| line.starts_with("ERROR "))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        errors,
+        [format!(
+            "ERROR gave up on a category video_id={} category=Tech \
+             reason=it thought past the output limit, then without thinking \
+             it hit the 3072-token output limit",
+            video.id
+        )]
+    );
+}
+
+#[test]
+fn it_should_mark_the_categorization_failed_without_asking_if_only_a_given_up_category_is_left() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = Video {
+        categorization: StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 1,
+                last_failed_at: Some(fixed_timestamp()),
+            },
+        },
+        ..summarized_video()
+    };
+    let (food, tech) = (prompted_category("Food"), prompted_category("Tech"));
+    seed(&db, &video, &[&food, &tech]);
+    let user_no =
+        VideoCategoryVerdict::by_user(video.id.clone(), food.id.clone(), false, fixed_timestamp());
+    verdict_repository.save(&user_no).unwrap();
+    verdict_repository
+        .save(&failed_verdict(&video, &tech))
+        .unwrap();
+    let llm = llm_replying(vec![]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        by_category([user_no, failed_verdict(&video, &tech)])
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Failed,
+                attempts: RetryAttempts {
+                    failed: 2,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
     );
 }
 
@@ -1847,6 +2398,11 @@ fn asked_categories(llm: &FakeLlmServerRepository) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// Whether each chat asked for thinking, in order.
+fn thinking_asked(llm: &FakeLlmServerRepository) -> Vec<bool> {
+    llm.chats().iter().map(|chat| chat.thinking).collect()
+}
+
 /// The output cap of each chat, in order.
 fn output_caps(llm: &FakeLlmServerRepository) -> Vec<u32> {
     llm.chats()
@@ -1946,6 +2502,19 @@ fn llm_replying(replies: Vec<anyhow::Result<LlmReply>>) -> Arc<FakeLlmServerRepo
     Arc::new(FakeLlmServerRepository::new(server_with(thinking_model())).with_replies(replies))
 }
 
+/// `llm_replying`, with a model that can't think.
+fn non_thinking_llm_replying(
+    replies: Vec<anyhow::Result<LlmReply>>,
+) -> Arc<FakeLlmServerRepository> {
+    Arc::new(
+        FakeLlmServerRepository::new(server_with(LlmModel {
+            thinking: false,
+            ..thinking_model()
+        }))
+        .with_replies(replies),
+    )
+}
+
 fn thinking_model() -> LlmModel {
     LlmModel {
         name: "qwen3:4b".to_string(),
@@ -1964,11 +2533,32 @@ fn server_with(model: LlmModel) -> LlmServer {
 fn reply(content: &str) -> anyhow::Result<LlmReply> {
     Ok(LlmReply {
         content: content.to_string(),
+        thinking: String::new(),
         input_tokens: 100,
         output_tokens: 200,
         stopped_at_limit: false,
         refusal: None,
         exceeded_context: false,
+    })
+}
+
+/// A reply that spent the whole output cap thinking, without an answer.
+fn thought_past_the_limit() -> anyhow::Result<LlmReply> {
+    Ok(LlmReply {
+        thinking: "Okay, is it Tech? ".repeat(500),
+        output_tokens: 3072,
+        stopped_at_limit: true,
+        ..reply("").unwrap()
+    })
+}
+
+/// A reply that stopped at the output limit without thinking.
+fn stopped_at_the_limit() -> anyhow::Result<LlmReply> {
+    Ok(LlmReply {
+        content: r#"{"Tech": {"reason": "It is about"#.to_string(),
+        output_tokens: 3072,
+        stopped_at_limit: true,
+        ..reply("").unwrap()
     })
 }
 
