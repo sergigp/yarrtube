@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every type and signature from design.md (## Types & Signatures), wired end-to-end with trivial bodies:
+- [x] 1.1 Create every type and signature from design.md (## Types & Signatures), wired end-to-end with trivial bodies:
   - `caption_lines` returning `vec![strip_tags(line)]` minus empties, used by both `from_srt`s.
   - `SummaryMessages::chars`.
   - `SummaryInput::new` taking `prompt` and `chars_per_token` (callers pass `language.chars_per_token()`). The prompt is stored, and `whole`/`part`/`reduce`/`reduce_group` lose their prompt param. `over_budget` returns `false`; `budget_tokens` is stored.

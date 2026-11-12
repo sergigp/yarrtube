@@ -1,4 +1,4 @@
-use super::transcript_text::{cue_text, is_cue_index, strip_tags, without_first_if};
+use super::transcript_text::{caption_lines, cue_text, is_cue_index, without_first_if};
 use super::{TimedLine, TranscriptPart};
 use crate::domain::video::VideoChapter;
 use std::ops::Range;
@@ -123,8 +123,7 @@ impl TimedTranscript {
 fn cue_lines(cue: &[&str], start: i64) -> Vec<TimedLine> {
     cue_text(cue)
         .iter()
-        .map(|line| strip_tags(line))
-        .filter(|text| !text.is_empty())
+        .flat_map(|line| caption_lines(line))
         .map(|text| TimedLine {
             start_seconds: start,
             text,

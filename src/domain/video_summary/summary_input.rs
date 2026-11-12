@@ -13,6 +13,8 @@ pub struct SummaryInput {
     language: String,
     chapters: Vec<VideoChapter>,
     parts: Vec<TranscriptPart>,
+    prompt: SummaryPrompt,
+    budget_tokens: u32,
     max_chars: usize,
 }
 
@@ -22,10 +24,12 @@ impl SummaryInput {
         language: &CaptionLanguage,
         transcript: &TimedTranscript,
         context_length: &ContextLength,
+        prompt: &SummaryPrompt,
+        chars_per_token: f64,
     ) -> Self {
         let chapters = video.chapters.found.clone().unwrap_or_default();
-        let max_chars =
-            (f64::from(context_length.input_budget_tokens()) * language.chars_per_token()) as usize;
+        let budget_tokens = context_length.input_budget_tokens();
+        let max_chars = (f64::from(budget_tokens) * chars_per_token) as usize;
         let parts = transcript.parts(&chapters, max_chars);
         Self {
             title: video.title.clone(),
@@ -33,6 +37,8 @@ impl SummaryInput {
             language: language.english_name(),
             chapters,
             parts,
+            prompt: prompt.clone(),
+            budget_tokens,
             max_chars,
         }
     }
@@ -42,7 +48,8 @@ impl SummaryInput {
     }
 
     /// `system` + `user`; only when `parts() == 1`.
-    pub fn whole(&self, prompt: &SummaryPrompt) -> SummaryMessages {
+    pub fn whole(&self) -> SummaryMessages {
+        let prompt = &self.prompt;
         let transcript = self.parts.first().map_or("", |part| part.text.as_str());
         SummaryMessages {
             system: prompt.render(SummaryPromptSection::System, &self.language_value()),
@@ -57,7 +64,8 @@ impl SummaryInput {
     }
 
     /// `map system` + `map user` for the 0-based `index`.
-    pub fn part(&self, prompt: &SummaryPrompt, index: usize) -> SummaryMessages {
+    pub fn part(&self, index: usize) -> SummaryMessages {
+        let prompt = &self.prompt;
         let part = &self.parts[index];
         SummaryMessages {
             system: prompt.render(SummaryPromptSection::MapSystem, &self.language_value()),
@@ -88,13 +96,13 @@ impl SummaryInput {
     }
 
     /// `reduce system` + `reduce user`, one `reduce part` per answer.
-    pub fn reduce(&self, prompt: &SummaryPrompt, answers: &[PartAnswer]) -> SummaryMessages {
-        self.reduce_with(prompt, answers, self.chapter_block(prompt))
+    pub fn reduce(&self, answers: &[PartAnswer]) -> SummaryMessages {
+        self.reduce_with(answers, self.chapter_block(&self.prompt))
     }
 
     /// A reduce of `answers` without the chapters: the last reduce has them.
-    pub fn reduce_group(&self, prompt: &SummaryPrompt, answers: &[PartAnswer]) -> SummaryMessages {
-        self.reduce_with(prompt, answers, String::new())
+    pub fn reduce_group(&self, answers: &[PartAnswer]) -> SummaryMessages {
+        self.reduce_with(answers, String::new())
     }
 
     /// Whether `answers` and the chapters fit the budget together.
@@ -116,6 +124,15 @@ impl SummaryInput {
         })
     }
 
+    /// Whether `input_tokens`, as Ollama reported them, are over the budget.
+    pub fn over_budget(&self, _input_tokens: u32) -> bool {
+        false
+    }
+
+    pub fn budget_tokens(&self) -> u32 {
+        self.budget_tokens
+    }
+
     fn joins(&self, group: &[PartAnswer], answer: &PartAnswer) -> bool {
         Self::chars(group) + answer.summary.as_str().chars().count() <= self.max_chars
     }
@@ -127,12 +144,8 @@ impl SummaryInput {
             .sum()
     }
 
-    fn reduce_with(
-        &self,
-        prompt: &SummaryPrompt,
-        answers: &[PartAnswer],
-        chapters: String,
-    ) -> SummaryMessages {
+    fn reduce_with(&self, answers: &[PartAnswer], chapters: String) -> SummaryMessages {
+        let prompt = &self.prompt;
         SummaryMessages {
             system: prompt.render(SummaryPromptSection::ReduceSystem, &self.language_value()),
             user: prompt.render(
