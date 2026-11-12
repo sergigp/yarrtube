@@ -87,7 +87,7 @@ impl VideoSummarizer {
 }
 ```
 
-Parts are cut so that `part(i).chars() <= max_chars`. The transcript's share is `max_chars` minus the overhead of the `map system` + `map user` messages, rendered with an empty transcript, every chapter and the widest part numbers. That's an upper bound for any part, so the existing cutting code stays transcript-only. Whole: `whole().chars() <= max_chars` means one part.
+Parts are cut so that `part(i).chars() <= max_chars`. The transcript's share is `max_chars` minus the larger overhead of the whole call and of a part's `map system` + `map user` messages, each rendered with an empty transcript, every chapter and the widest part numbers (`999`). That's an upper bound for any call, so the existing cutting code stays transcript-only. Using the larger of the two keeps a transcript that doesn't fit one call from being cut into a single part.
 
 ## Call Stack
 

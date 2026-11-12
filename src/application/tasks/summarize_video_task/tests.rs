@@ -1036,6 +1036,58 @@ fn it_should_cut_in_parts_when_the_prompt_pushes_the_call_over_the_budget() {
 }
 
 #[test]
+fn it_should_keep_every_part_call_within_the_budget() {
+    // A saved `map system` 3000 characters longer than the shipped one: a
+    // part's messages, not just its transcript, must fit ~30600.
+    let padding = " Keep it short.".repeat(200);
+    let map_system = format!("{MAP_SYSTEM}{padding}");
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![reply("A."), reply("B."), reply("All.")]);
+    let saved = SummaryPrompt::shipped().as_str().replace(
+        "Ignore sponsors and requests to subscribe.",
+        &format!("Ignore sponsors and requests to subscribe.{padding}"),
+    );
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&with_summaries(|settings| SummarySettings {
+            prompt: Some(SummaryPrompt::from_stored(saved)),
+            ..settings
+        }))
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository,
+        llm.clone(),
+        files_with(&srt_of(45, 60)),
+    );
+
+    run(&task, &video).unwrap();
+
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            SummaryMessages {
+                system: map_system.clone(),
+                ..part_messages(1, 2, "0:00–26:00", &[], 0..27)
+            },
+            SummaryMessages {
+                system: map_system,
+                ..part_messages(2, 2, "27:00–44:00", &[], 27..45)
+            },
+            reduce_messages(&[], &[("0:00–26:00", "A."), ("27:00–44:00", "B.")]),
+        ]
+    );
+}
+
+#[test]
 fn it_should_skip_if_summaries_are_unavailable() {
     let video = subtitled_video();
     let changed: Vec<(Vec<LlmChat>, Option<Video>)> = [

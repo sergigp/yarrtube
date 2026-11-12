@@ -4,6 +4,9 @@ use crate::domain::video::{Video, VideoChapter};
 use crate::domain::video_summary::{PartAnswer, SummaryMessages, SummaryText};
 use crate::domain::video_transcript::{CaptionLanguage, TimedTranscript, TranscriptPart};
 
+/// A part number at least as wide as any real one, to size the messages.
+const WIDEST_PART_NUMBER: &str = "999";
+
 /// A video as the summary prompt needs it, cut into the parts that fit the
 /// model's context.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,7 +63,7 @@ impl SummaryInput {
             user: prompt.render(
                 SummaryPromptSection::User,
                 &self.head_values_with(vec![
-                    ("chapters", self.chapter_block(prompt)),
+                    ("chapters", self.chapter_block()),
                     ("transcript", transcript.to_string()),
                 ]),
             ),
@@ -69,21 +72,13 @@ impl SummaryInput {
 
     /// `map system` + `map user` for the 0-based `index`.
     pub fn part(&self, index: usize) -> SummaryMessages {
-        let prompt = &self.prompt;
         let part = &self.parts[index];
-        SummaryMessages {
-            system: prompt.render(SummaryPromptSection::MapSystem, &self.language_value()),
-            user: prompt.render(
-                SummaryPromptSection::MapUser,
-                &self.head_values_with(vec![
-                    ("part", (index + 1).to_string()),
-                    ("parts", self.parts.len().to_string()),
-                    ("span", span(part.start_seconds, part.end_seconds)),
-                    ("chapters", self.part_chapter_block(prompt, part)),
-                    ("transcript", part.text.clone()),
-                ]),
-            ),
-        }
+        self.part_messages(
+            &(index + 1).to_string(),
+            &self.parts.len().to_string(),
+            part,
+            self.part_chapter_block(part),
+        )
     }
 
     /// The answers to every part, in order, as `reduce` takes them.
@@ -101,7 +96,7 @@ impl SummaryInput {
 
     /// `reduce system` + `reduce user`, one `reduce part` per answer.
     pub fn reduce(&self, answers: &[PartAnswer]) -> SummaryMessages {
-        self.reduce_with(answers, self.chapter_block(&self.prompt))
+        self.reduce_with(answers, self.chapter_block())
     }
 
     /// A reduce of `answers` without the chapters: the last reduce has them.
@@ -137,9 +132,51 @@ impl SummaryInput {
         self.budget_tokens
     }
 
-    /// What the messages around the transcript take, in characters.
+    /// What the messages around the transcript take, in characters: the
+    /// most of one call and of any part's, with every chapter and the
+    /// widest part numbers and span.
     fn prompt_chars(&self) -> usize {
-        self.whole().chars()
+        let end = self.minutes * 60;
+        let widest = TranscriptPart {
+            start_seconds: end,
+            end_seconds: end,
+            text: String::new(),
+        };
+        let part = self.part_messages(
+            WIDEST_PART_NUMBER,
+            WIDEST_PART_NUMBER,
+            &widest,
+            block(
+                &self.prompt,
+                SummaryPromptSection::MapChapters,
+                &self.chapters,
+            ),
+        );
+        self.whole().chars().max(part.chars())
+    }
+
+    fn part_messages(
+        &self,
+        number: &str,
+        parts: &str,
+        part: &TranscriptPart,
+        chapters: String,
+    ) -> SummaryMessages {
+        SummaryMessages {
+            system: self
+                .prompt
+                .render(SummaryPromptSection::MapSystem, &self.language_value()),
+            user: self.prompt.render(
+                SummaryPromptSection::MapUser,
+                &self.head_values_with(vec![
+                    ("part", number.to_string()),
+                    ("parts", parts.to_string()),
+                    ("span", span(part.start_seconds, part.end_seconds)),
+                    ("chapters", chapters),
+                    ("transcript", part.text.clone()),
+                ]),
+            ),
+        }
     }
 
     fn joins(&self, group: &[PartAnswer], answer: &PartAnswer) -> bool {
@@ -204,12 +241,12 @@ impl SummaryInput {
     }
 
     /// The whole video's chapters as the `chapters` section.
-    fn chapter_block(&self, prompt: &SummaryPrompt) -> String {
-        block(prompt, SummaryPromptSection::Chapters, &self.chapters)
+    fn chapter_block(&self) -> String {
+        block(&self.prompt, SummaryPromptSection::Chapters, &self.chapters)
     }
 
     /// The chapters overlapping `part` as the `map chapters` section.
-    fn part_chapter_block(&self, prompt: &SummaryPrompt, part: &TranscriptPart) -> String {
+    fn part_chapter_block(&self, part: &TranscriptPart) -> String {
         let overlapping: Vec<VideoChapter> = self
             .chapters
             .iter()
@@ -219,7 +256,11 @@ impl SummaryInput {
             })
             .cloned()
             .collect();
-        block(prompt, SummaryPromptSection::MapChapters, &overlapping)
+        block(
+            &self.prompt,
+            SummaryPromptSection::MapChapters,
+            &overlapping,
+        )
     }
 }
 
