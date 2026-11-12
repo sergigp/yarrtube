@@ -108,7 +108,13 @@ impl OllamaLlmServerRepository {
     /// A refusal as `error`, too long when Ollama says the prompt exceeds
     /// the context.
     fn refused(error: String) -> LlmReply {
-        match error.contains("exceeds the available context size") {
+        let too_long = [
+            "exceeds the available context size",
+            "exceeds the context length",
+        ]
+        .iter()
+        .any(|wording| error.contains(wording));
+        match too_long {
             true => LlmReply::refused_as_too_long(error),
             false => LlmReply::refused(error),
         }
@@ -454,6 +460,25 @@ mod tests {
             LlmReply::refused_as_too_long(
                 "request (7109 tokens) exceeds the available context size (512 tokens), try increasing it"
             )
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_as_too_long_when_the_input_length_exceeds_the_context() {
+        let mut server = mockito::Server::new();
+        let _chat = server
+            .mock("POST", "/api/chat")
+            .with_status(400)
+            .with_body(r#"{"error": "the input length exceeds the context length"}"#)
+            .create();
+
+        let reply = OllamaLlmServerRepository::new()
+            .chat(&url(&server), &chat())
+            .unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused_as_too_long("the input length exceeds the context length")
         );
     }
 
