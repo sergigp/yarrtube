@@ -18,8 +18,16 @@ const CHANNEL_PATH = `channels/${slugOf(CHANNEL_HANDLE)}`
  * video still downloading, a per-video task queued in its show folder, or a
  * downloaded video whose event isn't handled yet), and its videos are
  * downloaded with thumbnails, so the page shows one to play.
+ *
+ * It must stay settled for `SETTLED_FOR_MS`: the rule leaves out a pending
+ * `sync_video` and a pending `VideoSubtitlesFetched`, so right after the
+ * subtitles are fetched a source reads settled until the `sync_video` that
+ * event schedules starts running, and a move then is refused.
  */
+const SETTLED_FOR_MS = 2_500
+
 async function waitUntilSettled(request, { listUrl, id, videosUrl }) {
+  let settledSince = null
   await expect
     .poll(
       async () => {
@@ -29,9 +37,14 @@ async function waitUntilSettled(request, { listUrl, id, videosUrl }) {
         const downloaded =
           videos.length > 0 &&
           videos.every((video) => video.status === 'DOWNLOADED' && video.thumbnail_filename)
-        return source?.work_in_progress === false && downloaded
+        if (source?.work_in_progress !== false || !downloaded) {
+          settledSince = null
+          return false
+        }
+        settledSince ??= Date.now()
+        return Date.now() - settledSince >= SETTLED_FOR_MS
       },
-      { message: `${id} settled`, timeout: 30_000 },
+      { message: `${id} settled for ${SETTLED_FOR_MS} ms`, intervals: [250], timeout: 30_000 },
     )
     .toBe(true)
 }

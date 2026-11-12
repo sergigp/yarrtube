@@ -223,5 +223,5 @@ Several layers, from fast/isolated to slow/real:
   daemon per parallel worker. Covers add → download → playback and the
   rest of the UI flows; runs in CI on every pull request.
 
-`scripts/run-tests.sh` runs every suite; see
+`scripts/run-tests.sh --all` runs every suite; see
 [DEVELOPMENT.md](DEVELOPMENT.md).

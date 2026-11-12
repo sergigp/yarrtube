@@ -120,7 +120,7 @@ mod tests {
 }
 
 /// Against the real `yt-dlp` and YouTube: run with
-/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
@@ -129,7 +129,7 @@ mod youtube_contract_tests {
     };
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_fetch_the_chapters_of_a_real_video() {
         let repository = YtDlpChapterRepository::new(ytdlp_path());
 

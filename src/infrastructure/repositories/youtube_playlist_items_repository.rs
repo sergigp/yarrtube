@@ -817,7 +817,7 @@ mod tests {
 }
 
 /// Against the real YouTube Data API: run with
-/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
@@ -826,7 +826,7 @@ mod youtube_contract_tests {
     };
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --contract"]
     fn it_should_list_the_playlist_videos() {
         let repository = YoutubeApiPlaylistItemsRepository::new(api_key(), api_url());
 

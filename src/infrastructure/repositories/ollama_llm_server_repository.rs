@@ -21,11 +21,24 @@ pub trait LlmServerRepository: Send + Sync {
 }
 
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
-pub struct OllamaLlmServerRepository;
+pub struct OllamaLlmServerRepository {
+    check_timeout: Duration,
+}
 
 impl OllamaLlmServerRepository {
     pub fn new() -> Self {
-        Self
+        Self {
+            check_timeout: REQUEST_TIMEOUT,
+        }
+    }
+
+    /// A check that gives up after `timeout` instead of `REQUEST_TIMEOUT`, so
+    /// tests of a server that never answers don't wait seconds for it.
+    #[cfg(test)]
+    fn with_check_timeout(timeout: Duration) -> Self {
+        Self {
+            check_timeout: timeout,
+        }
     }
 }
 
@@ -37,7 +50,7 @@ impl Default for OllamaLlmServerRepository {
 
 impl LlmServerRepository for OllamaLlmServerRepository {
     fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer> {
-        let client = Self::client(REQUEST_TIMEOUT)?;
+        let client = Self::client(self.check_timeout)?;
         let version: VersionResponse = Self::get_json(&client, url, "/api/version")?;
         let tags: TagsResponse = Self::get_json(&client, url, "/api/tags")?;
         let models = tags
@@ -732,7 +745,8 @@ mod tests {
         let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = OllamaUrl::new(format!("http://{}", silent.local_addr().unwrap())).unwrap();
 
-        let result = OllamaLlmServerRepository::new().find(&url);
+        let result =
+            OllamaLlmServerRepository::with_check_timeout(Duration::from_millis(100)).find(&url);
 
         assert_eq!(
             result.map_err(|e| e.is::<LlmServerUnreachable>()),
@@ -748,13 +762,15 @@ mod tests {
         let (sender, receiver) = std::sync::mpsc::channel();
         let started = std::time::Instant::now();
         std::thread::spawn(move || {
-            let _ = sender.send(OllamaLlmServerRepository::new().find(&url).is_err());
+            let repository =
+                OllamaLlmServerRepository::with_check_timeout(Duration::from_millis(100));
+            let _ = sender.send(repository.find(&url).is_err());
         });
 
-        let failed = receiver.recv_timeout(Duration::from_secs(15));
+        let failed = receiver.recv_timeout(Duration::from_secs(5));
 
         assert_eq!(failed, Ok(true));
-        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     /// A URL where nothing listens: connecting is refused.

@@ -46,12 +46,28 @@ rules:
     - |
       On design.md add these sections that will be used as an overview of the design. Don't add anything else,
       we want to keep this short and simple
-      ## Files
-      Every file created or changed, one line each on why it lives there.
+      ## Diagrams
+      Mermaid diagrams for the human reviewer. They are drawn from the sections
+      below and add nothing to them: those sections stay complete on their own.
+      - `classDiagram` of the new/changed types from ## Types & Signatures and
+        their relationships (ports and their implementations, ownership,
+        dependencies), plus the unchanged types they touch.
+      - One `sequenceDiagram` per flow in ## Call Stack, with the call
+        parameters on the arrows and error paths as `alt` blocks.
+      - Only when a status or lifecycle changes: a `stateDiagram-v2` of it after
+        the change.
+      - Only when the SQLite schema changes: an `erDiagram` of the touched tables.
+      In the class and state diagrams, mark what the change adds, changes or
+      removes with these classes, and leave untouched elements plain:
+      classDef new fill:#d4f5d4,stroke:#2e7d32
+      classDef changed fill:#fff1c2,stroke:#b58900
+      classDef removed fill:#f8d4d4,stroke:#c62828,stroke-dasharray:4
+      At most ~15 nodes per diagram; split it rather than grow it.
       ## Types & Signatures
       Code blocks defining the new/changed types and method signatures only —
-      no implementation bodies. A human should read these in seconds and say
-      "right" or "wrong."
+      no implementation bodies. Start each block with its file path as a
+      comment (e.g. `// src/application/http/foo/handler.rs`). A human should
+      read these in seconds and say "right" or "wrong."
       ## Call Stack
       For each main flow: what calls what, top to bottom. And what are the call parameters.
       ## Test Plan
@@ -65,14 +81,26 @@ rules:
       non-obvious and needs one sentence to avoid it being "fixed" later
     - Follow /rust-architect's layering and naming conventions when naming
       files, types, and methods in the contract
+    - Whenever ## Types & Signatures or ## Call Stack change, update
+      ## Diagrams in the same edit so they never disagree
+  proposal:
+    - |
+      Keep `## Impact`'s text list, and below it add a Mermaid `flowchart LR`
+      for the human reviewer: the modules/components the change touches, grouped by layer
+      in `subgraph`s, plus the unchanged callers of anything it changes (that
+      is where side effects land). Mark nodes with the same classes as design.md:
+      classDef new fill:#d4f5d4,stroke:#2e7d32
+      classDef changed fill:#fff1c2,stroke:#b58900
+      classDef removed fill:#f8d4d4,stroke:#c62828,stroke-dasharray:4
+      Leave untouched callers plain. At most ~15 nodes.
   tasks:
     - |
       Structure tasks.md as a vertical slice built outside-in. Do NOT group tasks by
       layer (domain / application / infrastructure). Use exactly these sections, in order:
 
       ## 1. Walking skeleton
-      One task that creates every file, type and signature from design.md
-      (## Files, ## Types & Signatures) across all layers, wired end-to-end
+      One task that creates every type and signature from design.md's
+      ## Types & Signatures, in the files it names, across all layers, wired end-to-end
       (route/subscriber/task registered, dependencies constructed in the composition root),
       plus the fakes for any new or changed ports. Bodies return trivial hardcoded values
       (e.g. `Ok(())`, empty `Vec`, `None`, a fixed response) — never `todo!()` or
@@ -89,9 +117,9 @@ rules:
       replaces skeleton stub code in a real adapter via one red-green-refactor cycle.
 
       ## 4. Verification
-      The fast suites: scripts/run-tests.sh --only web --only rust (fmt, clippy, tests).
+      The fast suites: scripts/run-tests.sh --lint --web --rust.
       The slow suites (contract, end-to-end) run in CI and in /audit-change, not here;
-      only when the change adds or changes e2e specs, add a task to run --only e2e.
+      only when the change adds or changes e2e specs, add a task to run --e2e.
       When the change is user-visible, add a "Manual (agent)" task for the checks the
       agent can run itself: start scripts/run-local.sh --port <free port> --fresh-videos,
       seed data via the HTTP API, drive the UI with the Playwright MCP browser, assert

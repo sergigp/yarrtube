@@ -25,11 +25,15 @@ Always announce: "Auditing change: <name>" and how to override.
 
 **Steps**
 
-0. **Run all tests**
-   Run all tests, including smoke/end-to-end suites if the project has them. All must
-   pass to continue. If a test fails, investigate, stop the audit and ask the user. If
-   the failing test is a smoke test, rerun it twice to rule out flakiness. A test that
-   eventually passes is a `flaky-test` finding, severity `critical`, decide lane.
+0. **Run all tests, with the mutation run alongside**
+   First do steps 1–2 (resolve the change, write the patch file), then start the
+   mutation run of step 3e as a background command, then run all tests in the
+   foreground, including smoke/end-to-end suites if the project has them. The two
+   are the audit's slowest parts and need nothing from each other. All tests must
+   pass to continue. If a test fails, stop the mutation run, investigate, stop the
+   audit and ask the user. If the failing test is a smoke test, rerun it twice to
+   rule out flakiness. A test that eventually passes is a `flaky-test` finding,
+   severity `critical`, decide lane; keep the mutation run going then.
 
 1. **Resolve the change and its artifacts**
 
@@ -38,13 +42,12 @@ Always announce: "Auditing change: <name>" and how to override.
    ```
 
    Read `design.md`, `tasks.md`, and `proposal.md` from `artifactPaths.*.existingOutputPaths`.
-   If `design.md` doesn't follow the `## Files` / `## Types & Signatures` /
+   If `design.md` doesn't follow the `## Types & Signatures` /
    `## Call Stack` / `## Test Plan` structure (see `openspec/config.yaml`
    `rules.design`), record a `no-contract` finding (plan-gap lane) and skip step 3a —
    there's no contract to audit against.
 
 2. **Determine the code in scope**
-   - Start from `design.md`'s `## Files` list — that's the declared scope.
    - Determine the explicit diff range for this change and keep it — reuse it in step
      3, don't let each pass re-derive its own: if there's uncommitted work, that's
      `git status --porcelain`; otherwise find where the change's work branched from
@@ -55,13 +58,11 @@ Always announce: "Auditing change: <name>" and how to override.
      (`git diff <range> > <scratchpad>/change.patch`, or `git diff HEAD` plus untracked
      files for uncommitted work). Every later step reads this file; nobody re-derives
      the range.
-   - Any file touched by git but absent from `## Files`, or vice versa, is a
-     `scope-drift` finding (decide lane).
 
-3. **Run review passes in parallel.** Start the mutation run (e) as a background
-   command first, then launch passes a–d as separate subagents in a single message.
+3. **Run review passes in parallel.** The mutation run (e) is already running in
+   the background since step 0; launch passes a–d as separate subagents in a single message.
    Give each subagent the change name, the artifact content already read in step 1,
-   the file scope and the **patch file path** from step 2 — the patch is the review
+   and the **patch file path** from step 2 — the patch is the review
    target, they must not run git to rediscover it.
    Every pass returns structured findings: `{file, line_or_area, category, summary}`.
    Passes a and c additionally fill the risk fields of step 4 for each finding
@@ -101,8 +102,9 @@ Always announce: "Auditing change: <name>" and how to override.
    same explicit range from step 2, in review-only mode (do not let it apply fixes
    itself — step 6 owns the apply step and its gates). `category: simplification`.
 
-   e. **Test strength (mutation testing)** — run as a background Bash command, not a
-   subagent, so no agent idles on it:
+   e. **Test strength (mutation testing)** — started in step 0 as a background Bash
+   command, not a subagent, so no agent idles on it. It builds in its own copy of
+   the tree, so it doesn't contend with the step 0 tests for the cargo lock:
 
    ```bash
    cargo mutants --in-diff <scratchpad>/change.patch --jobs <cores/2> --output <scratchpad>/mutants
@@ -122,7 +124,7 @@ Always announce: "Auditing change: <name>" and how to override.
 
    | category | lane |
    |---|---|
-   | `correctness`, `contract`, `scope-drift`, `flaky-test` | **decide** — behaviour findings, the user judges |
+   | `correctness`, `contract`, `flaky-test` | **decide** — behaviour findings, the user judges |
    | `convention`, `simplification` | **auto-fix** — behaviour-preserving, applied if the gates pass |
    | `test-gap` | **auto-test** — a test is added if the behaviour matches the design |
    | `no-contract` | **plan-gap** — artifacts are stale, `/opsx:update` reconciles them |
@@ -173,7 +175,7 @@ Always announce: "Auditing change: <name>" and how to override.
    - **Drop `low` findings entirely** — do not list them; at most say "N low-severity
      items dropped."
    - **Action** is the proposed resolution: `code-fix` when the design is right and the
-     code is wrong; `plan-gap` for `contract`/`scope-drift` findings where the
+     code is wrong; `plan-gap` for `contract` findings where the
      deviation looks intentional or reasonable (the design missed a case) — the
      artifacts are stale, not the code; `undecided` when it could go either way. Never
      silently pick one.

@@ -10,7 +10,7 @@ upgrade check still uses the real YouTube.
 Run it with:
 
 ```bash
-./scripts/run-tests.sh --only e2e
+./scripts/run-tests.sh --e2e
 ```
 
 from the repository root. It builds the release Docker image, runs the

@@ -26,7 +26,8 @@ only by pushing a `vX.Y.Z` tag by hand; the tag is the version
 ## Commands
 
 ```bash
-scripts/run-tests.sh                  # every suite: web, rust, contract, e2e
+scripts/run-tests.sh --all            # every suite: lint, web, rust, contract, e2e
+scripts/run-tests.sh --lint --rust    # suites combine; one flag per suite (see --help)
 cargo build --release                 # build
 cargo test --locked                   # Rust unit/integration tests only
 cargo test <substring>                # run a single test / module by name filter
@@ -46,13 +47,25 @@ npm run build       # produces dist/, embedded into the binary by cargo build
 
 ### Verifying a change
 
+`scripts/run-tests.sh` takes one flag per suite, and needs at least one:
+
+| Flag | Runs |
+|---|---|
+| `--lint` | web typecheck + eslint, `cargo fmt --check`, clippy |
+| `--web` | Vitest |
+| `--rust` | `cargo test` |
+| `--contract` | adapters against the real yt-dlp / YouTube API |
+| `--e2e` | Docker image + Playwright against a fake YouTube |
+| `--all` | every suite |
+| `--ci` | what CI runs: every suite but contract, failing e2e tests retried |
+
 Before calling a change done, run the fast suites:
-`scripts/run-tests.sh --only web --only rust` (about 40 s: web typecheck, lint
-and tests; Rust fmt, clippy and tests), or just the suite of the side you
-touched. The slow suites (contract, end-to-end) are not run per change: CI runs
-the end-to-end suite on every push (`--ci`), and `/audit-change` runs every
-suite, contract included, before auditing. Run the full `scripts/run-tests.sh`
-yourself only when asked or when a change touches what only those suites cover
+`scripts/run-tests.sh --lint --web --rust`, or just `--lint` plus
+the suite of the side you touched (e.g. `--lint --web`). The slow
+suites (contract, end-to-end) are not run per change: CI runs `--ci` on
+every push, and
+`/audit-change` runs every suite, contract included, before auditing. Run
+`--all`, `--contract` or `--e2e` yourself only when asked or when a change touches what only those suites cover
 (the Docker image, the YouTube adapters, the e2e specs). The script installs or builds
 what the repo produces itself (`node_modules`, `web/dist`, Playwright browsers)
 when missing, so it works in a fresh worktree; missing tools (npm, cargo,

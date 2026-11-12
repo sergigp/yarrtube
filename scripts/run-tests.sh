@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Runs the test suites, the same way locally and in CI:
-#   web       the web UI's typecheck, lint and tests
-#   rust      Rust formatting, clippy and tests
-#   contract  the YouTube contract tests: adapters against the real yt-dlp
-#             and YouTube Data API (needs yt-dlp, ffprobe, YOUTUBE_API_KEY)
-#   e2e       the end-to-end suite: the Docker image driven through real
-#             browsers against a fake YouTube (needs Docker)
+#   --lint       static checks: the web UI's typecheck and lint, Rust
+#                formatting and clippy
+#   --web        the web UI's tests (Vitest)
+#   --rust       the Rust tests (`cargo test`)
+#   --contract   the YouTube contract tests: adapters against the real yt-dlp
+#                and YouTube Data API (needs yt-dlp, ffprobe, YOUTUBE_API_KEY)
+#   --e2e        the end-to-end suite: the Docker image driven through real
+#                browsers against a fake YouTube (needs Docker)
+#   --all        every suite above
+#   --ci         what CI runs: every suite but --contract (YouTube
+#                bot-checks CI runners), with failing end-to-end tests retried
 #
-# Usage: scripts/run-tests.sh [--ci] [--workers <N>] [--only <suite>]...
+# Usage: scripts/run-tests.sh <suite flag>... [--workers <N>]
 #
-# `--only` (repeatable) runs just those suites. `--workers` sets how many
-# end-to-end tests run at once, each worker against its own daemon
-# (default 3). In CI (`--ci`, or `CI=true`, which GitHub Actions sets) the
-# contract tests are left out (YouTube bot-checks CI runners) and failing
-# end-to-end tests are retried. Tools (npm, cargo, Docker, yt-dlp, …) must be
+# At least one suite flag is required; they combine (e.g. `--lint
+# --rust`). `--workers` sets how many end-to-end tests run at once, each
+# worker against its own daemon (default 3). Tools (npm, cargo, Docker, yt-dlp, …) must be
 # installed and are checked before anything runs; what the repo itself can
 # produce (the web UI's and e2e-tests/' node_modules, the web UI build, the
 # Playwright browsers) is installed or built when missing or stale, so a
@@ -24,27 +27,29 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ALL_SUITES=(web rust contract e2e)
+ALL_SUITES=(lint web rust contract e2e)
+
+usage() {
+  sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
+}
 
 CI_MODE=false
-if [[ "${CI:-}" == "true" ]]; then
-  CI_MODE=true
-fi
-ONLY=()
+REQUESTED=()
 WORKERS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --ci)
-      CI_MODE=true
+    --lint | --web | --rust | --contract | --e2e)
+      REQUESTED+=("${1#--}")
       shift
       ;;
-    --only)
-      if [[ ! " ${ALL_SUITES[*]} " == *" ${2:-} "* ]]; then
-        echo "unknown suite: ${2:-} (one of: ${ALL_SUITES[*]})" >&2
-        exit 1
-      fi
-      ONLY+=("$2")
-      shift 2
+    --all)
+      REQUESTED+=("${ALL_SUITES[@]}")
+      shift
+      ;;
+    --ci)
+      CI_MODE=true
+      REQUESTED+=(lint web rust e2e)
+      shift
       ;;
     --workers)
       if [[ -z "${2:-}" ]]; then
@@ -55,15 +60,21 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -h | --help)
-      sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      usage
       exit 0
       ;;
     *)
-      echo "unknown argument: $1" >&2
+      echo "unknown argument: $1 (see --help)" >&2
       exit 1
       ;;
   esac
 done
+
+if [[ ${#REQUESTED[@]} -eq 0 ]]; then
+  echo "no suite selected: pass --all, --ci or one or more of --lint," >&2
+  echo "--web, --rust, --contract, --e2e (see --help)" >&2
+  exit 1
+fi
 
 # End-to-end workers: 3 unless asked otherwise, fast on a laptop and on
 # GitHub's 4-vCPU runners alike.
@@ -73,10 +84,13 @@ if [[ ! "$WORKERS" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-# CI mode also makes Playwright retry a failing end-to-end test (see
-# e2e-tests/playwright.config.js), which reads CI.
+# Only --ci makes Playwright retry a failing end-to-end test (see
+# e2e-tests/playwright.config.js, which reads CI), whatever CI the caller's
+# shell has.
 if [[ "$CI_MODE" == true ]]; then
   export CI=true
+else
+  unset CI
 fi
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
@@ -309,12 +323,7 @@ finish() {
 trap finish EXIT
 
 selected() {
-  local suite="$1"
-  if [[ ${#ONLY[@]} -gt 0 ]]; then
-    [[ " ${ONLY[*]} " == *" $suite "* ]]
-  else
-    [[ "$suite" != contract || "$CI_MODE" == false ]]
-  fi
+  [[ " ${REQUESTED[*]} " == *" $1 "* ]]
 }
 
 # The contract tests' yt-dlp.
@@ -343,10 +352,9 @@ check_dependencies() {
       missing+=("$1 not found on PATH${2:+ ($2)}")
     fi
   }
-  if selected web || selected rust || selected contract || selected e2e; then
-    need_command npm
-  fi
-  if selected rust || selected contract; then
+  # Every suite needs npm: the Rust binary embeds the built web UI.
+  need_command npm
+  if selected lint || selected rust || selected contract; then
     need_command cargo
   fi
   if selected contract; then
@@ -390,11 +398,11 @@ node_modules_stale() {
 # beforehand.
 prepare() {
   local web_install=false web_build=false e2e_install=false
-  if (selected web || selected rust || selected contract) && node_modules_stale web; then
+  if (selected lint || selected web || selected rust || selected contract) && node_modules_stale web; then
     web_install=true
   fi
-  # The Rust binary embeds the built web UI.
-  if (selected rust || selected contract) && { [[ "$web_install" == true ]] || [[ ! -d "$REPO_ROOT/web/dist" ]]; }; then
+  # The Rust binary embeds the built web UI, so even clippy needs it.
+  if (selected lint || selected rust || selected contract) && { [[ "$web_install" == true ]] || [[ ! -d "$REPO_ROOT/web/dist" ]]; }; then
     web_build=true
   fi
   if selected e2e && node_modules_stale e2e-tests; then
@@ -431,10 +439,9 @@ print_plan() {
   step "plan"
   printf '  %-10s %s\n' "suites" "${run[*]}${skipped[*]:+ (skipped: ${skipped[*]})}"
   if [[ "$CI_MODE" == true ]]; then
-    printf '  %-10s %s\n' "CI mode" "on: contract tests left out unless --only names them" \
-      "" "(YouTube bot-checks CI runners), failing e2e tests retried twice"
+    printf '  %-10s %s\n' "CI mode" "on: failing e2e tests retried twice"
   else
-    printf '  %-10s %s\n' "CI mode" "off (--ci or CI=true: no contract tests, e2e retries)"
+    printf '  %-10s %s\n' "CI mode" "off (--ci: every suite but contract, e2e retries)"
   fi
   if selected contract; then
     printf '  %-10s %s\n' "yt-dlp" "$("$YTDLP" --version) at $YTDLP"
@@ -449,10 +456,16 @@ print_plan() {
   fi
 }
 
+run_lint() {
+  step "lint"
+  run_phase "web typecheck" plain npm --prefix "$REPO_ROOT/web" run typecheck
+  run_phase "web lint" plain npm --prefix "$REPO_ROOT/web" run lint
+  run_phase "Rust formatting" plain cargo fmt --all -- --check
+  run_phase "clippy" cargo-build cargo clippy --all-targets --all-features --locked -- -D warnings
+}
+
 run_web() {
-  step "web UI"
-  run_phase "typecheck" plain npm --prefix "$REPO_ROOT/web" run typecheck
-  run_phase "lint" plain npm --prefix "$REPO_ROOT/web" run lint
+  step "web UI tests"
   # Vitest's default reporter lists each test file as it finishes (others,
   # picked when it detects an agent or CI, only the failing ones), which the
   # progress line counts.
@@ -460,9 +473,7 @@ run_web() {
 }
 
 run_rust() {
-  step "Rust"
-  run_phase "formatting" plain cargo fmt --all -- --check
-  run_phase "clippy" cargo-build cargo clippy --all-targets --all-features --locked -- -D warnings
+  step "Rust tests"
   run_phase "tests" cargo cargo test --locked
 }
 
@@ -696,6 +707,7 @@ for suite in "${ALL_SUITES[@]}"; do
   if selected "$suite"; then
     SUITE="$suite"
     case "$suite" in
+      lint) run_lint ;;
       web) run_web ;;
       rust) run_rust ;;
       contract) run_contract ;;
