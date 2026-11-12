@@ -444,7 +444,10 @@ impl VideoSummarizer {
             "model answered"
         );
         if let Some(refusal) = reply.refusal {
-            return Err(anyhow!("Ollama refused the call: {refusal}").into());
+            return Err(match reply.exceeded_context {
+                true => Self::exceeded_context(call, &context_length, message_chars, &refusal),
+                false => anyhow!("Ollama refused the call: {refusal}").into(),
+            });
         }
         if reply.stopped_at_limit {
             return Err(Self::out_of_context(
@@ -523,12 +526,17 @@ impl VideoSummarizer {
     /// A call Ollama refused because the prompt exceeds the context length:
     /// the real ratio is under its characters over the context length.
     fn exceeded_context(
-        _call: &str,
-        _context_length: &ContextLength,
-        _message_chars: usize,
+        call: &str,
+        context_length: &ContextLength,
+        message_chars: usize,
         refusal: &str,
     ) -> Failure {
-        Failure::Rejected(anyhow!("Ollama refused the call: {refusal}"))
+        Failure::OverBudget(Overrun {
+            call: call.to_string(),
+            input_tokens: None,
+            chars_per_token: message_chars as f64 / f64::from(context_length.value()),
+            reason: anyhow!("Ollama refused the call: {refusal}"),
+        })
     }
 
     fn summary_input(

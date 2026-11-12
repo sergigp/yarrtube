@@ -1316,6 +1316,66 @@ fn it_should_cut_in_parts_when_the_whole_transcript_runs_over_the_budget() {
 }
 
 #[test]
+fn it_should_cut_smaller_when_the_prompt_exceeds_the_context() {
+    // The one call's ~29450 characters are refused as over 12288 tokens, so
+    // under ~2.4 a token: the budget of 9000 then holds ~21550 characters.
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = llm_replying(vec![
+        Ok(LlmReply::refused_as_too_long(
+            "the input length exceeds the context length",
+        )),
+        reply("A."),
+        reply("B."),
+        reply("All of it."),
+    ]);
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository.save(&summaries_on()).unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(&srt_of(28, 60)),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        sent_messages(&llm),
+        vec![
+            whole_messages(&transcript_lines(0..28)),
+            part_messages(1, 2, "0:00–19:00", &[], 0..20),
+            part_messages(2, 2, "20:00–27:00", &[], 20..28),
+            reduce_messages(&[], &[("0:00–19:00", "A."), ("20:00–27:00", "B.")]),
+        ]
+    );
+    assert_eq!(
+        summary_repository.find(&video.id).unwrap(),
+        Some(stored_summary(&video, "All of it."))
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            summary: StepState {
+                status: StepStatus::Done,
+                attempts: RetryAttempts::default(),
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
 fn it_should_skip_if_summaries_are_unavailable() {
     let video = subtitled_video();
     let changed: Vec<(Vec<LlmChat>, Option<Video>)> = [
