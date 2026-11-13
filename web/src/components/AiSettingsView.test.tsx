@@ -4,7 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { AiSettingsView } from './AiSettingsView'
 import { fetchChannelVideos } from '@/api/client'
 import { queryKeys } from '@/api/queries'
-import { aPreferences, aVideo, anOllamaServer, mockApi, renderWithProviders } from '@/test/helpers'
+import type { Preferences } from '@/api/types'
+import {
+  aPreferences,
+  aVideo,
+  anAnthropicServer,
+  anOllamaServer,
+  mockApi,
+  renderWithProviders,
+} from '@/test/helpers'
 
 describe('AiSettingsView', () => {
   it('shows the defaults, with the model disabled and the advanced settings hidden', async () => {
@@ -49,6 +57,25 @@ describe('AiSettingsView', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(patchBodies(fetchMock)).toEqual([{ ai_provider: 'anthropic' }])
+  })
+
+  it('lists Anthropic models and marks a saved one not listed as (not available)', async () => {
+    mockApi({
+      'GET /api/preferences': onAnthropic({ anthropic_summaries_model: 'claude-haiku-4-5' }),
+      'GET /api/llm/anthropic': anAnthropicServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    const model = await screen.findByRole('combobox', { name: 'Model' })
+    expect(optionTexts(model)).toEqual([
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+      'claude-haiku-4-5 (not available)',
+    ])
+    expect(model).toHaveValue('claude-haiku-4-5')
+    expect(screen.getByRole('combobox', { name: 'Categorization model' })).toHaveValue(
+      'claude-haiku-5-5',
+    )
   })
 
   it('shows the Categorization section disabled on a fresh install', async () => {
@@ -726,6 +753,18 @@ function aiOn() {
     ai_enabled: true,
     ollama_url: 'http://mac.local:11434',
     summaries_enabled: true,
+  })
+}
+
+/** AI with summaries and categorization on, running on Anthropic. */
+function onAnthropic(overrides: Partial<Preferences> = {}): Preferences {
+  return aPreferences({
+    ai_enabled: true,
+    ai_provider: 'anthropic',
+    anthropic_available: true,
+    summaries_enabled: true,
+    categorization_enabled: true,
+    ...overrides,
   })
 }
 

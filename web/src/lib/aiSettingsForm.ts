@@ -1,4 +1,4 @@
-import type { AiProvider, Effort, OllamaModel, Preferences, PreferencesPatch } from '@/api/types'
+import type { AiProvider, Effort, Preferences, PreferencesPatch } from '@/api/types'
 
 /** The AI page's editable fields, as typed (numbers as text). */
 export interface AiSettingsForm {
@@ -134,15 +134,16 @@ function toNumber(text: string): number {
 }
 
 /**
- * The choices for "Model": every model on the server, and `selected` marked
- * as not installed when the server doesn't have it.
+ * The choices for "Model": every model the provider has, in its order, and
+ * `selected` marked `(<missing>)` when the provider doesn't have it.
  */
 export function modelOptions(
-  models: OllamaModel[],
+  models: string[],
   selected: string,
+  missing: string,
 ): { value: string; label: string }[] {
-  const installed = models.map((model) => ({ value: model.name, label: model.name }))
-  return models.some((model) => model.name === selected)
-    ? installed
-    : [...installed, { value: selected, label: `${selected} (not installed)` }]
+  const offered = models.map((model) => ({ value: model, label: model }))
+  return models.includes(selected)
+    ? offered
+    : [...offered, { value: selected, label: `${selected} (${missing})` }]
 }

@@ -1,9 +1,14 @@
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
-import { useCheckOllama, useOllama, usePreferences, useSavePreferences } from '@/api/queries'
+import {
+  useAnthropic,
+  useCheckOllama,
+  useOllama,
+  usePreferences,
+  useSavePreferences,
+} from '@/api/queries'
 import type {
   AiProvider,
-  OllamaModel,
   OllamaServer,
   Preferences,
   PreferencesPatch,
@@ -76,6 +81,15 @@ function AiSettings({ saved }: { saved: Preferences }) {
   // tested successfully, whichever came last.
   const [modelsUrl, setModelsUrl] = useState(saved.ollama_url)
   const { data: server } = useOllama(modelsUrl)
+  // Anthropic's models, checked once Anthropic is saved or tested.
+  const [anthropicModelsWanted] = useState(
+    saved.ai_provider === 'anthropic',
+  )
+  const { data: anthropic } = useAnthropic(saved.anthropic_available && anthropicModelsWanted)
+  const models = onAnthropic
+    ? anthropic?.models.map((model) => model.name)
+    : server?.models.map((model) => model.name)
+  const missingModel = onAnthropic ? 'not available' : 'not installed'
   // Known only when the server lists the model; unknown, the switch shows.
   const modelCannotThink = (name: string) =>
     server?.models.find((model) => model.name === name)?.thinking === false
@@ -206,7 +220,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
         />
         <ModelField
           id="summaries-model"
-          models={onAnthropic ? undefined : server?.models}
+          models={models}
+          missing={missingModel}
           value={form[summariesModelKey]}
           disabled={modelDisabled}
           onChange={(value) => set(summariesModelKey, value)}
@@ -281,7 +296,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
           <ModelField
             id="categorization-model"
             name="Categorization model"
-            models={onAnthropic ? undefined : server?.models}
+            models={models}
+          missing={missingModel}
             value={form[categorizationModelKey]}
             disabled={aiOff || !form.categorization_enabled}
             onChange={(value) => set(categorizationModelKey, value)}
@@ -423,6 +439,7 @@ function ModelField({
   id,
   name,
   models,
+  missing,
   value,
   disabled,
   onChange,
@@ -430,7 +447,9 @@ function ModelField({
   id: string
   /** The field's accessible name, when the label alone is ambiguous. */
   name?: string
-  models: OllamaModel[] | undefined
+  models: string[] | undefined
+  /** How a selected model the provider doesn't have is marked. */
+  missing: string
   value: string
   disabled: boolean
   onChange: (value: string) => void
@@ -446,7 +465,7 @@ function ModelField({
           onChange={(event) => onChange(event.target.value)}
           className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
         >
-          {modelOptions(models, value).map((option) => (
+          {modelOptions(models, value, missing).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
