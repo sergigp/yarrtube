@@ -1607,6 +1607,32 @@ async fn it_should_reset_failed_verdicts_when_the_anthropic_categorization_effor
     }
 }
 
+#[tokio::test]
+async fn it_should_reject_enabling_ai_on_anthropic_without_a_key() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let stored = Preferences {
+        ai_provider: AiProvider::Anthropic,
+        ..Preferences::default()
+    };
+    repository.save(&stored).unwrap();
+    let preferences_updater = preferences_updater(&db, repository.clone());
+    let request = UpdatePreferencesRequest {
+        ai_enabled: Some(true),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic"
+        ))
+    );
+    assert_eq!(repository.find().unwrap(), Some(stored));
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await
