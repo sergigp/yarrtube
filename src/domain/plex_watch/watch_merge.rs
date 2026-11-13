@@ -21,6 +21,12 @@ pub enum MergeOutcome {
 /// Equal ⇒ in sync; only Plex differs from `agreed` ⇒ pull; only yarrtube
 /// ⇒ push; both ⇒ the later `changed_at` wins, a side without one loses,
 /// yarrtube on a tie.
-pub fn merge(local: WatchSide, _remote: WatchSide, _agreed: WatchProgress) -> MergeOutcome {
-    MergeOutcome::InSync(local.progress)
+pub fn merge(local: WatchSide, remote: WatchSide, agreed: WatchProgress) -> MergeOutcome {
+    if local.progress == remote.progress {
+        MergeOutcome::InSync(local.progress)
+    } else if remote.progress == agreed {
+        MergeOutcome::Push(local.progress)
+    } else {
+        MergeOutcome::Pull(remote.progress)
+    }
 }

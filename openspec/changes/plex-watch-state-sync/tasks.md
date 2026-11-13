@@ -8,7 +8,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_push_a_video_watched_in_yarrtube` — watched video, unplayed episode ⇒ `scrobble:{key}`, row agreed Watched.
+- [x] 2.1 `it_should_push_a_video_watched_in_yarrtube` — watched video, unplayed episode ⇒ `scrobble:{key}`, row agreed Watched.
 - [ ] 2.2 `it_should_pull_an_episode_watched_in_plex` — episode viewed once ⇒ video watched, position 0.
 - [ ] 2.3 `it_should_push_a_playback_position` — video unwatched at 300s ⇒ `progress:{key}:300000`.
 - [ ] 2.4 `it_should_pull_a_playback_position` — episode offset 215540 ms viewed at T ⇒ video unwatched at 215s, last played T.

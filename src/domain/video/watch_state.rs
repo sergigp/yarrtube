@@ -49,7 +49,11 @@ impl WatchState {
     /// Watched ⇒ watched; position past the start ⇒ in progress; else
     /// unplayed.
     pub fn progress(&self) -> WatchProgress {
-        WatchProgress::Unplayed
+        match (self.is_watched(), self.position.seconds()) {
+            (true, _) => WatchProgress::Watched,
+            (false, 0) => WatchProgress::Unplayed,
+            (false, _) => WatchProgress::InProgress(self.position),
+        }
     }
 
     /// The latest of when it was watched and when it was last played.

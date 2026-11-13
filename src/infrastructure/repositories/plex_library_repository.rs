@@ -628,6 +628,15 @@ impl FakePlexLibraryRepository {
     fn record(&self, mutation: String) {
         self.mutations.lock().unwrap().push(mutation);
     }
+
+    fn update_watch(&self, rating_key: &str, update: impl Fn(PlexWatchState) -> PlexWatchState) {
+        self.episodes
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|fake| fake.episode.rating_key == rating_key)
+            .for_each(|fake| fake.episode.watch = update(fake.episode.watch));
+    }
 }
 
 #[cfg(test)]
@@ -745,7 +754,14 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         Ok(())
     }
 
-    fn mark_watched(&self, _rating_key: &str) -> anyhow::Result<()> {
+    fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        self.record(format!("scrobble:{rating_key}"));
+        self.update_watch(rating_key, |watch| PlexWatchState {
+            view_count: watch.view_count + 1,
+            view_offset_ms: None,
+            ..watch
+        });
         Ok(())
     }
 

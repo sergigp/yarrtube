@@ -1,12 +1,19 @@
-use crate::domain::services::{PlexEpisodeFinder, VideoWatchStateUpdater};
+use crate::domain::plex::PlexEpisode;
+use crate::domain::plex_watch::{EpisodeWatch, MergeOutcome, WatchSide, merge};
+use crate::domain::services::{
+    PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary, VideoWatchStateUpdater,
+};
 use crate::domain::task::Task;
+use crate::domain::video::{Video, VideoId, WatchProgress};
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_episode_watch_repository::EpisodeWatchRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Duration, Utc};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::warn;
 
 /// How often a watch sync runs.
 pub const SYNC_INTERVAL: Duration = Duration::minutes(5);
@@ -73,6 +80,100 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        Ok(())
+        let library = self.plex_episode_finder.read_library()?;
+        let rows = self.agreed_rows()?;
+        let merged = self.merge_videos(&library, &rows)?;
+        let synced: Vec<EpisodeWatch> = merged
+            .into_iter()
+            .filter_map(|(video, episode, outcome)| self.settle(&video, episode, outcome))
+            .collect();
+        self.episode_watch_repository.save_many(&synced)
+    }
+}
+
+impl PlexWatchSyncer {
+    /// Every stored row, by video id.
+    fn agreed_rows(&self) -> anyhow::Result<HashMap<VideoId, EpisodeWatch>> {
+        Ok(self
+            .episode_watch_repository
+            .list()?
+            .into_iter()
+            .map(|row| (row.video_id.clone(), row))
+            .collect())
+    }
+
+    /// Each downloaded video with an episode in Plex, its episode and how
+    /// their states merge.
+    fn merge_videos<'a>(
+        &self,
+        library: &'a PlexLibrary,
+        rows: &HashMap<VideoId, EpisodeWatch>,
+    ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
+        let videos = self.video_repository.list_downloaded()?;
+        let found = videos
+            .into_iter()
+            .map(|video| {
+                self.plex_episode_finder
+                    .find_episode(&video, library)
+                    .map(|episode| episode.map(|episode| (video, episode)))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        Ok(found
+            .into_iter()
+            .flatten()
+            .map(|(video, episode)| {
+                let outcome = merge(
+                    local_side(&video),
+                    remote_side(episode),
+                    EpisodeWatch::agreed_with(rows.get(&video.id), episode),
+                );
+                (video, episode, outcome)
+            })
+            .collect())
+    }
+
+    /// The row to store once `outcome` is applied, `None` when nothing was
+    /// agreed (Plex rejected the push).
+    fn settle(
+        &self,
+        video: &Video,
+        episode: &PlexEpisode,
+        outcome: MergeOutcome,
+    ) -> Option<EpisodeWatch> {
+        match outcome {
+            MergeOutcome::InSync(progress) => {
+                Some(EpisodeWatch::new(video.id.clone(), episode, progress))
+            }
+            MergeOutcome::Push(progress) => self
+                .push(episode, progress)
+                .inspect_err(|e| warn!(video_id = %video.id, rating_key = %episode.rating_key, error = %e, "failed to write the Plex watch state, retrying on a later sync"))
+                .ok()
+                .map(|()| EpisodeWatch::new(video.id.clone(), episode, progress)),
+            MergeOutcome::Pull(_) => None,
+        }
+    }
+
+    /// Writes `progress` to the episode.
+    fn push(&self, episode: &PlexEpisode, progress: WatchProgress) -> anyhow::Result<()> {
+        match progress {
+            WatchProgress::Watched => self
+                .plex_library_repository
+                .mark_watched(&episode.rating_key),
+            _ => Ok(()),
+        }
+    }
+}
+
+fn local_side(video: &Video) -> WatchSide {
+    WatchSide {
+        progress: video.watch.progress(),
+        changed_at: video.watch.changed_at(),
+    }
+}
+
+fn remote_side(episode: &PlexEpisode) -> WatchSide {
+    WatchSide {
+        progress: episode.watch.progress(),
+        changed_at: episode.watch.last_viewed_at,
     }
 }
