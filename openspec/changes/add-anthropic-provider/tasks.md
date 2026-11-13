@@ -52,7 +52,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 `AnthropicLlmServerRepository`:
 
 - [x] 3.1 `it_should_send_the_api_key_and_version_headers`
-- [ ] 3.2 `it_should_post_the_message_with_model_max_tokens_and_effort`
+- [x] 3.2 `it_should_post_the_message_with_model_max_tokens_and_effort`
 - [ ] 3.3 `it_should_send_the_schema_as_structured_output`
 - [ ] 3.4 `it_should_send_no_temperature_or_thinking`
 - [ ] 3.5 `it_should_read_the_text_blocks_and_usage`

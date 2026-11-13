@@ -59,8 +59,21 @@ impl AnthropicLlmServerRepository {
             .post(format!("{}/v1/messages", self.config.api_url))
             .header("x-api-key", self.config.api_key.as_str())
             .header("anthropic-version", ANTHROPIC_VERSION)
+            .json(&Self::message_body(chat))
             .send()?;
         Ok(LlmReply::refused(""))
+    }
+
+    /// The request body: no temperature, context length or thinking, so the
+    /// model's default adaptive thinking applies.
+    fn message_body(chat: &LlmChat) -> serde_json::Value {
+        serde_json::json!({
+            "model": chat.model,
+            "max_tokens": chat.max_output_tokens,
+            "system": chat.system,
+            "messages": [{"role": "user", "content": chat.user}],
+            "output_config": {"effort": chat.effort.as_str()},
+        })
     }
 
     /// A fresh client per call, as for Ollama.
@@ -84,6 +97,27 @@ mod tests {
             .mock("POST", "/v1/messages")
             .match_header("x-api-key", "sk-ant-test")
             .match_header("anthropic-version", "2023-06-01")
+            .with_body(ANSWER)
+            .create();
+
+        let result = repository(&server).chat(&chat());
+
+        assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
+        messages.assert();
+    }
+
+    #[test]
+    fn it_should_post_the_message_with_model_max_tokens_and_effort() {
+        let mut server = mockito::Server::new();
+        let messages = server
+            .mock("POST", "/v1/messages")
+            .match_body(mockito::Matcher::Json(serde_json::json!({
+                "model": "claude-haiku-5-5",
+                "max_tokens": 16000,
+                "system": "Be brief.",
+                "messages": [{"role": "user", "content": "Title: Sicilian"}],
+                "output_config": {"effort": "medium"},
+            })))
             .with_body(ANSWER)
             .create();
 
