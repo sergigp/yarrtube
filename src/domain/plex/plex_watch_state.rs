@@ -12,6 +12,7 @@ pub struct PlexWatchState {
 
 impl PlexWatchState {
     /// Never played.
+    #[cfg(test)]
     pub fn unplayed() -> Self {
         Self {
             view_count: 0,

@@ -48,7 +48,7 @@
 ## 4. Verification
 
 - [x] 4.1 Document the watch sync in `doc/PLEX.md` (what syncs both ways, every 5 min, token user only, first-sync seeding, most recent change wins, short rewatches) and mention it next to labels in `doc/INSTALLATION.md`'s Plex variables; verify both read correctly against the specs.
-- [ ] 4.2 Run `scripts/run-tests.sh --lint --web --rust`; all pass.
+- [x] 4.2 Run `scripts/run-tests.sh --lint --web --rust`; all pass.
 - [ ] 4.3 Manual (human), against a real Plex server with the integration configured:
   - watch a video to the end in a Plex client ⇒ within 5 min it shows watched in the web UI;
   - stop a video halfway in a Plex client ⇒ within 5 min it is under "Continue watching" in the web UI at that position;
