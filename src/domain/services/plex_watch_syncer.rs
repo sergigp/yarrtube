@@ -89,8 +89,10 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
             }
         };
         let rows = self.agreed_rows()?;
-        self.forget_undownloaded(&rows)?;
-        let merged = self.pull_then_merge(&library, &rows, &viewer_id)?;
+        let videos = self.video_repository.list_downloaded()?;
+        self.forget_undownloaded(&rows, &videos)?;
+        let matched = self.match_episodes(videos, &library)?;
+        let merged = self.pull_then_merge(matched, &rows, &viewer_id)?;
         let backlog = self.settle_all(merged, &rows, &viewer_id)?;
         self.request_next_sync(backlog)
     }
@@ -115,65 +117,75 @@ impl PlexWatchSyncer {
     }
 
     /// Deletes the rows of videos no longer downloaded (or gone).
-    fn forget_undownloaded(&self, rows: &HashMap<VideoId, EpisodeWatch>) -> anyhow::Result<()> {
-        let downloaded: HashSet<VideoId> = self
-            .video_repository
-            .list_downloaded()?
-            .into_iter()
-            .map(|video| video.id)
-            .collect();
+    fn forget_undownloaded(
+        &self,
+        rows: &HashMap<VideoId, EpisodeWatch>,
+        downloaded: &[Video],
+    ) -> anyhow::Result<()> {
+        let downloaded: HashSet<&VideoId> = downloaded.iter().map(|video| &video.id).collect();
         let gone: Vec<VideoId> = rows
             .keys()
-            .filter(|id| !downloaded.contains(*id))
+            .filter(|id| !downloaded.contains(id))
             .cloned()
             .collect();
         self.episode_watch_repository.delete_many(&gone)
     }
 
-    /// Each downloaded video with an episode in Plex, its episode and how
-    /// their states merge.
-    fn merge_videos<'a>(
+    /// Each video with its episode in Plex; videos Plex hasn't imported are
+    /// left out.
+    fn match_episodes<'a>(
         &self,
+        videos: Vec<Video>,
         library: &'a PlexLibrary,
-        rows: &HashMap<VideoId, EpisodeWatch>,
-        viewer_id: &str,
-    ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
-        self.video_repository
-            .list_downloaded()?
+    ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode)>> {
+        videos
             .into_iter()
             .filter_map(|video| {
                 self.plex_episode_finder
                     .find_episode(&video, library)
                     .transpose()
-                    .map(|episode| {
-                        episode.map(|episode| {
-                            let outcome = merge(
-                                local_side(&video),
-                                remote_side(episode),
-                                EpisodeWatch::agreed_with(rows.get(&video.id), episode, viewer_id),
-                            );
-                            (video, episode, outcome)
-                        })
-                    })
+                    .map(|episode| episode.map(|episode| (video, episode)))
             })
             .collect()
     }
 
-    /// Merges every video with its episode, pulling what Plex changed
-    /// first: once pulled, the pulled copies are in sync and the other
-    /// copies of the same YouTube video have something to push.
+    /// Merges every matched video with its episode, pulling what Plex
+    /// changed first: once pulled, the pulled copies are in sync and the
+    /// other copies of the same YouTube video have something to push.
     fn pull_then_merge<'a>(
         &self,
-        library: &'a PlexLibrary,
+        matched: Vec<(Video, &'a PlexEpisode)>,
         rows: &HashMap<VideoId, EpisodeWatch>,
         viewer_id: &str,
     ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
-        let merged = self.merge_videos(library, rows, viewer_id)?;
+        let merged = merge_all(matched, rows, viewer_id);
         if self.pull(&merged)? {
-            self.merge_videos(library, rows, viewer_id)
+            Ok(merge_all(self.reread(merged)?, rows, viewer_id))
         } else {
             Ok(merged)
         }
+    }
+
+    /// The merged videos as stored now, each with the same episode; a video
+    /// gone since is left out.
+    fn reread<'a>(
+        &self,
+        merged: Vec<(Video, &'a PlexEpisode, MergeOutcome)>,
+    ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode)>> {
+        let ids: Vec<VideoId> = merged
+            .iter()
+            .map(|(video, _, _)| video.id.clone())
+            .collect();
+        let mut fresh: HashMap<VideoId, Video> = self
+            .video_repository
+            .find_many(&ids)?
+            .into_iter()
+            .map(|video| (video.id.clone(), video))
+            .collect();
+        Ok(merged
+            .into_iter()
+            .filter_map(|(video, episode, _)| fresh.remove(&video.id).map(|video| (video, episode)))
+            .collect())
     }
 
     /// Records what newly is in sync and pushes up to `BATCH_SIZE` states to
@@ -297,6 +309,25 @@ fn newest_per_youtube_video<'a>(
             },
         )
         .into_values()
+        .collect()
+}
+
+/// How each video's state merges with its episode's.
+fn merge_all<'a>(
+    matched: Vec<(Video, &'a PlexEpisode)>,
+    rows: &HashMap<VideoId, EpisodeWatch>,
+    viewer_id: &str,
+) -> Vec<(Video, &'a PlexEpisode, MergeOutcome)> {
+    matched
+        .into_iter()
+        .map(|(video, episode)| {
+            let outcome = merge(
+                local_side(&video),
+                remote_side(episode),
+                EpisodeWatch::agreed_with(rows.get(&video.id), episode, viewer_id),
+            );
+            (video, episode, outcome)
+        })
         .collect()
 }
 
