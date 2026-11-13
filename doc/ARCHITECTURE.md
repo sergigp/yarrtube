@@ -13,7 +13,7 @@ flowchart TB
     client(["Web UI / HTTP client"])
     api["HTTP API (axum)"]
     services["Domain services<br/>ChannelCreator, ChannelVideoReconciler,<br/>VideoDownloader, ..."]
-    external(["YouTube API / yt-dlp / filesystem"])
+    external(["YouTube API / yt-dlp / filesystem /<br/>Ollama / Anthropic API"])
 
     subgraph db["SQLite"]
         direction LR
@@ -46,6 +46,29 @@ flowchart TB
     subscribers -- "call service /<br/>schedule task" --> services
     handlers -- "call service" --> services
 ```
+
+### LLM providers
+
+Summaries and categorization reach their model through one port,
+`LlmServerRepository` (`find` the provider's models, `chat` with one), given
+an `LlmConnection`: `Ollama(url)` or `Anthropic`. `Preferences::connection()`
+picks it from the saved `ai_provider`. The production implementation,
+`RoutingLlmServerRepository`, sends each connection to its adapter:
+
+- `OllamaLlmServerRepository`: Ollama's native API at the saved URL
+  (`/api/version`, `/api/tags`, `/api/show`, `/api/chat`).
+- `AnthropicLlmServerRepository`: Anthropic's API with the key from
+  `YARRTUBE_ANTHROPIC_API_KEY` (`GET /v1/models`, paged, and
+  `POST /v1/messages`; raw `reqwest`, there's no Rust SDK). Without a key the
+  router has no Anthropic adapter and answers every Anthropic call as
+  unavailable.
+
+Both adapters map their failures the same way: an error tagged
+`LlmServerUnreachable` means the provider is unavailable (the step waits 6
+hours without spending an attempt), any other error is a server fault (a
+failed attempt), and an `LlmReply` marked refused or stopped at the limit is a
+rejected call. `GET /api/llm/ollama?url=` and `GET /api/llm/anthropic` check
+either provider through `LlmServerSearcher`. See [AI features](AI.md).
 
 For more information on the architectural decisions and conventions used in Yarrtube you can take a look at the [Rust Architect skill](../.claude/skills/rust-architect/SKILL.md).
 
@@ -118,7 +141,7 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    schedules a `SyncVideo` task. When AI and summaries are on and the channel
    opted in, its reconciler schedules a `SummarizeVideo` task (own `Summaries`
    lane, one at a time), and so does every later pass for each stored video
-   still without a summary. `VideoSummarizer` fills the prompt and asks Ollama,
+   still without a summary. `VideoSummarizer` fills the prompt and asks the AI provider (Ollama or Anthropic),
    by map-reduce when the transcript doesn't fit, and stores the result
    (`video_summaries`), then publishes `VideoSummaryGenerated`, whose
    `SyncVideoOnVideoSummaryGenerated` schedules a `SyncVideo` so the video's

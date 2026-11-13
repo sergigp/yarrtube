@@ -88,7 +88,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 
 ## 4. Verification
 
-- [ ] 4.1 Docs:
+- [x] 4.1 Docs:
   - `doc/INSTALLATION.md`: add `YARRTUBE_ANTHROPIC_API_KEY` to the env table.
   - `doc/AI.md`: the provider choice, the Anthropic settings, costs, and the error mapping to waiting, server fault and rejected call.
   - `doc/ARCHITECTURE.md`: the routing repository and the two adapters.

@@ -1,6 +1,6 @@
-# AI features (Ollama)
+# AI features (Ollama or Anthropic)
 
-Working notes for adding local LLM features to yarrtube. Brainstorm, not a
+Working notes for adding LLM features to yarrtube. Brainstorm, not a
 spec: decisions here feed OpenSpec changes later.
 
 ## Goals
@@ -13,6 +13,64 @@ spec: decisions here feed OpenSpec changes later.
    video is evaluated against each one.
 3. **Ask the video**: a chat in the player that answers questions about the
    video using its subtitles.
+
+## Providers
+
+Every AI feature runs on one provider, chosen on the AI page ("Provider"):
+
+- **Ollama** (default): a server you host, at the saved Ollama URL. Free, but
+  needs hardware and is slow on small machines (about 5 minutes per summary
+  with `qwen3:4b`).
+- **Anthropic**: Anthropic's API, with your key in
+  `YARRTUBE_ANTHROPIC_API_KEY` (see `doc/INSTALLATION.md`). The key is read
+  at startup only: never stored, accepted over HTTP, returned or logged.
+  Without it the page doesn't offer Anthropic; with `anthropic` saved and the
+  key removed, the page says so and AI steps wait as when Anthropic is
+  unavailable.
+
+Each provider keeps its own settings, so switching back and forth loses
+nothing. The prompts are shared.
+
+| Setting | Ollama | Anthropic |
+| --- | --- | --- |
+| Model, per feature | `summaries_model`, `categorization_model` (`qwen3:4b`) | `anthropic_summaries_model`, `anthropic_categorization_model` (`claude-haiku-5-5`) |
+| Effort, per feature | — | `anthropic_summaries_effort`, `anthropic_categorization_effort`: `low`, `medium` (default) or `high`. Higher reasons more: slower, more tokens |
+| Context length, temperature, thinking | per feature | not sent: the model thinks adaptively |
+
+On Anthropic, each call (`POST /v1/messages`) sends the model, `max_tokens`,
+the system prompt, one user message and the effort, and for categorization
+the answer's JSON schema as structured output. A summary call may write up to
+16,000 tokens; its input budget is computed from the model's context window
+as `GET /v1/models` lists it, capped at 131,072 tokens. A categorization call
+gets 1,365 output tokens per category, at least 3,072. "Retry without
+thinking" never applies. The model list (`GET /api/llm/anthropic`) is what
+the key can use, newest first; a saved model Anthropic no longer lists shows
+`(not available)`, and runs wait for it as for an uninstalled Ollama model.
+
+### Cost
+
+Calls are billed to your key. Measured by the evals on 2026-11-13 with
+`claude-haiku-5-5` at `medium` effort: about **$0.002 per summary** (10
+summaries, 136k input + 4k output tokens, $0.016) and under **$0.001 per
+video categorized** against 9 categories (58 videos, 174k input + 34k output
+tokens, $0.035). Long transcripts summarized in parts cost more. Check the
+Anthropic Console for the real spend.
+
+### How Anthropic's answers count
+
+They follow the same retry policy as Ollama's (`video-retries`):
+
+| Anthropic answers | Counts as |
+| --- | --- |
+| `end_turn` | an answer: the text blocks, joined |
+| `stop_reason: max_tokens` | stopped at the output limit |
+| `stop_reason: refusal`, any other 400, an empty answer | a rejected call: a failed attempt |
+| 400 "prompt is too long" | rejected as too long: the summary is cut smaller once |
+| can't connect, 401, 403, 404 (unknown model), 400 "credit balance is too low", no key set | unavailable: wait 6 hours, no attempt spent |
+| 429, 5xx, 529 (overloaded) | a server fault: a failed attempt |
+
+Changing the provider, or any Anthropic model or effort, resets Failed
+summaries and `failed` verdicts, as an Ollama URL or settings change does.
 
 ## Decisions
 
