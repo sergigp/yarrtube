@@ -31,11 +31,16 @@ impl LlmServerSearcherApi for LlmServerSearcher {
         if connection == LlmConnection::Anthropic && !self.anthropic_available {
             return Err(ReadLlmServerError::NotConfigured);
         }
-        let server = self
-            .repository
-            .find(&connection)
-            .map_err(|source| ReadLlmServerError::Unreachable { connection, source })?;
-        Ok(Self::sorted_by_name(server))
+        let server = self.repository.find(&connection).map_err(|source| {
+            ReadLlmServerError::Unreachable {
+                connection: connection.clone(),
+                source,
+            }
+        })?;
+        Ok(match connection {
+            LlmConnection::Ollama(_) => Self::sorted_by_name(server),
+            LlmConnection::Anthropic => server,
+        })
     }
 }
 
