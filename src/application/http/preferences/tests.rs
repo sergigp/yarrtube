@@ -1471,6 +1471,26 @@ async fn it_should_enable_ai_on_anthropic_without_an_ollama_url() {
     );
 }
 
+#[tokio::test]
+async fn it_should_ignore_a_sent_anthropic_available() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let preferences_updater = preferences_updater(&db, repository.clone());
+    let request: UpdatePreferencesRequest =
+        serde_json::from_value(serde_json::json!({"anthropic_available": true})).unwrap();
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            anthropic_available: false,
+            ..all_on_response()
+        })
+    );
+    assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await

@@ -29,7 +29,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 2.8 `it_should_reject_an_unknown_provider`: 400 for the `AiProvider` validation.
 - [x] 2.9 `it_should_reject_an_unknown_effort`: 400 for the `Effort` validation.
 - [x] 2.10 `it_should_enable_ai_on_anthropic_without_an_ollama_url`: "AI Needs An Ollama URL" applies only to Ollama.
-- [ ] 2.11 `it_should_ignore_a_sent_anthropic_available`: `anthropic_available` is read-only.
+- [x] 2.11 `it_should_ignore_a_sent_anthropic_available`: `anthropic_available` is read-only.
 - [ ] 2.12 `it_should_reset_failed_summaries_when_the_provider_changes`: `changes_summaries` compares the provider and the Anthropic summary settings.
 - [ ] 2.13 `it_should_reset_failed_verdicts_when_the_anthropic_categorization_effort_changes`: `changes_categorization` compares the provider and the Anthropic categorization settings.
 - [ ] 2.14 `it_should_summarize_with_the_anthropic_model_and_effort`: `SummaryCall::anthropic`, with the chat sent to `LlmConnection::Anthropic`.
