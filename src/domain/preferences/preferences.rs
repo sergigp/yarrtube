@@ -78,17 +78,21 @@ impl Preferences {
             || self.anthropic.summaries_effort != other.anthropic.summaries_effort
     }
 
-    /// Whether `other` categorizes differently: another server or other
-    /// settings (model, context length as saved, temperature, thinking,
-    /// effective prompt), not merely categorization turned on or off.
+    /// Whether `other` categorizes differently: another provider, server or
+    /// other settings (model, context length as saved, temperature, thinking,
+    /// effective prompt, Anthropic model and effort), not merely
+    /// categorization turned on or off.
     pub fn changes_categorization(&self, other: &Self) -> bool {
         let calls = |settings: &CategorizationSettings| CategorizationSettings {
             enabled: false,
             prompt: Some(settings.effective_prompt()),
             ..settings.clone()
         };
-        self.ollama_url != other.ollama_url
+        self.ai_provider != other.ai_provider
+            || self.ollama_url != other.ollama_url
             || calls(&self.categorization) != calls(&other.categorization)
+            || self.anthropic.categorization_model != other.anthropic.categorization_model
+            || self.anthropic.categorization_effort != other.anthropic.categorization_effort
     }
 
     /// These preferences with `change` applied, as long as the result is

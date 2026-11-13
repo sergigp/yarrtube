@@ -31,7 +31,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 2.10 `it_should_enable_ai_on_anthropic_without_an_ollama_url`: "AI Needs An Ollama URL" applies only to Ollama.
 - [x] 2.11 `it_should_ignore_a_sent_anthropic_available`: `anthropic_available` is read-only.
 - [x] 2.12 `it_should_reset_failed_summaries_when_the_provider_changes`: `changes_summaries` compares the provider and the Anthropic summary settings.
-- [ ] 2.13 `it_should_reset_failed_verdicts_when_the_anthropic_categorization_effort_changes`: `changes_categorization` compares the provider and the Anthropic categorization settings.
+- [x] 2.13 `it_should_reset_failed_verdicts_when_the_anthropic_categorization_effort_changes`: `changes_categorization` compares the provider and the Anthropic categorization settings.
 - [ ] 2.14 `it_should_summarize_with_the_anthropic_model_and_effort`: `SummaryCall::anthropic`, with the chat sent to `LlmConnection::Anthropic`.
 - [ ] 2.15 `it_should_budget_from_the_capped_anthropic_context`: the input budget comes from `min(window, 131072)`.
 - [ ] 2.16 `it_should_wait_when_the_anthropic_model_isnt_listed`: an unlisted model makes the summary wait 6 hours.

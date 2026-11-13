@@ -1538,6 +1538,75 @@ async fn it_should_reset_failed_summaries_when_the_provider_changes() {
     }
 }
 
+#[tokio::test]
+async fn it_should_reset_failed_verdicts_when_the_anthropic_categorization_effort_changes() {
+    let requests = [
+        UpdatePreferencesRequest {
+            anthropic_categorization_effort: Some("low".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            anthropic_categorization_model: Some("claude-sonnet-5-5".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            ai_provider: Some("anthropic".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+    ];
+
+    for request in requests {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = Video {
+            id: verdict_video_id(),
+            ..Video::create(
+                YoutubeVideoId::new("yt1").unwrap(),
+                "A video",
+                fixed_timestamp(),
+            )
+            .mark_categorization_failed(fixed_timestamp())
+        };
+        video_repository.insert(&video).unwrap();
+        let decided = [
+            verdict("chess", Verdict::Yes),
+            verdict("funny", Verdict::No),
+        ];
+        decided
+            .iter()
+            .chain(&[verdict("tech", Verdict::Failed)])
+            .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+        let preferences_updater = PreferencesUpdater::new(
+            repository,
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            verdict_repository.clone(),
+            Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            categorization_resetter(db.database()),
+            true,
+        );
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(
+            verdict_repository.find_many(&[verdict_video_id()]).unwrap(),
+            decided.to_vec()
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video
+            })
+        );
+    }
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await
