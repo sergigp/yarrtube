@@ -127,7 +127,7 @@ The system SHALL provide an HTTP endpoint that, given a stored video's `id`, mar
 - **THEN** the daemon responds with HTTP status 400 and changes nothing
 
 ### Requirement: Last Played Time
-The system SHALL record, for each video, the time playback progress was last recorded for it. Every successful progress report that is not stale SHALL set this time on every stored copy of that YouTube video, whether or not the report changes the video's watched status or saved position. A video whose progress has never been recorded SHALL have no last played time. Marking a channel or a single video watched SHALL NOT change any video's last played time.
+The system SHALL record, for each video, the time playback progress was last recorded for it. Every successful progress report that is not stale SHALL set this time on every stored copy of that YouTube video, whether or not the report changes the video's watched status or saved position. A watched or in-progress state taken from Plex by the Plex watch sync SHALL set this time, on every stored copy, to when Plex last played the episode. A video whose progress has never been recorded SHALL have no last played time. Marking a channel or a single video watched SHALL NOT change any video's last played time.
 
 #### Scenario: Progress sets the last played time
 - **WHEN** a client records playback progress for a video
@@ -136,6 +136,10 @@ The system SHALL record, for each video, the time playback progress was last rec
 #### Scenario: Progress that doesn't change the watch state still counts as played
 - **WHEN** a client that believed the video watched records a position at or below 10% of the duration for a watched video
 - **THEN** the video stays watched, and its last played time is set to the time of the report
+
+#### Scenario: Playback in Plex counts as played
+- **WHEN** the Plex watch sync takes an in-progress state from an episode Plex last played at 18:00
+- **THEN** every stored copy of that video has its last played time set to 18:00
 
 #### Scenario: A newly recorded video has never been played
 - **WHEN** a video is recorded for a playlist or channel for the first time
