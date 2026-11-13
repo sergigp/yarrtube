@@ -11,7 +11,7 @@
 - [x] 2.1 `it_should_push_a_video_watched_in_yarrtube` — watched video, unplayed episode ⇒ `scrobble:{key}`, row agreed Watched.
 - [x] 2.2 `it_should_pull_an_episode_watched_in_plex` — episode viewed once ⇒ video watched, position 0.
 - [x] 2.3 `it_should_push_a_playback_position` — video unwatched at 300s ⇒ `progress:{key}:300000`.
-- [ ] 2.4 `it_should_pull_a_playback_position` — episode offset 215540 ms viewed at T ⇒ video unwatched at 215s, last played T.
+- [x] 2.4 `it_should_pull_a_playback_position` — episode offset 215540 ms viewed at T ⇒ video unwatched at 215s, last played T.
 - [ ] 2.5 `it_should_unwatch_an_episode_before_saving_a_rewatch_position` — video unwatched at 600s, episode watched ⇒ `unscrobble` then `progress:{key}:600000`.
 - [ ] 2.6 `it_should_pull_an_episode_unwatched_in_plex` — agreed Watched, episode unplayed ⇒ video unwatched at 0.
 - [ ] 2.7 `it_should_push_a_video_unplayed_after_being_watched` — agreed Watched, video unwatched at 0 ⇒ `unscrobble`.

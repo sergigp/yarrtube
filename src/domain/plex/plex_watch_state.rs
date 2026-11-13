@@ -1,4 +1,4 @@
-use crate::domain::video::WatchProgress;
+use crate::domain::video::{PlaybackPosition, WatchProgress};
 use chrono::{DateTime, Utc};
 
 /// The token user's watch state of an episode, as Plex lists it.
@@ -26,10 +26,18 @@ impl PlexWatchState {
     /// rewatch just started); else viewed at least once ⇒ watched; else
     /// unplayed.
     pub fn progress(&self) -> WatchProgress {
-        if self.view_count > 0 {
-            WatchProgress::Watched
-        } else {
-            WatchProgress::Unplayed
+        match (self.resume_position(), self.view_count) {
+            (Some(position), _) => WatchProgress::InProgress(position),
+            (None, 0) => WatchProgress::Unplayed,
+            (None, _) => WatchProgress::Watched,
         }
+    }
+
+    /// The offset in whole seconds, when past the start.
+    fn resume_position(&self) -> Option<PlaybackPosition> {
+        self.view_offset_ms
+            .map(|offset_ms| offset_ms / 1000)
+            .filter(|seconds| *seconds > 0)
+            .and_then(|seconds| PlaybackPosition::new(seconds).ok())
     }
 }
