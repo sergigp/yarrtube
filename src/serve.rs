@@ -20,7 +20,9 @@ use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdate
 use crate::infrastructure::infrastructure_container::{
     InfrastructureContainer, InfrastructureSettings,
 };
-use crate::infrastructure::repositories::anthropic_llm_server_repository::AnthropicConfig;
+use crate::infrastructure::repositories::anthropic_llm_server_repository::{
+    AnthropicApiKey, AnthropicConfig,
+};
 use crate::infrastructure::repositories::domain_events_consumer::{
     DomainEventsConsumer, SubscriberRegistry,
 };
@@ -445,6 +447,8 @@ fn plex_integration_from(
 /// Anthropic's API, present only with a non-empty
 /// `YARRTUBE_ANTHROPIC_API_KEY`; `YARRTUBE_ANTHROPIC_API_URL` (default
 /// `https://api.anthropic.com`) points it at a fake in tests.
+const DEFAULT_ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
+
 fn anthropic_config() -> Option<AnthropicConfig> {
     anthropic_config_from(
         non_empty_env("YARRTUBE_ANTHROPIC_API_KEY"),
@@ -453,10 +457,16 @@ fn anthropic_config() -> Option<AnthropicConfig> {
 }
 
 fn anthropic_config_from(
-    _api_key: Option<String>,
-    _api_url: Option<String>,
+    api_key: Option<String>,
+    api_url: Option<String>,
 ) -> Option<AnthropicConfig> {
-    None
+    let api_key = api_key.filter(|key| !key.trim().is_empty())?;
+    Some(AnthropicConfig {
+        api_url: api_url
+            .filter(|url| !url.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_ANTHROPIC_API_URL.to_string()),
+        api_key: AnthropicApiKey::new(api_key),
+    })
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
@@ -1397,6 +1407,23 @@ mod tests {
             .map(|key| anthropic_config_from(key.map(str::to_string), None).is_some());
 
         assert_eq!(configs, [false, false, false]);
+    }
+
+    #[test]
+    fn it_should_default_the_anthropic_api_url() {
+        let urls = [None, Some(""), Some("http://127.0.0.1:9999")].map(|url| {
+            anthropic_config_from(Some("sk-ant-test".to_string()), url.map(str::to_string))
+                .map(|config| config.api_url)
+        });
+
+        assert_eq!(
+            urls,
+            [
+                Some("https://api.anthropic.com".to_string()),
+                Some("https://api.anthropic.com".to_string()),
+                Some("http://127.0.0.1:9999".to_string()),
+            ]
+        );
     }
 
     #[test]

@@ -84,7 +84,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 `serve.rs` config:
 
 - [x] 3.24 `it_should_have_no_anthropic_config_for_an_empty_key`
-- [ ] 3.25 `it_should_default_the_anthropic_api_url`
+- [x] 3.25 `it_should_default_the_anthropic_api_url`
 
 ## 4. Verification
 
