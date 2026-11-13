@@ -1,9 +1,11 @@
+pub mod anthropic_llm_server_repository;
 pub mod domain_events_consumer;
 pub mod event_subscriber;
 pub mod filesystem_channel_avatar_repository;
 pub mod filesystem_directory_repository;
 pub mod filesystem_show_file_repository;
 pub mod filesystem_video_file_repository;
+pub mod llm_server_repository;
 pub mod ollama_llm_server_repository;
 pub mod plex_library_repository;
 pub mod sqlite_category_playlist_repository;

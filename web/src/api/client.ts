@@ -14,6 +14,7 @@ import type {
   VideoSearchResults,
   PlaylistListItem,
   PlaylistPreview,
+  AnthropicServer,
   OllamaServer,
   Preferences,
   PreferencesPatch,
@@ -96,7 +97,12 @@ export function patchPreferences(patch: PreferencesPatch): Promise<Preferences> 
 
 /** Checks the Ollama server at `url` (saved or not) and lists its models. */
 export function fetchOllama(url: string): Promise<OllamaServer> {
-  return request(`/ollama?url=${encodeURIComponent(url)}`)
+  return request(`/llm/ollama?url=${encodeURIComponent(url)}`)
+}
+
+/** Checks Anthropic with the daemon's key and lists the models it can use. */
+export function fetchAnthropic(): Promise<AnthropicServer> {
+  return request('/llm/anthropic')
 }
 
 /**

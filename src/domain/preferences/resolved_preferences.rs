@@ -7,12 +7,19 @@ use crate::domain::category::Category;
 pub struct ResolvedPreferences {
     pub preferences: Preferences,
     pub categorization_context_length: ContextLength,
+    /// Whether the daemon has an Anthropic key.
+    pub anthropic_available: bool,
 }
 
 impl ResolvedPreferences {
     /// `preferences` with the categorization context length Auto sizes from
-    /// the categories with an AI prompt among `categories`.
-    pub fn new(preferences: Preferences, categories: &[Category]) -> Self {
+    /// the categories with an AI prompt among `categories`, read alongside
+    /// whether Anthropic is available.
+    pub fn new(
+        preferences: Preferences,
+        categories: &[Category],
+        anthropic_available: bool,
+    ) -> Self {
         let prompted = categories
             .iter()
             .filter(|category| category.ai_prompt.is_some())
@@ -22,6 +29,7 @@ impl ResolvedPreferences {
                 .categorization
                 .effective_context_length(prompted),
             preferences,
+            anthropic_available,
         }
     }
 }

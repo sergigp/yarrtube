@@ -1,6 +1,7 @@
+use super::CategorizationCall;
 use crate::domain::category::Category;
 use crate::domain::llm_server::{LlmChat, MIN_CHAT_TIMEOUT};
-use crate::domain::preferences::{CategorizationSettings, ContextLength};
+use crate::domain::preferences::ContextLength;
 use crate::domain::video::{Video, VideoChapter};
 use crate::domain::video_summary::SummaryText;
 use std::time::Duration;
@@ -63,24 +64,20 @@ impl CategorizationQuestion {
         )
     }
 
-    /// The request for this question under `settings` and `context_length`,
-    /// deterministic and bound to the answer's schema.
-    pub fn chat(
-        &self,
-        settings: &CategorizationSettings,
-        context_length: ContextLength,
-        thinking: bool,
-    ) -> LlmChat {
+    /// The request for this question as `call` sends it, deterministic and
+    /// bound to the answer's schema.
+    pub fn chat(&self, call: &CategorizationCall, thinking: bool) -> LlmChat {
         LlmChat {
-            model: settings.model.as_str().to_string(),
-            system: settings.effective_prompt().as_str().to_string(),
+            model: call.model.clone(),
+            system: call.prompt.as_str().to_string(),
             user: self.user_message(),
-            context_length: context_length.value(),
-            temperature: settings.temperature.value(),
+            context_length: call.context_length.value(),
+            temperature: call.temperature,
             thinking,
-            max_output_tokens: self.max_output_tokens(context_length),
+            effort: call.effort,
+            max_output_tokens: self.max_output_tokens(call.context_length),
             format: Some(self.answer_schema()),
-            timeout: self.timeout(context_length),
+            timeout: self.timeout(call.context_length),
         }
     }
 

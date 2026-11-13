@@ -1,3 +1,4 @@
+pub mod categorization_call;
 pub mod categorization_question;
 pub mod categorization_tally;
 pub mod errors;
@@ -8,6 +9,7 @@ pub mod video_category_choice;
 pub mod video_category_choices;
 pub mod video_category_verdict;
 
+pub use categorization_call::CategorizationCall;
 pub use categorization_question::{CategorizationAnswer, CategorizationQuestion};
 pub use categorization_tally::CategorizationTally;
 pub use errors::EditVideoCategoriesError;

@@ -5,7 +5,7 @@ use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::llm_server::{
-    LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    Effort, LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::SummaryModel;
@@ -23,7 +23,7 @@ use crate::domain::video_category::{
     Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
 };
 use crate::domain::video_summary::{SummaryText, VideoSummary};
-use crate::infrastructure::repositories::ollama_llm_server_repository::{
+use crate::infrastructure::repositories::llm_server_repository::{
     FakeLlmServerRepository, unreachable_error,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::{
@@ -287,6 +287,7 @@ fn it_should_send_the_video_details_and_category_prompts_with_the_categorization
             context_length: 6144,
             temperature: 0.0,
             thinking: true,
+            effort: Effort::default(),
             max_output_tokens: 4095,
             timeout: MIN_CHAT_TIMEOUT,
             format: Some(serde_json::json!({
@@ -1385,13 +1386,13 @@ fn it_should_wait_for_ollama_if_it_is_unavailable_for_a_categorization() {
         outcomes,
         [
             (
-                wait("can't connect to Ollama: connection refused"),
+                wait("the LLM provider is unavailable: connection refused"),
                 vec![],
                 pending
             ),
             (wait("qwen3:4b isn't installed on Ollama"), vec![], pending),
             (
-                wait("can't connect to Ollama: connection refused"),
+                wait("the LLM provider is unavailable: connection refused"),
                 vec![],
                 pending
             ),
@@ -1495,7 +1496,7 @@ fn it_should_not_fail_pending_categories_if_ollama_is_down_on_the_eleventh_attem
             reason: reason.to_string(),
         })
     };
-    let unreachable = wait("can't connect to Ollama: connection refused");
+    let unreachable = wait("the LLM provider is unavailable: connection refused");
     let unchanged = Some(video.categorization);
     assert_eq!(
         outcomes,
@@ -2518,14 +2519,16 @@ fn non_thinking_llm_replying(
 fn thinking_model() -> LlmModel {
     LlmModel {
         name: "qwen3:4b".to_string(),
-        size_bytes: 1,
+        display_name: None,
+        size_bytes: Some(1),
         thinking: true,
+        context_window: None,
     }
 }
 
 fn server_with(model: LlmModel) -> LlmServer {
     LlmServer {
-        version: "0.40.13".to_string(),
+        version: Some("0.40.13".to_string()),
         models: vec![model],
     }
 }

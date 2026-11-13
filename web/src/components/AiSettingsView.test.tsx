@@ -84,7 +84,7 @@ describe('AiSettingsView', () => {
     const saved = aPreferences({ ai_enabled: true, ollama_url: 'http://mac.local:11434' })
     const fetchMock = mockApi({
       'GET /api/preferences': saved,
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
       'PATCH /api/preferences': {
         ...saved,
         categorization_enabled: true,
@@ -107,7 +107,7 @@ describe('AiSettingsView', () => {
   it('saves only the changed categorization advanced setting', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aiOn(),
     })
     renderWithProviders(<AiSettingsView />)
@@ -309,7 +309,7 @@ describe('AiSettingsView', () => {
         ai_enabled: true,
         ollama_url: 'http://mac.local:11434',
       }),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -331,7 +331,7 @@ describe('AiSettingsView', () => {
     let videoListRequests = 0
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aPreferences(),
       'GET /api/channels/handle/videos': () => {
         videoListRequests += 1
@@ -376,7 +376,7 @@ describe('AiSettingsView', () => {
         ollama_url: 'http://mac.local:11434',
         summaries_enabled: true,
       }),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()
@@ -394,7 +394,7 @@ describe('AiSettingsView', () => {
   it('refuses to save an emptied categorization number', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -414,7 +414,7 @@ describe('AiSettingsView', () => {
   it('tests the connection to the typed URL', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -430,7 +430,7 @@ describe('AiSettingsView', () => {
   it('shows why the connection test failed', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'GET /api/ollama?url=http%3A%2F%2Fnowhere%3A11434': {
+      'GET /api/llm/ollama?url=http%3A%2F%2Fnowhere%3A11434': {
         status: 502,
         error: 'Could not reach Ollama at http://nowhere:11434: connection refused',
       },
@@ -449,7 +449,7 @@ describe('AiSettingsView', () => {
   it("lists the saved server's models to pick from", async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
 
@@ -462,7 +462,7 @@ describe('AiSettingsView', () => {
   it("lists the saved server's models in the categorization Model independently", async () => {
     mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -478,7 +478,7 @@ describe('AiSettingsView', () => {
   it('keeps a saved model the server no longer has', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer({
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer({
         models: [{ name: 'gemma3:4b', size_bytes: 1, thinking: false }],
       }),
     })
@@ -493,7 +493,7 @@ describe('AiSettingsView', () => {
   it('lets the model be typed when the server is down', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
     })
     renderWithProviders(<AiSettingsView />)
 
@@ -503,9 +503,9 @@ describe('AiSettingsView', () => {
   it('lists the models of a newly saved server', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aPreferences({ ai_enabled: true, ollama_url: 'http://nas:11434' }),
-      'GET /api/ollama?url=http%3A%2F%2Fnas%3A11434': anOllamaServer({
+      'GET /api/llm/ollama?url=http%3A%2F%2Fnas%3A11434': anOllamaServer({
         models: [{ name: 'llama3:8b', size_bytes: 1, thinking: false }],
       }),
     })
@@ -529,7 +529,7 @@ describe('AiSettingsView', () => {
   it('lists the models of the server just tested', async () => {
     mockApi({
       'GET /api/preferences': aPreferences({ summaries_enabled: true }),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -546,7 +546,7 @@ describe('AiSettingsView', () => {
   it('offers thinking for a model that can think', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()
@@ -559,7 +559,7 @@ describe('AiSettingsView', () => {
   it("replaces thinking with a note for a model that can't think, and doesn't save it", async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aiOn(),
     })
     renderWithProviders(<AiSettingsView />)
@@ -579,7 +579,7 @@ describe('AiSettingsView', () => {
   it('decides thinking section by section', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aiOn(),
     })
     renderWithProviders(<AiSettingsView />)
@@ -608,7 +608,7 @@ describe('AiSettingsView', () => {
   it('offers thinking while the models are unknown', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
     })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()

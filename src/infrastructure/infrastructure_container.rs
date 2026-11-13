@@ -1,4 +1,7 @@
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater};
+use crate::infrastructure::repositories::anthropic_llm_server_repository::{
+    AnthropicConfig, AnthropicLlmServerRepository,
+};
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::{
     ChannelAvatarRepository, FilesystemChannelAvatarRepository,
 };
@@ -11,9 +14,10 @@ use crate::infrastructure::repositories::filesystem_show_file_repository::{
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
     FilesystemVideoFileRepository, VideoFileRepository,
 };
-use crate::infrastructure::repositories::ollama_llm_server_repository::{
-    LlmServerRepository, OllamaLlmServerRepository,
+use crate::infrastructure::repositories::llm_server_repository::{
+    LlmServerRepository, RoutingLlmServerRepository,
 };
+use crate::infrastructure::repositories::ollama_llm_server_repository::OllamaLlmServerRepository;
 use crate::infrastructure::repositories::sqlite_category_playlist_repository::{
     CategoryPlaylistRepository, SqliteCategoryPlaylistRepository,
 };
@@ -110,6 +114,8 @@ pub struct InfrastructureSettings {
     pub videos_path: PathBuf,
     pub avatars_path: PathBuf,
     pub ytdlp_path: PathBuf,
+    /// `None` without an Anthropic key: Anthropic is unavailable.
+    pub anthropic: Option<AnthropicConfig>,
 }
 
 /// One production instance of every port implementation, shared by every
@@ -133,6 +139,8 @@ pub struct InfrastructureContainer {
     pub category_playlist_repository: Arc<dyn CategoryPlaylistRepository>,
     pub preferences_repository: Arc<dyn PreferencesRepository>,
     pub llm_server_repository: Arc<dyn LlmServerRepository>,
+    /// Whether the daemon has an Anthropic key.
+    pub anthropic_available: bool,
     pub task_repository: Arc<dyn TaskRepository>,
     pub event_publisher: Arc<dyn EventPublisher>,
     pub event_repository: Arc<dyn EventRepository>,
@@ -195,7 +203,11 @@ impl InfrastructureContainer {
                 db.clone(),
             )),
             preferences_repository: Arc::new(SqlitePreferencesRepository::new(db.clone())),
-            llm_server_repository: Arc::new(OllamaLlmServerRepository::new()),
+            anthropic_available: settings.anthropic.is_some(),
+            llm_server_repository: Arc::new(RoutingLlmServerRepository::new(
+                OllamaLlmServerRepository::new(),
+                settings.anthropic.map(AnthropicLlmServerRepository::new),
+            )),
             task_repository: Arc::new(SqliteTaskRepository::new(db.clone(), clock.clone())),
             event_publisher: Arc::new(SqliteEventPublisher::new(db.clone(), clock.clone())),
             event_repository: Arc::new(SqliteEventRepository::new(db.clone(), clock.clone())),

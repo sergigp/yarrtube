@@ -87,6 +87,11 @@ struct StoredPreferences {
     categorization_thinking: Option<bool>,
     /// Only once the user saved one: missing reads as the shipped prompt.
     categorization_prompt: Option<String>,
+    ai_provider: Option<String>,
+    anthropic_summaries_model: Option<String>,
+    anthropic_summaries_effort: Option<String>,
+    anthropic_categorization_model: Option<String>,
+    anthropic_categorization_effort: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -123,6 +128,27 @@ impl From<&Preferences> for StoredPreferences {
                 .prompt
                 .as_ref()
                 .map(|prompt| prompt.as_str().to_string()),
+            ai_provider: Some(preferences.ai_provider.as_str().to_string()),
+            anthropic_summaries_model: Some(
+                preferences.anthropic.summaries_model.as_str().to_string(),
+            ),
+            anthropic_summaries_effort: Some(
+                preferences.anthropic.summaries_effort.as_str().to_string(),
+            ),
+            anthropic_categorization_model: Some(
+                preferences
+                    .anthropic
+                    .categorization_model
+                    .as_str()
+                    .to_string(),
+            ),
+            anthropic_categorization_effort: Some(
+                preferences
+                    .anthropic
+                    .categorization_effort
+                    .as_str()
+                    .to_string(),
+            ),
         }
     }
 }
@@ -201,6 +227,8 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_prompt
                     .map(CategorizationPrompt::from_stored),
             },
+            ai_provider: defaults.ai_provider,
+            anthropic: defaults.anthropic,
         }
     }
 }

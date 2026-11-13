@@ -1,13 +1,17 @@
+pub mod effort;
 pub mod errors;
 pub mod llm_chat;
+pub mod llm_connection;
 pub mod llm_model;
 pub mod llm_reply;
 #[allow(clippy::module_inception)]
 pub mod llm_server;
 pub mod ollama_url;
 
+pub use effort::Effort;
 pub use errors::{LlmServerUnreachable, ReadLlmServerError};
 pub use llm_chat::{LlmChat, MIN_CHAT_TIMEOUT};
+pub use llm_connection::LlmConnection;
 pub use llm_model::LlmModel;
 pub use llm_reply::LlmReply;
 pub use llm_server::LlmServer;

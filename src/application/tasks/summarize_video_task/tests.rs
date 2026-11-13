@@ -4,7 +4,7 @@ use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::llm_server::{
-    LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    Effort, LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::{
@@ -22,7 +22,7 @@ use crate::domain::video_transcript::{
     CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-use crate::infrastructure::repositories::ollama_llm_server_repository::{
+use crate::infrastructure::repositories::llm_server_repository::{
     FakeLlmServerRepository, unreachable_error,
 };
 use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -1571,7 +1571,7 @@ fn it_should_wait_for_ollama_if_it_is_unreachable() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::hours(6),
-            reason: "can't connect to Ollama: connection refused".to_string(),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
         })
     );
     assert_eq!(llm.chats(), vec![]);
@@ -1617,7 +1617,7 @@ fn it_should_keep_the_failed_attempts_of_a_retrying_summary_while_waiting_for_ol
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::hours(6),
-            reason: "can't connect to Ollama: connection refused".to_string(),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
         })
     );
     assert_eq!(
@@ -2165,7 +2165,7 @@ fn it_should_wait_for_ollama_if_it_goes_down_between_parts() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::hours(6),
-            reason: "can't connect to Ollama: connection refused".to_string(),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
         })
     );
     assert_eq!(
@@ -2863,6 +2863,7 @@ fn one_call_chat() -> LlmChat {
         context_length: 12288,
         temperature: 0.3,
         thinking: true,
+        effort: Effort::default(),
         max_output_tokens: 12288,
         format: None,
         timeout: MIN_CHAT_TIMEOUT,
@@ -3050,14 +3051,16 @@ fn my_channel() -> Channel {
 fn thinking_model() -> LlmModel {
     LlmModel {
         name: "qwen3:4b".to_string(),
-        size_bytes: 1,
+        display_name: None,
+        size_bytes: Some(1),
         thinking: true,
+        context_window: None,
     }
 }
 
 fn server_with(model: LlmModel) -> LlmServer {
     LlmServer {
-        version: "0.40.13".to_string(),
+        version: Some("0.40.13".to_string()),
         models: vec![model],
     }
 }

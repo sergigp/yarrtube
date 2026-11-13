@@ -1,5 +1,8 @@
-use super::{CategorizationSettings, PreferencesChange, SummarySettings, Theme};
-use crate::domain::llm_server::OllamaUrl;
+use super::{
+    AiProvider, AnthropicSettings, CategorizationSettings, PreferencesChange, SummarySettings,
+    Theme,
+};
+use crate::domain::llm_server::{LlmConnection, OllamaUrl};
 use crate::domain::shared::ValidationError;
 
 /// The user's daemon-wide preferences.
@@ -12,9 +15,11 @@ pub struct Preferences {
     pub home_show_latest: bool,
     pub theme: Theme,
     pub ai_enabled: bool,
+    pub ai_provider: AiProvider,
     pub ollama_url: Option<OllamaUrl>,
     pub summaries: SummarySettings,
     pub categorization: CategorizationSettings,
+    pub anthropic: AnthropicSettings,
 }
 
 impl Default for Preferences {
@@ -28,9 +33,11 @@ impl Default for Preferences {
             home_show_latest: true,
             theme: Theme::default(),
             ai_enabled: false,
+            ai_provider: AiProvider::default(),
             ollama_url: None,
             summaries: SummarySettings::default(),
             categorization: CategorizationSettings::default(),
+            anthropic: AnthropicSettings::default(),
         }
     }
 }
@@ -50,6 +57,11 @@ impl Preferences {
     /// categorization on.
     pub fn categorization_available(&self) -> bool {
         self.ai_enabled && self.categories_enabled && self.categorization.enabled
+    }
+
+    /// Where AI calls go: `None` only for Ollama without a URL.
+    pub fn connection(&self) -> Option<LlmConnection> {
+        self.ollama_url.clone().map(LlmConnection::Ollama)
     }
 
     /// Whether `other` generates summaries differently: another server or
@@ -76,8 +88,13 @@ impl Preferences {
     }
 
     /// These preferences with `change` applied, as long as the result is
-    /// consistent: AI can't be on without an Ollama URL.
-    pub fn apply(self, change: PreferencesChange) -> Result<Self, ValidationError> {
+    /// consistent: AI can't be on Ollama without a URL, and Anthropic can't
+    /// be chosen unless `anthropic_available`.
+    pub fn apply(
+        self,
+        change: PreferencesChange,
+        _anthropic_available: bool,
+    ) -> Result<Self, ValidationError> {
         let summaries = SummarySettings {
             enabled: change.summaries_enabled.unwrap_or(self.summaries.enabled),
             model: change.summaries_model.unwrap_or(self.summaries.model),
@@ -124,9 +141,11 @@ impl Preferences {
             home_show_latest: change.home_show_latest.unwrap_or(self.home_show_latest),
             theme: change.theme.unwrap_or(self.theme),
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
+            ai_provider: self.ai_provider,
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             summaries,
             categorization,
+            anthropic: self.anthropic,
         }
         .ensure_ai_has_url()
     }

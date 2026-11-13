@@ -1,3 +1,5 @@
+pub mod ai_provider;
+pub mod anthropic_settings;
 pub mod categorization_model;
 pub mod categorization_prompt;
 pub mod categorization_settings;
@@ -14,6 +16,8 @@ pub mod summary_settings;
 pub mod temperature;
 pub mod theme;
 
+pub use ai_provider::AiProvider;
+pub use anthropic_settings::AnthropicSettings;
 pub use categorization_model::CategorizationModel;
 pub use categorization_prompt::CategorizationPrompt;
 pub use categorization_settings::CategorizationSettings;

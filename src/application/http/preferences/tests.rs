@@ -32,6 +32,7 @@ async fn it_should_return_the_defaults_if_nothing_saved() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -54,6 +55,7 @@ async fn it_should_return_an_auto_context_length_from_the_categories_with_a_prom
     let preferences_searcher = PreferencesSearcher::new(
         Arc::new(SqlitePreferencesRepository::new(db.database())),
         category_repository,
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -80,6 +82,7 @@ async fn it_should_return_4096_for_auto_with_few_categories() {
     let preferences_searcher = PreferencesSearcher::new(
         Arc::new(SqlitePreferencesRepository::new(db.database())),
         category_repository,
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -185,6 +188,7 @@ async fn it_should_return_the_ai_defaults_if_nothing_saved() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -336,6 +340,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_model_changes()
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
+            false,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -404,6 +409,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_generation_sett
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
+            false,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -482,6 +488,7 @@ async fn it_should_keep_failed_verdicts_when_the_same_settings_are_saved() {
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
+            false,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -508,6 +515,7 @@ async fn it_should_keep_failed_verdicts_when_the_shipped_categorization_prompt_i
         Arc::new(CategoryLock::default()),
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
+        false,
     );
     let request = UpdatePreferencesRequest {
         categorization_prompt: Some(Some(CategorizationPrompt::shipped().as_str().to_string())),
@@ -529,6 +537,7 @@ async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -553,6 +562,7 @@ async fn it_should_ship_the_categorization_prompt_v2_batch() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -576,6 +586,7 @@ async fn it_should_return_the_categorization_generation_defaults_if_nothing_save
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -1262,6 +1273,7 @@ async fn it_should_return_saved_preferences() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -1303,6 +1315,7 @@ fn any_preferences_updater() -> PreferencesUpdater {
         Arc::new(CategoryLock::default()),
         Arc::new(SqliteCategoryRepository::new(database())),
         categorization_resetter(database()),
+        false,
     )
 }
 
@@ -1318,6 +1331,7 @@ fn preferences_updater(
         Arc::new(CategoryLock::default()),
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
+        false,
     )
 }
 
@@ -1388,6 +1402,7 @@ fn all_on_response() -> PreferencesResponse {
         ..PreferencesResponse::from(ResolvedPreferences {
             preferences: Preferences::default(),
             categorization_context_length: ContextLength::auto(0),
+            anthropic_available: false,
         })
     }
 }

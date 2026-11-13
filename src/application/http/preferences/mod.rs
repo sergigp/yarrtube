@@ -2,10 +2,10 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use crate::domain::llm_server::OllamaUrl;
+use crate::domain::llm_server::{Effort, OllamaUrl};
 use crate::domain::preferences::{
-    CategorizationModel, CategorizationPrompt, ContextLength, PreferencesChange, SummaryModel,
-    SummaryPrompt, Temperature, Theme, UpdatePreferencesError,
+    AiProvider, CategorizationModel, CategorizationPrompt, ContextLength, PreferencesChange,
+    SummaryModel, SummaryPrompt, Temperature, Theme, UpdatePreferencesError,
 };
 use crate::domain::services::{
     PreferencesSearcher, PreferencesSearcherApi, PreferencesUpdater, PreferencesUpdaterApi,
@@ -77,6 +77,29 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
         categorization_prompt: request
             .categorization_prompt
             .map(|prompt| prompt.map(CategorizationPrompt::new).transpose())
+            .transpose()?,
+        ai_provider: request
+            .ai_provider
+            .as_deref()
+            .map(AiProvider::new)
+            .transpose()?,
+        anthropic_summaries_model: request
+            .anthropic_summaries_model
+            .map(SummaryModel::new)
+            .transpose()?,
+        anthropic_summaries_effort: request
+            .anthropic_summaries_effort
+            .as_deref()
+            .map(Effort::new)
+            .transpose()?,
+        anthropic_categorization_model: request
+            .anthropic_categorization_model
+            .map(CategorizationModel::new)
+            .transpose()?,
+        anthropic_categorization_effort: request
+            .anthropic_categorization_effort
+            .as_deref()
+            .map(Effort::new)
             .transpose()?,
     })
 }

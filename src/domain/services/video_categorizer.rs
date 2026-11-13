@@ -1,6 +1,6 @@
 use crate::domain::category::Category;
-use crate::domain::llm_server::{LlmReply, LlmServerUnreachable, OllamaUrl};
-use crate::domain::preferences::{CategorizationSettings, ContextLength, Preferences};
+use crate::domain::llm_server::{LlmConnection, LlmModel, LlmReply, LlmServerUnreachable};
+use crate::domain::preferences::{AiProvider, Preferences};
 use crate::domain::services::{
     CategorizationResetter, CategorizationResetterApi, VideoCategoryAssigner,
     VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
@@ -9,11 +9,11 @@ use crate::domain::video::{
     StepStatus, UNAVAILABLE_SERVER_WAIT, Video, VideoOwner, VideoStepOutcome,
 };
 use crate::domain::video_category::{
-    CategorizationAnswer, CategorizationQuestion, CategorizationTally, Verdict,
+    CategorizationAnswer, CategorizationCall, CategorizationQuestion, CategorizationTally, Verdict,
     VideoCategoryVerdict, pending_categories,
 };
 use crate::domain::video_summary::SummaryText;
-use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
+use crate::infrastructure::repositories::llm_server_repository::LlmServerRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -144,10 +144,10 @@ impl From<anyhow::Error> for Stop {
 #[derive(Clone)]
 struct CategorizationJob {
     preferences: Preferences,
-    url: OllamaUrl,
-    settings: CategorizationSettings,
+    connection: LlmConnection,
+    call: CategorizationCall,
+    /// Always `false` on Anthropic: "Retry Without Thinking" never applies.
     thinking: bool,
-    context_length: ContextLength,
     owner: VideoOwner,
     summary: SummaryText,
     pending: Vec<Category>,
@@ -262,10 +262,7 @@ impl VideoCategorizer {
         if video.summary.status != StepStatus::Done {
             return Err(Skip::NotWanted("the video has no summary"));
         }
-        let url = preferences
-            .ollama_url
-            .clone()
-            .context("no Ollama URL is saved")?;
+        let connection = preferences.connection().context("no Ollama URL is saved")?;
         let Some(owner) = self.video_owner_finder.find(video)? else {
             return Err(Skip::NotWanted("the video has no channel or playlist"));
         };
@@ -278,37 +275,80 @@ impl VideoCategorizer {
             .video_summary_repository
             .find(&video.id)?
             .context("the video has no summary")?;
-        let settings = preferences.categorization.clone();
         let pending = self.pending(video, &owner)?;
         if pending.is_empty() {
             return Err(Skip::NothingPending);
         }
-        let context_length = settings.effective_context_length(self.prompted_categories()?);
         let job = CategorizationJob {
+            call: self.unchecked_call(&preferences)?,
             preferences,
-            url,
-            settings,
+            connection,
             thinking: false,
-            context_length,
             owner,
             summary: summary.text,
             pending,
         };
-        let thinking = self.check_server(&job)?;
-        Ok(CategorizationJob { thinking, ..job })
+        let model = self.check_server(&job)?;
+        Ok(Self::checked(job, &model))
     }
 
-    /// Checks the server before any call, whatever the settings: whether
-    /// `job` asks with thinking (its settings want it and the saved model
-    /// supports it). Waits when Ollama can't be connected to or hasn't the
-    /// model; a failed attempt when the check otherwise fails.
-    fn check_server(&self, job: &CategorizationJob) -> Result<bool, Skip> {
-        let model = job.settings.model.as_str();
+    /// The call as saved, before the server says how the model is: what a
+    /// failed check records its failed attempt with.
+    fn unchecked_call(&self, preferences: &Preferences) -> anyhow::Result<CategorizationCall> {
+        let settings = &preferences.categorization;
+        Ok(match preferences.ai_provider {
+            AiProvider::Ollama => CategorizationCall::ollama(
+                settings,
+                settings.effective_context_length(self.prompted_categories()?),
+            ),
+            AiProvider::Anthropic => CategorizationCall::anthropic(
+                &preferences.anthropic,
+                settings.effective_prompt(),
+                &LlmModel {
+                    name: preferences
+                        .anthropic
+                        .categorization_model
+                        .as_str()
+                        .to_string(),
+                    display_name: None,
+                    size_bytes: None,
+                    thinking: false,
+                    context_window: None,
+                },
+            ),
+        })
+    }
+
+    /// `job` as the checked `model` calls it: with thinking on Ollama when
+    /// its settings want it and the model supports it.
+    fn checked(job: CategorizationJob, model: &LlmModel) -> CategorizationJob {
+        match job.preferences.ai_provider {
+            AiProvider::Ollama => CategorizationJob {
+                thinking: job.preferences.categorization.thinking && model.thinking,
+                ..job
+            },
+            AiProvider::Anthropic => CategorizationJob {
+                call: CategorizationCall::anthropic(
+                    &job.preferences.anthropic,
+                    job.call.prompt.clone(),
+                    model,
+                ),
+                thinking: false,
+                ..job
+            },
+        }
+    }
+
+    /// Checks the server before any call, whatever the settings: the saved
+    /// model as the server has it. Waits when the provider is unavailable
+    /// or hasn't the model; a failed attempt when the check otherwise fails.
+    fn check_server(&self, job: &CategorizationJob) -> Result<LlmModel, Skip> {
+        let model = job.call.model.as_str();
         self.llm_server_repository
-            .find(&job.url)
+            .find(&job.connection)
             .map_err(|error| Skip::from_server_error(error, job))?
             .model(model)
-            .map(|installed| job.settings.thinking && installed.thinking)
+            .cloned()
             .with_context(|| format!("{model} isn't installed on Ollama"))
             .map_err(Skip::Unavailable)
     }
@@ -388,10 +428,7 @@ impl VideoCategorizer {
             CategorizationQuestion::new(video, &job.owner.source_name, &job.summary, categories);
         let reply = self
             .llm_server_repository
-            .chat(
-                &job.url,
-                &question.chat(&job.settings, job.context_length, thinks),
-            )
+            .chat(&job.connection, &question.chat(&job.call, thinks))
             .map_err(Stop::from_chat_error)?;
         Self::log_call(video, categories, call, thinking, thinks, &reply, started);
         if reply.stopped_at_limit {
@@ -488,7 +525,7 @@ impl VideoCategorizer {
             video.id.clone(),
             category.id.clone(),
             answer,
-            job.settings.model.as_str(),
+            &job.call.model,
             self.clock.now(),
         );
         let stored =
@@ -535,7 +572,7 @@ impl VideoCategorizer {
             (None, true) => Some((
                 format!(
                     "it hit the {}-token output limit",
-                    question.max_output_tokens(job.context_length)
+                    question.max_output_tokens(job.call.context_length)
                 ),
                 limit_kind,
             )),
@@ -817,7 +854,7 @@ impl VideoCategorizer {
             let verdict = VideoCategoryVerdict::failed(
                 video.id.clone(),
                 category.id.clone(),
-                job.settings.model.as_str(),
+                &job.call.model,
                 now,
             );
             self.video_category_assigner

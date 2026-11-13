@@ -1,8 +1,8 @@
 use super::{
-    CategorizationModel, CategorizationPrompt, ContextLength, SummaryModel, SummaryPrompt,
-    Temperature, Theme,
+    AiProvider, CategorizationModel, CategorizationPrompt, ContextLength, SummaryModel,
+    SummaryPrompt, Temperature, Theme,
 };
-use crate::domain::llm_server::OllamaUrl;
+use crate::domain::llm_server::{Effort, OllamaUrl};
 
 /// Preferences to change; `None` keeps the stored value.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -14,6 +14,7 @@ pub struct PreferencesChange {
     pub home_show_latest: Option<bool>,
     pub theme: Option<Theme>,
     pub ai_enabled: Option<bool>,
+    pub ai_provider: Option<AiProvider>,
     /// `Some(None)` unsets the URL.
     pub ollama_url: Option<Option<OllamaUrl>>,
     pub summaries_enabled: Option<bool>,
@@ -31,4 +32,8 @@ pub struct PreferencesChange {
     pub categorization_thinking: Option<bool>,
     /// `Some(None)` goes back to the shipped prompt.
     pub categorization_prompt: Option<Option<CategorizationPrompt>>,
+    pub anthropic_summaries_model: Option<SummaryModel>,
+    pub anthropic_summaries_effort: Option<Effort>,
+    pub anthropic_categorization_model: Option<CategorizationModel>,
+    pub anthropic_categorization_effort: Option<Effort>,
 }

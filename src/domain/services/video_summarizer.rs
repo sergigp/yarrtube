@@ -1,8 +1,11 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::llm_server::{
-    LlmChat, LlmModel, LlmServerUnreachable, MIN_CHAT_TIMEOUT, OllamaUrl,
+    Effort, LlmChat, LlmConnection, LlmModel, LlmServerUnreachable, MIN_CHAT_TIMEOUT,
 };
-use crate::domain::preferences::{ContextLength, SummaryPrompt, SummarySettings};
+use crate::domain::preferences::{
+    AiProvider, AnthropicSettings, ContextLength, Preferences, SummaryModel, SummaryPrompt,
+    SummarySettings,
+};
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
@@ -14,7 +17,7 @@ use crate::domain::video_summary::{
 };
 use crate::domain::video_transcript::{CaptionLanguage, TimedTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
-use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
+use crate::infrastructure::repositories::llm_server_repository::LlmServerRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_summary_repository::VideoSummaryRepository;
@@ -29,11 +32,50 @@ use tracing::{error, info, warn};
 
 /// What every call of one generation shares.
 struct SummaryJob {
-    url: OllamaUrl,
-    settings: SummarySettings,
-    thinking: bool,
+    connection: LlmConnection,
+    call: SummaryCall,
     prompt: SummaryPrompt,
     owner: VideoOwner,
+}
+
+/// What each call of one generation sends, resolved from the provider.
+struct SummaryCall {
+    model: SummaryModel,
+    context_length: ContextLength,
+    max_output_tokens: u32,
+    /// Ollama only.
+    temperature: f64,
+    /// Ollama only.
+    thinking: bool,
+    /// Anthropic only.
+    effort: Effort,
+}
+
+impl SummaryCall {
+    /// The saved Ollama settings, thinking when the `installed` model can:
+    /// the answer may use all the context the prompt leaves.
+    fn ollama(settings: &SummarySettings, installed: &LlmModel) -> Self {
+        Self {
+            model: settings.model.clone(),
+            context_length: settings.context_length,
+            max_output_tokens: settings.context_length.value(),
+            temperature: settings.temperature.value(),
+            thinking: settings.thinking && installed.thinking,
+            effort: Effort::default(),
+        }
+    }
+
+    /// The saved Anthropic settings, for the model as Anthropic `listed` it.
+    fn anthropic(settings: &AnthropicSettings, _listed: &LlmModel) -> Self {
+        Self {
+            model: settings.summaries_model.clone(),
+            context_length: ContextLength::default(),
+            max_output_tokens: 0,
+            temperature: 0.0,
+            thinking: false,
+            effort: Effort::default(),
+        }
+    }
 }
 
 /// Why a video isn't summarized now. Nothing about the video changes.
@@ -194,37 +236,59 @@ impl VideoSummarizer {
         if !video.is_summarizable() {
             return Err(Skip::NotWanted("the video doesn't need a summary"));
         }
-        let url = preferences.ollama_url.context("no Ollama URL is saved")?;
-        let settings = preferences.summaries;
+        let connection = preferences.connection().context("no Ollama URL is saved")?;
         let Some(owner) = self.video_owner_finder.find(video)? else {
             return Err(Skip::NotWanted("the video has no channel or playlist"));
         };
         if !owner.summaries_enabled {
             return Err(Skip::NotWanted("its channel or playlist has summaries off"));
         }
-        let model = self.check_server(&url, &settings)?;
-        let thinking = settings.thinking && model.thinking;
-        let prompt = settings
+        let call = self.summary_call(&connection, &preferences)?;
+        let prompt = preferences
+            .summaries
             .effective_prompt()
             .validated()
             .map_err(anyhow::Error::new)?;
         Ok(SummaryJob {
-            url,
-            settings,
-            thinking,
+            connection,
+            call,
             prompt,
             owner,
         })
     }
 
-    /// The saved model on the server at `url`, unless Ollama can't be
-    /// connected to or hasn't it (wait) or the check fails (a failed attempt).
-    fn check_server(&self, url: &OllamaUrl, settings: &SummarySettings) -> Result<LlmModel, Skip> {
+    /// How the saved provider's settings call the model the server has.
+    fn summary_call(
+        &self,
+        connection: &LlmConnection,
+        preferences: &Preferences,
+    ) -> Result<SummaryCall, Skip> {
+        match preferences.ai_provider {
+            AiProvider::Ollama => {
+                let settings = &preferences.summaries;
+                let installed = self.check_server(connection, &settings.model)?;
+                Ok(SummaryCall::ollama(settings, &installed))
+            }
+            AiProvider::Anthropic => {
+                let settings = &preferences.anthropic;
+                let listed = self.check_server(connection, &settings.summaries_model)?;
+                Ok(SummaryCall::anthropic(settings, &listed))
+            }
+        }
+    }
+
+    /// The saved model on the provider behind `connection`, unless it is
+    /// unavailable or hasn't it (wait) or the check fails (a failed attempt).
+    fn check_server(
+        &self,
+        connection: &LlmConnection,
+        model: &SummaryModel,
+    ) -> Result<LlmModel, Skip> {
         let server = self
             .llm_server_repository
-            .find(url)
+            .find(connection)
             .map_err(Skip::from_server_error)?;
-        let model = settings.model.as_str();
+        let model = model.as_str();
         server
             .model(model)
             .cloned()
@@ -285,7 +349,7 @@ impl VideoSummarizer {
         self.video_summary_repository.save(&VideoSummary::create(
             video.id.clone(),
             text.clone(),
-            &job.settings.model,
+            &job.call.model,
             now,
         ))?;
         let marked = self.video_updater.update(&video.id, |video| {
@@ -301,7 +365,7 @@ impl VideoSummarizer {
             summary = %text.as_str(),
             duration_seconds = started.elapsed().as_secs_f64(),
             video_seconds = video.download.duration_seconds(),
-            model = %job.settings.model.as_str(),
+            model = %job.call.model.as_str(),
             "video summary generated"
         );
         Ok(())
@@ -413,20 +477,21 @@ impl VideoSummarizer {
             "sending prompt to the model"
         );
         let started = Instant::now();
-        let context_length = job.settings.context_length;
+        let context_length = job.call.context_length;
         let message_chars = messages.chars();
         let reply = self
             .llm_server_repository
             .chat(
-                &job.url,
+                &job.connection,
                 &LlmChat {
-                    model: job.settings.model.as_str().to_string(),
+                    model: job.call.model.as_str().to_string(),
                     system: messages.system,
                     user: messages.user,
                     context_length: context_length.value(),
-                    temperature: job.settings.temperature.value(),
-                    thinking: job.thinking,
-                    max_output_tokens: context_length.value(),
+                    temperature: job.call.temperature,
+                    thinking: job.call.thinking,
+                    effort: job.call.effort,
+                    max_output_tokens: job.call.max_output_tokens,
                     format: None,
                     timeout: MIN_CHAT_TIMEOUT,
                 },
@@ -436,7 +501,7 @@ impl VideoSummarizer {
             video_id = %video.id,
             call,
             answer = %reply.content,
-            thinking = job.thinking,
+            thinking = job.call.thinking,
             input_tokens = reply.input_tokens,
             output_tokens = reply.output_tokens,
             stopped_at_limit = reply.stopped_at_limit,
@@ -453,7 +518,7 @@ impl VideoSummarizer {
             warn!(
                 video_id = %video.id,
                 call,
-                thinking = job.thinking,
+                thinking = job.call.thinking,
                 thinking_chars = reply.thinking.chars().count(),
                 answer_chars = reply.content.chars().count(),
                 thinking_tail = %reply.thinking_tail(),
@@ -560,7 +625,7 @@ impl VideoSummarizer {
             video,
             language,
             transcript,
-            &job.settings.context_length,
+            &job.call.context_length,
             &job.prompt,
             chars_per_token,
         )
@@ -572,7 +637,7 @@ impl VideoSummarizer {
             title = %video.title,
             video_seconds = video.download.duration_seconds(),
             parts = input.parts(),
-            model = %job.settings.model.as_str(),
+            model = %job.call.model.as_str(),
             "generating video summary"
         );
     }
