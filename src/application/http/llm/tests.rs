@@ -5,7 +5,7 @@ use dto::OllamaModelResponse;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn it_should_return_the_server_version_and_models_sorted_by_name() {
+async fn it_should_list_ollama_models_at_the_llm_path() {
     let repository = Arc::new(FakeLlmServerRepository::new(LlmServer {
         version: Some("0.40.13".to_string()),
         models: vec![
