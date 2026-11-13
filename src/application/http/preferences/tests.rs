@@ -1430,6 +1430,47 @@ async fn it_should_reject_an_unknown_effort() {
     );
 }
 
+#[tokio::test]
+async fn it_should_enable_ai_on_anthropic_without_an_ollama_url() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let preferences_updater = PreferencesUpdater::new(
+        repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(CategoryLock::default()),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        categorization_resetter(db.database()),
+        true,
+    );
+    let request = UpdatePreferencesRequest {
+        ai_enabled: Some(true),
+        ai_provider: Some("anthropic".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            ai_enabled: true,
+            ai_provider: "anthropic".to_string(),
+            anthropic_available: true,
+            ..all_on_response()
+        })
+    );
+    assert_eq!(
+        repository.find().unwrap(),
+        Some(Preferences {
+            ai_enabled: true,
+            ai_provider: AiProvider::Anthropic,
+            ..Preferences::default()
+        })
+    );
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await

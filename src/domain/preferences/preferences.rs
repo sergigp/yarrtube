@@ -178,8 +178,8 @@ impl Preferences {
     }
 
     fn ensure_ai_has_url(self) -> Result<Self, ValidationError> {
-        match (self.ai_enabled, &self.ollama_url) {
-            (true, None) => Err(ValidationError(
+        match (self.ai_enabled, self.ai_provider, &self.ollama_url) {
+            (true, AiProvider::Ollama, None) => Err(ValidationError(
                 "Ollama URL must be set to enable AI".to_string(),
             )),
             _ => Ok(self),
