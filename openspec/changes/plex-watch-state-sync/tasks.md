@@ -41,9 +41,9 @@
 
 `SqliteEpisodeWatchRepository`
 
-- [ ] 3.6 `it_should_round_trip_each_agreed_progress` — Unplayed, InProgress(215), Watched.
-- [ ] 3.7 `it_should_replace_a_row_on_save`
-- [ ] 3.8 `it_should_delete_rows_by_video_id`
+- [x] 3.6 `it_should_round_trip_each_agreed_progress` — Unplayed, InProgress(215), Watched.
+- [x] 3.7 `it_should_replace_a_row_on_save`
+- [x] 3.8 `it_should_delete_rows_by_video_id`
 
 ## 4. Verification
 

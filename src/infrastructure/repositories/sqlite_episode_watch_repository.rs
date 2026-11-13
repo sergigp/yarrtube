@@ -122,3 +122,77 @@ struct RawRow {
     watched: bool,
     position_seconds: i64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+
+    #[test]
+    fn it_should_round_trip_each_agreed_progress() {
+        let db = TestDatabase::new();
+        let repository = SqliteEpisodeWatchRepository::new(db.database());
+        let rows = vec![
+            row("rec1", "101", WatchProgress::Unplayed),
+            row(
+                "rec2",
+                "102",
+                WatchProgress::InProgress(PlaybackPosition::new(215).unwrap()),
+            ),
+            row("rec3", "103", WatchProgress::Watched),
+        ];
+        repository.save_many(&rows).unwrap();
+
+        let listed = repository.list();
+
+        assert_eq!(listed.map_err(|e| e.to_string()), Ok(rows));
+    }
+
+    #[test]
+    fn it_should_replace_a_row_on_save() {
+        let db = TestDatabase::new();
+        let repository = SqliteEpisodeWatchRepository::new(db.database());
+        repository
+            .save_many(&[row("rec1", "101", WatchProgress::Unplayed)])
+            .unwrap();
+
+        repository
+            .save_many(&[row("rec1", "201", WatchProgress::Watched)])
+            .unwrap();
+
+        assert_eq!(
+            repository.list().map_err(|e| e.to_string()),
+            Ok(vec![row("rec1", "201", WatchProgress::Watched)])
+        );
+    }
+
+    #[test]
+    fn it_should_delete_rows_by_video_id() {
+        let db = TestDatabase::new();
+        let repository = SqliteEpisodeWatchRepository::new(db.database());
+        repository
+            .save_many(&[
+                row("rec1", "101", WatchProgress::Watched),
+                row("rec2", "102", WatchProgress::Watched),
+                row("rec3", "103", WatchProgress::Watched),
+            ])
+            .unwrap();
+
+        repository
+            .delete_many(&[VideoId::new("rec1").unwrap(), VideoId::new("rec3").unwrap()])
+            .unwrap();
+
+        assert_eq!(
+            repository.list().map_err(|e| e.to_string()),
+            Ok(vec![row("rec2", "102", WatchProgress::Watched)])
+        );
+    }
+
+    fn row(video_id: &str, rating_key: &str, agreed: WatchProgress) -> EpisodeWatch {
+        EpisodeWatch {
+            video_id: VideoId::new(video_id).unwrap(),
+            rating_key: rating_key.to_string(),
+            agreed,
+        }
+    }
+}
