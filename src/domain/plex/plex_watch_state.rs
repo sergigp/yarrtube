@@ -22,7 +22,7 @@ impl PlexWatchState {
         }
     }
 
-    /// An offset counts (in progress, floored to seconds) unless the episode
+    /// An offset over 30s counts (in progress, floored to seconds) unless the episode
     /// is watched and the offset is at or below 10% of its duration (a
     /// rewatch just started); else viewed at least once ⇒ watched; else
     /// unplayed.
@@ -34,14 +34,13 @@ impl PlexWatchState {
         }
     }
 
-    /// The offset in whole seconds, when past the start and not a rewatch
+    /// The offset in whole seconds, when started (past 30s) and not a rewatch
     /// that just started.
     fn resume_position(&self) -> Option<PlaybackPosition> {
         self.view_offset_ms
             .filter(|offset_ms| !self.is_short_rewatch(*offset_ms))
-            .map(|offset_ms| offset_ms / 1000)
-            .filter(|seconds| *seconds > 0)
-            .and_then(|seconds| PlaybackPosition::new(seconds).ok())
+            .and_then(|offset_ms| PlaybackPosition::new(offset_ms / 1000).ok())
+            .filter(PlaybackPosition::is_started)
     }
 
     /// Watched, and played again only up to 10% of its duration.

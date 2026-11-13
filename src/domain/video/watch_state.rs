@@ -6,10 +6,6 @@ use chrono::{DateTime, Duration, Utc};
 /// continue watching.
 const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
 
-/// How far past the start playback must have got for a video to count as
-/// started rather than just opened.
-const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
-
 const WATCHED_THRESHOLD: f64 = 0.9;
 const REWATCH_RESET_THRESHOLD: f64 = 0.1;
 
@@ -40,7 +36,7 @@ impl WatchState {
     /// of `now`: worth offering to continue watching.
     pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {
         !self.is_watched()
-            && self.position.seconds() > IN_PROGRESS_MIN_POSITION_SECONDS
+            && self.position.is_started()
             && self
                 .last_played_at
                 .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
@@ -49,12 +45,10 @@ impl WatchState {
     /// Watched ⇒ watched; position over 30s ⇒ in progress; else unplayed:
     /// a video only sampled is not worth resuming.
     pub fn progress(&self) -> WatchProgress {
-        match (self.is_watched(), self.position.seconds()) {
+        match (self.is_watched(), self.position.is_started()) {
             (true, _) => WatchProgress::Watched,
-            (false, seconds) if seconds > IN_PROGRESS_MIN_POSITION_SECONDS => {
-                WatchProgress::InProgress(self.position)
-            }
-            (false, _) => WatchProgress::Unplayed,
+            (false, true) => WatchProgress::InProgress(self.position),
+            (false, false) => WatchProgress::Unplayed,
         }
     }
 

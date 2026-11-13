@@ -992,6 +992,31 @@ fn it_should_not_push_a_position_of_30_seconds_or_less() {
     );
 }
 
+#[test]
+fn it_should_not_pull_a_plex_position_of_30_seconds_or_less() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_in_progress(20_000, an_hour_ago())),
+    );
+    let video = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(watch_state(&db, &video), WatchState::unwatched());
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
