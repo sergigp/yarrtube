@@ -1,4 +1,4 @@
-use crate::domain::llm_server::{LlmChat, LlmReply, LlmServer, LlmServerUnreachable};
+use crate::domain::llm_server::{LlmChat, LlmModel, LlmReply, LlmServer, LlmServerUnreachable};
 use anyhow::Context;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -6,6 +6,11 @@ use std::fmt;
 use std::time::Duration;
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
+/// A check is interactive (the "Test connection" button), so an API that
+/// doesn't answer fails it quickly.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+/// The most models one page of `GET /v1/models` lists.
+const MODELS_PAGE_LIMIT: u32 = 1000;
 /// How much of an error body that isn't Anthropic's is kept.
 const ERROR_BODY_CHARS: usize = 300;
 /// How long connecting may take before Anthropic counts as unreachable.
@@ -43,16 +48,24 @@ impl fmt::Debug for AnthropicApiKey {
 /// Anthropic's API: `GET /v1/models` (paged), `POST /v1/messages`.
 pub struct AnthropicLlmServerRepository {
     config: AnthropicConfig,
+    check_timeout: Duration,
 }
 
 impl AnthropicLlmServerRepository {
     pub fn new(config: AnthropicConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            check_timeout: CHECK_TIMEOUT,
+        }
     }
 
     /// The models the key can use, as Anthropic lists them, newest first.
     pub fn find(&self) -> anyhow::Result<LlmServer> {
-        Err(anyhow::anyhow!("Anthropic isn't implemented yet").context(LlmServerUnreachable))
+        let client = Self::client(self.check_timeout)?;
+        Ok(LlmServer {
+            version: None,
+            models: self.models_after(&client, None)?,
+        })
     }
 
     /// What the model says to `chat`: `POST /v1/messages`. Errors tagged
@@ -60,10 +73,8 @@ impl AnthropicLlmServerRepository {
     /// errors: 429, 5xx, 529. `LlmReply::refused*`: other 400s, refusal.
     pub fn chat(&self, chat: &LlmChat) -> anyhow::Result<LlmReply> {
         let client = Self::client(chat.timeout)?;
-        let response = client
-            .post(format!("{}/v1/messages", self.config.api_url))
-            .header("x-api-key", self.config.api_key.as_str())
-            .header("anthropic-version", ANTHROPIC_VERSION)
+        let response = self
+            .request(client.post(format!("{}/v1/messages", self.config.api_url)))
             .json(&Self::message_body(chat))
             .send()
             .map_err(Self::send_error)?;
@@ -99,6 +110,45 @@ impl AnthropicLlmServerRepository {
                 ..usage
             },
         }
+    }
+
+    /// The models listed from the page after `after_id` on, page by page.
+    fn models_after(
+        &self,
+        client: &reqwest::blocking::Client,
+        after_id: Option<&str>,
+    ) -> anyhow::Result<Vec<LlmModel>> {
+        let page: ModelsPage = self
+            .request(client.get(format!("{}/v1/models", self.config.api_url)))
+            .query(&Self::page_query(after_id))
+            .send()
+            .map_err(Self::send_error)?
+            .json()
+            .context("/v1/models didn't answer as Anthropic does")?;
+        let models = page.data.into_iter().map(LlmModel::from);
+        let rest = match (page.has_more, page.last_id) {
+            (true, Some(last_id)) => self.models_after(client, Some(&last_id))?,
+            _ => vec![],
+        };
+        Ok(models.chain(rest).collect())
+    }
+
+    /// The query for one page of models: the most a page holds, from after
+    /// `after_id` when it isn't the first.
+    fn page_query(after_id: Option<&str>) -> Vec<(&'static str, String)> {
+        std::iter::once(("limit", MODELS_PAGE_LIMIT.to_string()))
+            .chain(after_id.map(|id| ("after_id", id.to_string())))
+            .collect()
+    }
+
+    /// `request` with the key and API version headers.
+    fn request(
+        &self,
+        request: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
+        request
+            .header("x-api-key", self.config.api_key.as_str())
+            .header("anthropic-version", ANTHROPIC_VERSION)
     }
 
     /// A call Anthropic answered `status` with `message`: unavailable for a
@@ -195,6 +245,33 @@ impl AnthropicLlmServerRepository {
             .connect_timeout(CONNECT_TIMEOUT)
             .timeout(timeout)
             .build()?)
+    }
+}
+
+#[derive(Deserialize)]
+struct ModelsPage {
+    data: Vec<ListedModel>,
+    #[serde(default)]
+    has_more: bool,
+    last_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ListedModel {
+    id: String,
+    display_name: Option<String>,
+    max_input_tokens: Option<u32>,
+}
+
+impl From<ListedModel> for LlmModel {
+    fn from(model: ListedModel) -> Self {
+        Self {
+            name: model.id,
+            display_name: model.display_name,
+            size_bytes: None,
+            thinking: false,
+            context_window: model.max_input_tokens,
+        }
     }
 }
 
@@ -603,6 +680,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_list_models_across_pages() {
+        let mut server = mockito::Server::new();
+        let _first = server
+            .mock("GET", "/v1/models?limit=1000")
+            .match_header("x-api-key", "sk-ant-test")
+            .match_header("anthropic-version", "2023-06-01")
+            .with_body(
+                r#"{"data": [{"type": "model", "id": "claude-sonnet-5-5", "display_name": "Claude Sonnet 5.5", "created_at": "2026-09-01T00:00:00Z", "max_input_tokens": 1000000, "max_tokens": 128000}], "has_more": true, "first_id": "claude-sonnet-5-5", "last_id": "claude-sonnet-5-5"}"#,
+            )
+            .create();
+        let _second = server
+            .mock("GET", "/v1/models?limit=1000&after_id=claude-sonnet-5-5")
+            .with_body(
+                r#"{"data": [{"type": "model", "id": "claude-haiku-4-5", "display_name": "Claude Haiku 4.5", "created_at": "2025-10-01T00:00:00Z", "max_input_tokens": 200000}], "has_more": false, "first_id": "claude-haiku-4-5", "last_id": "claude-haiku-4-5"}"#,
+            )
+            .create();
+
+        let result = repository(&server).find();
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(LlmServer {
+                version: None,
+                models: vec![
+                    listed("claude-sonnet-5-5", "Claude Sonnet 5.5", 1_000_000),
+                    listed("claude-haiku-4-5", "Claude Haiku 4.5", 200_000),
+                ],
+            })
+        );
+    }
+
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {
         AnthropicLlmServerRepository::new(AnthropicConfig {
             api_url: server.url(),
@@ -624,6 +733,16 @@ mod tests {
             max_output_tokens: 16_000,
             format: None,
             timeout: MIN_CHAT_TIMEOUT,
+        }
+    }
+
+    fn listed(name: &str, display_name: &str, context_window: u32) -> LlmModel {
+        LlmModel {
+            name: name.to_string(),
+            display_name: Some(display_name.to_string()),
+            size_bytes: None,
+            thinking: false,
+            context_window: Some(context_window),
         }
     }
 
