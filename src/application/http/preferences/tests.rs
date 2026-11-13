@@ -1491,6 +1491,53 @@ async fn it_should_ignore_a_sent_anthropic_available() {
     assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
 }
 
+#[tokio::test]
+async fn it_should_reset_failed_summaries_when_the_provider_changes() {
+    let requests = [
+        UpdatePreferencesRequest {
+            ai_provider: Some("anthropic".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            anthropic_summaries_model: Some("claude-sonnet-5-5".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            anthropic_summaries_effort: Some("low".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+    ];
+
+    for request in requests {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = failed_summary_video();
+        video_repository.insert(&video).unwrap();
+        let preferences_updater = PreferencesUpdater::new(
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            categorization_resetter(db.database()),
+            true,
+        );
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                summary: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video
+            })
+        );
+    }
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await

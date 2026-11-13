@@ -64,14 +64,18 @@ impl Preferences {
         self.ollama_url.clone().map(LlmConnection::Ollama)
     }
 
-    /// Whether `other` generates summaries differently: another server or
-    /// other settings, not merely summaries turned on or off.
+    /// Whether `other` generates summaries differently: another provider,
+    /// server or other settings, not merely summaries turned on or off.
     pub fn changes_summaries(&self, other: &Self) -> bool {
         let settings = SummarySettings {
             enabled: other.summaries.enabled,
             ..self.summaries.clone()
         };
-        self.ollama_url != other.ollama_url || settings != other.summaries
+        self.ai_provider != other.ai_provider
+            || self.ollama_url != other.ollama_url
+            || settings != other.summaries
+            || self.anthropic.summaries_model != other.anthropic.summaries_model
+            || self.anthropic.summaries_effort != other.anthropic.summaries_effort
     }
 
     /// Whether `other` categorizes differently: another server or other
