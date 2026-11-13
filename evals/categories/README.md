@@ -31,8 +31,9 @@ The system prompt is `prompts/categorization/<version>.md`.
 
 ## Running it
 
-Needs Ollama with the model pulled (`OLLAMA_URL` if it's on another machine)
-and `yt-dlp` for the missing summaries.
+Needs Ollama with the model pulled (`OLLAMA_URL` if it's on another machine),
+or an Anthropic key for `--provider anthropic` (below), and `yt-dlp` for the
+missing summaries (`--summarize` always uses Ollama).
 
 ```bash
 python3 -I evals/categories/eval.py --check       # inputs valid? labels left?
@@ -49,6 +50,17 @@ python3 -I evals/categories/eval.py --model qwen3:4b --think      # again with t
   prompt match, so only the changed category is asked again.
 - **Other flags**: `--prompt`, `--num-ctx`, `--max-output` and `--temperature`
   for a new run.
+- **Anthropic**: `--provider anthropic` runs the model on the Anthropic API
+  instead of Ollama, with the key in `YARRTUBE_ANTHROPIC_API_KEY` (the run
+  stops before its first call without it). `--effort low|medium|high`
+  (default `medium`) is sent as `output_config.effort`; the model thinks
+  adaptively, so `--think` and `--temperature` don't apply. Each call sends
+  the schema as structured output and the output cap as `max_tokens`
+  (`--num-ctx` only sizes that cap with `--batch`). A call stopped at
+  `max_tokens`, a refusal or a 400 is an error row; a bad key, an unknown
+  model, no credit or no connection stops the run, resumed with `--run`. A
+  run's provider and effort are fixed when it starts, and its report ends
+  with its token totals and an estimated cost.
 - **Batch**: `--batch` asks as the app does: every category in one call per
   video, with prompt [`v2-batch`](../../prompts/categorization/v2-batch.md)
   and a schema keyed by category name. `num_ctx` is the app's Auto for the
@@ -66,6 +78,7 @@ python3 -I evals/categories/eval.py --model qwen3:4b --think      # again with t
 ```bash
 python3 -I evals/categories/eval.py --model qwen3:4b --think           # one call per category
 python3 -I evals/categories/eval.py --model qwen3:4b --think --batch   # one call per video
+python3 -I evals/categories/eval.py --provider anthropic --model claude-haiku-5-5 --batch --effort low
 ```
 
 `--limit 10` run first: thinking with an enforced JSON format hasn't been tried

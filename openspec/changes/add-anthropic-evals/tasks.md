@@ -28,5 +28,5 @@ red-green cycle.
 
 - [x] 4.1 Run the summaries eval on `claude-haiku-5-5` at effort `low` and `medium`, judged by the external Sonnet judge as for the baseline. Compare must-haves, major errors and coverage against the latest `qwen3:4b` run, and record the results, the effort chosen and the token cost in `evals/summaries/decisions.md`.
 - [x] 4.2 Run the categories eval on `claude-haiku-5-5` (`--batch`, the shipped categorization prompt) at effort `low` and `medium`. Compare precision and recall against the latest `qwen3:4b` run, and record the results and the effort chosen in `evals/categories/decisions.md`.
-- [ ] 4.3 Document `--provider`, `--effort` and `YARRTUBE_ANTHROPIC_API_KEY` in `evals/summaries/README.md` and `evals/categories/README.md`, and check that the documented commands run as written.
+- [x] 4.3 Document `--provider`, `--effort` and `YARRTUBE_ANTHROPIC_API_KEY` in `evals/summaries/README.md` and `evals/categories/README.md`, and check that the documented commands run as written.
 - [ ] 4.4 If the results change a default (model or effort) assumed by `add-anthropic-provider`, update that change's artifacts with `/opsx:update` before it is applied.
