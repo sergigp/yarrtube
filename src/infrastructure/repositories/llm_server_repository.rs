@@ -116,10 +116,6 @@ impl FakeLlmServerRepository {
     }
 
     /// The connection each chat was sent to, in order.
-    #[expect(
-        dead_code,
-        reason = "walking skeleton: asserted by the Anthropic task tests"
-    )]
     pub fn connections(&self) -> Vec<LlmConnection> {
         self.chats
             .lock()

@@ -4,11 +4,11 @@ use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::llm_server::{
-    Effort, LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    Effort, LlmChat, LlmConnection, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::{
-    ContextLength, Preferences, SummaryPrompt, SummarySettings, Temperature,
+    AiProvider, ContextLength, Preferences, SummaryPrompt, SummarySettings, Temperature,
 };
 use crate::domain::services::VideoOwnerFinder;
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -2749,6 +2749,45 @@ fn it_should_log_why_a_generation_was_skipped_or_failed() {
     );
 }
 
+#[test]
+fn it_should_summarize_with_the_anthropic_model_and_effort() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(anthropic_server()).with_replies(vec![reply("Three games.")]),
+    );
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&anthropic_summaries_on())
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        summary_repository.find(&video.id).unwrap(),
+        Some(VideoSummary {
+            model: "claude-haiku-5-5".to_string(),
+            ..stored_summary(&video, "Three games.")
+        })
+    );
+    assert_eq!(llm.chats(), vec![anthropic_chat()]);
+    assert_eq!(llm.connections(), vec![LlmConnection::Anthropic]);
+}
+
 fn summarize_video_task(
     db: &TestDatabase,
     video_repository: Arc<SqliteVideoRepository>,
@@ -3127,3 +3166,39 @@ Rules:
 - Use only what the part summaries says. Include a number only if the part summaries states it, and give it exactly. Do not add names, numbers or comparisons of your own.
 - The part summaries is auto-generated and may misspell names; use the title to correct them.
 - Ignore sponsors, ads and requests to like or subscribe."#;
+
+/// AI and summaries on, with Anthropic and no Ollama URL.
+fn anthropic_summaries_on() -> Preferences {
+    Preferences {
+        ai_provider: AiProvider::Anthropic,
+        ollama_url: None,
+        ..summaries_on()
+    }
+}
+
+/// Anthropic listing `claude-haiku-5-5`, with its million-token window.
+fn anthropic_server() -> LlmServer {
+    LlmServer {
+        version: None,
+        models: vec![LlmModel {
+            name: "claude-haiku-5-5".to_string(),
+            display_name: Some("Claude Haiku 5.5".to_string()),
+            size_bytes: None,
+            thinking: false,
+            context_window: Some(1_000_000),
+        }],
+    }
+}
+
+/// The one call for `SHORT_SRT` on Anthropic's defaults.
+fn anthropic_chat() -> LlmChat {
+    LlmChat {
+        model: "claude-haiku-5-5".to_string(),
+        context_length: 131_072,
+        temperature: 0.0,
+        thinking: false,
+        effort: Effort::Medium,
+        max_output_tokens: 16_000,
+        ..one_call_chat()
+    }
+}

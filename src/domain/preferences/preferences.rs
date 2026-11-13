@@ -61,7 +61,10 @@ impl Preferences {
 
     /// Where AI calls go: `None` only for Ollama without a URL.
     pub fn connection(&self) -> Option<LlmConnection> {
-        self.ollama_url.clone().map(LlmConnection::Ollama)
+        match self.ai_provider {
+            AiProvider::Ollama => self.ollama_url.clone().map(LlmConnection::Ollama),
+            AiProvider::Anthropic => Some(LlmConnection::Anthropic),
+        }
     }
 
     /// Whether `other` generates summaries differently: another provider,
