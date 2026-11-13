@@ -1,7 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { useCheckOllama, useOllama, usePreferences, useSavePreferences } from '@/api/queries'
-import type { OllamaModel, OllamaServer, Preferences, PreferencesPatch } from '@/api/types'
+import type {
+  AiProvider,
+  OllamaModel,
+  OllamaServer,
+  Preferences,
+  PreferencesPatch,
+} from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -47,6 +53,12 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const set = <K extends keyof AiSettingsForm>(key: K, value: AiSettingsForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
   const aiOff = !form.ai_enabled
+  const onAnthropic = form.ai_provider === 'anthropic'
+  // Each provider keeps its own models: the fields edit the selected one's.
+  const summariesModelKey = onAnthropic ? 'anthropic_summaries_model' : 'summaries_model'
+  const categorizationModelKey = onAnthropic
+    ? 'anthropic_categorization_model'
+    : 'categorization_model'
   // Always shown, so turning summaries on doesn't reshape the page.
   const modelDisabled = aiOff || !form.summaries_enabled
   // Context length, temperature, thinking and the prompt: their defaults come
@@ -149,34 +161,39 @@ function AiSettings({ saved }: { saved: Preferences }) {
           checked={form.ai_enabled}
           onChange={(value) => set('ai_enabled', value)}
         />
-        <Field id="ollama-url" label="Ollama URL">
-          <div className="flex gap-2">
-            <Input
-              id="ollama-url"
-              type="url"
-              placeholder="http://192.168.1.10:11434"
-              value={form.ollama_url}
-              onChange={(event) => set('ollama_url', event.target.value)}
-            />
-            <Button
-              variant="outline"
-              disabled={form.ollama_url.trim() === '' || connection.checking}
-              onClick={() => void testConnection()}
-            >
-              Test connection
-            </Button>
-          </div>
-          {connection.message && (
-            <p
-              className={cn(
-                'text-sm',
-                connection.failed ? 'text-destructive' : 'text-muted-foreground',
-              )}
-            >
-              {connection.message}
-            </p>
-          )}
-        </Field>
+        {saved.anthropic_available && (
+          <ProviderChoice value={form.ai_provider} onChange={(value) => set('ai_provider', value)} />
+        )}
+        {!onAnthropic && (
+          <Field id="ollama-url" label="Ollama URL">
+            <div className="flex gap-2">
+              <Input
+                id="ollama-url"
+                type="url"
+                placeholder="http://192.168.1.10:11434"
+                value={form.ollama_url}
+                onChange={(event) => set('ollama_url', event.target.value)}
+              />
+              <Button
+                variant="outline"
+                disabled={form.ollama_url.trim() === '' || connection.checking}
+                onClick={() => void testConnection()}
+              >
+                Test connection
+              </Button>
+            </div>
+            {connection.message && (
+              <p
+                className={cn(
+                  'text-sm',
+                  connection.failed ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                {connection.message}
+              </p>
+            )}
+          </Field>
+        )}
       </Section>
       <Section title="Summaries">
         <SwitchRow
@@ -189,10 +206,10 @@ function AiSettings({ saved }: { saved: Preferences }) {
         />
         <ModelField
           id="summaries-model"
-          models={server?.models}
-          value={form.summaries_model}
+          models={onAnthropic ? undefined : server?.models}
+          value={form[summariesModelKey]}
           disabled={modelDisabled}
-          onChange={(value) => set('summaries_model', value)}
+          onChange={(value) => set(summariesModelKey, value)}
         />
         {form.summaries_enabled && (
           <>
@@ -264,10 +281,10 @@ function AiSettings({ saved }: { saved: Preferences }) {
           <ModelField
             id="categorization-model"
             name="Categorization model"
-            models={server?.models}
-            value={form.categorization_model}
+            models={onAnthropic ? undefined : server?.models}
+            value={form[categorizationModelKey]}
             disabled={aiOff || !form.categorization_enabled}
-            onChange={(value) => set('categorization_model', value)}
+            onChange={(value) => set(categorizationModelKey, value)}
           />
           {form.categorization_enabled && (
             <>
@@ -369,6 +386,37 @@ function AiSettings({ saved }: { saved: Preferences }) {
     </>
   )
 }
+
+/** The provider every AI feature runs on. */
+function ProviderChoice({
+  value,
+  onChange,
+}: {
+  value: AiProvider
+  onChange: (value: AiProvider) => void
+}) {
+  return (
+    <div role="radiogroup" aria-label="Provider" className="flex gap-6">
+      {PROVIDERS.map((provider) => (
+        <label key={provider.value} className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name="ai-provider"
+            value={provider.value}
+            checked={value === provider.value}
+            onChange={() => onChange(provider.value)}
+          />
+          {provider.label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+const PROVIDERS: { value: AiProvider; label: string }[] = [
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'anthropic', label: 'Anthropic' },
+]
 
 /** "Model": the server's models when known, otherwise a text field. */
 function ModelField({

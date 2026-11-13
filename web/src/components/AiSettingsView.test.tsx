@@ -31,6 +31,26 @@ describe('AiSettingsView', () => {
     expect(section.getByRole('button', { name: 'Test connection' })).toBeDisabled()
   })
 
+  it('saves only ai_provider when switching to Anthropic and shows its settings', async () => {
+    const saved = { ...aiOn(), anthropic_available: true }
+    const fetchMock = mockApi({
+      'GET /api/preferences': saved,
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/anthropic': { status: 502, error: 'down' },
+      'PATCH /api/preferences': { ...saved, ai_provider: 'anthropic' },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('radio', { name: 'Anthropic' }))
+
+    expect(screen.queryByRole('textbox', { name: 'Ollama URL' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('claude-haiku-5-5')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(patchBodies(fetchMock)).toEqual([{ ai_provider: 'anthropic' }])
+  })
+
   it('shows the Categorization section disabled on a fresh install', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)

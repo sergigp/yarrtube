@@ -1,8 +1,9 @@
-import type { OllamaModel, Preferences, PreferencesPatch } from '@/api/types'
+import type { AiProvider, Effort, OllamaModel, Preferences, PreferencesPatch } from '@/api/types'
 
 /** The AI page's editable fields, as typed (numbers as text). */
 export interface AiSettingsForm {
   ai_enabled: boolean
+  ai_provider: AiProvider
   ollama_url: string
   summaries_enabled: boolean
   summaries_model: string
@@ -18,12 +19,17 @@ export interface AiSettingsForm {
   categorization_temperature: string
   categorization_thinking: boolean
   categorization_prompt: string
+  anthropic_summaries_model: string
+  anthropic_summaries_effort: Effort
+  anthropic_categorization_model: string
+  anthropic_categorization_effort: Effort
 }
 
 /** The form showing `preferences`. */
 export function formFrom(preferences: Preferences): AiSettingsForm {
   return {
     ai_enabled: preferences.ai_enabled,
+    ai_provider: preferences.ai_provider,
     ollama_url: preferences.ollama_url ?? '',
     summaries_enabled: preferences.summaries_enabled,
     summaries_model: preferences.summaries_model,
@@ -38,6 +44,10 @@ export function formFrom(preferences: Preferences): AiSettingsForm {
     categorization_temperature: String(preferences.categorization_temperature),
     categorization_thinking: preferences.categorization_thinking,
     categorization_prompt: preferences.categorization_prompt,
+    anthropic_summaries_model: preferences.anthropic_summaries_model,
+    anthropic_summaries_effort: preferences.anthropic_summaries_effort,
+    anthropic_categorization_model: preferences.anthropic_categorization_model,
+    anthropic_categorization_effort: preferences.anthropic_categorization_effort,
   }
 }
 
@@ -61,6 +71,7 @@ export function changedFields(
 ): PreferencesPatch {
   const current: PreferencesPatch = {
     ai_enabled: form.ai_enabled,
+    ai_provider: form.ai_provider,
     ollama_url: form.ollama_url.trim(),
     summaries_enabled: form.summaries_enabled,
     summaries_model: form.summaries_model,
@@ -75,6 +86,10 @@ export function changedFields(
       ? form.categorization_thinking
       : saved.categorization_thinking,
     categorization_prompt: form.categorization_prompt,
+    anthropic_summaries_model: form.anthropic_summaries_model,
+    anthropic_summaries_effort: form.anthropic_summaries_effort,
+    anthropic_categorization_model: form.anthropic_categorization_model,
+    anthropic_categorization_effort: form.anthropic_categorization_effort,
   }
   const before: PreferencesPatch = { ...saved, ollama_url: saved.ollama_url ?? '' }
   const changed: PreferencesPatch = Object.fromEntries(
