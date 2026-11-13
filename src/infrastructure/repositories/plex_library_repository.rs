@@ -558,16 +558,6 @@ impl FakePlexLibraryRepository {
         self
     }
 
-    /// The watch state of the episode `rating_key`.
-    pub fn watch(&self, rating_key: &str) -> Option<PlexWatchState> {
-        self.episodes
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|fake| fake.episode.rating_key == rating_key)
-            .map(|fake| fake.episode.watch)
-    }
-
     /// The same fake with a playlist yarrtube did not create.
     pub fn with_playlist(self, rating_key: &str, title: &str) -> Self {
         self.playlists.lock().unwrap().push(FakePlaylist {

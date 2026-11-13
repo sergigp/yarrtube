@@ -90,18 +90,9 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
         };
         let rows = self.agreed_rows()?;
         self.forget_undownloaded(&rows)?;
-        let merged = self.merge_videos(&library, &rows)?;
-        let merged = if self.pull(&merged)? {
-            self.merge_videos(&library, &rows)?
-        } else {
-            merged
-        };
-        let synced: Vec<EpisodeWatch> = merged
-            .into_iter()
-            .filter_map(|(video, episode, outcome)| self.settle(&video, episode, outcome))
-            .collect();
-        self.episode_watch_repository.save_many(&synced)?;
-        self.request_sync(self.clock.now() + SYNC_INTERVAL)
+        let merged = self.pull_then_merge(&library, &rows)?;
+        let backlog = self.settle_all(merged)?;
+        self.request_next_sync(backlog)
     }
 }
 
@@ -160,6 +151,44 @@ impl PlexWatchSyncer {
                 (video, episode, outcome)
             })
             .collect())
+    }
+
+    /// Merges every video with its episode, pulling what Plex changed
+    /// first: once pulled, the pulled copies are in sync and the other
+    /// copies of the same YouTube video have something to push.
+    fn pull_then_merge<'a>(
+        &self,
+        library: &'a PlexLibrary,
+        rows: &HashMap<VideoId, EpisodeWatch>,
+    ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
+        let merged = self.merge_videos(library, rows)?;
+        if self.pull(&merged)? {
+            self.merge_videos(library, rows)
+        } else {
+            Ok(merged)
+        }
+    }
+
+    /// Records what is in sync and pushes up to `BATCH_SIZE` states to
+    /// Plex; whether pushes were left for the next sync.
+    fn settle_all(&self, merged: Vec<(Video, &PlexEpisode, MergeOutcome)>) -> anyhow::Result<bool> {
+        let (pushes, others): (Vec<_>, Vec<_>) = merged
+            .into_iter()
+            .partition(|(_, _, outcome)| matches!(outcome, MergeOutcome::Push(_)));
+        let backlog = pushes.len() > BATCH_SIZE;
+        let synced: Vec<EpisodeWatch> = others
+            .into_iter()
+            .chain(pushes.into_iter().take(BATCH_SIZE))
+            .filter_map(|(video, episode, outcome)| self.settle(&video, episode, outcome))
+            .collect();
+        self.episode_watch_repository.save_many(&synced)?;
+        Ok(backlog)
+    }
+
+    /// Right away while pushes remain, else after `SYNC_INTERVAL`.
+    fn request_next_sync(&self, backlog: bool) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        self.request_sync(if backlog { now } else { now + SYNC_INTERVAL })
     }
 
     /// Copies each pulled state to its video (and every copy of it);

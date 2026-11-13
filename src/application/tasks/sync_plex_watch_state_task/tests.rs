@@ -5,6 +5,7 @@ use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, 
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::plex::PlexWatchState;
 use crate::domain::plex_watch::EpisodeWatch;
+use crate::domain::services::plex_watch_syncer::BATCH_SIZE;
 use crate::domain::services::{
     CategoryVideoCollector, PlexEpisodeFinder, VideoOwnerFinder, VideoWatchStateUpdater,
 };
@@ -679,6 +680,38 @@ fn it_should_schedule_the_next_sync_in_five_minutes() {
     assert_eq!(
         task_repository.list_non_completed().unwrap(),
         vec![pending_sync(1, now() + Duration::minutes(5))]
+    );
+}
+
+#[test]
+fn it_should_schedule_the_next_sync_now_if_pushes_exceeded_the_batch() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    let files: Vec<String> = (0..=BATCH_SIZE).map(|i| format!("V{i}.mp4")).collect();
+    let plex = Arc::new(files.iter().enumerate().fold(
+        FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
+        |plex, (i, file)| plex.with_episode("19", &i.to_string(), &plex_file(file), &[]),
+    ));
+    files.iter().enumerate().for_each(|(i, file)| {
+        seed_video(
+            &db,
+            downloaded_video(&format!("yt{i}"), file).mark_watched(an_hour_ago()),
+        );
+    });
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        Arc::new(SqliteEpisodeWatchRepository::new(db.database())),
+        task_repository.clone(),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations().len(), BATCH_SIZE);
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_sync(1, now())]
     );
 }
 
