@@ -20,8 +20,9 @@ to run alongside any other.
 
 Each worker starts its own daemon (`helpers/daemon.js`, a worker-scoped
 fixture): a container of the image with a fresh temp database and videos
-directory, on free ports, with its own Plex stub, all sharing the one fake
-YouTube. So at most N daemons are alive at once; a run starts one per
+directory, on free ports, with its own Plex, Ollama and Anthropic stubs
+(`plex-stub.js`, `ollama-stub.js`, `anthropic-stub.js`; the daemon gets a key
+for the last, so Anthropic is offered), all sharing the one fake YouTube. So at most N daemons are alive at once; a run starts one per
 worker per browser project, plus one more each time a failed test restarts
 its worker. When a worker finishes, its container and temp directories are
 removed and its log is saved to

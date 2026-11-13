@@ -126,9 +126,12 @@ Depends on `add-anthropic-evals`. Its results confirm the default model
 - Web:
   - `api/types.ts`, `api/client.ts`, `api/queries.ts`, the fixture builders
   - `AiSettingsView.tsx`, `lib/aiSettingsForm.ts` and their tests
-- e2e: the AI settings spec follows the moved endpoint through the UI. No new
-  e2e scenario: the Anthropic flows are covered by Vitest, Rust tests and an
-  agent manual check.
+- e2e: the AI settings spec follows the moved endpoint through the UI. Every
+  daemon also gets a key and an Anthropic stub (`e2e-tests/anthropic-stub.js`,
+  via `YARRTUBE_ANTHROPIC_API_URL`), and one scenario tests the Anthropic
+  connection and saves it as the provider: the route-coverage reporter needs
+  a 2xx from `GET /api/llm/anthropic` through the UI. The rest of the
+  Anthropic flows are covered by Vitest, Rust tests and an agent manual check.
 - Contract suite: one ignored test against the real Anthropic API (lists
   models, one tiny call). It runs with `--contract` when the key is set.
 - Cost: none unless the user picks Anthropic. Calls are billed to the user's
