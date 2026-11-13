@@ -46,13 +46,15 @@ impl WatchState {
                 .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
     }
 
-    /// Watched ⇒ watched; position past the start ⇒ in progress; else
-    /// unplayed.
+    /// Watched ⇒ watched; position over 30s ⇒ in progress; else unplayed:
+    /// a video only sampled is not worth resuming.
     pub fn progress(&self) -> WatchProgress {
         match (self.is_watched(), self.position.seconds()) {
             (true, _) => WatchProgress::Watched,
-            (false, 0) => WatchProgress::Unplayed,
-            (false, _) => WatchProgress::InProgress(self.position),
+            (false, seconds) if seconds > IN_PROGRESS_MIN_POSITION_SECONDS => {
+                WatchProgress::InProgress(self.position)
+            }
+            (false, _) => WatchProgress::Unplayed,
         }
     }
 

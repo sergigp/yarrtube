@@ -34,7 +34,7 @@
 - [x] 2.24 `it_should_schedule_the_next_sync_in_five_minutes_if_pushes_filled_the_batch` (added by the audit).
 - [x] 2.25 `it_should_bring_every_copy_in_line_with_the_latest_plex_change_if_listed_last` (added by the audit).
 - [x] 2.26 `it_should_rewind_a_video_unwatched_in_plex_while_in_progress` (added by the audit).
-- [ ] 2.27 `it_should_not_push_a_position_of_30_seconds_or_less` — video unwatched at 12 s, episode unplayed ⇒ no mutation, row agreed Unplayed.
+- [x] 2.27 `it_should_not_push_a_position_of_30_seconds_or_less` — video unwatched at 12 s, episode unplayed ⇒ no mutation, row agreed Unplayed.
 - [ ] 2.28 `it_should_not_pull_a_plex_position_of_30_seconds_or_less` — episode offset 20 000 ms, video unplayed ⇒ video unchanged, no mutation.
 - [ ] 2.29 `it_should_push_instead_of_unwatching_after_a_token_switch` — `viewer_id()` + `EpisodeWatch.viewer_id` (migration 0031 column, `agreed_with(row, episode, viewer_id)`): row agreed Watched under another viewer id, video watched, episode unplayed ⇒ `scrobble`, video stays watched, row stored under the current viewer id.
 - [ ] 2.30 Refactor (no behaviour change): save an in-sync row only when it differs from the stored row. Done when the whole `sync_plex_watch_state_task` suite passes unchanged.
