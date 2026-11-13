@@ -65,8 +65,24 @@ impl WatchState {
     /// last played then, position back to the start; in progress ⇒
     /// unwatched at that position, last played then; unplayed ⇒ unwatched
     /// at the start, last played time kept.
-    pub fn adopt(self, _progress: WatchProgress, _played_at: DateTime<Utc>) -> Self {
-        self
+    pub fn adopt(self, progress: WatchProgress, played_at: DateTime<Utc>) -> Self {
+        match progress {
+            WatchProgress::Watched => Self {
+                watched_at: Some(played_at),
+                position: PlaybackPosition::start(),
+                last_played_at: Some(played_at),
+            },
+            WatchProgress::InProgress(position) => Self {
+                watched_at: None,
+                position,
+                last_played_at: Some(played_at),
+            },
+            WatchProgress::Unplayed => Self {
+                watched_at: None,
+                position: PlaybackPosition::start(),
+                ..self
+            },
+        }
     }
 
     /// Watched `now`, its position back to the start.

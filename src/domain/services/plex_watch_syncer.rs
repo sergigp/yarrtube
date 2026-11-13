@@ -2,6 +2,7 @@ use crate::domain::plex::PlexEpisode;
 use crate::domain::plex_watch::{EpisodeWatch, MergeOutcome, WatchSide, merge};
 use crate::domain::services::{
     PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, WatchProgress};
@@ -83,6 +84,11 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
         let library = self.plex_episode_finder.read_library()?;
         let rows = self.agreed_rows()?;
         let merged = self.merge_videos(&library, &rows)?;
+        let merged = if self.pull(&merged)? {
+            self.merge_videos(&library, &rows)?
+        } else {
+            merged
+        };
         let synced: Vec<EpisodeWatch> = merged
             .into_iter()
             .filter_map(|(video, episode, outcome)| self.settle(&video, episode, outcome))
@@ -130,6 +136,29 @@ impl PlexWatchSyncer {
                 (video, episode, outcome)
             })
             .collect())
+    }
+
+    /// Copies each pulled state to its video (and every copy of it);
+    /// whether anything was pulled.
+    fn pull(&self, merged: &[(Video, &PlexEpisode, MergeOutcome)]) -> anyhow::Result<bool> {
+        let pulls: Vec<(&Video, &PlexEpisode, WatchProgress)> = merged
+            .iter()
+            .filter_map(|(video, episode, outcome)| match outcome {
+                MergeOutcome::Pull(progress) => Some((video, *episode, *progress)),
+                _ => None,
+            })
+            .collect();
+        let now = self.clock.now();
+        pulls.iter().try_for_each(|(video, episode, progress)| {
+            self.video_watch_state_updater
+                .adopt(
+                    &video.id,
+                    *progress,
+                    episode.watch.last_viewed_at.unwrap_or(now),
+                )
+                .map_err(anyhow::Error::from)
+        })?;
+        Ok(!pulls.is_empty())
     }
 
     /// The row to store once `outcome` is applied, `None` when nothing was

@@ -2,12 +2,13 @@ use super::*;
 use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::playlist::PlaylistPath;
+use crate::domain::plex::PlexWatchState;
 use crate::domain::plex_watch::EpisodeWatch;
 use crate::domain::services::{
     CategoryVideoCollector, PlexEpisodeFinder, VideoOwnerFinder, VideoWatchStateUpdater,
 };
 use crate::domain::shared::{Quality, ReconcileInterval};
-use crate::domain::video::{Video, WatchProgress, YoutubeVideoId};
+use crate::domain::video::{PlaybackPosition, Video, WatchProgress, WatchState, YoutubeVideoId};
 use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -57,6 +58,42 @@ fn it_should_push_a_video_watched_in_yarrtube() {
 
     assert_eq!(result, Ok(TaskOutcome::Done));
     assert_eq!(plex.mutations(), vec!["scrobble:101".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(&video, "101", WatchProgress::Watched)]
+    );
+}
+
+#[test]
+fn it_should_pull_an_episode_watched_in_plex() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_watched(an_hour_ago())),
+    );
+    let video = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        watch_state(&db, &video),
+        WatchState {
+            watched_at: Some(an_hour_ago()),
+            position: PlaybackPosition::start(),
+            last_played_at: Some(an_hour_ago()),
+        }
+    );
+    assert_eq!(plex.mutations(), Vec::<String>::new());
     assert_eq!(
         episode_watch_repository.list().unwrap(),
         vec![agreed(&video, "101", WatchProgress::Watched)]
@@ -146,6 +183,24 @@ fn seed_video(db: &TestDatabase, video: Video) -> Video {
         ))
         .unwrap();
     video
+}
+
+/// The stored watch state of `video`.
+fn watch_state(db: &TestDatabase, video: &Video) -> WatchState {
+    SqliteVideoRepository::new(db.database())
+        .find(&video.id)
+        .unwrap()
+        .unwrap()
+        .watch
+}
+
+/// Watched once in Plex, last viewed `at`.
+fn plex_watched(at: DateTime<Utc>) -> PlexWatchState {
+    PlexWatchState {
+        view_count: 1,
+        last_viewed_at: Some(at),
+        ..PlexWatchState::unplayed()
+    }
 }
 
 fn agreed(video: &Video, rating_key: &str, progress: WatchProgress) -> EpisodeWatch {

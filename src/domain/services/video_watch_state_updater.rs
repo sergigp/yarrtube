@@ -168,11 +168,20 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
 
     fn adopt(
         &self,
-        _id: &VideoId,
-        _progress: WatchProgress,
-        _played_at: DateTime<Utc>,
+        id: &VideoId,
+        progress: WatchProgress,
+        played_at: DateTime<Utc>,
     ) -> Result<(), UpdateWatchStateError> {
-        Ok(())
+        self.find_copies(id)?
+            .iter()
+            .try_for_each(|copy| {
+                self.video_updater
+                    .update(&copy.id, |video| {
+                        Some(video.adopt_watch_progress(progress, played_at))
+                    })
+                    .map(drop)
+            })
+            .map_err(UpdateWatchStateError::Repository)
     }
 }
 

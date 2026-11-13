@@ -26,6 +26,10 @@ impl PlexWatchState {
     /// rewatch just started); else viewed at least once ⇒ watched; else
     /// unplayed.
     pub fn progress(&self) -> WatchProgress {
-        WatchProgress::Unplayed
+        if self.view_count > 0 {
+            WatchProgress::Watched
+        } else {
+            WatchProgress::Unplayed
+        }
     }
 }
