@@ -69,6 +69,9 @@ pub trait PlexLibraryRepository: Send + Sync {
     fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()>;
 }
 
+/// The library every watch-state write targets.
+const LIBRARY_IDENTIFIER: &str = "com.plexapp.plugins.library";
+
 pub struct PlexConfig {
     pub base_url: String,
     pub token: String,
@@ -304,20 +307,35 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         self.send(&endpoint, request).map(drop)
     }
 
-    fn mark_watched(&self, _rating_key: &str) -> anyhow::Result<()> {
-        Ok(())
+    fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.send_watch("/:/scrobble", &[("key", rating_key)])
     }
 
-    fn mark_unwatched(&self, _rating_key: &str) -> anyhow::Result<()> {
-        Ok(())
+    fn mark_unwatched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.send_watch("/:/unscrobble", &[("key", rating_key)])
     }
 
-    fn save_position(&self, _rating_key: &str, _position: PlaybackPosition) -> anyhow::Result<()> {
-        Ok(())
+    fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()> {
+        let time = (position.seconds() * 1000).to_string();
+        self.send_watch(
+            "/:/progress",
+            &[("key", rating_key), ("time", &time), ("state", "stopped")],
+        )
     }
 }
 
 impl HttpPlexLibraryRepository {
+    /// A watch-state write to the token user's library item, `GET endpoint`
+    /// with `query`.
+    fn send_watch(&self, endpoint: &str, query: &[(&str, &str)]) -> anyhow::Result<()> {
+        let request = self
+            .client()?
+            .get(self.url(endpoint))
+            .query(&[("identifier", LIBRARY_IDENTIFIER)])
+            .query(query);
+        self.send(endpoint, request).map(drop)
+    }
+
     /// The section's episodes from `start` on, one page per request.
     fn list_episodes_from(
         &self,
@@ -1265,6 +1283,77 @@ mod tests {
         let repository = repository(&server);
 
         let result = repository.delete_playlist("503");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_mark_an_episode_watched() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/:/scrobble")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded(
+                    "identifier".into(),
+                    "com.plexapp.plugins.library".into(),
+                ),
+                mockito::Matcher::UrlEncoded("key".into(), "101".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.mark_watched("101");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_mark_an_episode_unwatched() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/:/unscrobble")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded(
+                    "identifier".into(),
+                    "com.plexapp.plugins.library".into(),
+                ),
+                mockito::Matcher::UrlEncoded("key".into(), "101".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.mark_unwatched("101");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_save_an_episode_position_in_milliseconds() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/:/progress")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded(
+                    "identifier".into(),
+                    "com.plexapp.plugins.library".into(),
+                ),
+                mockito::Matcher::UrlEncoded("key".into(), "101".into()),
+                mockito::Matcher::UrlEncoded("time".into(), "215000".into()),
+                mockito::Matcher::UrlEncoded("state".into(), "stopped".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_position("101", PlaybackPosition::new(215).unwrap());
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         mock.assert();
