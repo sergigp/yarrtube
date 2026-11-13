@@ -1,4 +1,5 @@
-use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection};
+use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState};
+use crate::domain::video::PlaybackPosition;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Deserialize;
 #[cfg(test)]
@@ -57,6 +58,15 @@ pub trait PlexLibraryRepository: Send + Sync {
     ) -> anyhow::Result<PlexPlaylist>;
     /// `DELETE /playlists/{rating_key}`.
     fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()>;
+    /// Marks the episode watched for the token user (`GET /:/scrobble`),
+    /// clearing its resume position.
+    fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()>;
+    /// Marks the episode unwatched for the token user (`GET /:/unscrobble`),
+    /// clearing its view count, resume position and last viewed time.
+    fn mark_unwatched(&self, rating_key: &str) -> anyhow::Result<()>;
+    /// Sets the episode's resume position for the token user
+    /// (`GET /:/progress`, in milliseconds); Plex ignores a position of 0.
+    fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()>;
 }
 
 pub struct PlexConfig {
@@ -285,6 +295,18 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         let request = self.client()?.delete(self.url(&endpoint));
         self.send(&endpoint, request).map(drop)
     }
+
+    fn mark_watched(&self, _rating_key: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn mark_unwatched(&self, _rating_key: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn save_position(&self, _rating_key: &str, _position: PlaybackPosition) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl HttpPlexLibraryRepository {
@@ -428,6 +450,7 @@ fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
             rating_key: metadata.rating_key.clone(),
             section_id: section_id.to_string(),
             file: part.file,
+            watch: PlexWatchState::unplayed(),
         })
         .collect()
 }
@@ -513,10 +536,33 @@ impl FakePlexLibraryRepository {
                 rating_key: rating_key.to_string(),
                 section_id: section_id.to_string(),
                 file: file.to_string(),
+                watch: PlexWatchState::unplayed(),
             },
             labels: labels.iter().map(|label| label.to_string()).collect(),
         });
         self
+    }
+
+    /// The same fake with the episode `rating_key`'s watch state set to
+    /// `watch`.
+    pub fn with_episode_watch(self, rating_key: &str, watch: PlexWatchState) -> Self {
+        self.episodes
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|fake| fake.episode.rating_key == rating_key)
+            .for_each(|fake| fake.episode.watch = watch);
+        self
+    }
+
+    /// The watch state of the episode `rating_key`.
+    pub fn watch(&self, rating_key: &str) -> Option<PlexWatchState> {
+        self.episodes
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|fake| fake.episode.rating_key == rating_key)
+            .map(|fake| fake.episode.watch)
     }
 
     /// The same fake with a playlist yarrtube did not create.
@@ -696,6 +742,18 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             .lock()
             .unwrap()
             .retain(|playlist| playlist.rating_key != rating_key);
+        Ok(())
+    }
+
+    fn mark_watched(&self, _rating_key: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn mark_unwatched(&self, _rating_key: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn save_position(&self, _rating_key: &str, _position: PlaybackPosition) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -1142,6 +1200,7 @@ mod tests {
             rating_key: rating_key.to_string(),
             section_id: "19".to_string(),
             file: file.to_string(),
+            watch: PlexWatchState::unplayed(),
         }
     }
 

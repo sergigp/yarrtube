@@ -93,9 +93,10 @@ impl TaskViewSearcher {
             Task::DeletePlaylistFiles { path, .. } | Task::DeleteChannelFiles { path, .. } => {
                 Ok(HashMap::from([("path".to_string(), path.clone())]))
             }
-            Task::UpdateYtdlp | Task::SyncPlexLabels | Task::Unreadable { .. } => {
-                Ok(HashMap::new())
-            }
+            Task::UpdateYtdlp
+            | Task::SyncPlexLabels
+            | Task::SyncPlexWatchState
+            | Task::Unreadable { .. } => Ok(HashMap::new()),
         }
     }
 

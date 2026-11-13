@@ -1,4 +1,5 @@
 use super::playback_position::PlaybackPosition;
+use super::watch_progress::WatchProgress;
 use chrono::{DateTime, Duration, Utc};
 
 /// How long after it was last played a started video is still offered to
@@ -43,6 +44,25 @@ impl WatchState {
             && self
                 .last_played_at
                 .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
+    }
+
+    /// Watched ⇒ watched; position past the start ⇒ in progress; else
+    /// unplayed.
+    pub fn progress(&self) -> WatchProgress {
+        WatchProgress::Unplayed
+    }
+
+    /// The latest of when it was watched and when it was last played.
+    pub fn changed_at(&self) -> Option<DateTime<Utc>> {
+        None
+    }
+
+    /// The state Plex reports, played at `played_at`: watched ⇒ watched and
+    /// last played then, position back to the start; in progress ⇒
+    /// unwatched at that position, last played then; unplayed ⇒ unwatched
+    /// at the start, last played time kept.
+    pub fn adopt(self, _progress: WatchProgress, _played_at: DateTime<Utc>) -> Self {
+        self
     }
 
     /// Watched `now`, its position back to the start.

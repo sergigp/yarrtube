@@ -47,6 +47,7 @@ pub enum Task {
         video_id: String,
     },
     SyncPlexLabels,
+    SyncPlexWatchState,
     FetchChapters {
         video_id: String,
     },
@@ -86,6 +87,7 @@ impl Task {
             Self::FetchSubtitles { .. } => "fetch_subtitles",
             Self::SyncVideo { .. } => "sync_video",
             Self::SyncPlexLabels => "sync_plex_labels",
+            Self::SyncPlexWatchState => "sync_plex_watch_state",
             Self::FetchChapters { .. } => "fetch_chapters",
             Self::SummarizeVideo { .. } => "summarize_video",
             Self::CategorizeVideo { .. } => "categorize_video",
@@ -102,7 +104,7 @@ impl Task {
             Self::FetchThumbnail { .. } => TaskLane::Thumbnail,
             Self::FetchSubtitles { .. } | Self::FetchChapters { .. } => TaskLane::Subtitles,
             Self::SyncVideo { .. } => TaskLane::VideoSync,
-            Self::SyncPlexLabels => TaskLane::Plex,
+            Self::SyncPlexLabels | Self::SyncPlexWatchState => TaskLane::Plex,
             Self::SummarizeVideo { .. } | Self::CategorizeVideo { .. } => TaskLane::Summaries,
             Self::UpdateYtdlp => TaskLane::Exclusive,
             Self::ReconcilePlaylist { .. }
@@ -225,6 +227,7 @@ mod tests {
                 TaskLane::Subtitles,
                 TaskLane::VideoSync,
                 TaskLane::Plex,
+                TaskLane::Plex,
                 TaskLane::Subtitles,
                 TaskLane::Download,
                 TaskLane::Summaries,
@@ -252,6 +255,7 @@ mod tests {
                 video_key.clone(),
                 video_key.clone(),
                 video_key.clone(),
+                None,
                 None,
                 video_key.clone(),
                 video_key.clone(),
@@ -295,7 +299,7 @@ mod tests {
             output_dirs,
             vec![
                 None, None, None, music, None, None, None, None, None, None, None, None, None,
-                None, None, None,
+                None, None, None, None,
             ]
         );
     }
@@ -310,8 +314,8 @@ mod tests {
         assert_eq!(
             video_ids,
             vec![
-                None, None, rec1, None, None, None, None, rec1, rec1, rec1, None, None, rec1, None,
-                None, None,
+                None, None, rec1, None, None, None, None, rec1, rec1, rec1, None, None, None, rec1,
+                None, None, None,
             ]
         );
     }
@@ -327,7 +331,7 @@ mod tests {
             deleted_paths,
             vec![
                 None, None, None, None, chill, chill, None, None, None, None, None, None, None,
-                None, None, None,
+                None, None, None, None,
             ]
         );
     }
@@ -380,6 +384,7 @@ mod tests {
                 video_id: "rec1".to_string(),
             },
             Task::SyncPlexLabels,
+            Task::SyncPlexWatchState,
             Task::FetchChapters {
                 video_id: "rec1".to_string(),
             },
