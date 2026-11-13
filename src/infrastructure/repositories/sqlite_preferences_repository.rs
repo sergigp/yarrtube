@@ -1,7 +1,8 @@
-use crate::domain::llm_server::OllamaUrl;
+use crate::domain::llm_server::{Effort, OllamaUrl};
 use crate::domain::preferences::{
-    CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength, Preferences,
-    SummaryModel, SummaryPrompt, SummarySettings, Temperature, Theme,
+    AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
+    CategorizationSettings, ContextLength, Preferences, SummaryModel, SummaryPrompt,
+    SummarySettings, Temperature, Theme,
 };
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -87,6 +88,11 @@ struct StoredPreferences {
     categorization_thinking: Option<bool>,
     /// Only once the user saved one: missing reads as the shipped prompt.
     categorization_prompt: Option<String>,
+    ai_provider: Option<String>,
+    anthropic_summaries_model: Option<String>,
+    anthropic_summaries_effort: Option<String>,
+    anthropic_categorization_model: Option<String>,
+    anthropic_categorization_effort: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -123,6 +129,27 @@ impl From<&Preferences> for StoredPreferences {
                 .prompt
                 .as_ref()
                 .map(|prompt| prompt.as_str().to_string()),
+            ai_provider: Some(preferences.ai_provider.as_str().to_string()),
+            anthropic_summaries_model: Some(
+                preferences.anthropic.summaries_model.as_str().to_string(),
+            ),
+            anthropic_summaries_effort: Some(
+                preferences.anthropic.summaries_effort.as_str().to_string(),
+            ),
+            anthropic_categorization_model: Some(
+                preferences
+                    .anthropic
+                    .categorization_model
+                    .as_str()
+                    .to_string(),
+            ),
+            anthropic_categorization_effort: Some(
+                preferences
+                    .anthropic
+                    .categorization_effort
+                    .as_str()
+                    .to_string(),
+            ),
         }
     }
 }
@@ -201,6 +228,28 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_prompt
                     .map(CategorizationPrompt::from_stored),
             },
+            ai_provider: stored
+                .ai_provider
+                .and_then(|provider| AiProvider::new(&provider).ok())
+                .unwrap_or(defaults.ai_provider),
+            anthropic: AnthropicSettings {
+                summaries_model: stored
+                    .anthropic_summaries_model
+                    .and_then(|model| SummaryModel::new(model).ok())
+                    .unwrap_or(defaults.anthropic.summaries_model),
+                summaries_effort: stored
+                    .anthropic_summaries_effort
+                    .and_then(|effort| Effort::new(&effort).ok())
+                    .unwrap_or(defaults.anthropic.summaries_effort),
+                categorization_model: stored
+                    .anthropic_categorization_model
+                    .and_then(|model| CategorizationModel::new(model).ok())
+                    .unwrap_or(defaults.anthropic.categorization_model),
+                categorization_effort: stored
+                    .anthropic_categorization_effort
+                    .and_then(|effort| Effort::new(&effort).ok())
+                    .unwrap_or(defaults.anthropic.categorization_effort),
+            },
         }
     }
 }
@@ -208,6 +257,7 @@ impl From<StoredPreferences> for Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::llm_server::LlmConnection;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 
     #[test]
@@ -430,6 +480,61 @@ mod tests {
                 theme: Theme::Dark,
                 ..Preferences::default()
             }))
+        );
+    }
+
+    #[test]
+    fn it_should_round_trip_the_provider_and_anthropic_settings() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            ai_enabled: true,
+            ai_provider: AiProvider::Anthropic,
+            anthropic: AnthropicSettings {
+                summaries_model: SummaryModel::new("claude-sonnet-5-5").unwrap(),
+                summaries_effort: Effort::High,
+                categorization_model: CategorizationModel::new("claude-opus-5-5").unwrap(),
+                categorization_effort: Effort::Low,
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_preferences_without_provider_keys_as_their_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"ai_enabled\": true, \"ollama_url\": \"http://mac.local:11434\", \"summaries_model\": \"gemma3:4b\"}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences {
+                ai_enabled: true,
+                ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+                summaries: SummarySettings {
+                    model: SummaryModel::new("gemma3:4b").unwrap(),
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            }))
+        );
+        assert_eq!(
+            repository
+                .find()
+                .unwrap()
+                .map(|preferences| preferences.connection()),
+            Some(Some(LlmConnection::Ollama(
+                OllamaUrl::new("http://mac.local:11434").unwrap()
+            )))
         );
     }
 

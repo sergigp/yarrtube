@@ -3,7 +3,7 @@ pub mod categories;
 pub mod channels;
 pub mod directories;
 pub mod error;
-pub mod ollama;
+pub mod llm;
 pub mod playlists;
 pub mod preferences;
 pub mod tasks;
@@ -124,7 +124,8 @@ pub fn api_router(api_services: ApiServices) -> Router {
         )
         .route("/tasks", get(tasks::list_tasks))
         .route("/version", get(version::get_version))
-        .route("/ollama", get(ollama::get_ollama))
+        .route("/llm/ollama", get(llm::get_ollama))
+        .route("/llm/anthropic", get(llm::get_anthropic))
         .route(
             "/preferences",
             get(preferences::get_preferences).patch(preferences::update_preferences),

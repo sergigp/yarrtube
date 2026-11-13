@@ -20,9 +20,11 @@ pub struct PreferencesUpdater {
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     category_lock: Arc<CategoryLock>,
     category_repository: Arc<dyn CategoryRepository>,
+    anthropic_available: bool,
 }
 
 impl PreferencesUpdater {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<dyn PreferencesRepository>,
         video_repository: Arc<dyn VideoRepository>,
@@ -31,6 +33,7 @@ impl PreferencesUpdater {
         category_lock: Arc<CategoryLock>,
         category_repository: Arc<dyn CategoryRepository>,
         categorization_resetter: CategorizationResetter,
+        anthropic_available: bool,
     ) -> Self {
         Self {
             repository,
@@ -40,6 +43,7 @@ impl PreferencesUpdater {
             video_category_verdict_repository,
             category_lock,
             category_repository,
+            anthropic_available,
         }
     }
 }
@@ -65,7 +69,7 @@ impl PreferencesUpdaterApi for PreferencesUpdater {
         let stored = self.stored()?;
         let updated = stored
             .clone()
-            .apply(change)
+            .apply(change, self.anthropic_available)
             .map_err(UpdatePreferencesError::Invalid)?;
         self.repository
             .save(&updated)
@@ -93,7 +97,11 @@ impl PreferencesUpdater {
             .category_repository
             .list()
             .map_err(UpdatePreferencesError::Repository)?;
-        Ok(ResolvedPreferences::new(preferences, &categories))
+        Ok(ResolvedPreferences::new(
+            preferences,
+            &categories,
+            self.anthropic_available,
+        ))
     }
 
     fn stored(&self) -> Result<Preferences, UpdatePreferencesError> {

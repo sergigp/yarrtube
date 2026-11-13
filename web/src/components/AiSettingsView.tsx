@@ -1,7 +1,21 @@
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
-import { useCheckOllama, useOllama, usePreferences, useSavePreferences } from '@/api/queries'
-import type { OllamaModel, OllamaServer, Preferences, PreferencesPatch } from '@/api/types'
+import {
+  useAnthropic,
+  useCheckAnthropic,
+  useCheckOllama,
+  useOllama,
+  usePreferences,
+  useSavePreferences,
+} from '@/api/queries'
+import type {
+  AiProvider,
+  AnthropicServer,
+  Effort,
+  OllamaServer,
+  Preferences,
+  PreferencesPatch,
+} from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,7 +35,7 @@ import { useSavedFlash } from '@/hooks/useSavedFlash'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 
-/** The AI page: the Ollama server and how video summaries are generated. */
+/** The AI page: the provider AI runs on, and how videos are summarized and categorized. */
 export function AiSettingsView() {
   const { data: preferences, error } = usePreferences()
 
@@ -47,6 +61,14 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const set = <K extends keyof AiSettingsForm>(key: K, value: AiSettingsForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
   const aiOff = !form.ai_enabled
+  const onAnthropic = form.ai_provider === 'anthropic'
+  // Saved before the key was removed: only Ollama can be picked now.
+  const keyRemoved = !saved.anthropic_available && saved.ai_provider === 'anthropic'
+  // Each provider keeps its own models: the fields edit the selected one's.
+  const summariesModelKey = onAnthropic ? 'anthropic_summaries_model' : 'summaries_model'
+  const categorizationModelKey = onAnthropic
+    ? 'anthropic_categorization_model'
+    : 'categorization_model'
   // Always shown, so turning summaries on doesn't reshape the page.
   const modelDisabled = aiOff || !form.summaries_enabled
   // Context length, temperature, thinking and the prompt: their defaults come
@@ -64,6 +86,16 @@ function AiSettings({ saved }: { saved: Preferences }) {
   // tested successfully, whichever came last.
   const [modelsUrl, setModelsUrl] = useState(saved.ollama_url)
   const { data: server } = useOllama(modelsUrl)
+  // Anthropic's models, checked once Anthropic is saved or tested.
+  const checkAnthropic = useCheckAnthropic()
+  const [anthropicModelsWanted, setAnthropicModelsWanted] = useState(
+    saved.ai_provider === 'anthropic',
+  )
+  const { data: anthropic } = useAnthropic(saved.anthropic_available && anthropicModelsWanted)
+  const models = onAnthropic
+    ? anthropic?.models.map((model) => model.name)
+    : server?.models.map((model) => model.name)
+  const missingModel = onAnthropic ? 'not available' : 'not installed'
   // Known only when the server lists the model; unknown, the switch shows.
   const modelCannotThink = (name: string) =>
     server?.models.find((model) => model.name === name)?.thinking === false
@@ -91,6 +123,17 @@ function AiSettings({ saved }: { saved: Preferences }) {
       const tested = await checkOllama(url)
       setModelsUrl(url)
       setConnection({ ...NO_CHECK, message: connectedMessage(tested) })
+    } catch (err) {
+      setConnection({ ...NO_CHECK, failed: true, message: errorMessage(err) })
+    }
+  }
+
+  const testAnthropic = async () => {
+    setConnection({ ...NO_CHECK, checking: true })
+    try {
+      const tested = await checkAnthropic()
+      setAnthropicModelsWanted(true)
+      setConnection({ ...NO_CHECK, message: anthropicConnectedMessage(tested) })
     } catch (err) {
       setConnection({ ...NO_CHECK, failed: true, message: errorMessage(err) })
     }
@@ -142,41 +185,59 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
   return (
     <>
-      <Section title="Ollama">
+      <Section title="Provider">
         <SwitchRow
           id="ai-enabled"
           label="Enable AI"
           checked={form.ai_enabled}
           onChange={(value) => set('ai_enabled', value)}
         />
-        <Field id="ollama-url" label="Ollama URL">
-          <div className="flex gap-2">
-            <Input
-              id="ollama-url"
-              type="url"
-              placeholder="http://192.168.1.10:11434"
-              value={form.ollama_url}
-              onChange={(event) => set('ollama_url', event.target.value)}
-            />
+        {keyRemoved && (
+          <p className="text-sm text-destructive">
+            Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set
+          </p>
+        )}
+        {(saved.anthropic_available || keyRemoved) && (
+          <ProviderChoice
+            providers={saved.anthropic_available ? PROVIDERS : OLLAMA_ONLY}
+            value={form.ai_provider}
+            onChange={(value) => set('ai_provider', value)}
+          />
+        )}
+        {!onAnthropic && (
+          <Field id="ollama-url" label="Ollama URL">
+            <div className="flex gap-2">
+              <Input
+                id="ollama-url"
+                type="url"
+                placeholder="http://192.168.1.10:11434"
+                value={form.ollama_url}
+                onChange={(event) => set('ollama_url', event.target.value)}
+              />
+              <Button
+                variant="outline"
+                disabled={form.ollama_url.trim() === '' || connection.checking}
+                onClick={() => void testConnection()}
+              >
+                Test connection
+              </Button>
+            </div>
+            <ConnectionMessage connection={connection} />
+          </Field>
+        )}
+        {onAnthropic && (
+          <div className="flex flex-col gap-1.5">
             <Button
               variant="outline"
-              disabled={form.ollama_url.trim() === '' || connection.checking}
-              onClick={() => void testConnection()}
+              className="self-start"
+              disabled={connection.checking}
+              onClick={() => void testAnthropic()}
             >
               Test connection
             </Button>
+            <ConnectionMessage connection={connection} />
           </div>
-          {connection.message && (
-            <p
-              className={cn(
-                'text-sm',
-                connection.failed ? 'text-destructive' : 'text-muted-foreground',
-              )}
-            >
-              {connection.message}
-            </p>
-          )}
-        </Field>
+        )}
       </Section>
       <Section title="Summaries">
         <SwitchRow
@@ -189,48 +250,60 @@ function AiSettings({ saved }: { saved: Preferences }) {
         />
         <ModelField
           id="summaries-model"
-          models={server?.models}
-          value={form.summaries_model}
+          models={models}
+          missing={missingModel}
+          value={form[summariesModelKey]}
           disabled={modelDisabled}
-          onChange={(value) => set('summaries_model', value)}
+          onChange={(value) => set(summariesModelKey, value)}
         />
         {form.summaries_enabled && (
           <>
             <AdvancedToggle open={advancedOpen} onToggle={setAdvancedOpen} />
             {advancedOpen && (
               <>
-                <Field id="summaries-context-length" label="Context length">
-                  <Input
-                    id="summaries-context-length"
-                    type="number"
-                    min={1024}
-                    max={131072}
-                    step={1024}
-                    value={form.summaries_context_length}
+                {onAnthropic ? (
+                  <EffortField
+                    id="summaries-effort"
+                    value={form.anthropic_summaries_effort}
                     disabled={aiOff}
-                    onChange={(event) => set('summaries_context_length', event.target.value)}
+                    onChange={(value) => set('anthropic_summaries_effort', value)}
                   />
-                </Field>
-                <Field id="summaries-temperature" label="Temperature">
-                  <Input
-                    id="summaries-temperature"
-                    type="number"
-                    min={0}
-                    max={2}
-                    step={0.1}
-                    value={form.summaries_temperature}
-                    disabled={aiOff}
-                    onChange={(event) => set('summaries_temperature', event.target.value)}
-                  />
-                </Field>
-                <ThinkingField
-                  id="summaries-thinking"
-                  model={form.summaries_model}
-                  cannotThink={summariesCannotThink}
-                  checked={form.summaries_thinking}
-                  disabled={aiOff}
-                  onChange={(value) => set('summaries_thinking', value)}
-                />
+                ) : (
+                  <>
+                    <Field id="summaries-context-length" label="Context length">
+                      <Input
+                        id="summaries-context-length"
+                        type="number"
+                        min={1024}
+                        max={131072}
+                        step={1024}
+                        value={form.summaries_context_length}
+                        disabled={aiOff}
+                        onChange={(event) => set('summaries_context_length', event.target.value)}
+                      />
+                    </Field>
+                    <Field id="summaries-temperature" label="Temperature">
+                      <Input
+                        id="summaries-temperature"
+                        type="number"
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        value={form.summaries_temperature}
+                        disabled={aiOff}
+                        onChange={(event) => set('summaries_temperature', event.target.value)}
+                      />
+                    </Field>
+                    <ThinkingField
+                      id="summaries-thinking"
+                      model={form.summaries_model}
+                      cannotThink={summariesCannotThink}
+                      checked={form.summaries_thinking}
+                      disabled={aiOff}
+                      onChange={(value) => set('summaries_thinking', value)}
+                    />
+                  </>
+                )}
                 <PromptField
                   id="summaries-prompt"
                   help={<PromptHelp />}
@@ -264,10 +337,11 @@ function AiSettings({ saved }: { saved: Preferences }) {
           <ModelField
             id="categorization-model"
             name="Categorization model"
-            models={server?.models}
-            value={form.categorization_model}
+            models={models}
+            missing={missingModel}
+            value={form[categorizationModelKey]}
             disabled={aiOff || !form.categorization_enabled}
-            onChange={(value) => set('categorization_model', value)}
+            onChange={(value) => set(categorizationModelKey, value)}
           />
           {form.categorization_enabled && (
             <>
@@ -278,55 +352,67 @@ function AiSettings({ saved }: { saved: Preferences }) {
               />
               {categorizationAdvancedOpen && (
                 <>
-                  <Field id="categorization-context-length" label="Context length">
-                    <Input
-                      id="categorization-context-length"
-                      aria-label="Categorization context length"
-                      type="number"
-                      min={1024}
-                      max={131072}
-                      step={1024}
-                      value={categorizationContextLength}
-                      readOnly={form.categorization_context_length_auto}
+                  {onAnthropic ? (
+                    <EffortField
+                      id="categorization-effort"
+                      name="Categorization effort"
+                      value={form.anthropic_categorization_effort}
                       disabled={aiOff}
-                      onChange={(event) => set('categorization_context_length', event.target.value)}
+                      onChange={(value) => set('anthropic_categorization_effort', value)}
                     />
-                    <p className="text-sm text-muted-foreground">
-                      Auto sizes it from your categories with an AI prompt, about 1,800 tokens
-                      each. Too small and videos are asked about one category at a time, which is
-                      slower.
-                    </p>
-                  </Field>
-                  <SwitchRow
-                    id="categorization-context-length-auto"
-                    label="Auto"
-                    name="Auto context length"
-                    checked={form.categorization_context_length_auto}
-                    disabled={aiOff}
-                    onChange={setCategorizationAuto}
-                  />
-                  <Field id="categorization-temperature" label="Temperature">
-                    <Input
-                      id="categorization-temperature"
-                      aria-label="Categorization temperature"
-                      type="number"
-                      min={0}
-                      max={2}
-                      step={0.1}
-                      value={form.categorization_temperature}
-                      disabled={aiOff}
-                      onChange={(event) => set('categorization_temperature', event.target.value)}
-                    />
-                  </Field>
-                  <ThinkingField
-                    id="categorization-thinking"
-                    name="Categorization thinking"
-                    model={form.categorization_model}
-                    cannotThink={categorizationCannotThink}
-                    checked={form.categorization_thinking}
-                    disabled={aiOff}
-                    onChange={(value) => set('categorization_thinking', value)}
-                  />
+                  ) : (
+                    <>
+                      <Field id="categorization-context-length" label="Context length">
+                        <Input
+                          id="categorization-context-length"
+                          aria-label="Categorization context length"
+                          type="number"
+                          min={1024}
+                          max={131072}
+                          step={1024}
+                          value={categorizationContextLength}
+                          readOnly={form.categorization_context_length_auto}
+                          disabled={aiOff}
+                          onChange={(event) => set('categorization_context_length', event.target.value)}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Auto sizes it from your categories with an AI prompt, about 1,800 tokens
+                          each. Too small and videos are asked about one category at a time, which is
+                          slower.
+                        </p>
+                      </Field>
+                      <SwitchRow
+                        id="categorization-context-length-auto"
+                        label="Auto"
+                        name="Auto context length"
+                        checked={form.categorization_context_length_auto}
+                        disabled={aiOff}
+                        onChange={setCategorizationAuto}
+                      />
+                      <Field id="categorization-temperature" label="Temperature">
+                        <Input
+                          id="categorization-temperature"
+                          aria-label="Categorization temperature"
+                          type="number"
+                          min={0}
+                          max={2}
+                          step={0.1}
+                          value={form.categorization_temperature}
+                          disabled={aiOff}
+                          onChange={(event) => set('categorization_temperature', event.target.value)}
+                        />
+                      </Field>
+                      <ThinkingField
+                        id="categorization-thinking"
+                        name="Categorization thinking"
+                        model={form.categorization_model}
+                        cannotThink={categorizationCannotThink}
+                        checked={form.categorization_thinking}
+                        disabled={aiOff}
+                        onChange={(value) => set('categorization_thinking', value)}
+                      />
+                    </>
+                  )}
                   <PromptField
                     id="categorization-prompt"
                     name="Categorization prompt"
@@ -370,11 +456,47 @@ function AiSettings({ saved }: { saved: Preferences }) {
   )
 }
 
+/** The provider every AI feature runs on. */
+function ProviderChoice({
+  providers,
+  value,
+  onChange,
+}: {
+  providers: { value: AiProvider; label: string }[]
+  value: AiProvider
+  onChange: (value: AiProvider) => void
+}) {
+  return (
+    <div role="radiogroup" aria-label="Provider" className="flex gap-6">
+      {providers.map((provider) => (
+        <label key={provider.value} className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name="ai-provider"
+            value={provider.value}
+            checked={value === provider.value}
+            onChange={() => onChange(provider.value)}
+          />
+          {provider.label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+const PROVIDERS: { value: AiProvider; label: string }[] = [
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'anthropic', label: 'Anthropic' },
+]
+
+const OLLAMA_ONLY = PROVIDERS.filter((provider) => provider.value === 'ollama')
+
 /** "Model": the server's models when known, otherwise a text field. */
 function ModelField({
   id,
   name,
   models,
+  missing,
   value,
   disabled,
   onChange,
@@ -382,7 +504,9 @@ function ModelField({
   id: string
   /** The field's accessible name, when the label alone is ambiguous. */
   name?: string
-  models: OllamaModel[] | undefined
+  models: string[] | undefined
+  /** How a selected model the provider doesn't have is marked. */
+  missing: string
   value: string
   disabled: boolean
   onChange: (value: string) => void
@@ -396,9 +520,9 @@ function ModelField({
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+          className={SELECT_CLASS}
         >
-          {modelOptions(models, value).map((option) => (
+          {modelOptions(models, value, missing).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -443,6 +567,46 @@ function AdvancedToggle({
     </button>
   )
 }
+
+/** "Effort": how much an Anthropic model reasons before answering. */
+function EffortField({
+  id,
+  name,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string
+  /** The field's accessible name, when the label alone is ambiguous. */
+  name?: string
+  value: Effort
+  disabled: boolean
+  onChange: (value: Effort) => void
+}) {
+  return (
+    <Field id={id} label="Effort" help={<PreferenceHelp label="Effort" help={EFFORT_HELP} />}>
+      <select
+        id={id}
+        aria-label={name}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as Effort)}
+        className={SELECT_CLASS}
+      >
+        {EFFORTS.map((effort) => (
+          <option key={effort} value={effort}>
+            {effort}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}
+
+const EFFORTS: Effort[] = ['low', 'medium', 'high']
+
+const EFFORT_HELP =
+  'Higher effort makes the model reason more before answering: slower, and it costs more tokens.'
 
 /** The "Thinking" switch, or a note when `model` is known not to support it. */
 function ThinkingField({
@@ -539,6 +703,9 @@ function PromptField({
   )
 }
 
+const SELECT_CLASS =
+  'h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30'
+
 const THINKING_HELP =
   'Lets the model reason before answering: slower, but more accurate. Some models, such as qwen3:4b, think even when it is off.'
 
@@ -551,8 +718,27 @@ interface ConnectionCheck {
 const NO_CHECK: ConnectionCheck = { checking: false, failed: false, message: null }
 
 function connectedMessage(server: OllamaServer): string {
-  const count = server.models.length
-  return `Connected to Ollama ${server.version}, ${count} ${count === 1 ? 'model' : 'models'}`
+  return `Connected to Ollama ${server.version}, ${modelCount(server.models.length)}`
+}
+
+function anthropicConnectedMessage(server: AnthropicServer): string {
+  return `Connected to Anthropic, ${modelCount(server.models.length)}`
+}
+
+function modelCount(count: number): string {
+  return `${count} ${count === 1 ? 'model' : 'models'}`
+}
+
+/** What the last "Test connection" found, if it ran. */
+function ConnectionMessage({ connection }: { connection: ConnectionCheck }) {
+  if (!connection.message) {
+    return null
+  }
+  return (
+    <p className={cn('text-sm', connection.failed ? 'text-destructive' : 'text-muted-foreground')}>
+      {connection.message}
+    </p>
+  )
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

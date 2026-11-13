@@ -95,6 +95,7 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 | `YARRTUBE_PLEX_URL`                   | —                     | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). With the token and `YARRTUBE_PLEX_VIDEOS_PATH`, enables the [Plex scan trigger](#plex)                                                       |
 | `YARRTUBE_PLEX_TOKEN`                 | —                     | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                    |
 | `YARRTUBE_PLEX_VIDEOS_PATH`           | —                     | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. Plex is asked to scan a show's folder after each download |
+| `YARRTUBE_ANTHROPIC_API_KEY`          | —                     | Anthropic API key. When set, the AI page offers Anthropic as the provider for summaries and categorization, billed to this key; see [doc/AI.md](AI.md). Never stored, returned or logged |
 
 Three more variables exist only for running Yarrtube against a fake
 YouTube in its own tests; leave them unset:

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { STUB_API_KEY, startAnthropicStub } from '../anthropic-stub.js'
 import { startOllamaStub } from '../ollama-stub.js'
 import { startPlexStub } from '../plex-stub.js'
 
@@ -18,7 +19,8 @@ const run = promisify(execFile)
  * a container of its own, with a fresh database and videos directory, on a
  * free port, pointed at the shared fake YouTube (`youtubeStubPort`) and at a
  * Plex stub of its own. An Ollama stub of its own listens too, at `ollamaUrl`
- * as the container reaches it, for the AI settings to be pointed at. During the upgrade check's phases nothing is started:
+ * as the container reaches it, for the AI settings to be pointed at, and an
+ * Anthropic stub the daemon reaches with a key, so Anthropic is offered. During the upgrade check's phases nothing is started:
  * those run against the container `scripts/run-tests.sh` manages.
  *
  * `stop()` saves the container's log to `test-results/`, removes the
@@ -34,13 +36,14 @@ export async function startDaemon({ runId, workerIndex, image, youtubeStubPort }
       stop: async () => {},
     }
   }
-  const [port, plexPort, ollamaPort] = await freePorts(3)
+  const [port, plexPort, ollamaPort, anthropicPort] = await freePorts(4)
   const dir = mkdtempSync(join(tmpdir(), 'yarrtube-e2e-'))
   const videosDir = join(dir, 'videos')
   mkdirSync(videosDir)
   mkdirSync(join(dir, 'config'))
   const plex = await startPlexStub(plexPort)
   const ollama = await startOllamaStub(ollamaPort)
+  const anthropic = await startAnthropicStub(anthropicPort)
   const name = `yarrtube-e2e-${runId}-w${workerIndex}`
   await run('docker', [
     'run', '-d', '--name', name,
@@ -51,13 +54,15 @@ export async function startDaemon({ runId, workerIndex, image, youtubeStubPort }
     '-e', `YARRTUBE_PLEX_URL=http://host.docker.internal:${plexPort}`,
     '-e', `YARRTUBE_PLEX_TOKEN=${PLEX_TOKEN}`,
     '-e', 'YARRTUBE_PLEX_VIDEOS_PATH=/plex/yarrtube',
+    '-e', `YARRTUBE_ANTHROPIC_API_KEY=${STUB_API_KEY}`,
+    '-e', `YARRTUBE_ANTHROPIC_API_URL=http://host.docker.internal:${anthropicPort}`,
     ...fakeYoutubeArgs(youtubeStubPort),
     '-v', `${videosDir}:/videos`,
     '-v', `${join(dir, 'config')}:/config`,
     image,
   ])
   const url = `http://localhost:${port}`
-  const stop = () => stopDaemon({ name, dir, plex, ollama, runId, workerIndex })
+  const stop = () => stopDaemon({ name, dir, plex, ollama, anthropic, runId, workerIndex })
   try {
     await waitForStatus(url)
   } catch (error) {
@@ -92,7 +97,7 @@ function fakeYoutubeArgs(youtubeStubPort) {
   ]
 }
 
-async function stopDaemon({ name, dir, plex, ollama, runId, workerIndex }) {
+async function stopDaemon({ name, dir, plex, ollama, anthropic, runId, workerIndex }) {
   const { stdout, stderr } = await run('docker', ['logs', name], { maxBuffer: 64 * 1024 * 1024 })
   const log = stdout + stderr
   const logFile = join(E2E_DIR, 'test-results', `container-${runId}-w${workerIndex}.log`)
@@ -104,6 +109,7 @@ async function stopDaemon({ name, dir, plex, ollama, runId, workerIndex }) {
   await run('docker', ['rm', '-f', name])
   await plex.close()
   await ollama.close()
+  await anthropic.close()
   rmSync(dir, { recursive: true, force: true, maxRetries: 2 })
   if (log.includes('panicked at')) {
     throw new Error(`the daemon ${name} panicked (see ${logFile})`)

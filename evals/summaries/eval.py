@@ -12,10 +12,11 @@ Steps, all cached in evals/summaries/results/<run-id>/ so an interrupted run res
   4. report:   per-model table + every failed critical fact
 
 Prompts come from prompts/summaries/<version>.md. Needs Ollama (OLLAMA_URL,
-default http://localhost:11434) and each case's local subtitles.srt
-(gitignored). Docs: evals/summaries/README.md.
+default http://localhost:11434), or YARRTUBE_ANTHROPIC_API_KEY with
+--provider anthropic, and each case's local subtitles.srt (gitignored).
+Docs: evals/summaries/README.md.
 """
-import argparse, datetime, glob, hashlib, json, os, re, sys, time, unicodedata, urllib.request
+import argparse, datetime, glob, hashlib, json, os, re, socket, sys, time, unicodedata, urllib.error, urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OLLAMA = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -26,6 +27,20 @@ CHARS_PER_TOKEN = {"en": 4.3}  # measured on the golden set; other languages ~3.
 LANG = {"es": "Spanish", "en": "English", "ca": "Catalan", "fr": "French", "de": "German"}
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen3:8b")
 JUDGE_CTX = 4096  # the judge reads one summary + facts: short, so a bigger model fits
+PROVIDERS = ("ollama", "anthropic")
+EFFORTS = ("low", "medium", "high")
+ANTHROPIC_KEY = "YARRTUBE_ANTHROPIC_API_KEY"
+ANTHROPIC_MAX_OUT = 16000  # a summary call's max_tokens: thinking + answer
+ANTHROPIC_CTX = 131072  # the app's cap on the model's context window, for the input budget
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = "2026-10-21"
+# $ per million tokens, from the Anthropic price list (2026-11). Haiku's
+# rate goes up for a prompt over 100K tokens.
+PRICES = {
+    "claude-haiku-5-5": {"in": 0.10, "out": 0.50, "long_from": 100_000, "long_in": 0.50, "long_out": 2.50},
+    "claude-sonnet-5-5": {"in": 2.00, "out": 10.00},
+    "claude-opus-5-5": {"in": 4.00, "out": 20.00},
+}
 
 # --- transcript --------------------------------------------------------------
 
@@ -61,11 +76,16 @@ def clock(seconds):
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
 
 
-def chunks(lines, chapters, lang):
+def input_budget(ctx):
+    """The tokens a call's input can take in a context of `ctx`: 9000 of the
+    default 12288, scaled as the app's ContextLength::input_budget_tokens."""
+    return ctx * INPUT_BUDGET_TOKENS // NUM_CTX
+
+
+def chunks(lines, chapters, lang, budget=INPUT_BUDGET_TOKENS):
     """Consecutive pieces of the transcript, each under the input budget.
     Cuts only at chapter starts when the video has chapters, packing whole
     chapters together; a chapter too long on its own is cut by size."""
-    budget = INPUT_BUDGET_TOKENS
     if tokens("\n".join(t for _, t in lines), lang) <= budget:
         return [lines]
     cuts = [c["start_seconds"] for c in chapters[1:]]
@@ -115,6 +135,113 @@ def chat(model, system, user, fmt=None, think=False, ctx=NUM_CTX, max_out=None, 
                   "out": r.get("eval_count")}
 
 
+# --- anthropic ---------------------------------------------------------------
+
+def anthropic_key():
+    """The Anthropic API key, or the run stops before its first call."""
+    key = os.environ.get(ANTHROPIC_KEY)
+    if not key:
+        sys.exit(f"--provider anthropic needs {ANTHROPIC_KEY} set")
+    return key
+
+
+def closed(schema):
+    """`schema` with `additionalProperties: false` on every object, which
+    Anthropic's structured outputs require (Ollama doesn't)."""
+    if isinstance(schema, list):
+        return [closed(s) for s in schema]
+    if not isinstance(schema, dict):
+        return schema
+    out = {k: closed(v) for k, v in schema.items()}
+    if out.get("type") == "object":
+        out.setdefault("additionalProperties", False)
+    return out
+
+
+def anthropic_chat(model, system, user, fmt, effort, max_out, timeout):
+    """One POST /v1/messages call, shaped as the app's Anthropic adapter sends it:
+    (answer text, stats), or (None, stats with `error`) for a rejected call."""
+    body = {"model": model, "max_tokens": max_out, "system": system,
+            "messages": [{"role": "user", "content": user}], "output_config": {"effort": effort}}
+    if fmt:
+        body["output_config"]["format"] = {"type": "json_schema", "schema": closed(fmt)}
+    req = urllib.request.Request(ANTHROPIC_URL, json.dumps(body).encode(), {
+        "x-api-key": anthropic_key(), "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"})
+    t0 = time.time()
+    try:
+        r = json.load(urllib.request.urlopen(req, timeout=timeout))
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode(errors="replace")
+        try:
+            message = json.loads(raw)["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            message = raw[:300]
+        stop = "Nothing lost: resume with --run."
+        if e.code in (401, 403):
+            sys.exit(f"Anthropic rejected {ANTHROPIC_KEY} ({e.code}: {message}). {stop}")
+        if e.code == 404:
+            sys.exit(f"Anthropic has no model {model} ({message}). {stop}")
+        if e.code == 400 and "credit balance" in message.lower():
+            sys.exit(f"Anthropic: {message}. {stop}")
+        if e.code == 400:
+            return None, {"error": message[:300], "s": round(time.time() - t0, 1)}
+        raise  # 429, 5xx, 529: as the Ollama path does
+    except (TimeoutError, socket.timeout):
+        return None, {"error": "timed out", "s": round(time.time() - t0, 1)}
+    except urllib.error.URLError as e:
+        sys.exit(f"can't reach Anthropic at {ANTHROPIC_URL}: {e.reason}. Nothing lost: resume with --run.")
+    usage = r.get("usage", {})
+    st = {"s": round(time.time() - t0, 1), "in": usage.get("input_tokens"), "out": usage.get("output_tokens")}
+    if r.get("stop_reason") == "max_tokens":
+        return None, {**st, "error": f"hit the {max_out}-token output limit"}
+    if r.get("stop_reason") == "refusal":
+        category = (r.get("stop_details") or {}).get("category")
+        return None, {**st, "error": f"refused ({category or 'no category'})"}
+    text = "".join(b["text"] for b in r.get("content", []) if b.get("type") == "text").strip()
+    if not text:
+        return None, {**st, "error": f"empty answer (stop_reason {r.get('stop_reason')})"}
+    return text, st
+
+
+def cost(model, calls):
+    """Estimated $ for `calls` (stats with `in`/`out`), or None for a model not in PRICES."""
+    price = PRICES.get(model)
+    if not price:
+        return None
+    total = 0.0
+    for c in calls:
+        long = (c.get("in") or 0) > price.get("long_from", float("inf"))
+        rate_in, rate_out = (price["long_in"], price["long_out"]) if long else (price["in"], price["out"])
+        total += ((c.get("in") or 0) * rate_in + (c.get("out") or 0) * rate_out) / 1e6
+    return total
+
+
+def usage_line(model, calls):
+    """One line on what `calls` read and wrote, and what that cost."""
+    tokens_in, tokens_out = sum(c.get("in") or 0 for c in calls), sum(c.get("out") or 0 for c in calls)
+    dollars = cost(model, calls)
+    return (f"{model}: {len(calls)} calls, {tokens_in:,} input + {tokens_out:,} output tokens"
+            + (f", about ${dollars:.3f}" if dollars is not None else ""))
+
+
+class CallFailed(Exception):
+    """A call the provider rejected: the summary becomes an error row."""
+
+    def __init__(self, stats):
+        super().__init__(stats["error"])
+        self.stats = stats
+
+
+def generate(model, system, user, provider="ollama", effort="medium"):
+    """One summary call to the run's provider: (text, stats)."""
+    if provider != "anthropic":
+        return chat(model, system, user)
+    text, st = anthropic_chat(model, system, user, None, effort, ANTHROPIC_MAX_OUT, 600)
+    if text is None:
+        raise CallFailed(st)
+    return text, st
+
+
 # --- generation ----------------------------------------------------------------
 
 PROMPTS = os.path.join(os.path.dirname(os.path.dirname(ROOT)), "prompts", "summaries")
@@ -138,7 +265,7 @@ def chapter_lines(chapters, start=None, end=None):
     return "\n".join(f"{clock(c['start_seconds'])} {c['title']}" for c in sel)
 
 
-def summarize(model, case, lines, prompt):
+def summarize(model, case, lines, prompt, provider="ollama", effort="medium"):
     lang = LANG.get(case["lang"], case["lang"])
     chapters = case.get("chapters", [])
     head = {"title": case["title"], "minutes": case["duration_s"] // 60, "lang": lang}
@@ -147,11 +274,12 @@ def summarize(model, case, lines, prompt):
         listed = chapter_lines(chapters, start, end) if chapters else ""
         return f"\n{fill(prompt[section], chapter_list=listed)}\n" if listed else ""
 
-    pieces = chunks(lines, chapters, case["lang"])
+    ctx = ANTHROPIC_CTX if provider == "anthropic" else NUM_CTX
+    pieces = chunks(lines, chapters, case["lang"], input_budget(ctx))
     if len(pieces) == 1:
         user = fill(prompt["user"], **head, chapters=chapter_block("chapters"),
                     transcript="\n".join(t for _, t in lines))
-        text, st = chat(model, fill(prompt["system"], lang=lang), user)
+        text, st = generate(model, fill(prompt["system"], lang=lang), user, provider, effort)
         return text, [st]
     parts, calls = [], []
     for n, p in enumerate(pieces, 1):
@@ -159,12 +287,12 @@ def summarize(model, case, lines, prompt):
         user = fill(prompt["map user"], **head, part=n, parts=len(pieces), span=span,
                     chapters=chapter_block("map chapters", p[0][0], p[-1][0]),
                     transcript="\n".join(t for _, t in p))
-        text, st = chat(model, fill(prompt["map system"], lang=lang), user)
+        text, st = generate(model, fill(prompt["map system"], lang=lang), user, provider, effort)
         parts.append(fill(prompt["reduce part"], part=n, span=span, summary=text))
         calls.append(st)
     user = fill(prompt["reduce user"], **head, chapters=chapter_block("chapters"),
                 part_summaries="\n\n".join(parts))
-    text, st = chat(model, fill(prompt["reduce system"], lang=lang), user)
+    text, st = generate(model, fill(prompt["reduce system"], lang=lang), user, provider, effort)
     return text, calls + [st]
 
 
@@ -437,6 +565,9 @@ def main():
     ap.add_argument("--judge", default="local",
                     help=f"'local' ({JUDGE_MODEL} via Ollama) or a name for an external judge, e.g. "
                          "'claude-sonnet': writes blind inputs, ingests answers on the next run")
+    ap.add_argument("--provider", choices=PROVIDERS, help="who runs the models, for a new run (default ollama)")
+    ap.add_argument("--effort", choices=EFFORTS,
+                    help="output_config.effort with --provider anthropic, for a new run (default medium)")
     a = ap.parse_args()
     judge_name = JUDGE_MODEL if a.judge == "local" else a.judge
     if a.check:
@@ -444,16 +575,24 @@ def main():
             print(f"ok {slug}")
         return
 
-    run_id = a.run or datetime.datetime.now().strftime("%Y-%m-%d_%H%M") + f"_prompt-{a.prompt}"
+    run_id = a.run or (datetime.datetime.now().strftime("%Y-%m-%d_%H%M") + f"_prompt-{a.prompt}"
+                       + (f"_anthropic-effort-{a.effort or 'medium'}" if a.provider == "anthropic" else ""))
     out = os.path.join(ROOT, "results", run_id)
     os.makedirs(out, exist_ok=True)
     meta_path = os.path.join(out, "run.json")
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {
-        "models": a.model, "prompt_version": a.prompt, "num_ctx": NUM_CTX}
+        "models": a.model, "prompt_version": a.prompt, "num_ctx": ANTHROPIC_CTX if a.provider == "anthropic" else NUM_CTX,
+        "provider": a.provider or "ollama", "effort": a.effort or "medium"}
+    meta.setdefault("provider", "ollama")  # runs from before --provider
+    for flag in ("provider", "effort"):  # a resumed run keeps its own
+        if getattr(a, flag) and getattr(a, flag) != meta.get(flag):
+            sys.exit(f"run {run_id} uses {flag} {meta.get(flag)}, not {getattr(a, flag)}")
     meta.pop("judge", None)  # judges are per report now
     meta["models"] = list(dict.fromkeys(meta["models"] + a.model))
     if not meta["models"]:
         sys.exit("give at least one --model")
+    if meta["provider"] == "anthropic":
+        anthropic_key()
     json.dump(meta, open(meta_path, "w"), indent=2)
     cases = load_cases(a.case)
     prompt = load_prompt(meta["prompt_version"])  # a resumed run keeps its own prompt
@@ -466,20 +605,30 @@ def main():
         for slug, case, lines in cases:
             if (slug, model) in done:
                 continue
-            text, calls = summarize(model, case, lines, prompt)
+            try:
+                text, calls = summarize(model, case, lines, prompt, meta["provider"], meta.get("effort"))
+            except CallFailed as e:
+                append(s_path, {"case": slug, "model": model, "summary": "", "error": str(e), "calls": [e.stats],
+                                "seconds": e.stats["s"], "checks": {}})
+                print(f"failed    {model:18} {slug:22} {e}", flush=True)
+                continue
             append(s_path, {"case": slug, "model": model, "summary": text, "calls": calls,
                             "seconds": round(sum(c["s"] for c in calls), 1), "checks": checks(text, case)})
             print(f"generated {model:18} {slug:22} {sum(c['s'] for c in calls):6.0f}s  {len(calls)} call(s)", flush=True)
 
+    for model in meta["models"]:
+        print(usage_line(model, [c for r in jsonl(s_path) if r["model"] == model for c in r["calls"]]), flush=True)
+
     judged = {(r["case"], r["model"]) for r in jsonl(j_path)}
     facts = {slug: case["summary"]["facts"] for slug, case, _ in cases}
     f_path = os.path.join(out, f"faithfulness-{slug_judge}.jsonl")
+    written = [r for r in jsonl(s_path) if "error" not in r]  # a failed call left nothing to judge
     if a.judge != "local":
-        facts_done = external_judge(out, jsonl(s_path), facts, judged, j_path)
-        faith_done = external_faithfulness(out, jsonl(s_path), cases, f_path)
+        facts_done = external_judge(out, written, facts, judged, j_path)
+        faith_done = external_faithfulness(out, written, cases, f_path)
         if not (facts_done and faith_done):
             return
-    for r in jsonl(s_path) if a.judge == "local" else []:
+    for r in written if a.judge == "local" else []:
         if (r["case"], r["model"]) in judged or r["case"] not in facts:
             continue
         verdicts, st = judge(r["summary"], facts[r["case"]])
@@ -496,7 +645,10 @@ def render(run_id, meta, judge_name, cases, summaries, judgments, faith=()):
     facts = {slug: {f["id"]: f for f in case["summary"]["facts"]} for slug, case, _ in cases}
     J = {(j["case"], j["model"]): j["verdicts"] for j in judgments}
     S = {(s["case"], s["model"]): s for s in summaries}
+    provider = meta.get("provider", "ollama")
     out = [f"# Summary eval: prompt {meta['prompt_version']}, judge {judge_name}", "",
+           f"Provider {provider}" + (f", effort {meta.get('effort')}" if provider == "anthropic" else "")
+           + f", context {meta['num_ctx']}.", "",
            "| model | contradicted | critical stated | facts stated | code checks | avg time |",
            "|---|---|---|---|---|---|"]
     fails = []
@@ -544,6 +696,13 @@ def render(run_id, meta, judge_name, cases, summaries, judgments, faith=()):
     if agree + len(disagree):
         out += ["", f"## Judge vs human verdicts: {agree}/{agree + len(disagree)} agree", ""]
         out += [f"- {m} · {slug} · `{fid}`: human {h}, judge {j}" for m, slug, fid, h, j in disagree]
+    failed = [(m, slug, s["error"]) for (slug, m), s in sorted(S.items()) if "error" in s]
+    if failed:
+        out += ["", "## Summaries the provider rejected", ""]
+        out += [f"- {m} · {slug}: {error}" for m, slug, error in failed]
+    out += ["", "## Tokens", ""]
+    out += [f"- {usage_line(m, [c for s in summaries if s['model'] == m for c in s['calls']])}"
+            for m in meta["models"]]
     out += ["", "## Code checks failed", ""]
     for (slug, model), s in sorted(S.items()):
         bad = [k for k, ok in s["checks"].items() if not ok]

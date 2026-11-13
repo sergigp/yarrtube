@@ -4,11 +4,12 @@ use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::llm_server::{
-    LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    Effort, LlmChat, LlmConnection, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::{
-    ContextLength, Preferences, SummaryPrompt, SummarySettings, Temperature,
+    AiProvider, AnthropicSettings, ContextLength, Preferences, SummaryModel, SummaryPrompt,
+    SummarySettings, Temperature,
 };
 use crate::domain::services::VideoOwnerFinder;
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -22,7 +23,7 @@ use crate::domain::video_transcript::{
     CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-use crate::infrastructure::repositories::ollama_llm_server_repository::{
+use crate::infrastructure::repositories::llm_server_repository::{
     FakeLlmServerRepository, unreachable_error,
 };
 use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -1571,7 +1572,7 @@ fn it_should_wait_for_ollama_if_it_is_unreachable() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::hours(6),
-            reason: "can't connect to Ollama: connection refused".to_string(),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
         })
     );
     assert_eq!(llm.chats(), vec![]);
@@ -1617,7 +1618,7 @@ fn it_should_keep_the_failed_attempts_of_a_retrying_summary_while_waiting_for_ol
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::hours(6),
-            reason: "can't connect to Ollama: connection refused".to_string(),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
         })
     );
     assert_eq!(
@@ -1985,7 +1986,7 @@ fn it_should_fail_the_summary_if_the_prompt_exceeds_the_context_again() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::minutes(10),
-            reason: "Ollama refused the call: request (12400 tokens) exceeds the available context size (12288 tokens), try increasing it"
+            reason: "the LLM provider refused the call: request (12400 tokens) exceeds the available context size (12288 tokens), try increasing it"
                 .to_string(),
         })
     );
@@ -2041,7 +2042,7 @@ fn it_should_count_a_refused_prompt_as_a_failed_summary_attempt() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::minutes(10),
-            reason: "Ollama refused the call: request too long".to_string(),
+            reason: "the LLM provider refused the call: request too long".to_string(),
         })
     );
     assert_eq!(summary_repository.find(&video.id).unwrap(), None);
@@ -2165,7 +2166,7 @@ fn it_should_wait_for_ollama_if_it_goes_down_between_parts() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::hours(6),
-            reason: "can't connect to Ollama: connection refused".to_string(),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
         })
     );
     assert_eq!(
@@ -2749,6 +2750,175 @@ fn it_should_log_why_a_generation_was_skipped_or_failed() {
     );
 }
 
+#[test]
+fn it_should_summarize_with_the_anthropic_model_and_effort() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(anthropic_server()).with_replies(vec![reply("Three games.")]),
+    );
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&anthropic_summaries_on())
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        summary_repository.find(&video.id).unwrap(),
+        Some(VideoSummary {
+            model: "claude-haiku-5-5".to_string(),
+            ..stored_summary(&video, "Three games.")
+        })
+    );
+    assert_eq!(llm.chats(), vec![anthropic_chat()]);
+    assert_eq!(llm.connections(), vec![LlmConnection::Anthropic]);
+}
+
+#[test]
+fn it_should_budget_from_the_capped_anthropic_context() {
+    // 400 lines of 1000 characters: two parts within ~326400, the budget at
+    // the 131072 cap, where Ollama's default 12288 would need fourteen.
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(anthropic_server()).with_replies(vec![
+            reply("A."),
+            reply("B."),
+            reply("All."),
+        ]),
+    );
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&anthropic_summaries_on())
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository,
+        llm.clone(),
+        files_with(&srt_of(400, 4)),
+    );
+
+    run(&task, &video).unwrap();
+
+    let within_budget = sent_messages(&llm)
+        .iter()
+        .map(|messages| messages.chars() <= 326_400)
+        .collect::<Vec<_>>();
+    assert_eq!(within_budget, vec![true, true, true]);
+}
+
+#[test]
+fn it_should_wait_when_the_anthropic_model_isnt_listed() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(FakeLlmServerRepository::new(anthropic_server()));
+    let video = Video {
+        summary: retrying_summary(4),
+        ..subtitled_video()
+    };
+    video_repository.insert(&video).unwrap();
+    let preferences = anthropic_summaries_on();
+    preferences_repository
+        .save(&Preferences {
+            anthropic: AnthropicSettings {
+                summaries_model: SummaryModel::new("claude-haiku-4-5").unwrap(),
+                ..preferences.anthropic.clone()
+            },
+            ..preferences
+        })
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + Duration::hours(6),
+            reason: "claude-haiku-4-5 isn't listed by Anthropic".to_string(),
+        })
+    );
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
+#[test]
+fn it_should_wait_when_anthropic_is_unavailable_during_a_call() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(anthropic_server())
+            .with_replies(vec![Err(unreachable_error())]),
+    );
+    let video = Video {
+        summary: retrying_summary(4),
+        ..subtitled_video()
+    };
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&anthropic_summaries_on())
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + Duration::hours(6),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
+        })
+    );
+    assert_eq!(llm.connections(), vec![LlmConnection::Anthropic]);
+    assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
 fn summarize_video_task(
     db: &TestDatabase,
     video_repository: Arc<SqliteVideoRepository>,
@@ -2863,6 +3033,7 @@ fn one_call_chat() -> LlmChat {
         context_length: 12288,
         temperature: 0.3,
         thinking: true,
+        effort: Effort::default(),
         max_output_tokens: 12288,
         format: None,
         timeout: MIN_CHAT_TIMEOUT,
@@ -3050,14 +3221,16 @@ fn my_channel() -> Channel {
 fn thinking_model() -> LlmModel {
     LlmModel {
         name: "qwen3:4b".to_string(),
-        size_bytes: 1,
+        display_name: None,
+        size_bytes: Some(1),
         thinking: true,
+        context_window: None,
     }
 }
 
 fn server_with(model: LlmModel) -> LlmServer {
     LlmServer {
-        version: "0.40.13".to_string(),
+        version: Some("0.40.13".to_string()),
         models: vec![model],
     }
 }
@@ -3124,3 +3297,39 @@ Rules:
 - Use only what the part summaries says. Include a number only if the part summaries states it, and give it exactly. Do not add names, numbers or comparisons of your own.
 - The part summaries is auto-generated and may misspell names; use the title to correct them.
 - Ignore sponsors, ads and requests to like or subscribe."#;
+
+/// AI and summaries on, with Anthropic and no Ollama URL.
+fn anthropic_summaries_on() -> Preferences {
+    Preferences {
+        ai_provider: AiProvider::Anthropic,
+        ollama_url: None,
+        ..summaries_on()
+    }
+}
+
+/// Anthropic listing `claude-haiku-5-5`, with its million-token window.
+fn anthropic_server() -> LlmServer {
+    LlmServer {
+        version: None,
+        models: vec![LlmModel {
+            name: "claude-haiku-5-5".to_string(),
+            display_name: Some("Claude Haiku 5.5".to_string()),
+            size_bytes: None,
+            thinking: false,
+            context_window: Some(1_000_000),
+        }],
+    }
+}
+
+/// The one call for `SHORT_SRT` on Anthropic's defaults.
+fn anthropic_chat() -> LlmChat {
+    LlmChat {
+        model: "claude-haiku-5-5".to_string(),
+        context_length: 131_072,
+        temperature: 0.0,
+        thinking: false,
+        effort: Effort::Low,
+        max_output_tokens: 16_000,
+        ..one_call_chat()
+    }
+}

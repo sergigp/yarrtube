@@ -30,7 +30,7 @@ use crate::domain::video_category::{
 };
 use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
 use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-use crate::infrastructure::repositories::ollama_llm_server_repository::FakeLlmServerRepository;
+use crate::infrastructure::repositories::llm_server_repository::FakeLlmServerRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::{
     CategoryRepository, SqliteCategoryRepository,
 };

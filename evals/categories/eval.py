@@ -6,12 +6,14 @@
     python3 -I evals/categories/eval.py --model qwen3:4b --limit 10     # time a few calls
     python3 -I evals/categories/eval.py --model qwen3:4b --think
     python3 -I evals/categories/eval.py --model qwen3:4b --think --batch  # one call per video, as the app asks
+    python3 -I evals/categories/eval.py --provider anthropic --model claude-haiku-5-5 --batch --effort low
     python3 -I evals/categories/eval.py --run <run-id>                  # resume / re-score
 
 Inputs: videos.json, labels.md (filled by hand), category-prompts.md and
 prompts/categorization/<version>.md. Verdicts are cached in
 results/<run-id>/verdicts.jsonl, so an interrupted run resumes. Needs Ollama
-(OLLAMA_URL, default http://localhost:11434). Docs: evals/categories/README.md.
+(OLLAMA_URL, default http://localhost:11434), or YARRTUBE_ANTHROPIC_API_KEY
+with --provider anthropic. Docs: evals/categories/README.md.
 """
 import argparse, datetime, glob, hashlib, importlib.util, json, os, re, shutil, socket, subprocess, sys, tempfile, time, urllib.error, urllib.request
 
@@ -223,6 +225,9 @@ def parse_batch(text, names):
 def chat(meta, schema, system, user, max_output):
     """One call: (stats, answer text) or (stats with `error`, None). A server
     that can't be reached stops the run, so resuming retries those calls."""
+    if meta.get("provider") == "anthropic":
+        text, row = summaries_eval.anthropic_chat(meta["model"], system, user, schema, meta["effort"], max_output, 1800)
+        return row, text
     body = {"model": meta["model"], "stream": False, "truncate": False, "shift": False, "think": meta["think"],
             "format": schema, "options": {"num_ctx": meta["num_ctx"], "temperature": meta["temperature"],
                                           "num_predict": max_output},
@@ -291,11 +296,16 @@ def reusable_rows(run_id, meta):
     if not os.path.exists(os.path.join(source, "run.json")):
         sys.exit(f"--reuse: no run {run_id}")
     settings = json.load(open(os.path.join(source, "run.json")))
-    if any(settings.get(k) != meta.get(k) for k in ("model", "think", "temperature", "num_ctx", "max_output",
-                                                     "system_sha", "batch", "fallback")):
+    keys = ["model", "think", "temperature", "num_ctx", "max_output", "system_sha", "batch", "fallback"]
+    keys += ["effort"] if meta.get("provider") == "anthropic" else []  # effort means nothing to Ollama
+    if any(settings.get(k) != meta.get(k) for k in keys) or provider(settings) != provider(meta):
         sys.exit(f"--reuse: {run_id} has other settings")
     return {(r["video"], r["category"], r["prompt_sha"]): r for r in jsonl(os.path.join(source, "verdicts.jsonl"))
             if "error" not in r}
+
+
+def provider(meta):
+    return meta.get("provider", "ollama")  # runs from before --provider ran on Ollama
 
 
 def run_calls(out, meta, prompts, videos, limit, reuse):
@@ -354,8 +364,11 @@ def render(run_id, meta, prompts, videos, labels, rows):
     by_id = {v["id"]: v for v in videos}
     categories = list(prompts["categories"])
     labeled = {i for i, l in labels.items() if l is not None}
-    settings = (f"model `{meta['model']}`, thinking {'on' if meta['think'] else 'off'}, prompt {meta['prompt_version']}, "
-                f"temperature {meta['temperature']}, num_ctx {meta['num_ctx']}, "
+    model = (f"model `{meta['model']}` on Anthropic, effort {meta['effort']}, adaptive thinking"
+             if provider(meta) == "anthropic" else
+             f"model `{meta['model']}` on Ollama, thinking {'on' if meta['think'] else 'off'}, "
+             f"temperature {meta['temperature']}, num_ctx {meta['num_ctx']}")
+    settings = (f"{model}, prompt {meta['prompt_version']}, "
                 f"max output {meta['max_output'] or 'scaled to the categories asked'}, "
                 + ("one call per video (--batch)" if meta.get("batch") else "one call per video + category")
                 + (", each category left without an answer asked alone" if meta.get("fallback") else ""))
@@ -406,6 +419,7 @@ def render(run_id, meta, prompts, videos, labels, rows):
         out += ["", "## Errors: no usable answer", ""] + [line(r) for r in errors]
     out += fallbacks(rows)
     out += speed(meta, rows, len(categories))
+    out += ["", "## Tokens", "", summaries_eval.usage_line(meta["model"], list(distinct_calls(rows).values()))]
     return "\n".join(out) + "\n"
 
 
@@ -423,16 +437,21 @@ def fallbacks(rows):
             f"({', '.join(sorted({c.get('error', '') for c in failed_calls.values()}))})."]
 
 
+def distinct_calls(rows):
+    """(video, call) -> stats, each model call once: a --batch call's rows share its stats."""
+    calls = {}
+    for r in rows:
+        calls[(r["video"], r.get("call") or r["category"])] = r
+        if "batch_call" in r:  # the call that fell back, counted once
+            calls[(r["video"], r["batch_call"]["call"])] = r["batch_call"]
+    return calls
+
+
 def speed(meta, rows, categories):
     """Time and output tokens per video, comparable between --batch and not.
     Output tokens don't depend on the hardware: they are what to compare
     across machines (time = tokens / the machine's tokens per second)."""
-    calls = {}  # (video, call) -> stats; a --batch call's rows share its stats
-    for r in rows:
-        key = (r["video"], r.get("call") or r["category"])
-        calls[key] = r
-        if "batch_call" in r:  # the call that fell back, counted once
-            calls[(r["video"], r["batch_call"]["call"])] = r["batch_call"]
+    calls = distinct_calls(rows)
     per_video = {}
     for (video, _), r in calls.items():
         seconds, tokens = per_video.get(video, (0.0, 0))
@@ -447,8 +466,9 @@ def speed(meta, rows, categories):
     rate = out_tokens / out_seconds if out_seconds else 0
     return ["", "## Speed", "",
             f"On the {len(complete)} videos asked about every category: {seconds:.1f}s and {tokens:.0f} output tokens "
-            f"per video on average ({rate:.1f} tokens/s here, input included), {len(calls)} calls in all.",
-            f"At 11 tokens/s (the MacBook Air with thinking) that is about {tokens / 11 / 60:.1f} min per video."]
+            f"per video on average ({rate:.1f} tokens/s here, input included), {len(calls)} calls in all."] + (
+        [f"At 11 tokens/s (the MacBook Air with thinking) that is about {tokens / 11 / 60:.1f} min per video."]
+        if provider(meta) == "ollama" else [])
 
 
 # --- run ---------------------------------------------------------------------
@@ -466,7 +486,10 @@ def main():
                                                 "with --batch, the app's Auto for the categories)")
     ap.add_argument("--max-output", type=int, help=f"output token cap, for a new run (default {MAX_OUTPUT}; "
                                                    "with --batch, scaled to the categories in each call)")
-    ap.add_argument("--temperature", type=float, default=TEMPERATURE, help="for a new run")
+    ap.add_argument("--temperature", type=float, default=TEMPERATURE, help="for a new run (Ollama only)")
+    ap.add_argument("--provider", choices=summaries_eval.PROVIDERS, help="who runs the model, for a new run (default ollama)")
+    ap.add_argument("--effort", choices=summaries_eval.EFFORTS,
+                    help="output_config.effort with --provider anthropic, for a new run (default medium)")
     ap.add_argument("--run", help="existing run id to resume / re-score")
     ap.add_argument("--reuse", help="run id whose answers are copied when settings and category prompt match")
     ap.add_argument("--limit", type=int, help="stop after this many model calls")
@@ -484,7 +507,10 @@ def main():
     a.max_output = a.max_output or (None if a.batch else MAX_OUTPUT)
     if a.max_output and a.max_output > a.num_ctx:
         sys.exit("--max-output can't be over --num-ctx")
-    think = "think-on" if a.think else "think-off"
+    anthropic = a.provider == "anthropic"
+    if anthropic and (a.think or a.temperature != TEMPERATURE):
+        sys.exit("--think and --temperature are Ollama only: Anthropic uses adaptive thinking and its own sampling")
+    think = f"effort-{a.effort or 'medium'}" if anthropic else "think-on" if a.think else "think-off"
     run_id = a.run or (datetime.datetime.now().strftime("%Y-%m-%d_%H%M") +
                        f"_prompt-{a.prompt}_{a.model.replace(':', '-')}_{think}" + ("_batch" if a.batch else ""))
     out = os.path.join(ROOT, "results", run_id)
@@ -499,10 +525,17 @@ def main():
         shutil.copy(CATEGORY_PROMPTS, snapshot)
         system = open(system_path(a.prompt), encoding="utf-8").read().strip()
         json.dump({"model": a.model, "think": a.think, "prompt_version": a.prompt, "system_sha": sha(system),
-                   "num_ctx": a.num_ctx, "temperature": a.temperature, "max_output": a.max_output, "batch": a.batch,
-                   "fallback": a.batch},
+                   "num_ctx": a.num_ctx, "temperature": None if anthropic else a.temperature,
+                   "max_output": a.max_output, "batch": a.batch, "fallback": a.batch,
+                   "provider": a.provider or "ollama", "effort": a.effort or "medium"},
                   open(meta_path, "w"), indent=2)
     meta = json.load(open(meta_path))
+    meta["provider"] = provider(meta)
+    for flag in ("provider", "effort"):  # a resumed run keeps its own
+        if a.run and getattr(a, flag) and getattr(a, flag) != meta.get(flag):
+            sys.exit(f"run {run_id} uses {flag} {meta.get(flag)}, not {getattr(a, flag)}")
+    if meta["provider"] == "anthropic":
+        summaries_eval.anthropic_key()
     prompts = load_category_prompts(snapshot)
     videos = load_videos()
     labels = load_labels(prompts["categories"], videos)

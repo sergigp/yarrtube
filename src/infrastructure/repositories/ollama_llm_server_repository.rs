@@ -11,15 +11,6 @@ use std::time::Duration;
 /// doesn't answer fails it quickly.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Port to an LLM server's HTTP API.
-pub trait LlmServerRepository: Send + Sync {
-    /// The server at `url`: its version and installed models, each with
-    /// whether it can think.
-    fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer>;
-    /// What the model says to `chat`: `POST /api/chat`, unstreamed.
-    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply>;
-}
-
 /// The Ollama API: `GET /api/version`, `GET /api/tags`, `POST /api/show`.
 pub struct OllamaLlmServerRepository {
     check_timeout: Duration,
@@ -32,24 +23,9 @@ impl OllamaLlmServerRepository {
         }
     }
 
-    /// A check that gives up after `timeout` instead of `REQUEST_TIMEOUT`, so
-    /// tests of a server that never answers don't wait seconds for it.
-    #[cfg(test)]
-    fn with_check_timeout(timeout: Duration) -> Self {
-        Self {
-            check_timeout: timeout,
-        }
-    }
-}
-
-impl Default for OllamaLlmServerRepository {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl LlmServerRepository for OllamaLlmServerRepository {
-    fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer> {
+    /// The server at `url`: its version and installed models, each with
+    /// whether it can think.
+    pub fn find(&self, url: &OllamaUrl) -> anyhow::Result<LlmServer> {
         let client = Self::client(self.check_timeout)?;
         let version: VersionResponse = Self::get_json(&client, url, "/api/version")?;
         let tags: TagsResponse = Self::get_json(&client, url, "/api/tags")?;
@@ -59,12 +35,13 @@ impl LlmServerRepository for OllamaLlmServerRepository {
             .map(|model| Self::model(&client, url, model))
             .collect::<anyhow::Result<_>>()?;
         Ok(LlmServer {
-            version: version.version,
+            version: Some(version.version),
             models,
         })
     }
 
-    fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
+    /// What the model says to `chat`: `POST /api/chat`, unstreamed.
+    pub fn chat(&self, url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
         let client = Self::client(chat.timeout)?;
         let sent = client
             .post(format!("{url}/api/chat"))
@@ -98,7 +75,22 @@ impl LlmServerRepository for OllamaLlmServerRepository {
     }
 }
 
+impl Default for OllamaLlmServerRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OllamaLlmServerRepository {
+    /// A check that gives up after `timeout` instead of `REQUEST_TIMEOUT`, so
+    /// tests of a server that never answers don't wait seconds for it.
+    #[cfg(test)]
+    fn with_check_timeout(timeout: Duration) -> Self {
+        Self {
+            check_timeout: timeout,
+        }
+    }
+
     /// A fresh client per check, as for Plex: a blocking client whose
     /// private thread died would fail every later request.
     fn client(timeout: Duration) -> anyhow::Result<reqwest::blocking::Client> {
@@ -180,7 +172,9 @@ impl OllamaLlmServerRepository {
         Ok(LlmModel {
             thinking: show.capabilities.iter().any(|c| c == "thinking"),
             name: model.name,
-            size_bytes: model.size,
+            display_name: None,
+            size_bytes: Some(model.size),
+            context_window: None,
         })
     }
 
@@ -251,105 +245,10 @@ struct TagsModel {
     size: u64,
 }
 
-/// An LLM server answering with a fixed state, or unreachable.
-#[cfg(test)]
-pub struct FakeLlmServerRepository {
-    server: Option<LlmServer>,
-    /// Whether `find` fails as when nothing can connect, rather than as a
-    /// server that connected but failed.
-    unreachable: bool,
-    /// The answers `chat` gives, in order; once used up, it fails.
-    replies: std::sync::Mutex<std::collections::VecDeque<anyhow::Result<LlmReply>>>,
-    chats: std::sync::Mutex<Vec<LlmChat>>,
-    on_chat: Option<Box<dyn Fn() + Send + Sync>>,
-}
-
-#[cfg(test)]
-impl FakeLlmServerRepository {
-    pub fn new(server: LlmServer) -> Self {
-        Self::with(Some(server))
-    }
-
-    /// A server whose check fails, though not as a connect failure (see
-    /// `unreachable()`): `find` fails with a plain error.
-    pub fn failing() -> Self {
-        Self::with(None)
-    }
-
-    /// A server nothing can connect to: `find` fails with
-    /// `unreachable_error()`.
-    pub fn unreachable() -> Self {
-        Self {
-            unreachable: true,
-            ..Self::with(None)
-        }
-    }
-
-    /// Answers `chat` with `replies`, in order.
-    pub fn with_replies(self, replies: Vec<anyhow::Result<LlmReply>>) -> Self {
-        Self {
-            replies: std::sync::Mutex::new(replies.into()),
-            ..self
-        }
-    }
-
-    /// Runs `hook` while `chat` is in flight.
-    pub fn with_on_chat(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
-        Self {
-            on_chat: Some(Box::new(hook)),
-            ..self
-        }
-    }
-
-    /// The chats received, in order.
-    pub fn chats(&self) -> Vec<LlmChat> {
-        self.chats.lock().unwrap().clone()
-    }
-
-    fn with(server: Option<LlmServer>) -> Self {
-        Self {
-            server,
-            unreachable: false,
-            replies: Default::default(),
-            chats: Default::default(),
-            on_chat: None,
-        }
-    }
-}
-
-/// What the adapter fails with when nothing can connect to the server.
-#[cfg(test)]
-pub fn unreachable_error() -> anyhow::Error {
-    anyhow::anyhow!("connection refused").context(LlmServerUnreachable)
-}
-
-#[cfg(test)]
-impl LlmServerRepository for FakeLlmServerRepository {
-    fn find(&self, _url: &OllamaUrl) -> anyhow::Result<LlmServer> {
-        match (&self.server, self.unreachable) {
-            (Some(server), _) => Ok(server.clone()),
-            (None, true) => Err(unreachable_error()),
-            (None, false) => Err(anyhow::anyhow!("connection refused")),
-        }
-    }
-
-    fn chat(&self, _url: &OllamaUrl, chat: &LlmChat) -> anyhow::Result<LlmReply> {
-        self.chats.lock().unwrap().push(chat.clone());
-        if let Some(hook) = &self.on_chat {
-            hook();
-        }
-        self.replies
-            .lock()
-            .unwrap()
-            .pop_front()
-            .unwrap_or_else(|| Err(anyhow::anyhow!("no reply left")))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::llm_server::{LlmModel, MIN_CHAT_TIMEOUT};
+    use crate::domain::llm_server::{Effort, LlmModel, MIN_CHAT_TIMEOUT};
 
     #[test]
     fn it_should_post_the_chat_with_its_options() {
@@ -659,11 +558,13 @@ mod tests {
         assert_eq!(
             result.map_err(|e| e.to_string()),
             Ok(LlmServer {
-                version: "0.40.13".to_string(),
+                version: Some("0.40.13".to_string()),
                 models: vec![LlmModel {
                     name: "gemma3:4b".to_string(),
-                    size_bytes: 3_338_801_804,
+                    display_name: None,
+                    size_bytes: Some(3_338_801_804),
                     thinking: false,
+                    context_window: None,
                 }],
             })
         );
@@ -693,11 +594,13 @@ mod tests {
         assert_eq!(
             result.map_err(|e| e.to_string()),
             Ok(LlmServer {
-                version: "0.40.13".to_string(),
+                version: Some("0.40.13".to_string()),
                 models: vec![LlmModel {
                     name: "qwen3:4b".to_string(),
-                    size_bytes: 2_497_293_918,
+                    display_name: None,
+                    size_bytes: Some(2_497_293_918),
                     thinking: true,
+                    context_window: None,
                 }],
             })
         );
@@ -796,6 +699,7 @@ mod tests {
             context_length: 12288,
             temperature: 0.3,
             thinking: true,
+            effort: Effort::default(),
             max_output_tokens: 3288,
             format: None,
             timeout: MIN_CHAT_TIMEOUT,

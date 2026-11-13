@@ -37,6 +37,12 @@ impl ContextLength {
         )
     }
 
+    /// The most of a model's `window` (none: unknown) the input budget is
+    /// computed from: at most the longest length, 131072.
+    pub fn of_window(window: Option<u32>) -> Self {
+        Self(window.map_or(MAX, |window| window.clamp(MIN, MAX)))
+    }
+
     pub fn value(&self) -> u32 {
         self.0
     }
@@ -88,6 +94,15 @@ mod tests {
         assert_eq!(
             [0, 2, 3, 9, 10, 80].map(|categories| ContextLength::auto(categories).value()),
             [4096, 4096, 6144, 16384, 18432, 131072]
+        );
+    }
+
+    #[test]
+    fn it_should_cap_a_model_window_at_the_maximum() {
+        assert_eq!(
+            [Some(1_000_000), Some(200_000), Some(32_768), Some(10), None]
+                .map(|window| ContextLength::of_window(window).value()),
+            [131072, 131072, 32768, 1024, 131072]
         );
     }
 

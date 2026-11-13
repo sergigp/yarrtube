@@ -4,7 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { AiSettingsView } from './AiSettingsView'
 import { fetchChannelVideos } from '@/api/client'
 import { queryKeys } from '@/api/queries'
-import { aPreferences, aVideo, anOllamaServer, mockApi, renderWithProviders } from '@/test/helpers'
+import type { Preferences } from '@/api/types'
+import {
+  aPreferences,
+  aVideo,
+  anAnthropicServer,
+  anOllamaServer,
+  mockApi,
+  renderWithProviders,
+} from '@/test/helpers'
 
 describe('AiSettingsView', () => {
   it('shows the defaults, with the model disabled and the advanced settings hidden', async () => {
@@ -18,6 +26,118 @@ describe('AiSettingsView', () => {
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
+  })
+
+  it('hides the provider choice without an Anthropic key', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: false }) })
+    renderWithProviders(<AiSettingsView />)
+
+    const section = within(await screen.findByRole('group', { name: 'Provider' }))
+    expect(section.queryByRole('radiogroup', { name: 'Provider' })).not.toBeInTheDocument()
+    expect(section.getByRole('switch', { name: 'Enable AI' })).toBeInTheDocument()
+    expect(section.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
+    expect(section.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+  })
+
+  it('saves only ai_provider when switching to Anthropic and shows its settings', async () => {
+    const saved = { ...aiOn(), anthropic_available: true }
+    const fetchMock = mockApi({
+      'GET /api/preferences': saved,
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/anthropic': { status: 502, error: 'down' },
+      'PATCH /api/preferences': { ...saved, ai_provider: 'anthropic' },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('radio', { name: 'Anthropic' }))
+
+    expect(screen.queryByRole('textbox', { name: 'Ollama URL' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('claude-haiku-5-5')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(patchBodies(fetchMock)).toEqual([{ ai_provider: 'anthropic' }])
+  })
+
+  it('lists Anthropic models and marks a saved one not listed as (not available)', async () => {
+    mockApi({
+      'GET /api/preferences': onAnthropic({ anthropic_summaries_model: 'claude-haiku-4-5' }),
+      'GET /api/llm/anthropic': anAnthropicServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    const model = await screen.findByRole('combobox', { name: 'Model' })
+    expect(optionTexts(model)).toEqual([
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+      'claude-haiku-4-5 (not available)',
+    ])
+    expect(model).toHaveValue('claude-haiku-4-5')
+    expect(screen.getByRole('combobox', { name: 'Categorization model' })).toHaveValue(
+      'claude-haiku-5-5',
+    )
+  })
+
+  it("shows Effort and Prompt only under Anthropic's Advanced and saves only the changed effort", async () => {
+    const saved = onAnthropic()
+    const fetchMock = mockApi({
+      'GET /api/preferences': saved,
+      'GET /api/llm/anthropic': anAnthropicServer(),
+      'PATCH /api/preferences': { ...saved, anthropic_summaries_effort: 'high' },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Advanced' }))
+    await user.click(screen.getByRole('button', { name: 'Advanced categorization settings' }))
+
+    expect(screen.getByRole('combobox', { name: 'Effort' })).toHaveValue('low')
+    expect(screen.getByRole('combobox', { name: 'Categorization effort' })).toHaveValue('low')
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(saved.summaries_prompt)
+    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
+      saved.categorization_prompt,
+    )
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: /thinking/i })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Effort' }), 'high')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'high' }])
+  })
+
+  it('shows "Connected to Anthropic, <n> models" after testing the connection', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({ anthropic_available: true }),
+      'GET /api/llm/anthropic': anAnthropicServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('radio', { name: 'Anthropic' }))
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+
+    expect(await screen.findByText('Connected to Anthropic, 2 models')).toBeInTheDocument()
+    expect(optionTexts(screen.getByRole('combobox', { name: 'Model' }))).toEqual([
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ])
+  })
+
+  it("says the key isn't set when Anthropic is saved without one", async () => {
+    mockApi({
+      'GET /api/preferences': onAnthropic({ anthropic_available: false }),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    const section = within(await screen.findByRole('group', { name: 'Provider' }))
+    expect(
+      section.getByText("Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set"),
+    ).toBeInTheDocument()
+    expect(
+      within(section.getByRole('radiogroup', { name: 'Provider' }))
+        .getAllByRole('radio')
+        .map((radio) => radio.getAttribute('value')),
+    ).toEqual(['ollama'])
   })
 
   it('shows the Categorization section disabled on a fresh install', async () => {
@@ -84,7 +204,7 @@ describe('AiSettingsView', () => {
     const saved = aPreferences({ ai_enabled: true, ollama_url: 'http://mac.local:11434' })
     const fetchMock = mockApi({
       'GET /api/preferences': saved,
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
       'PATCH /api/preferences': {
         ...saved,
         categorization_enabled: true,
@@ -107,7 +227,7 @@ describe('AiSettingsView', () => {
   it('saves only the changed categorization advanced setting', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aiOn(),
     })
     renderWithProviders(<AiSettingsView />)
@@ -309,7 +429,7 @@ describe('AiSettingsView', () => {
         ai_enabled: true,
         ollama_url: 'http://mac.local:11434',
       }),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -331,7 +451,7 @@ describe('AiSettingsView', () => {
     let videoListRequests = 0
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aPreferences(),
       'GET /api/channels/handle/videos': () => {
         videoListRequests += 1
@@ -376,7 +496,7 @@ describe('AiSettingsView', () => {
         ollama_url: 'http://mac.local:11434',
         summaries_enabled: true,
       }),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()
@@ -394,7 +514,7 @@ describe('AiSettingsView', () => {
   it('refuses to save an emptied categorization number', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -414,7 +534,7 @@ describe('AiSettingsView', () => {
   it('tests the connection to the typed URL', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -430,7 +550,7 @@ describe('AiSettingsView', () => {
   it('shows why the connection test failed', async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
-      'GET /api/ollama?url=http%3A%2F%2Fnowhere%3A11434': {
+      'GET /api/llm/ollama?url=http%3A%2F%2Fnowhere%3A11434': {
         status: 502,
         error: 'Could not reach Ollama at http://nowhere:11434: connection refused',
       },
@@ -449,7 +569,7 @@ describe('AiSettingsView', () => {
   it("lists the saved server's models to pick from", async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
 
@@ -462,7 +582,7 @@ describe('AiSettingsView', () => {
   it("lists the saved server's models in the categorization Model independently", async () => {
     mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -478,7 +598,7 @@ describe('AiSettingsView', () => {
   it('keeps a saved model the server no longer has', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer({
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer({
         models: [{ name: 'gemma3:4b', size_bytes: 1, thinking: false }],
       }),
     })
@@ -493,7 +613,7 @@ describe('AiSettingsView', () => {
   it('lets the model be typed when the server is down', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
     })
     renderWithProviders(<AiSettingsView />)
 
@@ -503,9 +623,9 @@ describe('AiSettingsView', () => {
   it('lists the models of a newly saved server', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aPreferences({ ai_enabled: true, ollama_url: 'http://nas:11434' }),
-      'GET /api/ollama?url=http%3A%2F%2Fnas%3A11434': anOllamaServer({
+      'GET /api/llm/ollama?url=http%3A%2F%2Fnas%3A11434': anOllamaServer({
         models: [{ name: 'llama3:8b', size_bytes: 1, thinking: false }],
       }),
     })
@@ -529,7 +649,7 @@ describe('AiSettingsView', () => {
   it('lists the models of the server just tested', async () => {
     mockApi({
       'GET /api/preferences': aPreferences({ summaries_enabled: true }),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -546,7 +666,7 @@ describe('AiSettingsView', () => {
   it('offers thinking for a model that can think', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
     })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()
@@ -559,7 +679,7 @@ describe('AiSettingsView', () => {
   it("replaces thinking with a note for a model that can't think, and doesn't save it", async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aiOn(),
     })
     renderWithProviders(<AiSettingsView />)
@@ -579,7 +699,7 @@ describe('AiSettingsView', () => {
   it('decides thinking section by section', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
       'PATCH /api/preferences': aiOn(),
     })
     renderWithProviders(<AiSettingsView />)
@@ -608,7 +728,7 @@ describe('AiSettingsView', () => {
   it('offers thinking while the models are unknown', async () => {
     mockApi({
       'GET /api/preferences': aiOn(),
-      'GET /api/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
     })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()
@@ -695,6 +815,18 @@ function aiOn() {
     ai_enabled: true,
     ollama_url: 'http://mac.local:11434',
     summaries_enabled: true,
+  })
+}
+
+/** AI with summaries and categorization on, running on Anthropic. */
+function onAnthropic(overrides: Partial<Preferences> = {}): Preferences {
+  return aPreferences({
+    ai_enabled: true,
+    ai_provider: 'anthropic',
+    anthropic_available: true,
+    summaries_enabled: true,
+    categorization_enabled: true,
+    ...overrides,
   })
 }
 

@@ -1,0 +1,9 @@
+{
+  "models": [
+    "claude-haiku-5-5"
+  ],
+  "prompt_version": "v3",
+  "num_ctx": 131072,
+  "provider": "anthropic",
+  "effort": "medium"
+}

@@ -1,8 +1,10 @@
 use super::*;
 use crate::application::http::test_support::categorization_resetter;
 use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryName, CategoryPrompt};
+use crate::domain::llm_server::Effort;
 use crate::domain::preferences::{
-    CategorizationSettings, Preferences, ResolvedPreferences, SummarySettings,
+    AiProvider, AnthropicSettings, CategorizationSettings, Preferences, ResolvedPreferences,
+    SummarySettings,
 };
 use crate::domain::video::{StepState, Video, VideoId, YoutubeVideoId};
 use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
@@ -32,6 +34,7 @@ async fn it_should_return_the_defaults_if_nothing_saved() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -54,6 +57,7 @@ async fn it_should_return_an_auto_context_length_from_the_categories_with_a_prom
     let preferences_searcher = PreferencesSearcher::new(
         Arc::new(SqlitePreferencesRepository::new(db.database())),
         category_repository,
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -80,6 +84,7 @@ async fn it_should_return_4096_for_auto_with_few_categories() {
     let preferences_searcher = PreferencesSearcher::new(
         Arc::new(SqlitePreferencesRepository::new(db.database())),
         category_repository,
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -185,6 +190,7 @@ async fn it_should_return_the_ai_defaults_if_nothing_saved() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -336,6 +342,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_model_changes()
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
+            false,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -404,6 +411,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_generation_sett
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
+            false,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -482,6 +490,7 @@ async fn it_should_keep_failed_verdicts_when_the_same_settings_are_saved() {
             Arc::new(CategoryLock::default()),
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
+            false,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -508,6 +517,7 @@ async fn it_should_keep_failed_verdicts_when_the_shipped_categorization_prompt_i
         Arc::new(CategoryLock::default()),
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
+        false,
     );
     let request = UpdatePreferencesRequest {
         categorization_prompt: Some(Some(CategorizationPrompt::shipped().as_str().to_string())),
@@ -529,6 +539,7 @@ async fn it_should_return_the_categorization_defaults_if_nothing_saved() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -553,6 +564,7 @@ async fn it_should_ship_the_categorization_prompt_v2_batch() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -576,6 +588,7 @@ async fn it_should_return_the_categorization_generation_defaults_if_nothing_save
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -1262,6 +1275,7 @@ async fn it_should_return_saved_preferences() {
     let preferences_searcher = PreferencesSearcher::new(
         repository,
         Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
     );
 
     let response = get(preferences_searcher).await;
@@ -1273,6 +1287,350 @@ async fn it_should_return_saved_preferences() {
             ..all_on_response()
         })
     );
+}
+
+#[tokio::test]
+async fn it_should_read_the_anthropic_defaults_and_availability() {
+    let db = TestDatabase::new();
+    let preferences_searcher = PreferencesSearcher::new(
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        true,
+    );
+
+    let response = get(preferences_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            ai_provider: "ollama".to_string(),
+            anthropic_available: true,
+            anthropic_summaries_model: "claude-haiku-5-5".to_string(),
+            anthropic_summaries_effort: "low".to_string(),
+            anthropic_categorization_model: "claude-haiku-5-5".to_string(),
+            anthropic_categorization_effort: "low".to_string(),
+            ..all_on_response()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_save_the_anthropic_provider_and_settings() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let ollama_settings = Preferences {
+        summaries: SummarySettings {
+            model: SummaryModel::new("gemma3:4b").unwrap(),
+            ..SummarySettings::default()
+        },
+        ..Preferences::default()
+    };
+    repository.save(&ollama_settings).unwrap();
+    let preferences_updater = PreferencesUpdater::new(
+        repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(CategoryLock::default()),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        categorization_resetter(db.database()),
+        true,
+    );
+    let request = UpdatePreferencesRequest {
+        ai_provider: Some("anthropic".to_string()),
+        anthropic_summaries_model: Some("claude-sonnet-5-5".to_string()),
+        anthropic_summaries_effort: Some("high".to_string()),
+        anthropic_categorization_model: Some("claude-opus-5-5".to_string()),
+        anthropic_categorization_effort: Some("medium".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            summaries_model: "gemma3:4b".to_string(),
+            ai_provider: "anthropic".to_string(),
+            anthropic_available: true,
+            anthropic_summaries_model: "claude-sonnet-5-5".to_string(),
+            anthropic_summaries_effort: "high".to_string(),
+            anthropic_categorization_model: "claude-opus-5-5".to_string(),
+            anthropic_categorization_effort: "medium".to_string(),
+            ..all_on_response()
+        })
+    );
+    assert_eq!(
+        repository.find().unwrap(),
+        Some(Preferences {
+            ai_provider: AiProvider::Anthropic,
+            anthropic: AnthropicSettings {
+                summaries_model: SummaryModel::new("claude-sonnet-5-5").unwrap(),
+                summaries_effort: Effort::High,
+                categorization_model: CategorizationModel::new("claude-opus-5-5").unwrap(),
+                categorization_effort: Effort::Medium,
+            },
+            ..ollama_settings
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_reject_the_anthropic_provider_without_a_key() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let preferences_updater = preferences_updater(&db, repository.clone());
+    let request = UpdatePreferencesRequest {
+        ai_provider: Some("anthropic".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic"
+        ))
+    );
+    assert_eq!(repository.find().unwrap(), None);
+}
+
+#[tokio::test]
+async fn it_should_reject_an_unknown_provider() {
+    let request = UpdatePreferencesRequest {
+        ai_provider: Some("openai".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(any_preferences_updater(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "AI provider must be \"ollama\" or \"anthropic\" (got \"openai\")"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_reject_an_unknown_effort() {
+    let request = UpdatePreferencesRequest {
+        anthropic_summaries_effort: Some("max".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(any_preferences_updater(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Effort must be \"low\", \"medium\" or \"high\" (got \"max\")"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_enable_ai_on_anthropic_without_an_ollama_url() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let preferences_updater = PreferencesUpdater::new(
+        repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(CategoryLock::default()),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        categorization_resetter(db.database()),
+        true,
+    );
+    let request = UpdatePreferencesRequest {
+        ai_enabled: Some(true),
+        ai_provider: Some("anthropic".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            ai_enabled: true,
+            ai_provider: "anthropic".to_string(),
+            anthropic_available: true,
+            ..all_on_response()
+        })
+    );
+    assert_eq!(
+        repository.find().unwrap(),
+        Some(Preferences {
+            ai_enabled: true,
+            ai_provider: AiProvider::Anthropic,
+            ..Preferences::default()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_ignore_a_sent_anthropic_available() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let preferences_updater = preferences_updater(&db, repository.clone());
+    let request: UpdatePreferencesRequest =
+        serde_json::from_value(serde_json::json!({"anthropic_available": true})).unwrap();
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            anthropic_available: false,
+            ..all_on_response()
+        })
+    );
+    assert_eq!(repository.find().unwrap(), Some(Preferences::default()));
+}
+
+#[tokio::test]
+async fn it_should_reset_failed_summaries_when_the_provider_changes() {
+    let requests = [
+        UpdatePreferencesRequest {
+            ai_provider: Some("anthropic".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            anthropic_summaries_model: Some("claude-sonnet-5-5".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            anthropic_summaries_effort: Some("high".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+    ];
+
+    for request in requests {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = failed_summary_video();
+        video_repository.insert(&video).unwrap();
+        let preferences_updater = PreferencesUpdater::new(
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            categorization_resetter(db.database()),
+            true,
+        );
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                summary: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video
+            })
+        );
+    }
+}
+
+#[tokio::test]
+async fn it_should_reset_failed_verdicts_when_the_anthropic_categorization_effort_changes() {
+    let requests = [
+        UpdatePreferencesRequest {
+            anthropic_categorization_effort: Some("high".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            anthropic_categorization_model: Some("claude-sonnet-5-5".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+        UpdatePreferencesRequest {
+            ai_provider: Some("anthropic".to_string()),
+            ..UpdatePreferencesRequest::default()
+        },
+    ];
+
+    for request in requests {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let verdict_repository = Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video = Video {
+            id: verdict_video_id(),
+            ..Video::create(
+                YoutubeVideoId::new("yt1").unwrap(),
+                "A video",
+                fixed_timestamp(),
+            )
+            .mark_categorization_failed(fixed_timestamp())
+        };
+        video_repository.insert(&video).unwrap();
+        let decided = [
+            verdict("chess", Verdict::Yes),
+            verdict("funny", Verdict::No),
+        ];
+        decided
+            .iter()
+            .chain(&[verdict("tech", Verdict::Failed)])
+            .for_each(|verdict| verdict_repository.save(verdict).unwrap());
+        let preferences_updater = PreferencesUpdater::new(
+            repository,
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            verdict_repository.clone(),
+            Arc::new(CategoryLock::default()),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            categorization_resetter(db.database()),
+            true,
+        );
+
+        update(preferences_updater, request).await.unwrap();
+
+        assert_eq!(
+            verdict_repository.find_many(&[verdict_video_id()]).unwrap(),
+            decided.to_vec()
+        );
+        assert_eq!(
+            video_repository.find(&video.id).unwrap(),
+            Some(Video {
+                version: 1,
+                categorization: StepState::pending(),
+                updated_at: fixed_timestamp(),
+                ..video
+            })
+        );
+    }
+}
+
+#[tokio::test]
+async fn it_should_reject_enabling_ai_on_anthropic_without_a_key() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let stored = Preferences {
+        ai_provider: AiProvider::Anthropic,
+        ..Preferences::default()
+    };
+    repository.save(&stored).unwrap();
+    let preferences_updater = preferences_updater(&db, repository.clone());
+    let request = UpdatePreferencesRequest {
+        ai_enabled: Some(true),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic"
+        ))
+    );
+    assert_eq!(repository.find().unwrap(), Some(stored));
 }
 
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
@@ -1303,6 +1661,7 @@ fn any_preferences_updater() -> PreferencesUpdater {
         Arc::new(CategoryLock::default()),
         Arc::new(SqliteCategoryRepository::new(database())),
         categorization_resetter(database()),
+        false,
     )
 }
 
@@ -1318,6 +1677,7 @@ fn preferences_updater(
         Arc::new(CategoryLock::default()),
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
+        false,
     )
 }
 
@@ -1388,6 +1748,7 @@ fn all_on_response() -> PreferencesResponse {
         ..PreferencesResponse::from(ResolvedPreferences {
             preferences: Preferences::default(),
             categorization_context_length: ContextLength::auto(0),
+            anthropic_available: false,
         })
     }
 }

@@ -35,6 +35,7 @@ const DEFAULT_PREFERENCES = {
   home_show_latest: true,
   theme: 'light',
   ai_enabled: false,
+  ai_provider: 'ollama',
   ollama_url: '',
   summaries_enabled: false,
   categorization_enabled: false,

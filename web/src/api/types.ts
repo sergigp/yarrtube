@@ -301,6 +301,12 @@ export interface CreatedCategory {
   playlists: string[]
 }
 
+/** The provider every AI feature runs on. */
+export type AiProvider = 'ollama' | 'anthropic'
+
+/** How much an Anthropic model reasons before answering. */
+export type Effort = 'low' | 'medium' | 'high'
+
 /** Response of `GET`/`PATCH /api/preferences`: every preference. */
 export interface Preferences {
   categories_enabled: boolean
@@ -330,6 +336,13 @@ export interface Preferences {
   /** The saved prompt, or the shipped one when none is saved. */
   categorization_prompt: string
   categorization_prompt_is_default: boolean
+  ai_provider: AiProvider
+  /** Read-only: whether the daemon has an Anthropic key. */
+  anthropic_available: boolean
+  anthropic_summaries_model: string
+  anthropic_summaries_effort: Effort
+  anthropic_categorization_model: string
+  anthropic_categorization_effort: Effort
 }
 
 /**
@@ -348,6 +361,7 @@ export type PreferencesPatch = Partial<
     | 'categorization_context_length_is_auto'
     | 'categorization_prompt'
     | 'categorization_prompt_is_default'
+    | 'anthropic_available'
   >
 > & {
   ollama_url?: string
@@ -356,7 +370,7 @@ export type PreferencesPatch = Partial<
   categorization_prompt?: string | null
 }
 
-/** Response of `GET /api/ollama?url=`: an Ollama server and its models. */
+/** Response of `GET /api/llm/ollama?url=`: an Ollama server and its models. */
 export interface OllamaServer {
   version: string
   models: OllamaModel[]
@@ -367,6 +381,20 @@ export interface OllamaModel {
   size_bytes: number
   /** Whether the model can think before answering. */
   thinking: boolean
+}
+
+/** Response of `GET /api/llm/anthropic`: the models the key can use. */
+export interface AnthropicServer {
+  /** Newest first, as Anthropic lists them. */
+  models: AnthropicModel[]
+}
+
+export interface AnthropicModel {
+  /** The model id, e.g. `claude-haiku-5-5`. */
+  name: string
+  display_name: string
+  /** The most input tokens it takes. */
+  context_window: number
 }
 
 /** Where a video's membership of a category comes from. */

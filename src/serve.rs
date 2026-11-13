@@ -21,6 +21,9 @@ use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdate
 use crate::infrastructure::infrastructure_container::{
     InfrastructureContainer, InfrastructureSettings,
 };
+use crate::infrastructure::repositories::anthropic_llm_server_repository::{
+    AnthropicApiKey, AnthropicConfig,
+};
 use crate::infrastructure::repositories::domain_events_consumer::{
     DomainEventsConsumer, SubscriberRegistry,
 };
@@ -177,6 +180,7 @@ pub(crate) fn build_infrastructure() -> Result<InfrastructureContainer> {
         videos_path: PathBuf::from(videos_path()),
         avatars_path: avatars_path(),
         ytdlp_path: target_path(),
+        anthropic: anthropic_config(),
     })
 }
 
@@ -452,6 +456,32 @@ fn plex_integration_from(
     }
 }
 
+/// Where Anthropic's API is, unless `YARRTUBE_ANTHROPIC_API_URL` says otherwise.
+const DEFAULT_ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
+
+/// Anthropic's API, present only with a non-empty
+/// `YARRTUBE_ANTHROPIC_API_KEY`; `YARRTUBE_ANTHROPIC_API_URL` (default
+/// `https://api.anthropic.com`) points it at a fake in tests.
+fn anthropic_config() -> Option<AnthropicConfig> {
+    anthropic_config_from(
+        non_empty_env("YARRTUBE_ANTHROPIC_API_KEY"),
+        non_empty_env("YARRTUBE_ANTHROPIC_API_URL"),
+    )
+}
+
+fn anthropic_config_from(
+    api_key: Option<String>,
+    api_url: Option<String>,
+) -> Option<AnthropicConfig> {
+    let api_key = api_key.filter(|key| !key.trim().is_empty())?;
+    Some(AnthropicConfig {
+        api_url: api_url
+            .filter(|url| !url.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_ANTHROPIC_API_URL.to_string()),
+        api_key: AnthropicApiKey::new(api_key),
+    })
+}
+
 fn non_empty_env(name: &str) -> Option<String> {
     std::env::var(name)
         .ok()
@@ -610,6 +640,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         preferences_searcher: PreferencesSearcher::new(
             infrastructure.preferences_repository.clone(),
             infrastructure.category_repository.clone(),
+            infrastructure.anthropic_available,
         ),
         preferences_updater: PreferencesUpdater::new(
             infrastructure.preferences_repository.clone(),
@@ -619,8 +650,12 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.category_lock.clone(),
             infrastructure.category_repository.clone(),
             categorization_resetter(infrastructure),
+            infrastructure.anthropic_available,
         ),
-        llm_server_searcher: LlmServerSearcher::new(infrastructure.llm_server_repository.clone()),
+        llm_server_searcher: LlmServerSearcher::new(
+            infrastructure.llm_server_repository.clone(),
+            infrastructure.anthropic_available,
+        ),
         video_category_choice_searcher: VideoCategoryChoiceSearcher::new(
             infrastructure.video_repository.clone(),
             video_owner_finder(infrastructure),
@@ -1417,6 +1452,31 @@ mod tests {
     }
 
     #[test]
+    fn it_should_have_no_anthropic_config_for_an_empty_key() {
+        let configs = [None, Some(""), Some("  ")]
+            .map(|key| anthropic_config_from(key.map(str::to_string), None).is_some());
+
+        assert_eq!(configs, [false, false, false]);
+    }
+
+    #[test]
+    fn it_should_default_the_anthropic_api_url() {
+        let urls = [None, Some(""), Some("http://127.0.0.1:9999")].map(|url| {
+            anthropic_config_from(Some("sk-ant-test".to_string()), url.map(str::to_string))
+                .map(|config| config.api_url)
+        });
+
+        assert_eq!(
+            urls,
+            [
+                Some("https://api.anthropic.com".to_string()),
+                Some("https://api.anthropic.com".to_string()),
+                Some("http://127.0.0.1:9999".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_request_the_plex_syncs_at_startup_only_if_plex_is_configured() {
         let queued: Vec<Vec<String>> = [
             None,
@@ -1735,6 +1795,7 @@ mod tests {
             videos_path: unique_temp_dir("serve-registry-videos"),
             avatars_path: unique_temp_dir("serve-registry-avatars"),
             ytdlp_path: PathBuf::from("yt-dlp"),
+            anthropic: None,
         })
         .unwrap()
     }

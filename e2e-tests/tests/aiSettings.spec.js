@@ -1,4 +1,5 @@
 import { test, expect } from '../helpers/fixtures.js'
+import { MODELS } from '../anthropic-stub.js'
 import { OLLAMA_VERSION } from '../ollama-stub.js'
 
 test('AI settings: point at Ollama, pick a model and save, then reset the prompt', async ({ page, daemon }) => {
@@ -115,3 +116,22 @@ test.describe(() => {
     await expect(prompt).toHaveValue(/## map usr/)
   })
 })
+
+test('AI settings: test the Anthropic connection and save it as the provider', async ({ page }) => {
+  const anthropic = page.getByRole('radio', { name: 'Anthropic' })
+  const model = page.getByRole('combobox', { name: 'Model', exact: true })
+
+  await page.goto('/ai')
+  await anthropic.check()
+  await expect(page.getByRole('textbox', { name: 'Ollama URL' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Test connection' }).click()
+  await expect(page.getByText(`Connected to Anthropic, ${MODELS.length} models`)).toBeVisible()
+  await expect(model.locator('option')).toHaveText(MODELS.map((listed) => listed.id))
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Saved')).toBeVisible()
+
+  await page.reload()
+  await expect(anthropic).toBeChecked()
+  await expect(model).toHaveValue('claude-haiku-5-5')
+})
+

@@ -18,6 +18,11 @@ impl CategorizationModel {
         }
     }
 
+    /// The model Anthropic summaries and categorizations start with.
+    pub fn anthropic_default() -> Self {
+        Self("claude-haiku-5-5".to_string())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

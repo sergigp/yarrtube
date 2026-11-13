@@ -38,7 +38,8 @@ it's unreliable and kept only for comparison.
 
 ### Before the first run
 
-- Ollama running on the laptop, with the models pulled
+- For `--provider anthropic`: `YARRTUBE_ANTHROPIC_API_KEY` set. Otherwise:
+  Ollama running on the laptop, with the models pulled
   (`ollama pull qwen3:4b`). If it's not on this machine, set
   `OLLAMA_URL=http://<host>:11434`.
 - Each case's subtitles. **The repo is public, so subtitles and transcripts
@@ -65,6 +66,20 @@ python3 -I evals/summaries/eval.py --model qwen3:4b --judge claude-sonnet
   `--model qwen3:4b --model gemma3:4b`.
 - `--prompt v2` runs another prompt version (default: the one in use).
 - `--case <slug>` limits the run to some videos, for a quick try.
+- `--provider anthropic` runs the models on the Anthropic API instead of
+  Ollama, e.g. `--provider anthropic --model claude-haiku-5-5 --effort low`.
+  It needs the key in `YARRTUBE_ANTHROPIC_API_KEY` (the run stops before its
+  first call without it). Each call sends `max_tokens` 16000 and
+  `--effort low|medium|high` (default `medium`) as `output_config.effort`,
+  with no temperature and the model's adaptive thinking. Transcripts are cut
+  for a 131072-token context, the app's cap, instead of 12288. A refusal, a
+  call stopped at `max_tokens` or a 400 leaves an error row instead of a
+  summary; a bad key, an unknown model, no credit or no connection stops the
+  run, resumed with `--run`. The run id ends in
+  `_anthropic-effort-<effort>`: one effort per run, and a resumed run keeps
+  its provider and effort.
+- Every run prints its input and output tokens and an estimated cost (prices
+  in `PRICES` in `eval.py`); the report lists them too.
 - Slow: about 5 min per video for qwen3:4b, so ~50 min per model. Run it in
   the background. If it stops, rerun the same command with
   `--run <run-id>` and it picks up where it stopped; every summary is cached.

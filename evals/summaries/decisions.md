@@ -16,6 +16,41 @@ Known weaknesses: videos with several parts (the chess stream with three
 games is still summarized wrong); opens with "The video…" now and then
 (strip it in code). About 5 min per video on the M2 Air, ~12 videos an hour.
 
+**On Anthropic (`add-anthropic-provider`): `claude-haiku-5-5` at effort
+`low`**, same prompt v3, `max_tokens` 16000, input cut for a 131072-token
+context (every golden-set video fits one call). See the entry below.
+
+## 2026-11-13 · Anthropic · claude-haiku-5-5, effort low
+
+Runs: [`effort low`](results/2026-11-13_1041_prompt-v3_anthropic-effort-low/report-claude-sonnet.md),
+[`effort medium`](results/2026-11-13_1041_prompt-v3_anthropic-effort-medium/report-claude-sonnet.md),
+prompt v3, judged by Sonnet subagents as before, compared with the
+[`qwen3:4b` v3 run](results/2026-11-03_prompt-v3/report-claude-sonnet.md).
+
+| Model | Effort | Must-haves | Facts | Contradicted | Major / minor unfaithful | Fully faithful | Avg time | Cost (10 videos) |
+|---|---|---|---|---|---|---|---|---|
+| qwen3:4b | (thinking) | 19/23 | 33/50 | 2/50 | 4 / 14 | 3/10 | 287 s | free |
+| **claude-haiku-5-5** | **low** | **22/23** | **46/50** | **0/50** | **0 / 6** | **6/10** | 2 s | $0.016 |
+| claude-haiku-5-5 | medium | 20/23 | 41/50 | 0/50 | 0 / 6 | 6/10 | 3 s | $0.016 |
+
+- **Decision: Haiku at effort `low`** for Anthropic summaries. It beats
+  qwen3:4b on every axis: no major error (qwen: 4), 3 more must-haves, 13
+  more facts. `medium` was no better (2 must-haves fewer, same
+  faithfulness), and on a single run the gap between the two is noise:
+  `low` is enough. `add-anthropic-provider` assumed `medium`.
+- **Cost**: 136,475 input + 3,745 output tokens for 10 videos at `low`
+  (4,261 at `medium`), about $0.0016 per summary. Input dominates; effort
+  barely changes it.
+- One call per video: the 96,000-token input budget (131072 scaled as the
+  app does) fits every case, where qwen3:4b map-reduces the long ones.
+- Still opens with "El vídeo…"/"The video…" in 7 of 10 summaries at both
+  efforts (`direct_start`): the code strip stays needed. One or two per run
+  are 6 sentences.
+- Caveats: one run per effort; `cross-entropy` and `extreme-places` used
+  the subtitles yarrtube downloaded (same as the NAS copy, which a fresh
+  `yt-dlp` download differs from), the rest a fresh download with the same
+  text; case titles are now the original YouTube ones (see the v3 caveat).
+
 ## 2026-11-12 · budget the whole prompt, re-cut once on an overrun
 
 A chess video (`Jobava London Guide…`) failed its map call "part 1 of 2" 4

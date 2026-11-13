@@ -48,6 +48,16 @@ pub struct UpdatePreferencesRequest {
     /// Left out keeps the prompt, `null` goes back to the shipped one.
     #[serde(default, deserialize_with = "present")]
     pub categorization_prompt: Option<Option<String>>,
+    #[serde(default)]
+    pub ai_provider: Option<String>,
+    #[serde(default)]
+    pub anthropic_summaries_model: Option<String>,
+    #[serde(default)]
+    pub anthropic_summaries_effort: Option<String>,
+    #[serde(default)]
+    pub anthropic_categorization_model: Option<String>,
+    #[serde(default)]
+    pub anthropic_categorization_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -75,6 +85,13 @@ pub struct PreferencesResponse {
     pub categorization_thinking: bool,
     pub categorization_prompt: String,
     pub categorization_prompt_is_default: bool,
+    pub ai_provider: String,
+    /// Read-only: whether the daemon has an Anthropic key.
+    pub anthropic_available: bool,
+    pub anthropic_summaries_model: String,
+    pub anthropic_summaries_effort: String,
+    pub anthropic_categorization_model: String,
+    pub anthropic_categorization_effort: String,
 }
 
 impl From<ResolvedPreferences> for PreferencesResponse {
@@ -82,6 +99,7 @@ impl From<ResolvedPreferences> for PreferencesResponse {
         let preferences = resolved.preferences;
         let summaries = &preferences.summaries;
         let categorization = &preferences.categorization;
+        let anthropic = &preferences.anthropic;
         Self {
             categories_enabled: preferences.categories_enabled,
             home_show_continue_watching: preferences.home_show_continue_watching,
@@ -106,6 +124,12 @@ impl From<ResolvedPreferences> for PreferencesResponse {
             categorization_thinking: categorization.thinking,
             categorization_prompt: categorization.effective_prompt().as_str().to_string(),
             categorization_prompt_is_default: categorization.prompt.is_none(),
+            ai_provider: preferences.ai_provider.as_str().to_string(),
+            anthropic_available: resolved.anthropic_available,
+            anthropic_summaries_model: anthropic.summaries_model.as_str().to_string(),
+            anthropic_summaries_effort: anthropic.summaries_effort.as_str().to_string(),
+            anthropic_categorization_model: anthropic.categorization_model.as_str().to_string(),
+            anthropic_categorization_effort: anthropic.categorization_effort.as_str().to_string(),
         }
     }
 }

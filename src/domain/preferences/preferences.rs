@@ -1,5 +1,8 @@
-use super::{CategorizationSettings, PreferencesChange, SummarySettings, Theme};
-use crate::domain::llm_server::OllamaUrl;
+use super::{
+    AiProvider, AnthropicSettings, CategorizationSettings, PreferencesChange, SummarySettings,
+    Theme,
+};
+use crate::domain::llm_server::{LlmConnection, OllamaUrl};
 use crate::domain::shared::ValidationError;
 
 /// The user's daemon-wide preferences.
@@ -12,9 +15,11 @@ pub struct Preferences {
     pub home_show_latest: bool,
     pub theme: Theme,
     pub ai_enabled: bool,
+    pub ai_provider: AiProvider,
     pub ollama_url: Option<OllamaUrl>,
     pub summaries: SummarySettings,
     pub categorization: CategorizationSettings,
+    pub anthropic: AnthropicSettings,
 }
 
 impl Default for Preferences {
@@ -28,9 +33,11 @@ impl Default for Preferences {
             home_show_latest: true,
             theme: Theme::default(),
             ai_enabled: false,
+            ai_provider: AiProvider::default(),
             ollama_url: None,
             summaries: SummarySettings::default(),
             categorization: CategorizationSettings::default(),
+            anthropic: AnthropicSettings::default(),
         }
     }
 }
@@ -52,32 +59,54 @@ impl Preferences {
         self.ai_enabled && self.categories_enabled && self.categorization.enabled
     }
 
-    /// Whether `other` generates summaries differently: another server or
-    /// other settings, not merely summaries turned on or off.
+    /// Where AI calls go: `None` only for Ollama without a URL.
+    pub fn connection(&self) -> Option<LlmConnection> {
+        match self.ai_provider {
+            AiProvider::Ollama => self.ollama_url.clone().map(LlmConnection::Ollama),
+            AiProvider::Anthropic => Some(LlmConnection::Anthropic),
+        }
+    }
+
+    /// Whether `other` generates summaries differently: another provider,
+    /// server or other settings, not merely summaries turned on or off.
     pub fn changes_summaries(&self, other: &Self) -> bool {
         let settings = SummarySettings {
             enabled: other.summaries.enabled,
             ..self.summaries.clone()
         };
-        self.ollama_url != other.ollama_url || settings != other.summaries
+        self.ai_provider != other.ai_provider
+            || self.ollama_url != other.ollama_url
+            || settings != other.summaries
+            || self.anthropic.summaries_model != other.anthropic.summaries_model
+            || self.anthropic.summaries_effort != other.anthropic.summaries_effort
     }
 
-    /// Whether `other` categorizes differently: another server or other
-    /// settings (model, context length as saved, temperature, thinking,
-    /// effective prompt), not merely categorization turned on or off.
+    /// Whether `other` categorizes differently: another provider, server or
+    /// other settings (model, context length as saved, temperature, thinking,
+    /// effective prompt, Anthropic model and effort), not merely
+    /// categorization turned on or off.
     pub fn changes_categorization(&self, other: &Self) -> bool {
         let calls = |settings: &CategorizationSettings| CategorizationSettings {
             enabled: false,
             prompt: Some(settings.effective_prompt()),
             ..settings.clone()
         };
-        self.ollama_url != other.ollama_url
+        self.ai_provider != other.ai_provider
+            || self.ollama_url != other.ollama_url
             || calls(&self.categorization) != calls(&other.categorization)
+            || self.anthropic.categorization_model != other.anthropic.categorization_model
+            || self.anthropic.categorization_effort != other.anthropic.categorization_effort
     }
 
     /// These preferences with `change` applied, as long as the result is
-    /// consistent: AI can't be on without an Ollama URL.
-    pub fn apply(self, change: PreferencesChange) -> Result<Self, ValidationError> {
+    /// consistent: AI can't be on Ollama without a URL, and Anthropic can't
+    /// be chosen unless `anthropic_available`.
+    pub fn apply(
+        self,
+        change: PreferencesChange,
+        anthropic_available: bool,
+    ) -> Result<Self, ValidationError> {
+        self.ensure_anthropic_has_key(&change, anthropic_available)?;
         let summaries = SummarySettings {
             enabled: change.summaries_enabled.unwrap_or(self.summaries.enabled),
             model: change.summaries_model.unwrap_or(self.summaries.model),
@@ -124,16 +153,49 @@ impl Preferences {
             home_show_latest: change.home_show_latest.unwrap_or(self.home_show_latest),
             theme: change.theme.unwrap_or(self.theme),
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
+            ai_provider: change.ai_provider.unwrap_or(self.ai_provider),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             summaries,
             categorization,
+            anthropic: AnthropicSettings {
+                summaries_model: change
+                    .anthropic_summaries_model
+                    .unwrap_or(self.anthropic.summaries_model),
+                summaries_effort: change
+                    .anthropic_summaries_effort
+                    .unwrap_or(self.anthropic.summaries_effort),
+                categorization_model: change
+                    .anthropic_categorization_model
+                    .unwrap_or(self.anthropic.categorization_model),
+                categorization_effort: change
+                    .anthropic_categorization_effort
+                    .unwrap_or(self.anthropic.categorization_effort),
+            },
         }
         .ensure_ai_has_url()
     }
 
+    /// Without a key, Anthropic can't be picked, nor AI turned on with it.
+    /// Other changes are kept while it stays saved, so a removed key doesn't
+    /// block every save.
+    fn ensure_anthropic_has_key(
+        &self,
+        change: &PreferencesChange,
+        anthropic_available: bool,
+    ) -> Result<(), ValidationError> {
+        let provider = change.ai_provider.unwrap_or(self.ai_provider);
+        let starts_using = change.ai_provider.is_some() || change.ai_enabled == Some(true);
+        match (provider, starts_using, anthropic_available) {
+            (AiProvider::Anthropic, true, false) => Err(ValidationError(
+                "Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic".to_string(),
+            )),
+            _ => Ok(()),
+        }
+    }
+
     fn ensure_ai_has_url(self) -> Result<Self, ValidationError> {
-        match (self.ai_enabled, &self.ollama_url) {
-            (true, None) => Err(ValidationError(
+        match (self.ai_enabled, self.ai_provider, &self.ollama_url) {
+            (true, AiProvider::Ollama, None) => Err(ValidationError(
                 "Ollama URL must be set to enable AI".to_string(),
             )),
             _ => Ok(self),

@@ -8,16 +8,19 @@ use std::sync::Arc;
 pub struct PreferencesSearcher {
     repository: Arc<dyn PreferencesRepository>,
     category_repository: Arc<dyn CategoryRepository>,
+    anthropic_available: bool,
 }
 
 impl PreferencesSearcher {
     pub fn new(
         repository: Arc<dyn PreferencesRepository>,
         category_repository: Arc<dyn CategoryRepository>,
+        anthropic_available: bool,
     ) -> Self {
         Self {
             repository,
             category_repository,
+            anthropic_available,
         }
     }
 }
@@ -50,6 +53,10 @@ impl PreferencesSearcher {
             .category_repository
             .list()
             .map_err(ReadPreferencesError::Repository)?;
-        Ok(ResolvedPreferences::new(preferences, &categories))
+        Ok(ResolvedPreferences::new(
+            preferences,
+            &categories,
+            self.anthropic_available,
+        ))
     }
 }

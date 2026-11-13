@@ -5,13 +5,13 @@ use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::llm_server::{
-    LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    Effort, LlmChat, LlmConnection, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::SummaryModel;
 use crate::domain::preferences::{
-    CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength, Preferences,
-    Temperature,
+    AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
+    CategorizationSettings, ContextLength, Preferences, Temperature,
 };
 use crate::domain::services::{CategorizationResetter, VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -23,7 +23,7 @@ use crate::domain::video_category::{
     Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
 };
 use crate::domain::video_summary::{SummaryText, VideoSummary};
-use crate::infrastructure::repositories::ollama_llm_server_repository::{
+use crate::infrastructure::repositories::llm_server_repository::{
     FakeLlmServerRepository, unreachable_error,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::{
@@ -287,6 +287,7 @@ fn it_should_send_the_video_details_and_category_prompts_with_the_categorization
             context_length: 6144,
             temperature: 0.0,
             thinking: true,
+            effort: Effort::default(),
             max_output_tokens: 4095,
             timeout: MIN_CHAT_TIMEOUT,
             format: Some(serde_json::json!({
@@ -1385,13 +1386,13 @@ fn it_should_wait_for_ollama_if_it_is_unavailable_for_a_categorization() {
         outcomes,
         [
             (
-                wait("can't connect to Ollama: connection refused"),
+                wait("the LLM provider is unavailable: connection refused"),
                 vec![],
                 pending
             ),
             (wait("qwen3:4b isn't installed on Ollama"), vec![], pending),
             (
-                wait("can't connect to Ollama: connection refused"),
+                wait("the LLM provider is unavailable: connection refused"),
                 vec![],
                 pending
             ),
@@ -1495,7 +1496,7 @@ fn it_should_not_fail_pending_categories_if_ollama_is_down_on_the_eleventh_attem
             reason: reason.to_string(),
         })
     };
-    let unreachable = wait("can't connect to Ollama: connection refused");
+    let unreachable = wait("the LLM provider is unavailable: connection refused");
     let unchanged = Some(video.categorization);
     assert_eq!(
         outcomes,
@@ -2223,6 +2224,249 @@ fn it_should_mark_the_categorization_failed_without_asking_if_only_a_given_up_ca
     );
 }
 
+#[test]
+fn it_should_size_the_anthropic_call_from_a_smaller_context_window() {
+    let db = TestDatabase::new();
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(LlmServer {
+            version: None,
+            models: vec![LlmModel {
+                name: "claude-haiku-5-5".to_string(),
+                display_name: Some("Claude Haiku 5.5".to_string()),
+                size_bytes: None,
+                thinking: false,
+                context_window: Some(64_000),
+            }],
+        })
+        .with_replies(vec![reply(&answers(&[("Tech", NO)]))]),
+    );
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        llm.chats()
+            .iter()
+            .map(|chat| chat.context_length)
+            .collect::<Vec<_>>(),
+        vec![64_000]
+    );
+}
+
+#[test]
+fn it_should_categorize_with_the_anthropic_model_and_effort() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let names = NINE_CATEGORIES;
+    let llm = anthropic_replying(vec![reply(&answers(&names.map(|name| (name, NO))))]);
+    let video = summarized_video();
+    let categories = names.map(prompted_category);
+    seed(&db, &video, &categories.each_ref());
+    let preferences = anthropic_categorization_on();
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            anthropic: AnthropicSettings {
+                categorization_effort: Effort::High,
+                ..preferences.anthropic.clone()
+            },
+            ..preferences
+        })
+        .unwrap();
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        llm.chats()
+            .iter()
+            .map(|chat| (
+                chat.model.as_str(),
+                chat.effort,
+                chat.context_length,
+                chat.max_output_tokens,
+                chat.thinking,
+                chat.format
+                    .as_ref()
+                    .map(|schema| schema["required"].clone()),
+            ))
+            .collect::<Vec<_>>(),
+        vec![(
+            "claude-haiku-5-5",
+            Effort::High,
+            131_072,
+            12285,
+            false,
+            Some(serde_json::json!(names)),
+        )]
+    );
+    assert_eq!(llm.connections(), vec![LlmConnection::Anthropic]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        by_category(categories.each_ref().map(|category| VideoCategoryVerdict {
+            model: Some("claude-haiku-5-5".to_string()),
+            ..ai_verdict(&video, category, Verdict::No, "A chess game.")
+        }))
+    );
+}
+
+#[test]
+fn it_should_fall_back_per_category_without_dropping_thinking_on_anthropic() {
+    let db = TestDatabase::new();
+    let video = summarized_video();
+    seed(
+        &db,
+        &video,
+        &[&prompted_category("AI news"), &prompted_category("Tech")],
+    );
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = anthropic_replying(vec![
+        stopped_at_the_limit(),
+        reply(&answers(&[("AI news", NO)])),
+        reply(&answers(&[("Tech", YES)])),
+    ]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        asked_categories(&llm),
+        vec![vec!["AI news", "Tech"], vec!["AI news"], vec!["Tech"]]
+    );
+    assert_eq!(thinking_asked(&llm), vec![false, false, false]);
+}
+
+#[test]
+fn it_should_count_an_own_call_limit_stop_as_a_failed_attempt_on_anthropic() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = anthropic_replying(vec![stopped_at_the_limit()]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::minutes(10),
+            reason: "the model couldn't answer for Tech (it hit the 3072-token output limit)"
+                .to_string(),
+        })
+    );
+    assert_eq!(thinking_asked(&llm), vec![false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
+#[test]
+fn it_should_wait_when_anthropic_is_unavailable_for_categorization() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = Video {
+        categorization: StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 3,
+                last_failed_at: Some(fixed_timestamp()),
+            },
+        },
+        ..summarized_video()
+    };
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = Arc::new(FakeLlmServerRepository::unreachable());
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::hours(6),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
+        })
+    );
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
+#[test]
+fn it_should_wait_when_the_anthropic_categorization_model_isnt_listed() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    let preferences = anthropic_categorization_on();
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            anthropic: AnthropicSettings {
+                categorization_model: CategorizationModel::new("claude-haiku-4-5").unwrap(),
+                ..preferences.anthropic.clone()
+            },
+            ..preferences
+        })
+        .unwrap();
+    let llm = anthropic_replying(vec![]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::hours(6),
+            reason: "claude-haiku-4-5 isn't listed by Anthropic".to_string(),
+        })
+    );
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
 /// The run's summary lines among captured lines.
 fn summary_lines(lines: &[String]) -> Vec<String> {
     lines
@@ -2518,14 +2762,16 @@ fn non_thinking_llm_replying(
 fn thinking_model() -> LlmModel {
     LlmModel {
         name: "qwen3:4b".to_string(),
-        size_bytes: 1,
+        display_name: None,
+        size_bytes: Some(1),
         thinking: true,
+        context_window: None,
     }
 }
 
 fn server_with(model: LlmModel) -> LlmServer {
     LlmServer {
-        version: "0.40.13".to_string(),
+        version: Some("0.40.13".to_string()),
         models: vec![model],
     }
 }
@@ -2583,4 +2829,30 @@ impl EventPublisher for RemovingVideoOnPublish {
         self.publisher.publish(event)?;
         self.video_repository.delete(&self.video_id)
     }
+}
+
+/// AI and categorization on, with Anthropic and no Ollama URL.
+fn anthropic_categorization_on() -> Preferences {
+    Preferences {
+        ai_provider: AiProvider::Anthropic,
+        ollama_url: None,
+        ..categorization_on()
+    }
+}
+
+/// Anthropic listing `claude-haiku-5-5`, answering `chat` with `replies`.
+fn anthropic_replying(replies: Vec<anyhow::Result<LlmReply>>) -> Arc<FakeLlmServerRepository> {
+    Arc::new(
+        FakeLlmServerRepository::new(LlmServer {
+            version: None,
+            models: vec![LlmModel {
+                name: "claude-haiku-5-5".to_string(),
+                display_name: Some("Claude Haiku 5.5".to_string()),
+                size_bytes: None,
+                thinking: false,
+                context_window: Some(1_000_000),
+            }],
+        })
+        .with_replies(replies),
+    )
 }

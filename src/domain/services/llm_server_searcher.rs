@@ -1,32 +1,46 @@
-use crate::domain::llm_server::{LlmServer, OllamaUrl, ReadLlmServerError};
-use crate::infrastructure::repositories::ollama_llm_server_repository::LlmServerRepository;
+use crate::domain::llm_server::{LlmConnection, LlmServer, ReadLlmServerError};
+use crate::infrastructure::repositories::llm_server_repository::LlmServerRepository;
 use std::sync::Arc;
 
-/// Checks an LLM server and lists its models.
+/// Checks an LLM provider and lists its models.
 #[derive(Clone)]
 pub struct LlmServerSearcher {
     repository: Arc<dyn LlmServerRepository>,
+    anthropic_available: bool,
 }
 
 impl LlmServerSearcher {
-    pub fn new(repository: Arc<dyn LlmServerRepository>) -> Self {
-        Self { repository }
+    pub fn new(repository: Arc<dyn LlmServerRepository>, anthropic_available: bool) -> Self {
+        Self {
+            repository,
+            anthropic_available,
+        }
     }
 }
 
 pub trait LlmServerSearcherApi: Send + Sync {
-    /// The server at `url` with its models sorted by name, or `Unreachable`
-    /// when it doesn't answer as an Ollama server.
-    fn get(&self, url: OllamaUrl) -> Result<LlmServer, ReadLlmServerError>;
+    /// The provider behind `connection` with its models: Ollama's sorted by
+    /// name, Anthropic's as listed, newest first. `NotConfigured` for
+    /// Anthropic without a key, `Unreachable` when it doesn't answer as the
+    /// provider does.
+    fn get(&self, connection: LlmConnection) -> Result<LlmServer, ReadLlmServerError>;
 }
 
 impl LlmServerSearcherApi for LlmServerSearcher {
-    fn get(&self, url: OllamaUrl) -> Result<LlmServer, ReadLlmServerError> {
-        let server = self
-            .repository
-            .find(&url)
-            .map_err(|source| ReadLlmServerError::Unreachable { url, source })?;
-        Ok(Self::sorted_by_name(server))
+    fn get(&self, connection: LlmConnection) -> Result<LlmServer, ReadLlmServerError> {
+        if connection == LlmConnection::Anthropic && !self.anthropic_available {
+            return Err(ReadLlmServerError::NotConfigured);
+        }
+        let server = self.repository.find(&connection).map_err(|source| {
+            ReadLlmServerError::Unreachable {
+                connection: connection.clone(),
+                source,
+            }
+        })?;
+        Ok(match connection {
+            LlmConnection::Ollama(_) => Self::sorted_by_name(server),
+            LlmConnection::Anthropic => server,
+        })
     }
 }
 

@@ -16,6 +16,8 @@ import type {
   CreatedCategory,
   HomeCategorySection,
   HomeVideo,
+  AnthropicModel,
+  AnthropicServer,
   OllamaServer,
   PlaylistListItem,
   Preferences,
@@ -375,6 +377,12 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     categorization_thinking: true,
     categorization_prompt: SHIPPED_CATEGORIZATION_PROMPT,
     categorization_prompt_is_default: true,
+    ai_provider: 'ollama',
+    anthropic_available: false,
+    anthropic_summaries_model: 'claude-haiku-5-5',
+    anthropic_summaries_effort: 'low',
+    anthropic_categorization_model: 'claude-haiku-5-5',
+    anthropic_categorization_effort: 'low',
     ...overrides,
   }
 }
@@ -385,6 +393,25 @@ export function anOllamaServer(overrides: Partial<OllamaServer> = {}): OllamaSer
     models: [
       { name: 'gemma3:4b', size_bytes: 3_338_801_804, thinking: false },
       { name: 'qwen3:4b', size_bytes: 2_497_293_918, thinking: true },
+    ],
+    ...overrides,
+  }
+}
+
+export function anAnthropicModel(overrides: Partial<AnthropicModel> = {}): AnthropicModel {
+  return {
+    name: 'claude-haiku-5-5',
+    display_name: 'Claude Haiku 5.5',
+    context_window: 1_000_000,
+    ...overrides,
+  }
+}
+
+export function anAnthropicServer(overrides: Partial<AnthropicServer> = {}): AnthropicServer {
+  return {
+    models: [
+      anAnthropicModel({ name: 'claude-sonnet-5-5', display_name: 'Claude Sonnet 5.5' }),
+      anAnthropicModel(),
     ],
     ...overrides,
   }

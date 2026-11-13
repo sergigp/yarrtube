@@ -13,6 +13,7 @@ import {
   fetchChannels,
   fetchChannelVideos,
   fetchHomeVideos,
+  fetchAnthropic,
   fetchOllama,
   searchVideos,
   fetchPlaylists,
@@ -44,6 +45,7 @@ import type {
   ChannelListItem,
   ChannelPreview,
   HomeVideos,
+  AnthropicServer,
   OllamaServer,
   VideoSearchResults,
   PlaylistListItem,
@@ -90,6 +92,7 @@ export const queryKeys = {
   version: ['version'] as const,
   preferences: ['preferences'] as const,
   ollama: (url: string) => ['ollama', url] as const,
+  anthropic: ['anthropic'] as const,
   // Outside the `['playlists']` and `['channels']` prefixes so refetching the
   // library leaves them be.
   playlistPreview: (value: string) => ['playlist-preview', value] as const,
@@ -618,4 +621,32 @@ function whenUnobserved(client: QueryClient, queryKey: QueryKey, then: () => voi
       then()
     }
   })
+}
+
+/**
+ * Anthropic's models (none while `enabled` is false), checked once: a failed
+ * check isn't retried, the user tests the connection again instead.
+ */
+export function useAnthropic(enabled: boolean): UseQueryResult<AnthropicServer, Error> {
+  return useQuery({
+    queryKey: queryKeys.anthropic,
+    queryFn: fetchAnthropic,
+    enabled,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+}
+
+/**
+ * Returns a function that checks Anthropic now, keeping the answer as
+ * `useAnthropic`'s data.
+ */
+export function useCheckAnthropic(): () => Promise<AnthropicServer> {
+  const queryClient = useQueryClient()
+  return useCallback(async () => {
+    const server = await fetchAnthropic()
+    queryClient.setQueryData(queryKeys.anthropic, server)
+    return server
+  }, [queryClient])
 }
