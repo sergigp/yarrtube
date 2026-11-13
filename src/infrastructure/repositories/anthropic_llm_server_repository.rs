@@ -1,5 +1,6 @@
 use crate::domain::llm_server::{LlmChat, LlmReply, LlmServer, LlmServerUnreachable};
 use anyhow::Context;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use std::fmt;
 use std::time::Duration;
@@ -57,12 +58,16 @@ impl AnthropicLlmServerRepository {
     /// errors: 429, 5xx, 529. `LlmReply::refused*`: other 400s, refusal.
     pub fn chat(&self, chat: &LlmChat) -> anyhow::Result<LlmReply> {
         let client = Self::client(chat.timeout)?;
-        let response: MessageResponse = client
+        let response = client
             .post(format!("{}/v1/messages", self.config.api_url))
             .header("x-api-key", self.config.api_key.as_str())
             .header("anthropic-version", ANTHROPIC_VERSION)
             .json(&Self::message_body(chat))
-            .send()?
+            .send()?;
+        if response.status() == StatusCode::BAD_REQUEST {
+            return Ok(Self::refused(Self::error_message(response)?));
+        }
+        let response: MessageResponse = response
             .json()
             .context("/v1/messages didn't answer as Anthropic does")?;
         Ok(Self::reply(response))
@@ -90,6 +95,22 @@ impl AnthropicLlmServerRepository {
                 ..usage
             },
         }
+    }
+
+    /// A rejected request, too long when the prompt doesn't fit.
+    fn refused(message: String) -> LlmReply {
+        match message.contains("prompt is too long") {
+            true => LlmReply::refused_as_too_long(message),
+            false => LlmReply::refused(message),
+        }
+    }
+
+    /// The message of Anthropic's error body.
+    fn error_message(response: reqwest::blocking::Response) -> anyhow::Result<String> {
+        let error: ErrorResponse = response
+            .json()
+            .context("/v1/messages didn't answer as Anthropic does")?;
+        Ok(error.error.message)
     }
 
     /// The request body: no temperature, context length or thinking, so the
@@ -149,6 +170,16 @@ struct MessageResponse {
     stop_reason: Option<String>,
     stop_details: Option<StopDetails>,
     usage: Usage,
+}
+
+#[derive(Deserialize)]
+struct ErrorResponse {
+    error: ErrorDetails,
+}
+
+#[derive(Deserialize)]
+struct ErrorDetails {
+    message: String,
 }
 
 #[derive(Deserialize)]
@@ -379,6 +410,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_report_prompt_too_long_as_refused_as_too_long() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_status(400)
+            .with_body(error_body(
+                "invalid_request_error",
+                "prompt is too long: 140000 tokens > 131072 maximum",
+            ))
+            .create();
+
+        let reply = repository(&server).chat(&chat()).unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused_as_too_long("prompt is too long: 140000 tokens > 131072 maximum")
+        );
+    }
+
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {
         AnthropicLlmServerRepository::new(AnthropicConfig {
             api_url: server.url(),
@@ -401,5 +452,11 @@ mod tests {
             format: None,
             timeout: MIN_CHAT_TIMEOUT,
         }
+    }
+
+    /// Anthropic's error body.
+    fn error_body(kind: &str, message: &str) -> String {
+        serde_json::json!({"type": "error", "error": {"type": kind, "message": message}})
+            .to_string()
     }
 }
