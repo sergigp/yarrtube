@@ -105,6 +105,24 @@ describe('AiSettingsView', () => {
     expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'low' }])
   })
 
+  it('shows "Connected to Anthropic, <n> models" after testing the connection', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({ anthropic_available: true }),
+      'GET /api/llm/anthropic': anAnthropicServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('radio', { name: 'Anthropic' }))
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+
+    expect(await screen.findByText('Connected to Anthropic, 2 models')).toBeInTheDocument()
+    expect(optionTexts(screen.getByRole('combobox', { name: 'Model' }))).toEqual([
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ])
+  })
+
   it('shows the Categorization section disabled on a fresh install', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)

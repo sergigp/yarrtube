@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import {
   useAnthropic,
+  useCheckAnthropic,
   useCheckOllama,
   useOllama,
   usePreferences,
@@ -9,6 +10,7 @@ import {
 } from '@/api/queries'
 import type {
   AiProvider,
+  AnthropicServer,
   Effort,
   OllamaServer,
   Preferences,
@@ -83,7 +85,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
   const [modelsUrl, setModelsUrl] = useState(saved.ollama_url)
   const { data: server } = useOllama(modelsUrl)
   // Anthropic's models, checked once Anthropic is saved or tested.
-  const [anthropicModelsWanted] = useState(
+  const checkAnthropic = useCheckAnthropic()
+  const [anthropicModelsWanted, setAnthropicModelsWanted] = useState(
     saved.ai_provider === 'anthropic',
   )
   const { data: anthropic } = useAnthropic(saved.anthropic_available && anthropicModelsWanted)
@@ -118,6 +121,17 @@ function AiSettings({ saved }: { saved: Preferences }) {
       const tested = await checkOllama(url)
       setModelsUrl(url)
       setConnection({ ...NO_CHECK, message: connectedMessage(tested) })
+    } catch (err) {
+      setConnection({ ...NO_CHECK, failed: true, message: errorMessage(err) })
+    }
+  }
+
+  const testAnthropic = async () => {
+    setConnection({ ...NO_CHECK, checking: true })
+    try {
+      const tested = await checkAnthropic()
+      setAnthropicModelsWanted(true)
+      setConnection({ ...NO_CHECK, message: anthropicConnectedMessage(tested) })
     } catch (err) {
       setConnection({ ...NO_CHECK, failed: true, message: errorMessage(err) })
     }
@@ -197,17 +211,21 @@ function AiSettings({ saved }: { saved: Preferences }) {
                 Test connection
               </Button>
             </div>
-            {connection.message && (
-              <p
-                className={cn(
-                  'text-sm',
-                  connection.failed ? 'text-destructive' : 'text-muted-foreground',
-                )}
-              >
-                {connection.message}
-              </p>
-            )}
+            <ConnectionMessage connection={connection} />
           </Field>
+        )}
+        {onAnthropic && (
+          <div className="flex flex-col gap-1.5">
+            <Button
+              variant="outline"
+              className="self-start"
+              disabled={connection.checking}
+              onClick={() => void testAnthropic()}
+            >
+              Test connection
+            </Button>
+            <ConnectionMessage connection={connection} />
+          </div>
         )}
       </Section>
       <Section title="Summaries">
@@ -685,8 +703,27 @@ interface ConnectionCheck {
 const NO_CHECK: ConnectionCheck = { checking: false, failed: false, message: null }
 
 function connectedMessage(server: OllamaServer): string {
-  const count = server.models.length
-  return `Connected to Ollama ${server.version}, ${count} ${count === 1 ? 'model' : 'models'}`
+  return `Connected to Ollama ${server.version}, ${modelCount(server.models.length)}`
+}
+
+function anthropicConnectedMessage(server: AnthropicServer): string {
+  return `Connected to Anthropic, ${modelCount(server.models.length)}`
+}
+
+function modelCount(count: number): string {
+  return `${count} ${count === 1 ? 'model' : 'models'}`
+}
+
+/** What the last "Test connection" found, if it ran. */
+function ConnectionMessage({ connection }: { connection: ConnectionCheck }) {
+  if (!connection.message) {
+    return null
+  }
+  return (
+    <p className={cn('text-sm', connection.failed ? 'text-destructive' : 'text-muted-foreground')}>
+      {connection.message}
+    </p>
+  )
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
