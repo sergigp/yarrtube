@@ -1306,9 +1306,9 @@ async fn it_should_read_the_anthropic_defaults_and_availability() {
             ai_provider: "ollama".to_string(),
             anthropic_available: true,
             anthropic_summaries_model: "claude-haiku-5-5".to_string(),
-            anthropic_summaries_effort: "medium".to_string(),
+            anthropic_summaries_effort: "low".to_string(),
             anthropic_categorization_model: "claude-haiku-5-5".to_string(),
-            anthropic_categorization_effort: "medium".to_string(),
+            anthropic_categorization_effort: "low".to_string(),
             ..all_on_response()
         })
     );
@@ -1341,7 +1341,7 @@ async fn it_should_save_the_anthropic_provider_and_settings() {
         anthropic_summaries_model: Some("claude-sonnet-5-5".to_string()),
         anthropic_summaries_effort: Some("high".to_string()),
         anthropic_categorization_model: Some("claude-opus-5-5".to_string()),
-        anthropic_categorization_effort: Some("low".to_string()),
+        anthropic_categorization_effort: Some("medium".to_string()),
         ..UpdatePreferencesRequest::default()
     };
 
@@ -1356,7 +1356,7 @@ async fn it_should_save_the_anthropic_provider_and_settings() {
             anthropic_summaries_model: "claude-sonnet-5-5".to_string(),
             anthropic_summaries_effort: "high".to_string(),
             anthropic_categorization_model: "claude-opus-5-5".to_string(),
-            anthropic_categorization_effort: "low".to_string(),
+            anthropic_categorization_effort: "medium".to_string(),
             ..all_on_response()
         })
     );
@@ -1368,7 +1368,7 @@ async fn it_should_save_the_anthropic_provider_and_settings() {
                 summaries_model: SummaryModel::new("claude-sonnet-5-5").unwrap(),
                 summaries_effort: Effort::High,
                 categorization_model: CategorizationModel::new("claude-opus-5-5").unwrap(),
-                categorization_effort: Effort::Low,
+                categorization_effort: Effort::Medium,
             },
             ..ollama_settings
         })
@@ -1503,7 +1503,7 @@ async fn it_should_reset_failed_summaries_when_the_provider_changes() {
             ..UpdatePreferencesRequest::default()
         },
         UpdatePreferencesRequest {
-            anthropic_summaries_effort: Some("low".to_string()),
+            anthropic_summaries_effort: Some("high".to_string()),
             ..UpdatePreferencesRequest::default()
         },
     ];
@@ -1542,7 +1542,7 @@ async fn it_should_reset_failed_summaries_when_the_provider_changes() {
 async fn it_should_reset_failed_verdicts_when_the_anthropic_categorization_effort_changes() {
     let requests = [
         UpdatePreferencesRequest {
-            anthropic_categorization_effort: Some("low".to_string()),
+            anthropic_categorization_effort: Some("high".to_string()),
             ..UpdatePreferencesRequest::default()
         },
         UpdatePreferencesRequest {

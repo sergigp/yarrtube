@@ -2239,7 +2239,7 @@ fn it_should_categorize_with_the_anthropic_model_and_effort() {
     SqlitePreferencesRepository::new(db.database())
         .save(&Preferences {
             anthropic: AnthropicSettings {
-                categorization_effort: Effort::Low,
+                categorization_effort: Effort::High,
                 ..preferences.anthropic.clone()
             },
             ..preferences
@@ -2266,7 +2266,7 @@ fn it_should_categorize_with_the_anthropic_model_and_effort() {
             .collect::<Vec<_>>(),
         vec![(
             "claude-haiku-5-5",
-            Effort::Low,
+            Effort::High,
             131_072,
             12285,
             false,

@@ -5,8 +5,8 @@ use std::fmt;
 /// costs more tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Effort {
-    Low,
     #[default]
+    Low,
     Medium,
     High,
 }

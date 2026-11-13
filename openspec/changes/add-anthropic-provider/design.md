@@ -181,7 +181,7 @@ pub enum LlmConnection {
 ```rust
 // src/domain/llm_server/effort.rs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Effort { Low, #[default] Medium, High }
+pub enum Effort { #[default] Low, Medium, High }
 
 impl Effort {
     /// `Effort must be "low", "medium" or "high" (got "<value>")`
@@ -251,9 +251,9 @@ impl AiProvider {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnthropicSettings {
     pub summaries_model: SummaryModel,             // default claude-haiku-5-5
-    pub summaries_effort: Effort,                  // default Medium
+    pub summaries_effort: Effort,                  // default Low
     pub categorization_model: CategorizationModel, // default claude-haiku-5-5
-    pub categorization_effort: Effort,             // default Medium
+    pub categorization_effort: Effort,             // default Low
 }
 impl Default for AnthropicSettings { fn default() -> Self; }
 
@@ -548,7 +548,8 @@ anAnthropicServer(overrides?), anAnthropicModel(overrides?) // aPreferences gain
    - `ask` → `CategorizationQuestion::chat(&call, false)` →
      `LlmChat { effort, format: Some(schema), max_output_tokens: max(1365 × n, 3072).min(context), .. }`
      → `chat(&connection, ..)` → `POST /v1/messages` with
-     `output_config: {effort, format: {type: json_schema, schema}}`.
+     `output_config: {effort, format: {type: json_schema, schema}}`, the
+     schema with `additionalProperties: false` on every object.
    - A limit stop takes the existing no-thinking fallback path.
 5. **Ollama runs.** The same flow with `connection = Ollama(url)`, and
    `SummaryCall::ollama` / `CategorizationCall::ollama` built from the saved
@@ -581,7 +582,7 @@ HTTP `application/http/llm/tests.rs`:
 
 HTTP `application/http/preferences/tests.rs`:
 
-5. `it_should_read_the_anthropic_defaults_and_availability`: `ai_provider` is `ollama`, both Anthropic models are `claude-haiku-5-5` with effort `medium`, and `anthropic_available` reflects the key.
+5. `it_should_read_the_anthropic_defaults_and_availability`: `ai_provider` is `ollama`, both Anthropic models are `claude-haiku-5-5` with effort `low`, and `anthropic_available` reflects the key.
 6. `it_should_save_the_anthropic_provider_and_settings`: with a key, the patch is saved and returned, and the Ollama settings are unchanged.
 7. `it_should_reject_the_anthropic_provider_without_a_key`: 400 with `Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic`, and nothing is saved.
 8. `it_should_reject_an_unknown_provider`: 400 with `AI provider must be "ollama" or "anthropic" (got "openai")`.
@@ -593,7 +594,7 @@ HTTP `application/http/preferences/tests.rs`:
 
 Task `application/tasks/summarize_video_task/tests.rs`:
 
-14. `it_should_summarize_with_the_anthropic_model_and_effort`: with the provider on Anthropic and a fake listing `claude-haiku-5-5` (1000000 window), the chat goes to `Anthropic` with that model, effort `medium` and 16000 max output, and the summary is stored with the model id.
+14. `it_should_summarize_with_the_anthropic_model_and_effort`: with the provider on Anthropic and a fake listing `claude-haiku-5-5` (1000000 window), the chat goes to `Anthropic` with that model, effort `low` and 16000 max output, and the summary is stored with the model id.
 15. `it_should_budget_from_the_capped_anthropic_context`: a 400000-character Spanish transcript is summarized in parts, every part within the budget of 131072.
 16. `it_should_wait_when_the_anthropic_model_isnt_listed`: no chat is made, the summary keeps its status and attempts, and `RetryAt` is +6h.
 17. `it_should_wait_when_anthropic_is_unavailable_during_a_call`: a chat error tagged unreachable means nothing is stored, attempts are unchanged and the retry is +6h.

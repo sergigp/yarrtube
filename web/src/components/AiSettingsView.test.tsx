@@ -83,7 +83,7 @@ describe('AiSettingsView', () => {
     const fetchMock = mockApi({
       'GET /api/preferences': saved,
       'GET /api/llm/anthropic': anAnthropicServer(),
-      'PATCH /api/preferences': { ...saved, anthropic_summaries_effort: 'low' },
+      'PATCH /api/preferences': { ...saved, anthropic_summaries_effort: 'high' },
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -91,18 +91,18 @@ describe('AiSettingsView', () => {
     await user.click(await screen.findByRole('button', { name: 'Advanced' }))
     await user.click(screen.getByRole('button', { name: 'Advanced categorization settings' }))
 
-    expect(screen.getByRole('combobox', { name: 'Effort' })).toHaveValue('medium')
-    expect(screen.getByRole('combobox', { name: 'Categorization effort' })).toHaveValue('medium')
+    expect(screen.getByRole('combobox', { name: 'Effort' })).toHaveValue('low')
+    expect(screen.getByRole('combobox', { name: 'Categorization effort' })).toHaveValue('low')
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(saved.summaries_prompt)
     expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
       saved.categorization_prompt,
     )
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: /thinking/i })).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Effort' }), 'low')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Effort' }), 'high')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
-    expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'low' }])
+    expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'high' }])
   })
 
   it('shows "Connected to Anthropic, <n> models" after testing the connection', async () => {

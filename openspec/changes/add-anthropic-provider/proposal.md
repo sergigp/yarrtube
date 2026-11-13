@@ -7,10 +7,10 @@ server. That means owning hardware that can run a model, and small local
 models are slow: the evals average about 5 minutes per summary with
 `qwen3:4b`. Letting users run the same features on Anthropic's API with their
 own key removes the hardware requirement. Users can also pick a stronger model
-at a known cost (Haiku: about $0.003 per summary).
+at a known cost (Haiku: about $0.002 per summary).
 
 Depends on `add-anthropic-evals`. Its results confirm the default model
-(`claude-haiku-5-5`) and default effort (`medium`) assumed here.
+(`claude-haiku-5-5`) and default effort (`low`) assumed here.
 
 ## What Changes
 
@@ -29,7 +29,7 @@ Depends on `add-anthropic-evals`. Its results confirm the default model
   - `anthropic_summaries_model` and `anthropic_categorization_model`, default
     `claude-haiku-5-5`
   - `anthropic_summaries_effort` and `anthropic_categorization_effort`,
-    `low`/`medium`/`high`, default `medium`
+    `low`/`medium`/`high`, default `low`
   - Prompts stay shared between providers.
 - **Anthropic calls.** They send the model, effort, `max_tokens`, `system`,
   the user message and, for categorization, the JSON schema as structured

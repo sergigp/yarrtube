@@ -1,10 +1,9 @@
 # Tasks
 
-The defaults used here (`claude-haiku-5-5`, effort `medium`) are provisional
-until `add-anthropic-evals` reports its results. This change can be applied in
-parallel. If the evals pick other defaults, update `AnthropicSettings::default`,
-tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
-`/opsx:update` or in a follow-up commit.
+The defaults (`claude-haiku-5-5`, effort `low`) come from `add-anthropic-evals`:
+at `low` Haiku did as well as or better than at `medium` on summaries and
+categorization (see `evals/summaries/decisions.md` and `evals/categories/decisions.md`). The
+change was first applied with effort `medium`; task 4.6 moves the default.
 
 ## 1. Walking skeleton
 
@@ -103,3 +102,4 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
   4. Seed a channel with one downloaded, subtitled video through the HTTP API, let its summary run, and check the logs for the call to `claude-haiku-5-5` and the stored summary.
   5. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.5 Manual (human): read a few Haiku summaries and categorizations on your own library and judge them. Check the spend shown in the Anthropic Console against the per-video estimate in `doc/AI.md`.
+- [x] 4.6 Default effort `low`, from `add-anthropic-evals`: `Effort`'s `#[default]` becomes `Low`; tests 2.5 and 2.14 and any test relying on the default expect `low`; the web fixture in `web/src/test/helpers.tsx` and `AiSettingsView.test.tsx` use `low`; `doc/AI.md` names `low` as the default and about $0.002 per summary. Run `scripts/run-tests.sh --lint --web --rust`.

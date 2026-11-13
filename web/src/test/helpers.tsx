@@ -380,9 +380,9 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     ai_provider: 'ollama',
     anthropic_available: false,
     anthropic_summaries_model: 'claude-haiku-5-5',
-    anthropic_summaries_effort: 'medium',
+    anthropic_summaries_effort: 'low',
     anthropic_categorization_model: 'claude-haiku-5-5',
-    anthropic_categorization_effort: 'medium',
+    anthropic_categorization_effort: 'low',
     ...overrides,
   }
 }

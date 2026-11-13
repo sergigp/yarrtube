@@ -3328,7 +3328,7 @@ fn anthropic_chat() -> LlmChat {
         context_length: 131_072,
         temperature: 0.0,
         thinking: false,
-        effort: Effort::Medium,
+        effort: Effort::Low,
         max_output_tokens: 16_000,
         ..one_call_chat()
     }

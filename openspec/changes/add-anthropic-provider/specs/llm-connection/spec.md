@@ -113,8 +113,8 @@ An Anthropic call SHALL count as: an answer, its text blocks joined, with `usage
 - **THEN** the call is a server fault
 
 ### Requirement: Anthropic Request Shape
-Every Anthropic call SHALL send the model, `max_tokens`, the system message, one user message and the effort, and the answer's JSON schema as structured output when the call has one. It SHALL NOT send a temperature, a context length or a thinking setting, so the model's default adaptive thinking applies.
+Every Anthropic call SHALL send the model, `max_tokens`, the system message, one user message and the effort, and the answer's JSON schema as structured output when the call has one, with `additionalProperties: false` on every object (the API rejects a schema without it). It SHALL NOT send a temperature, a context length or a thinking setting, so the model's default adaptive thinking applies.
 
 #### Scenario: Categorization call
 - **WHEN** a categorization call with a JSON schema is sent to Anthropic with effort `medium`
-- **THEN** the request holds the model, `max_tokens`, system and user messages, effort `medium` and the schema as structured output, and no temperature or thinking setting
+- **THEN** the request holds the model, `max_tokens`, system and user messages, effort `medium` and the schema as structured output with `additionalProperties: false` on every object, and no temperature or thinking setting

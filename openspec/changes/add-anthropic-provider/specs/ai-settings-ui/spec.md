@@ -24,7 +24,7 @@ While Ollama is selected, "Context length", "Temperature", the "Thinking" switch
 
 #### Scenario: Anthropic advanced settings
 - **WHEN** Anthropic is selected, summaries are on and a user opens "Advanced"
-- **THEN** it shows "Effort" set to `medium` and the prompt, and no context length, temperature or thinking
+- **THEN** it shows "Effort" set to `low` and the prompt, and no context length, temperature or thinking
 
 ### Requirement: Test Ollama Connection
 While Ollama is selected, activating "Test connection" SHALL check the URL currently typed, saved or not, and show `Connected to Ollama <version>, <n> models` on success or the daemon's error message on failure. The button SHALL be disabled while the URL field is empty or a check is running.

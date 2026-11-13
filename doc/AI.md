@@ -34,7 +34,7 @@ nothing. The prompts are shared.
 | Setting | Ollama | Anthropic |
 | --- | --- | --- |
 | Model, per feature | `summaries_model`, `categorization_model` (`qwen3:4b`) | `anthropic_summaries_model`, `anthropic_categorization_model` (`claude-haiku-5-5`) |
-| Effort, per feature | — | `anthropic_summaries_effort`, `anthropic_categorization_effort`: `low`, `medium` (default) or `high`. Higher reasons more: slower, more tokens |
+| Effort, per feature | — | `anthropic_summaries_effort`, `anthropic_categorization_effort`: `low` (default), `medium` or `high`. Higher reasons more: slower, more tokens |
 | Context length, temperature, thinking | per feature | not sent: the model thinks adaptively |
 
 On Anthropic, each call (`POST /v1/messages`) sends the model, `max_tokens`,
@@ -50,10 +50,10 @@ the key can use, newest first; a saved model Anthropic no longer lists shows
 ### Cost
 
 Calls are billed to your key. Measured by the evals on 2026-11-13 with
-`claude-haiku-5-5` at `medium` effort: about **$0.002 per summary** (10
+`claude-haiku-5-5` at `low` effort: about **$0.002 per summary** (10
 summaries, 136k input + 4k output tokens, $0.016) and under **$0.001 per
-video categorized** against 9 categories (58 videos, 174k input + 34k output
-tokens, $0.035). Long transcripts summarized in parts cost more. Check the
+video categorized** against 9 categories (58 videos, 174k input + 28k output
+tokens, $0.031). Long transcripts summarized in parts cost more. Check the
 Anthropic Console for the real spend.
 
 ### How Anthropic's answers count
