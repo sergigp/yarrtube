@@ -166,6 +166,22 @@ async fn it_should_answer_404_when_anthropic_isnt_configured() {
     );
 }
 
+#[tokio::test]
+async fn it_should_answer_502_when_anthropic_cant_be_reached() {
+    let llm_server_searcher =
+        LlmServerSearcher::new(Arc::new(FakeLlmServerRepository::failing()), true);
+
+    let response = anthropic(llm_server_searcher).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::BAD_GATEWAY,
+            "Could not reach Anthropic: connection refused"
+        ))
+    );
+}
+
 async fn get(
     llm_server_searcher: LlmServerSearcher,
     query: OllamaQuery,
