@@ -425,6 +425,49 @@ fn it_should_keep_the_most_recently_played_side_when_both_changed() {
     );
 }
 
+#[test]
+fn it_should_seed_from_whichever_side_was_played_on_the_first_sync() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_watched(an_hour_ago()))
+            .with_episode("19", "102", &plex_file("S2023E1115 - Two.mp4"), &[])
+            .with_episode("19", "103", &plex_file("S2023E1116 - Three.mp4"), &[]),
+    );
+    let watched_in_plex = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
+    let watched_in_yarrtube = seed_video(
+        &db,
+        downloaded_video("yt2", "S2023E1115 - Two.mp4").mark_watched(an_hour_ago()),
+    );
+    let never_played = seed_video(&db, downloaded_video("yt3", "S2023E1116 - Three.mp4"));
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        watch_state(&db, &watched_in_plex).progress(),
+        WatchProgress::Watched
+    );
+    assert_eq!(plex.mutations(), vec!["scrobble:102".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        by_video_id(vec![
+            agreed(&watched_in_plex, "101", WatchProgress::Watched),
+            agreed(&watched_in_yarrtube, "102", WatchProgress::Watched),
+            agreed(&never_played, "103", WatchProgress::Unplayed),
+        ])
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
