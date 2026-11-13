@@ -566,9 +566,10 @@ impl VideoCategorizer {
             rejected_kind
         };
         match (&reply.refusal, reply.stopped_at_limit) {
-            (Some(refusal), _) => {
-                Some((format!("Ollama refused the call: {refusal}"), rejected_kind))
-            }
+            (Some(refusal), _) => Some((
+                format!("the LLM provider refused the call: {refusal}"),
+                rejected_kind,
+            )),
             (None, true) => Some((
                 format!(
                     "it hit the {}-token output limit",

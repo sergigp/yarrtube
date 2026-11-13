@@ -97,7 +97,7 @@ enum Skip {
 /// A call that stopped at the context limit on more input than the budget.
 struct Overrun {
     call: String,
-    /// None when Ollama refused the call: it reports no count then.
+    /// None when the LLM provider refused the call: it reports no count then.
     input_tokens: Option<u32>,
     /// The call's messages' characters over its input tokens.
     chars_per_token: f64,
@@ -514,7 +514,7 @@ impl VideoSummarizer {
         if let Some(refusal) = reply.refusal {
             return Err(match reply.exceeded_context {
                 true => Self::exceeded_context(call, &context_length, message_chars, &refusal),
-                false => anyhow!("Ollama refused the call: {refusal}").into(),
+                false => anyhow!("the LLM provider refused the call: {refusal}").into(),
             });
         }
         if reply.stopped_at_limit {
@@ -612,7 +612,7 @@ impl VideoSummarizer {
             call: call.to_string(),
             input_tokens: None,
             chars_per_token: message_chars as f64 / f64::from(context_length.value()),
-            reason: anyhow!("Ollama refused the call: {refusal}"),
+            reason: anyhow!("the LLM provider refused the call: {refusal}"),
         })
     }
 

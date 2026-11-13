@@ -1986,7 +1986,7 @@ fn it_should_fail_the_summary_if_the_prompt_exceeds_the_context_again() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::minutes(10),
-            reason: "Ollama refused the call: request (12400 tokens) exceeds the available context size (12288 tokens), try increasing it"
+            reason: "the LLM provider refused the call: request (12400 tokens) exceeds the available context size (12288 tokens), try increasing it"
                 .to_string(),
         })
     );
@@ -2042,7 +2042,7 @@ fn it_should_count_a_refused_prompt_as_a_failed_summary_attempt() {
         result,
         Ok(TaskOutcome::RunAgainAt {
             run_at: later() + Duration::minutes(10),
-            reason: "Ollama refused the call: request too long".to_string(),
+            reason: "the LLM provider refused the call: request too long".to_string(),
         })
     );
     assert_eq!(summary_repository.find(&video.id).unwrap(), None);
