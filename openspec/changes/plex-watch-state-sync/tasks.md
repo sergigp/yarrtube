@@ -37,7 +37,7 @@
 - [x] 2.27 `it_should_not_push_a_position_of_30_seconds_or_less` — video unwatched at 12 s, episode unplayed ⇒ no mutation, row agreed Unplayed.
 - [x] 2.28 `it_should_not_pull_a_plex_position_of_30_seconds_or_less` — episode offset 20 000 ms, video unplayed ⇒ video unchanged, no mutation.
 - [x] 2.29 `it_should_push_instead_of_unwatching_after_a_token_switch` — `viewer_id()` + `EpisodeWatch.viewer_id` (migration 0031 column, `agreed_with(row, episode, viewer_id)`): row agreed Watched under another viewer id, video watched, episode unplayed ⇒ `scrobble`, video stays watched, row stored under the current viewer id.
-- [ ] 2.30 Refactor (no behaviour change): save an in-sync row only when it differs from the stored row. Done when the whole `sync_plex_watch_state_task` suite passes unchanged.
+- [x] 2.30 Refactor (no behaviour change): save an in-sync row only when it differs from the stored row. Done when the whole `sync_plex_watch_state_task` suite passes unchanged.
 - [ ] 2.31 Refactor (no behaviour change): read the downloaded videos and resolve their episodes once per sync; after a pull re-read only the matched videos (`VideoRepository::find_many`) and re-merge them with the same episodes. Done when the whole suite passes unchanged.
 
 ## 3. Infrastructure adapters (TDD)

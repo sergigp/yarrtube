@@ -91,7 +91,7 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
         let rows = self.agreed_rows()?;
         self.forget_undownloaded(&rows)?;
         let merged = self.pull_then_merge(&library, &rows, &viewer_id)?;
-        let backlog = self.settle_all(merged, &viewer_id)?;
+        let backlog = self.settle_all(merged, &rows, &viewer_id)?;
         self.request_next_sync(backlog)
     }
 }
@@ -176,11 +176,12 @@ impl PlexWatchSyncer {
         }
     }
 
-    /// Records what is in sync and pushes up to `BATCH_SIZE` states to
+    /// Records what newly is in sync and pushes up to `BATCH_SIZE` states to
     /// Plex; whether pushes were left for the next sync.
     fn settle_all(
         &self,
         merged: Vec<(Video, &PlexEpisode, MergeOutcome)>,
+        rows: &HashMap<VideoId, EpisodeWatch>,
         viewer_id: &str,
     ) -> anyhow::Result<bool> {
         let (pushes, others): (Vec<_>, Vec<_>) = merged
@@ -193,6 +194,7 @@ impl PlexWatchSyncer {
             .filter_map(|(video, episode, outcome)| {
                 self.settle(&video, episode, outcome, viewer_id)
             })
+            .filter(|row| rows.get(&row.video_id) != Some(row))
             .collect();
         self.episode_watch_repository.save_many(&synced)?;
         Ok(backlog)
