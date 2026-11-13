@@ -32,14 +32,14 @@ impl CategorizationCall {
     pub fn anthropic(
         settings: &AnthropicSettings,
         prompt: CategorizationPrompt,
-        _listed: &LlmModel,
+        listed: &LlmModel,
     ) -> Self {
         Self {
             model: settings.categorization_model.as_str().to_string(),
             prompt,
-            context_length: ContextLength::default(),
+            context_length: ContextLength::of_window(listed.context_window),
             temperature: 0.0,
-            effort: Effort::default(),
+            effort: settings.categorization_effort,
         }
     }
 }

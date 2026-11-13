@@ -30,8 +30,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, warn};
 
-/// Cap on the Anthropic context the input budget is computed from.
-const ANTHROPIC_MAX_CONTEXT: u32 = 131_072;
 const ANTHROPIC_SUMMARY_MAX_OUTPUT_TOKENS: u32 = 16_000;
 
 /// What every call of one generation shares.
@@ -72,14 +70,9 @@ impl SummaryCall {
     /// The saved Anthropic settings, for the model as Anthropic `listed` it:
     /// the input budget comes from its context window, capped.
     fn anthropic(settings: &AnthropicSettings, listed: &LlmModel) -> Self {
-        let window = listed
-            .context_window
-            .map_or(ANTHROPIC_MAX_CONTEXT, |window| {
-                window.min(ANTHROPIC_MAX_CONTEXT)
-            });
         Self {
             model: settings.summaries_model.clone(),
-            context_length: ContextLength::new(window.into()).unwrap_or_default(),
+            context_length: ContextLength::of_window(listed.context_window),
             max_output_tokens: ANTHROPIC_SUMMARY_MAX_OUTPUT_TOKENS,
             temperature: 0.0,
             thinking: false,

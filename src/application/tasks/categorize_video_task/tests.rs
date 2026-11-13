@@ -5,13 +5,13 @@ use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::{DomainEvent, ScheduledEvent};
 use crate::domain::llm_server::{
-    Effort, LlmChat, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
+    Effort, LlmChat, LlmConnection, LlmModel, LlmReply, LlmServer, MIN_CHAT_TIMEOUT, OllamaUrl,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::SummaryModel;
 use crate::domain::preferences::{
-    CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength, Preferences,
-    Temperature,
+    AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
+    CategorizationSettings, ContextLength, Preferences, Temperature,
 };
 use crate::domain::services::{CategorizationResetter, VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -2225,6 +2225,66 @@ fn it_should_mark_the_categorization_failed_without_asking_if_only_a_given_up_ca
 }
 
 /// The run's summary lines among captured lines.
+
+#[test]
+fn it_should_categorize_with_the_anthropic_model_and_effort() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let names = NINE_CATEGORIES;
+    let llm = anthropic_replying(vec![reply(&answers(&names.map(|name| (name, NO))))]);
+    let video = summarized_video();
+    let categories = names.map(prompted_category);
+    seed(&db, &video, &categories.each_ref());
+    let preferences = anthropic_categorization_on();
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            anthropic: AnthropicSettings {
+                categorization_effort: Effort::Low,
+                ..preferences.anthropic.clone()
+            },
+            ..preferences
+        })
+        .unwrap();
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        llm.chats()
+            .iter()
+            .map(|chat| (
+                chat.model.as_str(),
+                chat.effort,
+                chat.context_length,
+                chat.max_output_tokens,
+                chat.thinking,
+                chat.format
+                    .as_ref()
+                    .map(|schema| schema["required"].clone()),
+            ))
+            .collect::<Vec<_>>(),
+        vec![(
+            "claude-haiku-5-5",
+            Effort::Low,
+            131_072,
+            12285,
+            false,
+            Some(serde_json::json!(names)),
+        )]
+    );
+    assert_eq!(llm.connections(), vec![LlmConnection::Anthropic]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        by_category(categories.each_ref().map(|category| VideoCategoryVerdict {
+            model: Some("claude-haiku-5-5".to_string()),
+            ..ai_verdict(&video, category, Verdict::No, "A chess game.")
+        }))
+    );
+}
+
 fn summary_lines(lines: &[String]) -> Vec<String> {
     lines
         .iter()
@@ -2586,4 +2646,30 @@ impl EventPublisher for RemovingVideoOnPublish {
         self.publisher.publish(event)?;
         self.video_repository.delete(&self.video_id)
     }
+}
+
+/// AI and categorization on, with Anthropic and no Ollama URL.
+fn anthropic_categorization_on() -> Preferences {
+    Preferences {
+        ai_provider: AiProvider::Anthropic,
+        ollama_url: None,
+        ..categorization_on()
+    }
+}
+
+/// Anthropic listing `claude-haiku-5-5`, answering `chat` with `replies`.
+fn anthropic_replying(replies: Vec<anyhow::Result<LlmReply>>) -> Arc<FakeLlmServerRepository> {
+    Arc::new(
+        FakeLlmServerRepository::new(LlmServer {
+            version: None,
+            models: vec![LlmModel {
+                name: "claude-haiku-5-5".to_string(),
+                display_name: Some("Claude Haiku 5.5".to_string()),
+                size_bytes: None,
+                thinking: false,
+                context_window: Some(1_000_000),
+            }],
+        })
+        .with_replies(replies),
+    )
 }
