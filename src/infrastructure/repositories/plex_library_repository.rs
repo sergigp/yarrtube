@@ -765,7 +765,15 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         Ok(())
     }
 
-    fn mark_unwatched(&self, _rating_key: &str) -> anyhow::Result<()> {
+    fn mark_unwatched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        self.record(format!("unscrobble:{rating_key}"));
+        self.update_watch(rating_key, |watch| PlexWatchState {
+            view_count: 0,
+            view_offset_ms: None,
+            last_viewed_at: None,
+            ..watch
+        });
         Ok(())
     }
 

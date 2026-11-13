@@ -182,15 +182,26 @@ impl PlexWatchSyncer {
         }
     }
 
+    /// Plex keeps a watched episode watched when only its position is set.
+    fn unwatch_if_watched(&self, episode: &PlexEpisode) -> anyhow::Result<()> {
+        if episode.watch.view_count > 0 {
+            self.plex_library_repository
+                .mark_unwatched(&episode.rating_key)?;
+        }
+        Ok(())
+    }
+
     /// Writes `progress` to the episode.
     fn push(&self, episode: &PlexEpisode, progress: WatchProgress) -> anyhow::Result<()> {
         match progress {
             WatchProgress::Watched => self
                 .plex_library_repository
                 .mark_watched(&episode.rating_key),
-            WatchProgress::InProgress(position) => self
-                .plex_library_repository
-                .save_position(&episode.rating_key, position),
+            WatchProgress::InProgress(position) => {
+                self.unwatch_if_watched(episode)?;
+                self.plex_library_repository
+                    .save_position(&episode.rating_key, position)
+            }
             WatchProgress::Unplayed => Ok(()),
         }
     }

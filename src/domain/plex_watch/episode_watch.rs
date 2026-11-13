@@ -22,7 +22,8 @@ impl EpisodeWatch {
     /// What was agreed with `episode`: unplayed when there is no row or it
     /// was agreed with another episode (Plex re-imported the file), so a
     /// re-imported episode's empty state never reads as unwatched in Plex.
-    pub fn agreed_with(_row: Option<&EpisodeWatch>, _episode: &PlexEpisode) -> WatchProgress {
-        WatchProgress::Unplayed
+    pub fn agreed_with(row: Option<&EpisodeWatch>, episode: &PlexEpisode) -> WatchProgress {
+        row.filter(|row| row.rating_key == episode.rating_key)
+            .map_or(WatchProgress::Unplayed, |row| row.agreed)
     }
 }

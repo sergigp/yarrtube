@@ -170,6 +170,53 @@ fn it_should_pull_a_playback_position() {
     );
 }
 
+#[test]
+fn it_should_unwatch_an_episode_before_saving_a_rewatch_position() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_watched(two_hours_ago())),
+    );
+    let video = seed_video(
+        &db,
+        Video {
+            watch: in_progress(600, an_hour_ago()),
+            ..downloaded_video("yt1", "S2023E1114 - One.mp4")
+        },
+    );
+    episode_watch_repository
+        .save_many(&[agreed(&video, "101", WatchProgress::Watched)])
+        .unwrap();
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex.mutations(),
+        vec![
+            "unscrobble:101".to_string(),
+            "progress:101:600000".to_string()
+        ]
+    );
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(
+            &video,
+            "101",
+            WatchProgress::InProgress(position(600))
+        )]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
@@ -326,6 +373,10 @@ fn my_channel() -> Channel {
         None,
         now(),
     )
+}
+
+fn two_hours_ago() -> DateTime<Utc> {
+    now() - Duration::hours(2)
 }
 
 fn an_hour_ago() -> DateTime<Utc> {
