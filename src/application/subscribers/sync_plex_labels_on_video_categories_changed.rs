@@ -38,7 +38,7 @@ impl EventSubscriber for SyncPlexLabelsOnVideoCategoriesChanged {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::plex::{PlexEpisode, PlexLabels};
+    use crate::domain::plex::{PlexEpisode, PlexLabels, PlexWatchState};
     use crate::domain::plex_label::EpisodeLabels;
     use crate::domain::services::{PlexEpisodeFinder, VideoOwnerFinder};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
@@ -210,7 +210,7 @@ mod tests {
                 rating_key: "101".to_string(),
                 section_id: "19".to_string(),
                 file: "/plex/videos/a.mp4".to_string(),
-                watch: crate::domain::plex::PlexWatchState::unplayed(),
+                watch: PlexWatchState::unplayed(),
             },
             PlexLabels::new(vec!["Chess".to_string()]),
             now(),

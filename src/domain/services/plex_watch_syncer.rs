@@ -130,27 +130,25 @@ impl PlexWatchSyncer {
         library: &'a PlexLibrary,
         rows: &HashMap<VideoId, EpisodeWatch>,
     ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
-        let videos = self.video_repository.list_downloaded()?;
-        let found = videos
+        self.video_repository
+            .list_downloaded()?
             .into_iter()
-            .map(|video| {
+            .filter_map(|video| {
                 self.plex_episode_finder
                     .find_episode(&video, library)
-                    .map(|episode| episode.map(|episode| (video, episode)))
+                    .transpose()
+                    .map(|episode| {
+                        episode.map(|episode| {
+                            let outcome = merge(
+                                local_side(&video),
+                                remote_side(episode),
+                                EpisodeWatch::agreed_with(rows.get(&video.id), episode),
+                            );
+                            (video, episode, outcome)
+                        })
+                    })
             })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        Ok(found
-            .into_iter()
-            .flatten()
-            .map(|(video, episode)| {
-                let outcome = merge(
-                    local_side(&video),
-                    remote_side(episode),
-                    EpisodeWatch::agreed_with(rows.get(&video.id), episode),
-                );
-                (video, episode, outcome)
-            })
-            .collect())
+            .collect()
     }
 
     /// Merges every video with its episode, pulling what Plex changed

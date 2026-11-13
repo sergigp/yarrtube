@@ -715,6 +715,250 @@ fn it_should_schedule_the_next_sync_now_if_pushes_exceeded_the_batch() {
     );
 }
 
+#[test]
+fn it_should_count_an_episode_stopped_under_a_second_as_unplayed() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_in_progress(500, an_hour_ago())),
+    );
+    let video = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(watch_state(&db, &video), WatchState::unwatched());
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(&video, "101", WatchProgress::Unplayed)]
+    );
+}
+
+#[test]
+fn it_should_pull_a_long_rewatch_in_plex_as_in_progress() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch(
+                "101",
+                PlexWatchState {
+                    view_count: 1,
+                    ..plex_in_progress(600_000, an_hour_ago())
+                },
+            ),
+    );
+    let video = seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(two_hours_ago()),
+    );
+    episode_watch_repository
+        .save_many(&[agreed(&video, "101", WatchProgress::Watched)])
+        .unwrap();
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(watch_state(&db, &video), in_progress(600, an_hour_ago()));
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(
+            &video,
+            "101",
+            WatchProgress::InProgress(position(600))
+        )]
+    );
+}
+
+#[test]
+fn it_should_keep_the_yarrtube_side_if_both_changed_at_the_same_time() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_watched(an_hour_ago())),
+    );
+    let video = seed_video(
+        &db,
+        Video {
+            watch: in_progress(120, an_hour_ago()),
+            ..downloaded_video("yt1", "S2023E1114 - One.mp4")
+        },
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(watch_state(&db, &video), in_progress(120, an_hour_ago()));
+    assert_eq!(
+        plex.mutations(),
+        vec![
+            "unscrobble:101".to_string(),
+            "progress:101:120000".to_string()
+        ]
+    );
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(
+            &video,
+            "101",
+            WatchProgress::InProgress(position(120))
+        )]
+    );
+}
+
+#[test]
+fn it_should_schedule_the_next_sync_in_five_minutes_if_pushes_filled_the_batch() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    let files: Vec<String> = (0..BATCH_SIZE).map(|i| format!("V{i}.mp4")).collect();
+    let plex = Arc::new(files.iter().enumerate().fold(
+        FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
+        |plex, (i, file)| plex.with_episode("19", &i.to_string(), &plex_file(file), &[]),
+    ));
+    files.iter().enumerate().for_each(|(i, file)| {
+        seed_video(
+            &db,
+            downloaded_video(&format!("yt{i}"), file).mark_watched(an_hour_ago()),
+        );
+    });
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        Arc::new(SqliteEpisodeWatchRepository::new(db.database())),
+        task_repository.clone(),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex.mutations(),
+        (0..BATCH_SIZE)
+            .map(|i| format!("scrobble:{i}"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_sync(1, now() + Duration::minutes(5))]
+    );
+}
+
+#[test]
+fn it_should_bring_every_copy_in_line_with_the_latest_plex_change_if_listed_last() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_location("21", "/plex/videos/music")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_in_progress(60_000, two_hours_ago()))
+            .with_episode("21", "201", &playlist_plex_file("S01E001 - One.mp4"), &[])
+            .with_episode_watch("201", plex_watched(an_hour_ago())),
+    );
+    let channel_copy = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
+    let playlist_copy = seed_playlist_video(&db, "yt1", "S01E001 - One.mp4");
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    let watched = WatchState {
+        watched_at: Some(an_hour_ago()),
+        position: PlaybackPosition::start(),
+        last_played_at: Some(an_hour_ago()),
+    };
+    assert_eq!(
+        (
+            watch_state(&db, &channel_copy),
+            watch_state(&db, &playlist_copy)
+        ),
+        (watched, watched)
+    );
+    assert_eq!(plex.mutations(), vec!["scrobble:101".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        by_video_id(vec![
+            agreed(&channel_copy, "101", WatchProgress::Watched),
+            agreed(&playlist_copy, "201", WatchProgress::Watched),
+        ])
+    );
+}
+
+#[test]
+fn it_should_rewind_a_video_unwatched_in_plex_while_in_progress() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_video(
+        &db,
+        Video {
+            watch: in_progress(300, an_hour_ago()),
+            ..downloaded_video("yt1", "S2023E1114 - One.mp4")
+        },
+    );
+    episode_watch_repository
+        .save_many(&[agreed(
+            &video,
+            "101",
+            WatchProgress::InProgress(position(300)),
+        )])
+        .unwrap();
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(watch_state(&db, &video), in_progress(0, an_hour_ago()));
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(&video, "101", WatchProgress::Unplayed)]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
@@ -890,8 +1134,7 @@ fn seed_playlist_video(db: &TestDatabase, youtube_id: &str, file_name: &str) -> 
 }
 
 /// `rows` in the order the repository lists them.
-fn by_video_id(rows: Vec<EpisodeWatch>) -> Vec<EpisodeWatch> {
-    let mut rows = rows;
+fn by_video_id(mut rows: Vec<EpisodeWatch>) -> Vec<EpisodeWatch> {
     rows.sort_by(|a, b| a.video_id.as_str().cmp(b.video_id.as_str()));
     rows
 }

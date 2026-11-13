@@ -1,5 +1,8 @@
 use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState};
 use crate::domain::video::PlaybackPosition;
+use chrono::DateTime;
+#[cfg(test)]
+use chrono::Utc;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Deserialize;
 #[cfg(test)]
@@ -473,7 +476,7 @@ fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
         view_offset_ms: metadata.view_offset,
         last_viewed_at: metadata
             .last_viewed_at
-            .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0)),
+            .and_then(|seconds| DateTime::from_timestamp(seconds, 0)),
         duration_ms: metadata.duration,
     };
     metadata
@@ -506,7 +509,7 @@ pub struct FakePlexLibraryRepository {
     rejected: Vec<String>,
     /// The server's time, stamped as the last viewed time of every watch
     /// write, like Plex does (it cannot backdate one).
-    now: Option<chrono::DateTime<chrono::Utc>>,
+    now: Option<DateTime<Utc>>,
 }
 
 #[cfg(test)]
@@ -611,7 +614,7 @@ impl FakePlexLibraryRepository {
     }
 
     /// The same fake stamping watch writes with `now`.
-    pub fn at(self, now: chrono::DateTime<chrono::Utc>) -> Self {
+    pub fn at(self, now: DateTime<Utc>) -> Self {
         Self {
             now: Some(now),
             ..self
@@ -1061,7 +1064,7 @@ mod tests {
                 watch: PlexWatchState {
                     view_count: 2,
                     view_offset_ms: Some(215_540),
-                    last_viewed_at: chrono::DateTime::from_timestamp(1_794_073_896, 0),
+                    last_viewed_at: DateTime::from_timestamp(1_794_073_896, 0),
                     duration_ms: Some(3_119_000),
                 },
                 ..episode("101", "/volume1/a.mp4")
