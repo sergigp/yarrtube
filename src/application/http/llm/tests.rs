@@ -145,6 +145,27 @@ async fn it_should_list_anthropic_models_in_the_listed_order() {
     );
 }
 
+#[tokio::test]
+async fn it_should_answer_404_when_anthropic_isnt_configured() {
+    let llm_server_searcher = LlmServerSearcher::new(
+        Arc::new(FakeLlmServerRepository::new(LlmServer {
+            version: None,
+            models: vec![anthropic_model("claude-haiku-5-5", "Claude Haiku 5.5")],
+        })),
+        false,
+    );
+
+    let response = anthropic(llm_server_searcher).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "Anthropic isn't configured: set YARRTUBE_ANTHROPIC_API_KEY"
+        ))
+    );
+}
+
 async fn get(
     llm_server_searcher: LlmServerSearcher,
     query: OllamaQuery,
