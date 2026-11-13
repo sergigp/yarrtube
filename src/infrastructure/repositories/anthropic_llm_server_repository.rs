@@ -1,4 +1,6 @@
 use crate::domain::llm_server::{LlmChat, LlmReply, LlmServer, LlmServerUnreachable};
+use anyhow::Context;
+use serde::Deserialize;
 use std::fmt;
 use std::time::Duration;
 
@@ -55,13 +57,23 @@ impl AnthropicLlmServerRepository {
     /// errors: 429, 5xx, 529. `LlmReply::refused*`: other 400s, refusal.
     pub fn chat(&self, chat: &LlmChat) -> anyhow::Result<LlmReply> {
         let client = Self::client(chat.timeout)?;
-        client
+        let response: MessageResponse = client
             .post(format!("{}/v1/messages", self.config.api_url))
             .header("x-api-key", self.config.api_key.as_str())
             .header("anthropic-version", ANTHROPIC_VERSION)
             .json(&Self::message_body(chat))
-            .send()?;
-        Ok(LlmReply::refused(""))
+            .send()?
+            .json()
+            .context("/v1/messages didn't answer as Anthropic does")?;
+        Ok(LlmReply {
+            content: response.text(),
+            thinking: String::new(),
+            input_tokens: response.usage.input_tokens,
+            output_tokens: response.usage.output_tokens,
+            stopped_at_limit: false,
+            refusal: None,
+            exceeded_context: false,
+        })
     }
 
     /// The request body: no temperature, context length or thinking, so the
@@ -112,6 +124,40 @@ impl AnthropicLlmServerRepository {
             .timeout(timeout)
             .build()?)
     }
+}
+
+#[derive(Deserialize)]
+struct MessageResponse {
+    #[serde(default)]
+    content: Vec<ContentBlock>,
+    usage: Usage,
+}
+
+impl MessageResponse {
+    /// The text blocks, joined: thinking blocks hold no answer.
+    fn text(&self) -> String {
+        self.content
+            .iter()
+            .filter(|block| block.kind == "text")
+            .map(|block| block.text.as_str())
+            .collect()
+    }
+}
+
+#[derive(Deserialize)]
+struct ContentBlock {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct Usage {
+    #[serde(default)]
+    input_tokens: u32,
+    #[serde(default)]
+    output_tokens: u32,
 }
 
 #[cfg(test)]
@@ -229,6 +275,32 @@ mod tests {
 
         assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
         messages.assert();
+    }
+
+    #[test]
+    fn it_should_read_the_text_blocks_and_usage() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_body(
+                r#"{"content": [{"type": "thinking", "thinking": "", "signature": "x"}, {"type": "text", "text": "Three "}, {"type": "text", "text": "games."}], "stop_reason": "end_turn", "usage": {"input_tokens": 900, "output_tokens": 120}}"#,
+            )
+            .create();
+
+        let reply = repository(&server).chat(&chat()).unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply {
+                content: "Three games.".to_string(),
+                thinking: String::new(),
+                input_tokens: 900,
+                output_tokens: 120,
+                stopped_at_limit: false,
+                refusal: None,
+                exceeded_context: false,
+            }
+        );
     }
 
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {
