@@ -72,9 +72,9 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 
 `RoutingLlmServerRepository`:
 
-- [ ] 3.19 `it_should_route_an_ollama_connection_to_ollama`
-- [ ] 3.20 `it_should_route_an_anthropic_connection_to_anthropic`
-- [ ] 3.21 `it_should_report_anthropic_without_a_key_as_unreachable`
+- [x] 3.19 `it_should_route_an_ollama_connection_to_ollama`
+- [x] 3.20 `it_should_route_an_anthropic_connection_to_anthropic`
+- [x] 3.21 `it_should_report_anthropic_without_a_key_as_unreachable`
 
 `SqlitePreferencesRepository`:
 

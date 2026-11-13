@@ -167,3 +167,93 @@ impl LlmServerRepository for FakeLlmServerRepository {
             .unwrap_or_else(|| Err(anyhow::anyhow!("no reply left")))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::llm_server::{Effort, MIN_CHAT_TIMEOUT, OllamaUrl};
+    use crate::infrastructure::repositories::anthropic_llm_server_repository::{
+        AnthropicApiKey, AnthropicConfig,
+    };
+
+    #[test]
+    fn it_should_route_an_ollama_connection_to_ollama() {
+        let mut ollama = mockito::Server::new();
+        let chat_mock = ollama
+            .mock("POST", "/api/chat")
+            .with_body(r#"{"message": {"content": "Three games."}, "done_reason": "stop"}"#)
+            .create();
+        let repository = RoutingLlmServerRepository::new(OllamaLlmServerRepository::new(), None);
+
+        let reply = repository.chat(
+            &LlmConnection::Ollama(OllamaUrl::new(ollama.url()).unwrap()),
+            &chat(),
+        );
+
+        assert_eq!(
+            reply.map(|reply| reply.content).map_err(|e| e.to_string()),
+            Ok("Three games.".to_string())
+        );
+        chat_mock.assert();
+    }
+
+    #[test]
+    fn it_should_route_an_anthropic_connection_to_anthropic() {
+        let mut anthropic = mockito::Server::new();
+        let messages = anthropic
+            .mock("POST", "/v1/messages")
+            .with_body(
+                r#"{"content": [{"type": "text", "text": "Three games."}], "stop_reason": "end_turn", "usage": {"input_tokens": 9, "output_tokens": 3}}"#,
+            )
+            .create();
+        let repository = RoutingLlmServerRepository::new(
+            OllamaLlmServerRepository::new(),
+            Some(AnthropicLlmServerRepository::new(AnthropicConfig {
+                api_url: anthropic.url(),
+                api_key: AnthropicApiKey::new("sk-ant-test".to_string()),
+            })),
+        );
+
+        let reply = repository.chat(&LlmConnection::Anthropic, &chat());
+
+        assert_eq!(
+            reply.map(|reply| reply.content).map_err(|e| e.to_string()),
+            Ok("Three games.".to_string())
+        );
+        messages.assert();
+    }
+
+    #[test]
+    fn it_should_report_anthropic_without_a_key_as_unreachable() {
+        let repository = RoutingLlmServerRepository::new(OllamaLlmServerRepository::new(), None);
+
+        let checked = repository
+            .find(&LlmConnection::Anthropic)
+            .map_err(|e| (e.is::<LlmServerUnreachable>(), format!("{e:#}")));
+        let chatted = repository
+            .chat(&LlmConnection::Anthropic, &chat())
+            .map_err(|e| (e.is::<LlmServerUnreachable>(), format!("{e:#}")));
+
+        let unavailable = Err((
+            true,
+            "the LLM provider is unavailable: YARRTUBE_ANTHROPIC_API_KEY isn't set".to_string(),
+        ));
+        assert_eq!(checked.map(|_| ()), unavailable);
+        assert_eq!(chatted.map(|_| ()), unavailable);
+    }
+
+    fn chat() -> LlmChat {
+        LlmChat {
+            model: "claude-haiku-5-5".to_string(),
+            system: "Be brief.".to_string(),
+            user: "Title: Sicilian".to_string(),
+            context_length: 12288,
+            temperature: 0.3,
+            thinking: false,
+            effort: Effort::Medium,
+            max_output_tokens: 1024,
+            format: None,
+            timeout: MIN_CHAT_TIMEOUT,
+        }
+    }
+}
