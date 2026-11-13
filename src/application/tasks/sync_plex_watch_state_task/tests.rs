@@ -595,6 +595,42 @@ fn it_should_forget_a_video_no_longer_downloaded() {
     assert_eq!(episode_watch_repository.list().unwrap(), vec![]);
 }
 
+#[test]
+fn it_should_push_the_others_if_plex_rejects_one() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode("19", "102", &plex_file("S2023E1115 - Two.mp4"), &[])
+            .rejecting("101"),
+    );
+    seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(an_hour_ago()),
+    );
+    let accepted = seed_video(
+        &db,
+        downloaded_video("yt2", "S2023E1115 - Two.mp4").mark_watched(an_hour_ago()),
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), vec!["scrobble:102".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(&accepted, "102", WatchProgress::Watched)]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(

@@ -578,7 +578,7 @@ impl FakePlexLibraryRepository {
         self
     }
 
-    /// The same fake rejecting every label write to `rating_key`.
+    /// The same fake rejecting every label and watch write to `rating_key`.
     pub fn rejecting(self, rating_key: &str) -> Self {
         Self {
             rejected: [self.rejected.clone(), vec![rating_key.to_string()]].concat(),
@@ -632,6 +632,13 @@ impl FakePlexLibraryRepository {
     fn ensure_reachable(&self) -> anyhow::Result<()> {
         if self.unreachable {
             anyhow::bail!("Plex is unreachable");
+        }
+        Ok(())
+    }
+
+    fn ensure_accepted(&self, rating_key: &str) -> anyhow::Result<()> {
+        if self.rejected.iter().any(|rejected| rejected == rating_key) {
+            anyhow::bail!("Plex rejected the watch state of {rating_key}");
         }
         Ok(())
     }
@@ -767,6 +774,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
 
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
         self.ensure_reachable()?;
+        self.ensure_accepted(rating_key)?;
         self.record(format!("scrobble:{rating_key}"));
         self.update_watch(rating_key, |watch| PlexWatchState {
             view_count: watch.view_count + 1,
@@ -779,6 +787,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
 
     fn mark_unwatched(&self, rating_key: &str) -> anyhow::Result<()> {
         self.ensure_reachable()?;
+        self.ensure_accepted(rating_key)?;
         self.record(format!("unscrobble:{rating_key}"));
         self.update_watch(rating_key, |watch| PlexWatchState {
             view_count: 0,
@@ -791,6 +800,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
 
     fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()> {
         self.ensure_reachable()?;
+        self.ensure_accepted(rating_key)?;
         let offset_ms = position.seconds() * 1000;
         self.record(format!("progress:{rating_key}:{offset_ms}"));
         self.update_watch(rating_key, |watch| PlexWatchState {

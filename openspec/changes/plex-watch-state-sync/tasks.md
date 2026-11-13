@@ -23,7 +23,7 @@
 - [x] 2.13 `it_should_skip_a_video_plex_has_not_imported` — no episode for the file ⇒ no mutation, no row.
 - [x] 2.14 `it_should_push_to_an_episode_plex_reimported` — row agreed Watched under another rating key, new episode unplayed ⇒ `scrobble` on the new key, video stays watched.
 - [x] 2.15 `it_should_forget_a_video_no_longer_downloaded` — its row is deleted.
-- [ ] 2.16 `it_should_push_the_others_if_plex_rejects_one` — other row agreed; rejected row unchanged.
+- [x] 2.16 `it_should_push_the_others_if_plex_rejects_one` — other row agreed; rejected row unchanged.
 - [ ] 2.17 `it_should_retry_later_if_plex_is_unreachable` — `failing()` ⇒ no change, next `sync_plex_watch_state` at now + 5 min.
 - [ ] 2.18 `it_should_schedule_the_next_sync_in_five_minutes`
 - [ ] 2.19 `it_should_schedule_the_next_sync_now_if_pushes_exceeded_the_batch` — BATCH_SIZE + 1 pushes ⇒ BATCH_SIZE mutations, next sync at now.
