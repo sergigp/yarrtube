@@ -27,7 +27,7 @@
 - [x] 2.17 `it_should_retry_later_if_plex_is_unreachable` — `failing()` ⇒ no change, next `sync_plex_watch_state` at now + 5 min.
 - [x] 2.18 `it_should_schedule_the_next_sync_in_five_minutes`
 - [x] 2.19 `it_should_schedule_the_next_sync_now_if_pushes_exceeded_the_batch` — BATCH_SIZE + 1 pushes ⇒ BATCH_SIZE mutations, next sync at now.
-- [ ] 2.20 `web/src/lib/tasks.test.ts`: `describes a Plex watch sync` — "Syncing Plex watch state" under **Other** (Vitest, `npm run test`).
+- [x] 2.20 `web/src/lib/tasks.test.ts`: `describes a Plex watch sync` — "Syncing Plex watch state" under **Other** (Vitest, `npm run test`).
 
 ## 3. Infrastructure adapters (TDD)
 

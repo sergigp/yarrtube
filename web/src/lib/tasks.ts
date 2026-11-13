@@ -35,6 +35,8 @@ export function describeTask(task: Task): string {
       return `Syncing ${videoInContainer(payload)}`
     case 'sync_plex_labels':
       return 'Syncing Plex category labels'
+    case 'sync_plex_watch_state':
+      return 'Syncing Plex watch state'
     case 'delete_video_file':
       return payload.filename ? `Removing file ${payload.filename}` : 'Removing a video file'
     default:
