@@ -33,11 +33,21 @@ impl PlexWatchState {
         }
     }
 
-    /// The offset in whole seconds, when past the start.
+    /// The offset in whole seconds, when past the start and not a rewatch
+    /// that just started.
     fn resume_position(&self) -> Option<PlaybackPosition> {
         self.view_offset_ms
+            .filter(|offset_ms| !self.is_short_rewatch(*offset_ms))
             .map(|offset_ms| offset_ms / 1000)
             .filter(|seconds| *seconds > 0)
             .and_then(|seconds| PlaybackPosition::new(seconds).ok())
+    }
+
+    /// Watched, and played again only up to 10% of its duration.
+    fn is_short_rewatch(&self, offset_ms: i64) -> bool {
+        self.view_count > 0
+            && self
+                .duration_ms
+                .is_some_and(|duration_ms| offset_ms * 10 <= duration_ms)
     }
 }

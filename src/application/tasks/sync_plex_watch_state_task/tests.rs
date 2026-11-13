@@ -468,6 +468,46 @@ fn it_should_seed_from_whichever_side_was_played_on_the_first_sync() {
     );
 }
 
+#[test]
+fn it_should_count_a_short_rewatch_in_plex_as_still_watched() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch(
+                "101",
+                PlexWatchState {
+                    view_count: 1,
+                    ..plex_in_progress(120_000, an_hour_ago())
+                },
+            ),
+    );
+    let video = seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(two_hours_ago()),
+    );
+    episode_watch_repository
+        .save_many(&[agreed(&video, "101", WatchProgress::Watched)])
+        .unwrap();
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        watch_state(&db, &video),
+        WatchState::unwatched().mark_watched(two_hours_ago())
+    );
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
