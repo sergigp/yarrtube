@@ -2285,6 +2285,35 @@ fn it_should_categorize_with_the_anthropic_model_and_effort() {
     );
 }
 
+#[test]
+fn it_should_fall_back_per_category_without_dropping_thinking_on_anthropic() {
+    let db = TestDatabase::new();
+    let video = summarized_video();
+    seed(
+        &db,
+        &video,
+        &[&prompted_category("AI news"), &prompted_category("Tech")],
+    );
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = anthropic_replying(vec![
+        stopped_at_the_limit(),
+        reply(&answers(&[("AI news", NO)])),
+        reply(&answers(&[("Tech", YES)])),
+    ]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        asked_categories(&llm),
+        vec![vec!["AI news", "Tech"], vec!["AI news"], vec!["Tech"]]
+    );
+    assert_eq!(thinking_asked(&llm), vec![false, false, false]);
+}
+
 fn summary_lines(lines: &[String]) -> Vec<String> {
     lines
         .iter()
