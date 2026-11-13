@@ -78,8 +78,8 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 
 `SqlitePreferencesRepository`:
 
-- [ ] 3.22 `it_should_round_trip_the_provider_and_anthropic_settings`
-- [ ] 3.23 `it_should_read_preferences_without_provider_keys_as_their_defaults`
+- [x] 3.22 `it_should_round_trip_the_provider_and_anthropic_settings`
+- [x] 3.23 `it_should_read_preferences_without_provider_keys_as_their_defaults`
 
 `serve.rs` config:
 

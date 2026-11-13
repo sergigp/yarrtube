@@ -257,6 +257,7 @@ impl From<StoredPreferences> for Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::llm_server::LlmConnection;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 
     #[test]
@@ -479,6 +480,61 @@ mod tests {
                 theme: Theme::Dark,
                 ..Preferences::default()
             }))
+        );
+    }
+
+    #[test]
+    fn it_should_round_trip_the_provider_and_anthropic_settings() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            ai_enabled: true,
+            ai_provider: AiProvider::Anthropic,
+            anthropic: AnthropicSettings {
+                summaries_model: SummaryModel::new("claude-sonnet-5-5").unwrap(),
+                summaries_effort: Effort::High,
+                categorization_model: CategorizationModel::new("claude-opus-5-5").unwrap(),
+                categorization_effort: Effort::Low,
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_preferences_without_provider_keys_as_their_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"ai_enabled\": true, \"ollama_url\": \"http://mac.local:11434\", \"summaries_model\": \"gemma3:4b\"}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences {
+                ai_enabled: true,
+                ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+                summaries: SummarySettings {
+                    model: SummaryModel::new("gemma3:4b").unwrap(),
+                    ..SummarySettings::default()
+                },
+                ..Preferences::default()
+            }))
+        );
+        assert_eq!(
+            repository
+                .find()
+                .unwrap()
+                .map(|preferences| preferences.connection()),
+            Some(Some(LlmConnection::Ollama(
+                OllamaUrl::new("http://mac.local:11434").unwrap()
+            )))
         );
     }
 
