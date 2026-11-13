@@ -101,5 +101,5 @@ change was first applied with effort `medium`; task 4.6 moves the default.
   3. Save Anthropic with summaries on. Assert the `PATCH` body holds only the changed fields, and that "Advanced" shows Effort and Prompt only.
   4. Seed a channel with one downloaded, subtitled video through the HTTP API, let its summary run, and check the logs for the call to `claude-haiku-5-5` and the stored summary.
   5. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
-- [ ] 4.5 Manual (human): read a few Haiku summaries and categorizations on your own library and judge them. Check the spend shown in the Anthropic Console against the per-video estimate in `doc/AI.md`.
+- [x] 4.5 Manual (human): read a few Haiku summaries and categorizations on your own library and judge them. Check the spend shown in the Anthropic Console against the per-video estimate in `doc/AI.md`.
 - [x] 4.6 Default effort `low`, from `add-anthropic-evals`: `Effort`'s `#[default]` becomes `Low`; tests 2.5 and 2.14 and any test relying on the default expect `low`; the web fixture in `web/src/test/helpers.tsx` and `AiSettingsView.test.tsx` use `low`; `doc/AI.md` names `low` as the default and about $0.002 per summary. Run `scripts/run-tests.sh --lint --web --rust`.
