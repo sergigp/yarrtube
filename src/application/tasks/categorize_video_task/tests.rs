@@ -2361,6 +2361,47 @@ fn it_should_count_an_own_call_limit_stop_as_a_failed_attempt_on_anthropic() {
     );
 }
 
+#[test]
+fn it_should_wait_when_anthropic_is_unavailable_for_categorization() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = Video {
+        categorization: StepState {
+            status: StepStatus::Retrying,
+            attempts: RetryAttempts {
+                failed: 3,
+                last_failed_at: Some(fixed_timestamp()),
+            },
+        },
+        ..summarized_video()
+    };
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = Arc::new(FakeLlmServerRepository::unreachable());
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::hours(6),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
+        })
+    );
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
 fn summary_lines(lines: &[String]) -> Vec<String> {
     lines
         .iter()
