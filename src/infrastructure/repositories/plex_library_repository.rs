@@ -61,6 +61,10 @@ pub trait PlexLibraryRepository: Send + Sync {
     ) -> anyhow::Result<PlexPlaylist>;
     /// `DELETE /playlists/{rating_key}`.
     fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()>;
+    /// Whose watch state the watch calls read and write: the server's
+    /// machine identifier and a fingerprint of the token,
+    /// `"<machineIdentifier>/<fingerprint>"`.
+    fn viewer_id(&self) -> anyhow::Result<String>;
     /// Marks the episode watched for the token user (`GET /:/scrobble`),
     /// clearing its resume position.
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()>;
@@ -310,6 +314,10 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         self.send(&endpoint, request).map(drop)
     }
 
+    fn viewer_id(&self) -> anyhow::Result<String> {
+        Ok(String::new())
+    }
+
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
         self.send_watch("/:/scrobble", &[("key", rating_key)])
     }
@@ -538,6 +546,7 @@ pub struct FakePlaylist {
 #[cfg(test)]
 impl FakePlexLibraryRepository {
     pub const SERVER_ID: &str = "fake-server";
+    pub const VIEWER_ID: &str = "fake-server/viewer";
 
     /// The same fake with `location` added to `section_id`'s folders.
     pub fn with_location(self, section_id: &str, location: &str) -> Self {
@@ -797,6 +806,11 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             .unwrap()
             .retain(|playlist| playlist.rating_key != rating_key);
         Ok(())
+    }
+
+    fn viewer_id(&self) -> anyhow::Result<String> {
+        self.ensure_reachable()?;
+        Ok(Self::VIEWER_ID.to_string())
     }
 
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {

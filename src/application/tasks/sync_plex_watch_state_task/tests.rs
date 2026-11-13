@@ -1017,6 +1017,46 @@ fn it_should_not_pull_a_plex_position_of_30_seconds_or_less() {
     assert_eq!(plex.mutations(), Vec::<String>::new());
 }
 
+#[test]
+fn it_should_push_instead_of_unwatching_after_a_token_switch() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(two_hours_ago()),
+    );
+    episode_watch_repository
+        .save_many(&[EpisodeWatch {
+            viewer_id: "fake-server/another-user".to_string(),
+            ..agreed(&video, "101", WatchProgress::Watched)
+        }])
+        .unwrap();
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        watch_state(&db, &video),
+        WatchState::unwatched().mark_watched(two_hours_ago())
+    );
+    assert_eq!(plex.mutations(), vec!["scrobble:101".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(&video, "101", WatchProgress::Watched)]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
@@ -1201,6 +1241,7 @@ fn agreed(video: &Video, rating_key: &str, progress: WatchProgress) -> EpisodeWa
     EpisodeWatch {
         video_id: video.id.clone(),
         rating_key: rating_key.to_string(),
+        viewer_id: FakePlexLibraryRepository::VIEWER_ID.to_string(),
         agreed: progress,
     }
 }

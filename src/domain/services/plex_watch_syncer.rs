@@ -81,8 +81,8 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let library = match self.plex_episode_finder.read_library() {
-            Ok(library) => library,
+        let (library, viewer_id) = match self.read_plex() {
+            Ok(plex) => plex,
             Err(e) => {
                 warn!(error = %e, "failed to reach Plex, retrying the watch sync later");
                 return self.request_sync(self.clock.now() + SYNC_INTERVAL);
@@ -90,13 +90,20 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
         };
         let rows = self.agreed_rows()?;
         self.forget_undownloaded(&rows)?;
-        let merged = self.pull_then_merge(&library, &rows)?;
-        let backlog = self.settle_all(merged)?;
+        let merged = self.pull_then_merge(&library, &rows, &viewer_id)?;
+        let backlog = self.settle_all(merged, &viewer_id)?;
         self.request_next_sync(backlog)
     }
 }
 
 impl PlexWatchSyncer {
+    /// The library and whose watch state it holds.
+    fn read_plex(&self) -> anyhow::Result<(PlexLibrary, String)> {
+        let library = self.plex_episode_finder.read_library()?;
+        let viewer_id = self.plex_library_repository.viewer_id()?;
+        Ok((library, viewer_id))
+    }
+
     /// Every stored row, by video id.
     fn agreed_rows(&self) -> anyhow::Result<HashMap<VideoId, EpisodeWatch>> {
         Ok(self
@@ -129,6 +136,7 @@ impl PlexWatchSyncer {
         &self,
         library: &'a PlexLibrary,
         rows: &HashMap<VideoId, EpisodeWatch>,
+        viewer_id: &str,
     ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
         self.video_repository
             .list_downloaded()?
@@ -142,7 +150,7 @@ impl PlexWatchSyncer {
                             let outcome = merge(
                                 local_side(&video),
                                 remote_side(episode),
-                                EpisodeWatch::agreed_with(rows.get(&video.id), episode),
+                                EpisodeWatch::agreed_with(rows.get(&video.id), episode, viewer_id),
                             );
                             (video, episode, outcome)
                         })
@@ -158,10 +166,11 @@ impl PlexWatchSyncer {
         &self,
         library: &'a PlexLibrary,
         rows: &HashMap<VideoId, EpisodeWatch>,
+        viewer_id: &str,
     ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
-        let merged = self.merge_videos(library, rows)?;
+        let merged = self.merge_videos(library, rows, viewer_id)?;
         if self.pull(&merged)? {
-            self.merge_videos(library, rows)
+            self.merge_videos(library, rows, viewer_id)
         } else {
             Ok(merged)
         }
@@ -169,7 +178,11 @@ impl PlexWatchSyncer {
 
     /// Records what is in sync and pushes up to `BATCH_SIZE` states to
     /// Plex; whether pushes were left for the next sync.
-    fn settle_all(&self, merged: Vec<(Video, &PlexEpisode, MergeOutcome)>) -> anyhow::Result<bool> {
+    fn settle_all(
+        &self,
+        merged: Vec<(Video, &PlexEpisode, MergeOutcome)>,
+        viewer_id: &str,
+    ) -> anyhow::Result<bool> {
         let (pushes, others): (Vec<_>, Vec<_>) = merged
             .into_iter()
             .partition(|(_, _, outcome)| matches!(outcome, MergeOutcome::Push(_)));
@@ -177,7 +190,9 @@ impl PlexWatchSyncer {
         let synced: Vec<EpisodeWatch> = others
             .into_iter()
             .chain(pushes.into_iter().take(BATCH_SIZE))
-            .filter_map(|(video, episode, outcome)| self.settle(&video, episode, outcome))
+            .filter_map(|(video, episode, outcome)| {
+                self.settle(&video, episode, outcome, viewer_id)
+            })
             .collect();
         self.episode_watch_repository.save_many(&synced)?;
         Ok(backlog)
@@ -219,16 +234,17 @@ impl PlexWatchSyncer {
         video: &Video,
         episode: &PlexEpisode,
         outcome: MergeOutcome,
+        viewer_id: &str,
     ) -> Option<EpisodeWatch> {
         match outcome {
             MergeOutcome::InSync(progress) => {
-                Some(EpisodeWatch::new(video.id.clone(), episode, progress))
+                Some(EpisodeWatch::new(video.id.clone(), episode, viewer_id, progress))
             }
             MergeOutcome::Push(progress) => self
                 .push(episode, progress)
                 .inspect_err(|e| warn!(video_id = %video.id, rating_key = %episode.rating_key, error = %e, "failed to write the Plex watch state, retrying on a later sync"))
                 .ok()
-                .map(|()| EpisodeWatch::new(video.id.clone(), episode, progress)),
+                .map(|()| EpisodeWatch::new(video.id.clone(), episode, viewer_id, progress)),
             MergeOutcome::Pull(_) => None,
         }
     }
