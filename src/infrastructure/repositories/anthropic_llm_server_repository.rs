@@ -63,7 +63,8 @@ impl AnthropicLlmServerRepository {
             .header("x-api-key", self.config.api_key.as_str())
             .header("anthropic-version", ANTHROPIC_VERSION)
             .json(&Self::message_body(chat))
-            .send()?;
+            .send()
+            .map_err(Self::send_error)?;
         match response.status() {
             StatusCode::BAD_REQUEST => return Self::bad_request(Self::error_message(response)?),
             status @ (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND) => {
@@ -111,6 +112,16 @@ impl AnthropicLlmServerRepository {
             true => LlmReply::refused_as_too_long(message),
             false => LlmReply::refused(message),
         })
+    }
+
+    /// `error`, tagged `LlmServerUnreachable` when it is a connect error.
+    fn send_error(error: reqwest::Error) -> anyhow::Error {
+        let connect = error.is_connect();
+        let error = anyhow::Error::new(error);
+        match connect {
+            true => error.context(LlmServerUnreachable),
+            false => error,
+        }
     }
 
     /// Anthropic answering `status` with `message`, as unavailable.
@@ -521,6 +532,25 @@ mod tests {
                 true,
                 "the LLM provider is unavailable: Anthropic answered 404 Not Found: model: claude-haiku-4-0".to_string()
             ))
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_connect_error_as_unreachable() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let repository = AnthropicLlmServerRepository::new(AnthropicConfig {
+            api_url: format!("http://{closed}"),
+            api_key: AnthropicApiKey::new("sk-ant-test".to_string()),
+        });
+
+        let result = repository.chat(&chat());
+
+        assert_eq!(
+            result.map_err(|e| e.is::<LlmServerUnreachable>()),
+            Err(true)
         );
     }
 
