@@ -52,7 +52,7 @@
 
 `SqliteEpisodeWatchRepository`
 
-- [ ] 3.5b `it_should_identify_the_viewer_by_server_and_token` — `GET /identity` ⇒ `"<machineIdentifier>/<fingerprint>"`, a different token gives a different id.
+- [x] 3.5b `it_should_identify_the_viewer_by_server_and_token` — `GET /identity` ⇒ `"<machineIdentifier>/<fingerprint>"`, a different token gives a different id.
 - [x] 3.6 `it_should_round_trip_each_agreed_progress` — Unplayed, InProgress(215), Watched.
 - [x] 3.7 `it_should_replace_a_row_on_save`
 - [x] 3.8 `it_should_delete_rows_by_video_id`

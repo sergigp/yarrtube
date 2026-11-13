@@ -315,7 +315,11 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
     }
 
     fn viewer_id(&self) -> anyhow::Result<String> {
-        Ok(String::new())
+        Ok(format!(
+            "{}/{}",
+            self.server_id()?,
+            token_fingerprint(&self.config.token)
+        ))
     }
 
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
@@ -475,6 +479,15 @@ fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> String 
 /// `value` percent-encoded as Plex expects inside a value it parses again.
 fn plex_escaped(value: &str) -> String {
     utf8_percent_encode(value, PLEX_ESCAPED).to_string()
+}
+
+/// A stable fingerprint of the token (FNV-1a 64, hex), so whose watch state
+/// it is can be stored without storing the token itself.
+fn token_fingerprint(token: &str) -> String {
+    let hash = token.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    });
+    format!("{hash:016x}")
 }
 
 /// One episode per file of `metadata`'s media parts.
@@ -1303,6 +1316,33 @@ mod tests {
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         mock.assert();
+    }
+
+    #[test]
+    fn it_should_identify_the_viewer_by_server_and_token() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/identity")
+            .with_status(200)
+            .with_body(r#"{"MediaContainer": {"machineIdentifier": "abc123"}}"#)
+            .create();
+        let other_token = HttpPlexLibraryRepository::new(PlexConfig {
+            base_url: server.url(),
+            token: "another-token".to_string(),
+        });
+
+        let viewers = (
+            repository(&server).viewer_id().map_err(|e| e.to_string()),
+            other_token.viewer_id().map_err(|e| e.to_string()),
+        );
+
+        assert_eq!(
+            viewers,
+            (
+                Ok("abc123/5a1df1cf03604e11".to_string()),
+                Ok("abc123/8951b24986ac0d78".to_string())
+            )
+        );
     }
 
     #[test]
