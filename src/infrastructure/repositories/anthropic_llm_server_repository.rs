@@ -65,7 +65,7 @@ impl AnthropicLlmServerRepository {
             .json(&Self::message_body(chat))
             .send()?;
         if response.status() == StatusCode::BAD_REQUEST {
-            return Ok(Self::refused(Self::error_message(response)?));
+            return Self::bad_request(Self::error_message(response)?);
         }
         let response: MessageResponse = response
             .json()
@@ -97,12 +97,21 @@ impl AnthropicLlmServerRepository {
         }
     }
 
-    /// A rejected request, too long when the prompt doesn't fit.
-    fn refused(message: String) -> LlmReply {
-        match message.contains("prompt is too long") {
+    /// A rejected request, too long when the prompt doesn't fit; out of
+    /// credit, Anthropic is unavailable until it is topped up.
+    fn bad_request(message: String) -> anyhow::Result<LlmReply> {
+        if message.to_lowercase().contains("credit balance") {
+            return Err(Self::unavailable(StatusCode::BAD_REQUEST, &message));
+        }
+        Ok(match message.contains("prompt is too long") {
             true => LlmReply::refused_as_too_long(message),
             false => LlmReply::refused(message),
-        }
+        })
+    }
+
+    /// Anthropic answering `status` with `message`, as unavailable.
+    fn unavailable(status: StatusCode, message: &str) -> anyhow::Error {
+        anyhow::anyhow!("Anthropic answered {status}: {message}").context(LlmServerUnreachable)
     }
 
     /// The message of Anthropic's error body.
@@ -427,6 +436,49 @@ mod tests {
         assert_eq!(
             reply,
             LlmReply::refused_as_too_long("prompt is too long: 140000 tokens > 131072 maximum")
+        );
+    }
+
+    #[test]
+    fn it_should_report_another_bad_request_as_refused() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_status(400)
+            .with_body(error_body(
+                "invalid_request_error",
+                "output_config.format.schema: too many properties",
+            ))
+            .create();
+
+        let reply = repository(&server).chat(&chat()).unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply::refused("output_config.format.schema: too many properties")
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_low_credit_balance_as_unreachable() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_status(400)
+            .with_body(error_body(
+                "invalid_request_error",
+                "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+            ))
+            .create();
+
+        let result = repository(&server).chat(&chat());
+
+        assert_eq!(
+            result.map_err(|e| (e.is::<LlmServerUnreachable>(), format!("{e:#}"))),
+            Err((
+                true,
+                "the LLM provider is unavailable: Anthropic answered 400 Bad Request: Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.".to_string()
+            ))
         );
     }
 
