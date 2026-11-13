@@ -2876,6 +2876,49 @@ fn it_should_wait_when_the_anthropic_model_isnt_listed() {
     assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
 }
 
+#[test]
+fn it_should_wait_when_anthropic_is_unavailable_during_a_call() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(anthropic_server())
+            .with_replies(vec![Err(unreachable_error())]),
+    );
+    let video = Video {
+        summary: retrying_summary(4),
+        ..subtitled_video()
+    };
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&anthropic_summaries_on())
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + Duration::hours(6),
+            reason: "the LLM provider is unavailable: connection refused".to_string(),
+        })
+    );
+    assert_eq!(llm.connections(), vec![LlmConnection::Anthropic]);
+    assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
 fn summarize_video_task(
     db: &TestDatabase,
     video_repository: Arc<SqliteVideoRepository>,
