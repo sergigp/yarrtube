@@ -66,7 +66,7 @@ impl AnthropicLlmServerRepository {
             .send()?;
         match response.status() {
             StatusCode::BAD_REQUEST => return Self::bad_request(Self::error_message(response)?),
-            status @ (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => {
+            status @ (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND) => {
                 return Err(Self::unavailable(status, &Self::error_message(response)?));
             }
             _ => {}
@@ -502,6 +502,26 @@ mod tests {
             });
 
         assert_eq!(rejected, [Err(true), Err(true)]);
+    }
+
+    #[test]
+    fn it_should_report_an_unknown_model_as_unreachable() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_status(404)
+            .with_body(error_body("not_found_error", "model: claude-haiku-4-0"))
+            .create();
+
+        let result = repository(&server).chat(&chat());
+
+        assert_eq!(
+            result.map_err(|e| (e.is::<LlmServerUnreachable>(), format!("{e:#}"))),
+            Err((
+                true,
+                "the LLM provider is unavailable: Anthropic answered 404 Not Found: model: claude-haiku-4-0".to_string()
+            ))
+        );
     }
 
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {

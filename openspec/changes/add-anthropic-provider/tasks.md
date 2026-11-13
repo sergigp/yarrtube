@@ -62,7 +62,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 3.9 `it_should_report_another_bad_request_as_refused`
 - [x] 3.10 `it_should_report_a_low_credit_balance_as_unreachable`
 - [x] 3.11 `it_should_report_a_rejected_key_as_unreachable`
-- [ ] 3.12 `it_should_report_an_unknown_model_as_unreachable`
+- [x] 3.12 `it_should_report_an_unknown_model_as_unreachable`
 - [ ] 3.13 `it_should_report_a_connect_error_as_unreachable`
 - [ ] 3.14 `it_should_fail_on_an_overloaded_api_as_a_server_fault`
 - [ ] 3.15 `it_should_list_models_across_pages`
