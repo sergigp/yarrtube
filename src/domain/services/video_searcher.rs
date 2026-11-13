@@ -187,21 +187,22 @@ impl VideoSearcherApi for VideoSearcher {
         id: &CategoryId,
     ) -> Result<Vec<CategoryVideoView>, ListVideosError> {
         let category = self.find_category(id)?;
-        let mut videos = Self::once_per_youtube_video(
+        let videos = Self::once_per_youtube_video(
             self.category_video_collector
                 .downloaded_videos(&category)
                 .map_err(ListVideosError::Repository)?,
         );
-        videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
         let by_video = self
             .category_ids_by_video(&self.list_categories()?)
             .map_err(ListVideosError::Repository)?;
         let summaries_available = self.find_preferences()?.summaries_available();
-        videos
+        let mut views = videos
             .into_iter()
             .map(|sourced| self.category_view(sourced, &by_video, summaries_available))
             .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
-            .map_err(ListVideosError::Repository)
+            .map_err(ListVideosError::Repository)?;
+        views.sort_by_key(|view| std::cmp::Reverse(Self::published_or_synced(view)));
+        Ok(views)
     }
 
     fn search_by_title(
@@ -292,6 +293,14 @@ impl VideoSearcher {
             source: sourced.source,
             category_ids,
         })
+    }
+
+    /// When `view`'s video was published on YouTube, or, without metadata
+    /// yet, when it was recorded: what a category's videos are ordered by.
+    fn published_or_synced(view: &CategoryVideoView) -> DateTime<Utc> {
+        view.metadata
+            .as_ref()
+            .map_or(view.video.created_at, |metadata| metadata.published_at)
     }
 
     /// Whether `source` opted in; false when it is no longer stored.

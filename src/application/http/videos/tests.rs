@@ -6186,6 +6186,74 @@ async fn it_should_list_category_videos_with_their_metadata() {
 }
 
 #[tokio::test]
+async fn it_should_list_category_videos_newest_published_first() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+    let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+    let video_dir = tempfile::tempdir().unwrap();
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let published_later = downloaded_video("vid1", "Published later", None, 10);
+    let published_earlier = downloaded_video("vid2", "Published earlier", None, 30);
+    for (index, video, published_at) in [
+        (0, &published_later, 1_600_000_000),
+        (1, &published_earlier, 1_500_000_000),
+    ] {
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            video,
+            index,
+        );
+        video_metadata_repository
+            .save(
+                &video.id,
+                &VideoMetadata {
+                    published_at: DateTime::<Utc>::from_timestamp(published_at, 0).unwrap(),
+                    ..video_metadata()
+                },
+                &EpisodeNumber::from_columns(2024, 10101 + index as u32).unwrap(),
+                &video_dir.path().join(format!("{}.nfo", video.title)),
+            )
+            .unwrap();
+    }
+    let chess = category_with_members(&[channel_member("@somechannel")]);
+    category_repository.insert(&chess).unwrap();
+    categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        video_metadata_repository,
+        Arc::new(FixedClock(fixed_timestamp())),
+        category_repository,
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_category(video_searcher, chess.id.as_str()).await;
+
+    assert_eq!(
+        response.map(|videos| videos
+            .into_iter()
+            .map(|video| video.title)
+            .collect::<Vec<_>>()),
+        Ok(vec![
+            "Published later".to_string(),
+            "Published earlier".to_string()
+        ])
+    );
+}
+
+#[tokio::test]
 async fn it_should_list_category_videos_without_metadata_as_absent() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
