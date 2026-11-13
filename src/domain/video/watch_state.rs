@@ -1,13 +1,10 @@
 use super::playback_position::PlaybackPosition;
+use super::watch_progress::WatchProgress;
 use chrono::{DateTime, Duration, Utc};
 
 /// How long after it was last played a started video is still offered to
 /// continue watching.
 const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
-
-/// How far past the start playback must have got for a video to count as
-/// started rather than just opened.
-const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
 
 const WATCHED_THRESHOLD: f64 = 0.9;
 const REWATCH_RESET_THRESHOLD: f64 = 0.1;
@@ -39,10 +36,49 @@ impl WatchState {
     /// of `now`: worth offering to continue watching.
     pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {
         !self.is_watched()
-            && self.position.seconds() > IN_PROGRESS_MIN_POSITION_SECONDS
+            && self.position.is_started()
             && self
                 .last_played_at
                 .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
+    }
+
+    /// Watched ⇒ watched; position over 30s ⇒ in progress; else unplayed:
+    /// a video only sampled is not worth resuming.
+    pub fn progress(&self) -> WatchProgress {
+        match (self.is_watched(), self.position.is_started()) {
+            (true, _) => WatchProgress::Watched,
+            (false, true) => WatchProgress::InProgress(self.position),
+            (false, false) => WatchProgress::Unplayed,
+        }
+    }
+
+    /// The latest of when it was watched and when it was last played.
+    pub fn changed_at(&self) -> Option<DateTime<Utc>> {
+        self.watched_at.max(self.last_played_at)
+    }
+
+    /// The state Plex reports, played at `played_at`: watched ⇒ watched and
+    /// last played then, position back to the start; in progress ⇒
+    /// unwatched at that position, last played then; unplayed ⇒ unwatched
+    /// at the start, last played time kept.
+    pub fn adopt(self, progress: WatchProgress, played_at: DateTime<Utc>) -> Self {
+        match progress {
+            WatchProgress::Watched => Self {
+                watched_at: Some(played_at),
+                position: PlaybackPosition::start(),
+                last_played_at: Some(played_at),
+            },
+            WatchProgress::InProgress(position) => Self {
+                watched_at: None,
+                position,
+                last_played_at: Some(played_at),
+            },
+            WatchProgress::Unplayed => Self {
+                watched_at: None,
+                position: PlaybackPosition::start(),
+                ..self
+            },
+        }
     }
 
     /// Watched `now`, its position back to the start.

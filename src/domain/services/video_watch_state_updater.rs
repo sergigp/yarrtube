@@ -6,7 +6,8 @@ use crate::domain::services::{
     CategoryVideoCollector, CategoryVideoCollectorApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
-    PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId, YoutubeVideoId,
+    PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId, WatchProgress,
+    YoutubeVideoId,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -86,6 +87,14 @@ pub trait VideoWatchStateUpdaterApi: Send + Sync {
     /// Marks every `Downloaded` video of the playlist watched, with every
     /// stored copy of each; pending/in-flight videos are left unchanged.
     fn mark_playlist_watched(&self, playlist_id: &PlaylistId) -> Result<(), UpdateWatchStateError>;
+    /// Applies `Video::adopt_watch_progress(progress, played_at)` to the
+    /// stored video `id` and every other stored copy of its YouTube video.
+    fn adopt(
+        &self,
+        id: &VideoId,
+        progress: WatchProgress,
+        played_at: DateTime<Utc>,
+    ) -> Result<(), UpdateWatchStateError>;
 }
 
 impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
@@ -155,6 +164,24 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         Self::unwatched_downloaded_youtube_ids(self.playlist_videos(playlist_id)?)
             .iter()
             .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
+    }
+
+    fn adopt(
+        &self,
+        id: &VideoId,
+        progress: WatchProgress,
+        played_at: DateTime<Utc>,
+    ) -> Result<(), UpdateWatchStateError> {
+        self.find_copies(id)?
+            .iter()
+            .try_for_each(|copy| {
+                self.video_updater
+                    .update(&copy.id, |video| {
+                        Some(video.adopt_watch_progress(progress, played_at))
+                    })
+                    .map(drop)
+            })
+            .map_err(UpdateWatchStateError::Repository)
     }
 }
 

@@ -189,8 +189,10 @@ another mount is rejected, and the files stay where they were.
 Point a Plex **TV Shows** library (Plex NFO Series agent) at your videos
 folders. Optionally, set `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and
 `YARRTUBE_PLEX_VIDEOS_PATH` (all three) and yarrtube asks Plex to scan a
-show's folder as soon as one of its videos is downloaded. The library setup
-and the scan trigger are covered step by step in [PLEX.md](PLEX.md).
+show's folder as soon as one of its videos is downloaded, mirrors your
+categories as Plex smart playlists and keeps what you watched in sync
+between the web UI and Plex. The library setup and the scan trigger are
+covered step by step in [PLEX.md](PLEX.md).
 
 ## Updating
 

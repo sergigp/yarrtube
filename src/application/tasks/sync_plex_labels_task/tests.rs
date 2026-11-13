@@ -5,8 +5,8 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::plex::PlexLabels;
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
-use crate::domain::services::VideoOwnerFinder;
 use crate::domain::services::plex_label_syncer::BATCH_SIZE;
+use crate::domain::services::{PlexEpisodeFinder, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, TaskStatus};
 use crate::domain::video::{Video, VideoId, YoutubeVideoId};
@@ -1045,23 +1045,26 @@ fn syncer(
     task_repository: Arc<dyn TaskRepository>,
 ) -> PlexLabelSyncer {
     PlexLabelSyncer::new(
-        plex,
+        plex.clone(),
         episode_labels_repository,
         category_playlist_repository,
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteCategoryRepository::new(db.database())),
         Arc::new(SqliteVideoRepository::new(db.database())),
-        Arc::new(VideoOwnerFinder::new(
-            Arc::new(SqliteChannelVideoRepository::new(db.database())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            Arc::new(SqliteChannelRepository::new(db.database())),
-            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        PlexEpisodeFinder::new(
+            plex,
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
             "/videos",
-        )),
+            "/plex/videos",
+        ),
         task_repository,
         Arc::new(FixedClock(now())),
-        "/videos",
-        "/plex/videos",
     )
 }
 

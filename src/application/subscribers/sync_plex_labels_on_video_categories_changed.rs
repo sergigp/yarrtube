@@ -38,9 +38,9 @@ impl EventSubscriber for SyncPlexLabelsOnVideoCategoriesChanged {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::plex::{PlexEpisode, PlexLabels};
+    use crate::domain::plex::{PlexEpisode, PlexLabels, PlexWatchState};
     use crate::domain::plex_label::EpisodeLabels;
-    use crate::domain::services::VideoOwnerFinder;
+    use crate::domain::services::{PlexEpisodeFinder, VideoOwnerFinder};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
     use crate::infrastructure::repositories::sqlite_category_playlist_repository::SqliteCategoryPlaylistRepository;
@@ -166,17 +166,20 @@ mod tests {
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteCategoryRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
-            Arc::new(VideoOwnerFinder::new(
-                Arc::new(SqliteChannelVideoRepository::new(db.database())),
-                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                Arc::new(SqliteChannelRepository::new(db.database())),
-                Arc::new(SqlitePlaylistRepository::new(db.database())),
+            PlexEpisodeFinder::new(
+                Arc::new(FakePlexLibraryRepository::failing()),
+                Arc::new(VideoOwnerFinder::new(
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(SqliteChannelRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistRepository::new(db.database())),
+                    "/videos",
+                )),
                 "/videos",
-            )),
+                "/plex/videos",
+            ),
             task_repository,
             Arc::new(FixedClock(now())),
-            "/videos",
-            "/plex/videos",
         )
     }
 
@@ -207,6 +210,7 @@ mod tests {
                 rating_key: "101".to_string(),
                 section_id: "19".to_string(),
                 file: "/plex/videos/a.mp4".to_string(),
+                watch: PlexWatchState::unplayed(),
             },
             PlexLabels::new(vec!["Chess".to_string()]),
             now(),

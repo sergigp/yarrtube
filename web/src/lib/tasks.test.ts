@@ -147,6 +147,12 @@ describe('describeTask', () => {
     )
   })
 
+  it('describes a Plex watch sync in plain language', () => {
+    expect(describeTask(aTask({ task_type: 'sync_plex_watch_state', payload: {} }))).toBe(
+      'Syncing Plex watch state',
+    )
+  })
+
   it('humanizes an unknown type instead of showing the raw snake_case string', () => {
     const description = describeTask(aTask({ task_type: 'mystery_task', payload: {} }))
     expect(description).not.toContain('_')
@@ -255,6 +261,10 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
 
   it('puts Plex label syncs in the other family', () => {
     expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }), false)).toBe('other')
+  })
+
+  it('puts Plex watch syncs in the other family', () => {
+    expect(taskFamily(aTask({ task_type: 'sync_plex_watch_state' }), false)).toBe('other')
   })
 
   it('puts video syncs in the syncs family', () => {

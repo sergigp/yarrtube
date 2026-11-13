@@ -13,6 +13,7 @@ use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_status::VideoStatus;
+use super::watch_progress::WatchProgress;
 use super::watch_state::WatchState;
 use super::youtube_video_id::YoutubeVideoId;
 use crate::domain::shared::Quality;
@@ -227,6 +228,14 @@ impl Video {
             watch: self
                 .watch
                 .record_playback(position, duration_seconds, was_watched, now),
+            ..self
+        }
+    }
+
+    /// Takes the watch state Plex reports — see `WatchState::adopt`.
+    pub fn adopt_watch_progress(self, progress: WatchProgress, played_at: DateTime<Utc>) -> Self {
+        Self {
+            watch: self.watch.adopt(progress, played_at),
             ..self
         }
     }

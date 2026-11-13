@@ -12,14 +12,15 @@ pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
 pub mod summarize_video_task;
 pub mod sync_plex_labels_task;
+pub mod sync_plex_watch_state_task;
 pub mod sync_video_task;
 pub mod update_ytdlp_task;
 pub mod upgrade_quality_task;
 
 use crate::domain::services::{
     ChannelVideoReconciler, ChapterFetcher, PlaylistVideoReconciler, PlexLabelSyncer,
-    QualityUpgrader, SubtitleFetcher, ThumbnailFetcher, VideoCategorizer, VideoDownloader,
-    VideoFileDeleter, VideoReconciler, VideoSummarizer,
+    PlexWatchSyncer, QualityUpgrader, SubtitleFetcher, ThumbnailFetcher, VideoCategorizer,
+    VideoDownloader, VideoFileDeleter, VideoReconciler, VideoSummarizer,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -41,6 +42,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use summarize_video_task::SummarizeVideoTask;
 use sync_plex_labels_task::SyncPlexLabelsTask;
+use sync_plex_watch_state_task::SyncPlexWatchStateTask;
 use sync_video_task::SyncVideoTask;
 use update_ytdlp_task::UpdateYtdlpTask;
 use upgrade_quality_task::UpgradeQualityTask;
@@ -67,6 +69,7 @@ pub fn registry(
     ytdlp_path: PathBuf,
     ytdlp_self_update_enabled: bool,
     plex_label_syncer: Option<PlexLabelSyncer>,
+    plex_watch_syncer: Option<PlexWatchSyncer>,
 ) -> HandlerRegistry {
     let mut registry: HandlerRegistry = HashMap::new();
     registry.insert(
@@ -144,6 +147,12 @@ pub fn registry(
         registry.insert(
             "sync_plex_labels".to_string(),
             Arc::new(SyncPlexLabelsTask::new(syncer)),
+        );
+    }
+    if let Some(syncer) = plex_watch_syncer {
+        registry.insert(
+            "sync_plex_watch_state".to_string(),
+            Arc::new(SyncPlexWatchStateTask::new(syncer)),
         );
     }
     registry
