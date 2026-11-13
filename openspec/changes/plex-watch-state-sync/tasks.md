@@ -15,7 +15,7 @@
 - [x] 2.5 `it_should_unwatch_an_episode_before_saving_a_rewatch_position` — video unwatched at 600s, episode watched ⇒ `unscrobble` then `progress:{key}:600000`.
 - [x] 2.6 `it_should_pull_an_episode_unwatched_in_plex` — agreed Watched, episode unplayed ⇒ video unwatched at 0.
 - [x] 2.7 `it_should_push_a_video_unplayed_after_being_watched` — agreed Watched, video unwatched at 0 ⇒ `unscrobble`.
-- [ ] 2.8 `it_should_bring_every_copy_in_line_with_a_plex_change` — channel + playlist copies, channel episode watched in Plex ⇒ both copies watched and the playlist episode scrobbled in one sync.
+- [x] 2.8 `it_should_bring_every_copy_in_line_with_a_plex_change` — channel + playlist copies, channel episode watched in Plex ⇒ both copies watched and the playlist episode scrobbled in one sync.
 - [ ] 2.9 `it_should_not_echo_a_pushed_change` — a second sync after a push makes no mutation and no video change.
 - [ ] 2.10 `it_should_keep_the_most_recently_played_side_when_both_changed` — Plex later ⇒ pull; yarrtube later ⇒ push.
 - [ ] 2.11 `it_should_seed_from_whichever_side_was_played_on_the_first_sync` — no rows: Plex-only watch pulled, yarrtube-only watch pushed, both unplayed ⇒ nothing.

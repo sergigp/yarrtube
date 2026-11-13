@@ -26,7 +26,21 @@ pub fn merge(local: WatchSide, remote: WatchSide, agreed: WatchProgress) -> Merg
         MergeOutcome::InSync(local.progress)
     } else if remote.progress == agreed {
         MergeOutcome::Push(local.progress)
-    } else {
+    } else if local.progress == agreed || remote.changed_later_than(&local) {
         MergeOutcome::Pull(remote.progress)
+    } else {
+        MergeOutcome::Push(local.progress)
+    }
+}
+
+impl WatchSide {
+    /// Whether this side changed after `other`; a side with no known time of
+    /// change never did.
+    fn changed_later_than(&self, other: &WatchSide) -> bool {
+        match (self.changed_at, other.changed_at) {
+            (Some(mine), Some(theirs)) => mine > theirs,
+            (Some(_), None) => true,
+            (None, _) => false,
+        }
     }
 }

@@ -5,7 +5,7 @@ use crate::domain::services::{
     VideoWatchStateUpdaterApi,
 };
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, WatchProgress};
+use crate::domain::video::{Video, VideoId, WatchProgress, YoutubeVideoId};
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_episode_watch_repository::EpisodeWatchRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -141,13 +141,13 @@ impl PlexWatchSyncer {
     /// Copies each pulled state to its video (and every copy of it);
     /// whether anything was pulled.
     fn pull(&self, merged: &[(Video, &PlexEpisode, MergeOutcome)]) -> anyhow::Result<bool> {
-        let pulls: Vec<(&Video, &PlexEpisode, WatchProgress)> = merged
-            .iter()
-            .filter_map(|(video, episode, outcome)| match outcome {
-                MergeOutcome::Pull(progress) => Some((video, *episode, *progress)),
-                _ => None,
-            })
-            .collect();
+        let pulls =
+            newest_per_youtube_video(merged.iter().filter_map(|(video, episode, outcome)| {
+                match outcome {
+                    MergeOutcome::Pull(progress) => Some((video, *episode, *progress)),
+                    _ => None,
+                }
+            }));
         let now = self.clock.now();
         pulls.iter().try_for_each(|(video, episode, progress)| {
             self.video_watch_state_updater
@@ -207,6 +207,28 @@ impl PlexWatchSyncer {
                 .mark_unwatched(&episode.rating_key),
         }
     }
+}
+
+/// One pull per YouTube video: the one whose episode Plex played last, so
+/// copies changed differently in Plex end up as the latest change.
+fn newest_per_youtube_video<'a>(
+    pulls: impl Iterator<Item = (&'a Video, &'a PlexEpisode, WatchProgress)>,
+) -> Vec<(&'a Video, &'a PlexEpisode, WatchProgress)> {
+    pulls
+        .fold(
+            HashMap::<&YoutubeVideoId, (&Video, &PlexEpisode, WatchProgress)>::new(),
+            |mut newest, pull| {
+                let played_later = |kept: &(&Video, &PlexEpisode, WatchProgress)| {
+                    pull.1.watch.last_viewed_at > kept.1.watch.last_viewed_at
+                };
+                if newest.get(&pull.0.youtube_id).is_none_or(played_later) {
+                    newest.insert(&pull.0.youtube_id, pull);
+                }
+                newest
+            },
+        )
+        .into_values()
+        .collect()
 }
 
 fn local_side(video: &Video) -> WatchSide {

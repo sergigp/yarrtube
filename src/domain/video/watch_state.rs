@@ -58,7 +58,7 @@ impl WatchState {
 
     /// The latest of when it was watched and when it was last played.
     pub fn changed_at(&self) -> Option<DateTime<Utc>> {
-        None
+        self.watched_at.max(self.last_played_at)
     }
 
     /// The state Plex reports, played at `played_at`: watched ⇒ watched and

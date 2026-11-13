@@ -1,7 +1,8 @@
 use super::*;
 use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::channel_video::ChannelVideo;
-use crate::domain::playlist::PlaylistPath;
+use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
+use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::plex::PlexWatchState;
 use crate::domain::plex_watch::EpisodeWatch;
 use crate::domain::services::{
@@ -20,8 +21,12 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::{
 use crate::infrastructure::repositories::sqlite_episode_watch_repository::{
     EpisodeWatchRepository, SqliteEpisodeWatchRepository,
 };
-use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
-use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_playlist_repository::{
+    PlaylistRepository, SqlitePlaylistRepository,
+};
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+    PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+};
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
@@ -282,6 +287,53 @@ fn it_should_push_a_video_unplayed_after_being_watched() {
     );
 }
 
+#[test]
+fn it_should_bring_every_copy_in_line_with_a_plex_change() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_location("21", "/plex/videos/music")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_watched(an_hour_ago()))
+            .with_episode("21", "201", &playlist_plex_file("S01E001 - One.mp4"), &[])
+            .with_episode_watch("201", plex_in_progress(60_000, two_hours_ago())),
+    );
+    let channel_copy = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
+    let playlist_copy = seed_playlist_video(&db, "yt1", "S01E001 - One.mp4");
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    let watched = WatchState {
+        watched_at: Some(an_hour_ago()),
+        position: PlaybackPosition::start(),
+        last_played_at: Some(an_hour_ago()),
+    };
+    assert_eq!(
+        (
+            watch_state(&db, &channel_copy),
+            watch_state(&db, &playlist_copy)
+        ),
+        (watched, watched)
+    );
+    assert_eq!(plex.mutations(), vec!["scrobble:201".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        by_video_id(vec![
+            agreed(&channel_copy, "101", WatchProgress::Watched),
+            agreed(&playlist_copy, "201", WatchProgress::Watched),
+        ])
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
@@ -409,6 +461,46 @@ fn plex_watched(at: DateTime<Utc>) -> PlexWatchState {
     }
 }
 
+/// A copy of `youtube_id` in `my_playlist()`, downloaded to
+/// `Season 1/<file_name>`.
+fn seed_playlist_video(db: &TestDatabase, youtube_id: &str, file_name: &str) -> Video {
+    let playlist_repository = SqlitePlaylistRepository::new(db.database());
+    if playlist_repository
+        .find(&my_playlist_id())
+        .unwrap()
+        .is_none()
+    {
+        playlist_repository.insert(&my_playlist()).unwrap();
+    }
+    let video = Video::create(YoutubeVideoId::new(youtube_id).unwrap(), youtube_id, now())
+        .mark_downloaded(
+            Quality::High,
+            format!("Season 1/{file_name}"),
+            None,
+            None,
+            now(),
+        );
+    SqliteVideoRepository::new(db.database())
+        .insert(&video)
+        .unwrap();
+    SqlitePlaylistVideoRepository::new(db.database())
+        .save(&PlaylistVideo::create(
+            my_playlist_id(),
+            video.id.clone(),
+            1,
+            now(),
+        ))
+        .unwrap();
+    video
+}
+
+/// `rows` in the order the repository lists them.
+fn by_video_id(rows: Vec<EpisodeWatch>) -> Vec<EpisodeWatch> {
+    let mut rows = rows;
+    rows.sort_by(|a, b| a.video_id.as_str().cmp(b.video_id.as_str()));
+    rows
+}
+
 fn agreed(video: &Video, rating_key: &str, progress: WatchProgress) -> EpisodeWatch {
     EpisodeWatch {
         video_id: video.id.clone(),
@@ -420,6 +512,28 @@ fn agreed(video: &Video, rating_key: &str, progress: WatchProgress) -> EpisodeWa
 /// Where Plex sees `my_channel()`'s episode `file_name`.
 fn plex_file(file_name: &str) -> String {
     format!("/plex/videos/creators/somechannel/Season 2023/{file_name}")
+}
+
+/// Where Plex sees `my_playlist()`'s episode `file_name`.
+fn playlist_plex_file(file_name: &str) -> String {
+    format!("/plex/videos/music/chill/Season 1/{file_name}")
+}
+
+fn my_playlist_id() -> PlaylistId {
+    PlaylistId::new("PL1").unwrap()
+}
+
+fn my_playlist() -> Playlist {
+    Playlist::create(
+        my_playlist_id(),
+        PlaylistName::new("Chill").unwrap(),
+        PlaylistPath::new("music/chill").unwrap(),
+        Quality::High,
+        PlaylistKind::YoutubeLinked,
+        false,
+        ReconcileInterval::default_interval(),
+        now(),
+    )
 }
 
 fn my_channel_id() -> ChannelHandle {
