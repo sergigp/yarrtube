@@ -1,8 +1,10 @@
 use super::*;
 use crate::application::http::test_support::categorization_resetter;
 use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryName, CategoryPrompt};
+use crate::domain::llm_server::Effort;
 use crate::domain::preferences::{
-    CategorizationSettings, Preferences, ResolvedPreferences, SummarySettings,
+    AiProvider, AnthropicSettings, CategorizationSettings, Preferences, ResolvedPreferences,
+    SummarySettings,
 };
 use crate::domain::video::{StepState, Video, VideoId, YoutubeVideoId};
 use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
@@ -1308,6 +1310,67 @@ async fn it_should_read_the_anthropic_defaults_and_availability() {
             anthropic_categorization_model: "claude-haiku-5-5".to_string(),
             anthropic_categorization_effort: "medium".to_string(),
             ..all_on_response()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_save_the_anthropic_provider_and_settings() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let ollama_settings = Preferences {
+        summaries: SummarySettings {
+            model: SummaryModel::new("gemma3:4b").unwrap(),
+            ..SummarySettings::default()
+        },
+        ..Preferences::default()
+    };
+    repository.save(&ollama_settings).unwrap();
+    let preferences_updater = PreferencesUpdater::new(
+        repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(CategoryLock::default()),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        categorization_resetter(db.database()),
+        true,
+    );
+    let request = UpdatePreferencesRequest {
+        ai_provider: Some("anthropic".to_string()),
+        anthropic_summaries_model: Some("claude-sonnet-5-5".to_string()),
+        anthropic_summaries_effort: Some("high".to_string()),
+        anthropic_categorization_model: Some("claude-opus-5-5".to_string()),
+        anthropic_categorization_effort: Some("low".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            summaries_model: "gemma3:4b".to_string(),
+            ai_provider: "anthropic".to_string(),
+            anthropic_available: true,
+            anthropic_summaries_model: "claude-sonnet-5-5".to_string(),
+            anthropic_summaries_effort: "high".to_string(),
+            anthropic_categorization_model: "claude-opus-5-5".to_string(),
+            anthropic_categorization_effort: "low".to_string(),
+            ..all_on_response()
+        })
+    );
+    assert_eq!(
+        repository.find().unwrap(),
+        Some(Preferences {
+            ai_provider: AiProvider::Anthropic,
+            anthropic: AnthropicSettings {
+                summaries_model: SummaryModel::new("claude-sonnet-5-5").unwrap(),
+                summaries_effort: Effort::High,
+                categorization_model: CategorizationModel::new("claude-opus-5-5").unwrap(),
+                categorization_effort: Effort::Low,
+            },
+            ..ollama_settings
         })
     );
 }

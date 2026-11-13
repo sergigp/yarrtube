@@ -141,11 +141,24 @@ impl Preferences {
             home_show_latest: change.home_show_latest.unwrap_or(self.home_show_latest),
             theme: change.theme.unwrap_or(self.theme),
             ai_enabled: change.ai_enabled.unwrap_or(self.ai_enabled),
-            ai_provider: self.ai_provider,
+            ai_provider: change.ai_provider.unwrap_or(self.ai_provider),
             ollama_url: change.ollama_url.unwrap_or(self.ollama_url),
             summaries,
             categorization,
-            anthropic: self.anthropic,
+            anthropic: AnthropicSettings {
+                summaries_model: change
+                    .anthropic_summaries_model
+                    .unwrap_or(self.anthropic.summaries_model),
+                summaries_effort: change
+                    .anthropic_summaries_effort
+                    .unwrap_or(self.anthropic.summaries_effort),
+                categorization_model: change
+                    .anthropic_categorization_model
+                    .unwrap_or(self.anthropic.categorization_model),
+                categorization_effort: change
+                    .anthropic_categorization_effort
+                    .unwrap_or(self.anthropic.categorization_effort),
+            },
         }
         .ensure_ai_has_url()
     }

@@ -4,10 +4,6 @@ use std::fmt;
 /// How much an Anthropic model reasons before answering: more is slower and
 /// costs more tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[expect(
-    dead_code,
-    reason = "walking skeleton: constructed once parsing is implemented"
-)]
 pub enum Effort {
     Low,
     #[default]
@@ -16,8 +12,13 @@ pub enum Effort {
 }
 
 impl Effort {
-    pub fn new(_value: &str) -> Result<Self, ValidationError> {
-        Ok(Self::default())
+    pub fn new(value: &str) -> Result<Self, ValidationError> {
+        match value {
+            "low" => Ok(Self::Low),
+            "medium" => Ok(Self::Medium),
+            "high" => Ok(Self::High),
+            _ => Ok(Self::default()),
+        }
     }
 
     pub fn as_str(&self) -> &'static str {

@@ -4,10 +4,6 @@ use std::fmt;
 /// Where every AI feature runs: a user-hosted Ollama server, or Anthropic's
 /// API with the key from the environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[expect(
-    dead_code,
-    reason = "walking skeleton: constructed once parsing is implemented"
-)]
 pub enum AiProvider {
     #[default]
     Ollama,
@@ -15,8 +11,11 @@ pub enum AiProvider {
 }
 
 impl AiProvider {
-    pub fn new(_value: &str) -> Result<Self, ValidationError> {
-        Ok(Self::default())
+    pub fn new(value: &str) -> Result<Self, ValidationError> {
+        match value {
+            "anthropic" => Ok(Self::Anthropic),
+            _ => Ok(Self::Ollama),
+        }
     }
 
     pub fn as_str(&self) -> &'static str {

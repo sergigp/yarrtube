@@ -1,7 +1,8 @@
-use crate::domain::llm_server::OllamaUrl;
+use crate::domain::llm_server::{Effort, OllamaUrl};
 use crate::domain::preferences::{
-    CategorizationModel, CategorizationPrompt, CategorizationSettings, ContextLength, Preferences,
-    SummaryModel, SummaryPrompt, SummarySettings, Temperature, Theme,
+    AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
+    CategorizationSettings, ContextLength, Preferences, SummaryModel, SummaryPrompt,
+    SummarySettings, Temperature, Theme,
 };
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -227,8 +228,28 @@ impl From<StoredPreferences> for Preferences {
                     .categorization_prompt
                     .map(CategorizationPrompt::from_stored),
             },
-            ai_provider: defaults.ai_provider,
-            anthropic: defaults.anthropic,
+            ai_provider: stored
+                .ai_provider
+                .and_then(|provider| AiProvider::new(&provider).ok())
+                .unwrap_or(defaults.ai_provider),
+            anthropic: AnthropicSettings {
+                summaries_model: stored
+                    .anthropic_summaries_model
+                    .and_then(|model| SummaryModel::new(model).ok())
+                    .unwrap_or(defaults.anthropic.summaries_model),
+                summaries_effort: stored
+                    .anthropic_summaries_effort
+                    .and_then(|effort| Effort::new(&effort).ok())
+                    .unwrap_or(defaults.anthropic.summaries_effort),
+                categorization_model: stored
+                    .anthropic_categorization_model
+                    .and_then(|model| CategorizationModel::new(model).ok())
+                    .unwrap_or(defaults.anthropic.categorization_model),
+                categorization_effort: stored
+                    .anthropic_categorization_effort
+                    .and_then(|effort| Effort::new(&effort).ok())
+                    .unwrap_or(defaults.anthropic.categorization_effort),
+            },
         }
     }
 }
