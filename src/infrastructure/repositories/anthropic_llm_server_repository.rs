@@ -65,15 +65,31 @@ impl AnthropicLlmServerRepository {
             .send()?
             .json()
             .context("/v1/messages didn't answer as Anthropic does")?;
-        Ok(LlmReply {
-            content: response.text(),
-            thinking: String::new(),
+        Ok(Self::reply(response))
+    }
+    /// What the model answered: refused when its safety classifiers
+    /// declined, stopped at the limit on `max_tokens`.
+    fn reply(response: MessageResponse) -> LlmReply {
+        let usage = LlmReply {
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
-            stopped_at_limit: response.stop_reason.as_deref() == Some("max_tokens"),
-            refusal: None,
-            exceeded_context: false,
-        })
+            ..LlmReply::refused("")
+        };
+        match response.stop_reason.as_deref() {
+            Some("refusal") => LlmReply {
+                refusal: Some(format!(
+                    "Anthropic declined to answer ({})",
+                    response.refusal_category().unwrap_or("no category")
+                )),
+                ..usage
+            },
+            stop_reason => LlmReply {
+                content: response.text(),
+                stopped_at_limit: stop_reason == Some("max_tokens"),
+                refusal: None,
+                ..usage
+            },
+        }
     }
 
     /// The request body: no temperature, context length or thinking, so the
@@ -131,10 +147,21 @@ struct MessageResponse {
     #[serde(default)]
     content: Vec<ContentBlock>,
     stop_reason: Option<String>,
+    stop_details: Option<StopDetails>,
     usage: Usage,
 }
 
+#[derive(Deserialize)]
+struct StopDetails {
+    category: Option<String>,
+}
+
 impl MessageResponse {
+    /// Why the safety classifiers declined, when they did.
+    fn refusal_category(&self) -> Option<&str> {
+        self.stop_details.as_ref()?.category.as_deref()
+    }
+
     /// The text blocks, joined: thinking blocks hold no answer.
     fn text(&self) -> String {
         self.content
@@ -326,6 +353,28 @@ mod tests {
                 stopped_at_limit: true,
                 refusal: None,
                 exceeded_context: false,
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_refusal_stop_as_refused() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_body(
+                r#"{"content": [], "stop_reason": "refusal", "stop_details": {"type": "refusal", "category": "cyber", "explanation": null}, "usage": {"input_tokens": 900, "output_tokens": 3}}"#,
+            )
+            .create();
+
+        let reply = repository(&server).chat(&chat()).unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply {
+                input_tokens: 900,
+                output_tokens: 3,
+                ..LlmReply::refused("Anthropic declined to answer (cyber)")
             }
         );
     }
