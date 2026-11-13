@@ -40,7 +40,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 2.19 `it_should_fall_back_per_category_without_dropping_thinking_on_anthropic`: no retry without thinking on Anthropic.
 - [x] 2.20 `it_should_count_an_own_call_limit_stop_as_a_failed_attempt_on_anthropic`: Retrying, with no `failed` verdict.
 - [x] 2.21 `it_should_wait_when_anthropic_is_unavailable_for_categorization`: the categorization waits 6 hours and keeps its attempts.
-- [ ] 2.22 Web: `it hides the provider choice without an Anthropic key`. The Provider section is unchanged without a key.
+- [x] 2.22 Web: `it hides the provider choice without an Anthropic key`. The Provider section is unchanged without a key.
 - [ ] 2.23 Web: `it saves only ai_provider when switching to Anthropic and shows its settings`. Covers the provider choice and saving it.
 - [ ] 2.24 Web: `it lists Anthropic models and marks a saved one not listed as (not available)`. Covers the Anthropic model picker.
 - [ ] 2.25 Web: `it shows Effort and Prompt only under Anthropic's Advanced and saves only the changed effort`. Covers the Effort field.

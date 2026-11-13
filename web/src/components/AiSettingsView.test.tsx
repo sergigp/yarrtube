@@ -20,6 +20,17 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
   })
 
+  it('hides the provider choice without an Anthropic key', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: false }) })
+    renderWithProviders(<AiSettingsView />)
+
+    const section = within(await screen.findByRole('group', { name: 'Provider' }))
+    expect(section.queryByRole('radiogroup', { name: 'Provider' })).not.toBeInTheDocument()
+    expect(section.getByRole('switch', { name: 'Enable AI' })).toBeInTheDocument()
+    expect(section.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
+    expect(section.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+  })
+
   it('shows the Categorization section disabled on a fresh install', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)

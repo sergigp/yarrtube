@@ -21,7 +21,7 @@ import { useSavedFlash } from '@/hooks/useSavedFlash'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 
-/** The AI page: the Ollama server and how video summaries are generated. */
+/** The AI page: the provider AI runs on, and how videos are summarized and categorized. */
 export function AiSettingsView() {
   const { data: preferences, error } = usePreferences()
 
@@ -142,7 +142,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
   return (
     <>
-      <Section title="Ollama">
+      <Section title="Provider">
         <SwitchRow
           id="ai-enabled"
           label="Enable AI"
