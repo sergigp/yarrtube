@@ -1392,6 +1392,14 @@ mod tests {
     }
 
     #[test]
+    fn it_should_have_no_anthropic_config_for_an_empty_key() {
+        let configs = [None, Some(""), Some("  ")]
+            .map(|key| anthropic_config_from(key.map(str::to_string), None).is_some());
+
+        assert_eq!(configs, [false, false, false]);
+    }
+
+    #[test]
     fn it_should_request_the_label_sync_at_startup_only_if_plex_is_configured() {
         let queued: Vec<Vec<String>> = [
             None,
