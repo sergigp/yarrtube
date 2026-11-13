@@ -12,8 +12,9 @@ Steps, all cached in evals/summaries/results/<run-id>/ so an interrupted run res
   4. report:   per-model table + every failed critical fact
 
 Prompts come from prompts/summaries/<version>.md. Needs Ollama (OLLAMA_URL,
-default http://localhost:11434) and each case's local subtitles.srt
-(gitignored). Docs: evals/summaries/README.md.
+default http://localhost:11434), or YARRTUBE_ANTHROPIC_API_KEY with
+--provider anthropic, and each case's local subtitles.srt (gitignored).
+Docs: evals/summaries/README.md.
 """
 import argparse, datetime, glob, hashlib, json, os, re, sys, time, unicodedata, urllib.request
 
@@ -26,6 +27,10 @@ CHARS_PER_TOKEN = {"en": 4.3}  # measured on the golden set; other languages ~3.
 LANG = {"es": "Spanish", "en": "English", "ca": "Catalan", "fr": "French", "de": "German"}
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen3:8b")
 JUDGE_CTX = 4096  # the judge reads one summary + facts: short, so a bigger model fits
+PROVIDERS = ("ollama", "anthropic")
+EFFORTS = ("low", "medium", "high")
+ANTHROPIC_KEY = "YARRTUBE_ANTHROPIC_API_KEY"
+ANTHROPIC_MAX_OUT = 16000  # a summary call's max_tokens: thinking + answer
 
 # --- transcript --------------------------------------------------------------
 
@@ -115,6 +120,40 @@ def chat(model, system, user, fmt=None, think=False, ctx=NUM_CTX, max_out=None, 
                   "out": r.get("eval_count")}
 
 
+# --- anthropic ---------------------------------------------------------------
+
+def anthropic_key():
+    """The Anthropic API key, or the run stops before its first call."""
+    key = os.environ.get(ANTHROPIC_KEY)
+    if not key:
+        sys.exit(f"--provider anthropic needs {ANTHROPIC_KEY} set")
+    return key
+
+
+def anthropic_chat(model, system, user, fmt, effort, max_out, timeout):
+    """One POST /v1/messages call, shaped as the app's Anthropic adapter sends it:
+    (answer text, stats), or (None, stats with `error`) for a rejected call."""
+    raise NotImplementedError("anthropic_chat")
+
+
+class CallFailed(Exception):
+    """A call the provider rejected: the summary becomes an error row."""
+
+    def __init__(self, stats):
+        super().__init__(stats["error"])
+        self.stats = stats
+
+
+def generate(model, system, user, provider="ollama", effort="medium"):
+    """One summary call to the run's provider: (text, stats)."""
+    if provider != "anthropic":
+        return chat(model, system, user)
+    text, st = anthropic_chat(model, system, user, None, effort, ANTHROPIC_MAX_OUT, 600)
+    if text is None:
+        raise CallFailed(st)
+    return text, st
+
+
 # --- generation ----------------------------------------------------------------
 
 PROMPTS = os.path.join(os.path.dirname(os.path.dirname(ROOT)), "prompts", "summaries")
@@ -138,7 +177,7 @@ def chapter_lines(chapters, start=None, end=None):
     return "\n".join(f"{clock(c['start_seconds'])} {c['title']}" for c in sel)
 
 
-def summarize(model, case, lines, prompt):
+def summarize(model, case, lines, prompt, provider="ollama", effort="medium"):
     lang = LANG.get(case["lang"], case["lang"])
     chapters = case.get("chapters", [])
     head = {"title": case["title"], "minutes": case["duration_s"] // 60, "lang": lang}
@@ -151,7 +190,7 @@ def summarize(model, case, lines, prompt):
     if len(pieces) == 1:
         user = fill(prompt["user"], **head, chapters=chapter_block("chapters"),
                     transcript="\n".join(t for _, t in lines))
-        text, st = chat(model, fill(prompt["system"], lang=lang), user)
+        text, st = generate(model, fill(prompt["system"], lang=lang), user, provider, effort)
         return text, [st]
     parts, calls = [], []
     for n, p in enumerate(pieces, 1):
@@ -159,12 +198,12 @@ def summarize(model, case, lines, prompt):
         user = fill(prompt["map user"], **head, part=n, parts=len(pieces), span=span,
                     chapters=chapter_block("map chapters", p[0][0], p[-1][0]),
                     transcript="\n".join(t for _, t in p))
-        text, st = chat(model, fill(prompt["map system"], lang=lang), user)
+        text, st = generate(model, fill(prompt["map system"], lang=lang), user, provider, effort)
         parts.append(fill(prompt["reduce part"], part=n, span=span, summary=text))
         calls.append(st)
     user = fill(prompt["reduce user"], **head, chapters=chapter_block("chapters"),
                 part_summaries="\n\n".join(parts))
-    text, st = chat(model, fill(prompt["reduce system"], lang=lang), user)
+    text, st = generate(model, fill(prompt["reduce system"], lang=lang), user, provider, effort)
     return text, calls + [st]
 
 
@@ -437,6 +476,9 @@ def main():
     ap.add_argument("--judge", default="local",
                     help=f"'local' ({JUDGE_MODEL} via Ollama) or a name for an external judge, e.g. "
                          "'claude-sonnet': writes blind inputs, ingests answers on the next run")
+    ap.add_argument("--provider", choices=PROVIDERS, help="who runs the models, for a new run (default ollama)")
+    ap.add_argument("--effort", choices=EFFORTS,
+                    help="output_config.effort with --provider anthropic, for a new run (default medium)")
     a = ap.parse_args()
     judge_name = JUDGE_MODEL if a.judge == "local" else a.judge
     if a.check:
@@ -449,11 +491,18 @@ def main():
     os.makedirs(out, exist_ok=True)
     meta_path = os.path.join(out, "run.json")
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {
-        "models": a.model, "prompt_version": a.prompt, "num_ctx": NUM_CTX}
+        "models": a.model, "prompt_version": a.prompt, "num_ctx": NUM_CTX,
+        "provider": a.provider or "ollama", "effort": a.effort or "medium"}
+    meta.setdefault("provider", "ollama")  # runs from before --provider
+    for flag in ("provider", "effort"):  # a resumed run keeps its own
+        if getattr(a, flag) and getattr(a, flag) != meta.get(flag):
+            sys.exit(f"run {run_id} uses {flag} {meta.get(flag)}, not {getattr(a, flag)}")
     meta.pop("judge", None)  # judges are per report now
     meta["models"] = list(dict.fromkeys(meta["models"] + a.model))
     if not meta["models"]:
         sys.exit("give at least one --model")
+    if meta["provider"] == "anthropic":
+        anthropic_key()
     json.dump(meta, open(meta_path, "w"), indent=2)
     cases = load_cases(a.case)
     prompt = load_prompt(meta["prompt_version"])  # a resumed run keeps its own prompt
@@ -466,7 +515,13 @@ def main():
         for slug, case, lines in cases:
             if (slug, model) in done:
                 continue
-            text, calls = summarize(model, case, lines, prompt)
+            try:
+                text, calls = summarize(model, case, lines, prompt, meta["provider"], meta.get("effort"))
+            except CallFailed as e:
+                append(s_path, {"case": slug, "model": model, "summary": "", "error": str(e), "calls": [e.stats],
+                                "seconds": e.stats["s"], "checks": {}})
+                print(f"failed    {model:18} {slug:22} {e}", flush=True)
+                continue
             append(s_path, {"case": slug, "model": model, "summary": text, "calls": calls,
                             "seconds": round(sum(c["s"] for c in calls), 1), "checks": checks(text, case)})
             print(f"generated {model:18} {slug:22} {sum(c['s'] for c in calls):6.0f}s  {len(calls)} call(s)", flush=True)
@@ -474,12 +529,13 @@ def main():
     judged = {(r["case"], r["model"]) for r in jsonl(j_path)}
     facts = {slug: case["summary"]["facts"] for slug, case, _ in cases}
     f_path = os.path.join(out, f"faithfulness-{slug_judge}.jsonl")
+    written = [r for r in jsonl(s_path) if "error" not in r]  # a failed call left nothing to judge
     if a.judge != "local":
-        facts_done = external_judge(out, jsonl(s_path), facts, judged, j_path)
-        faith_done = external_faithfulness(out, jsonl(s_path), cases, f_path)
+        facts_done = external_judge(out, written, facts, judged, j_path)
+        faith_done = external_faithfulness(out, written, cases, f_path)
         if not (facts_done and faith_done):
             return
-    for r in jsonl(s_path) if a.judge == "local" else []:
+    for r in written if a.judge == "local" else []:
         if (r["case"], r["model"]) in judged or r["case"] not in facts:
             continue
         verdicts, st = judge(r["summary"], facts[r["case"]])
@@ -544,6 +600,10 @@ def render(run_id, meta, judge_name, cases, summaries, judgments, faith=()):
     if agree + len(disagree):
         out += ["", f"## Judge vs human verdicts: {agree}/{agree + len(disagree)} agree", ""]
         out += [f"- {m} · {slug} · `{fid}`: human {h}, judge {j}" for m, slug, fid, h, j in disagree]
+    failed = [(m, slug, s["error"]) for (slug, m), s in sorted(S.items()) if "error" in s]
+    if failed:
+        out += ["", "## Summaries the provider rejected", ""]
+        out += [f"- {m} · {slug}: {error}" for m, slug, error in failed]
     out += ["", "## Code checks failed", ""]
     for (slug, model), s in sorted(S.items()):
         bad = [k for k, ok in s["checks"].items() if not ok]
