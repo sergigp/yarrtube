@@ -364,8 +364,11 @@ def render(run_id, meta, prompts, videos, labels, rows):
     by_id = {v["id"]: v for v in videos}
     categories = list(prompts["categories"])
     labeled = {i for i, l in labels.items() if l is not None}
-    settings = (f"model `{meta['model']}`, thinking {'on' if meta['think'] else 'off'}, prompt {meta['prompt_version']}, "
-                f"temperature {meta['temperature']}, num_ctx {meta['num_ctx']}, "
+    model = (f"model `{meta['model']}` on Anthropic, effort {meta['effort']}, adaptive thinking"
+             if provider(meta) == "anthropic" else
+             f"model `{meta['model']}` on Ollama, thinking {'on' if meta['think'] else 'off'}, "
+             f"temperature {meta['temperature']}, num_ctx {meta['num_ctx']}")
+    settings = (f"{model}, prompt {meta['prompt_version']}, "
                 f"max output {meta['max_output'] or 'scaled to the categories asked'}, "
                 + ("one call per video (--batch)" if meta.get("batch") else "one call per video + category")
                 + (", each category left without an answer asked alone" if meta.get("fallback") else ""))
@@ -416,6 +419,7 @@ def render(run_id, meta, prompts, videos, labels, rows):
         out += ["", "## Errors: no usable answer", ""] + [line(r) for r in errors]
     out += fallbacks(rows)
     out += speed(meta, rows, len(categories))
+    out += ["", "## Tokens", "", summaries_eval.usage_line(meta["model"], list(distinct_calls(rows).values()))]
     return "\n".join(out) + "\n"
 
 
@@ -433,16 +437,21 @@ def fallbacks(rows):
             f"({', '.join(sorted({c.get('error', '') for c in failed_calls.values()}))})."]
 
 
+def distinct_calls(rows):
+    """(video, call) -> stats, each model call once: a --batch call's rows share its stats."""
+    calls = {}
+    for r in rows:
+        calls[(r["video"], r.get("call") or r["category"])] = r
+        if "batch_call" in r:  # the call that fell back, counted once
+            calls[(r["video"], r["batch_call"]["call"])] = r["batch_call"]
+    return calls
+
+
 def speed(meta, rows, categories):
     """Time and output tokens per video, comparable between --batch and not.
     Output tokens don't depend on the hardware: they are what to compare
     across machines (time = tokens / the machine's tokens per second)."""
-    calls = {}  # (video, call) -> stats; a --batch call's rows share its stats
-    for r in rows:
-        key = (r["video"], r.get("call") or r["category"])
-        calls[key] = r
-        if "batch_call" in r:  # the call that fell back, counted once
-            calls[(r["video"], r["batch_call"]["call"])] = r["batch_call"]
+    calls = distinct_calls(rows)
     per_video = {}
     for (video, _), r in calls.items():
         seconds, tokens = per_video.get(video, (0.0, 0))
@@ -457,8 +466,9 @@ def speed(meta, rows, categories):
     rate = out_tokens / out_seconds if out_seconds else 0
     return ["", "## Speed", "",
             f"On the {len(complete)} videos asked about every category: {seconds:.1f}s and {tokens:.0f} output tokens "
-            f"per video on average ({rate:.1f} tokens/s here, input included), {len(calls)} calls in all.",
-            f"At 11 tokens/s (the MacBook Air with thinking) that is about {tokens / 11 / 60:.1f} min per video."]
+            f"per video on average ({rate:.1f} tokens/s here, input included), {len(calls)} calls in all."] + (
+        [f"At 11 tokens/s (the MacBook Air with thinking) that is about {tokens / 11 / 60:.1f} min per video."]
+        if provider(meta) == "ollama" else [])
 
 
 # --- run ---------------------------------------------------------------------

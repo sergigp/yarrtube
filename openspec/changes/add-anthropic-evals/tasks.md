@@ -10,14 +10,14 @@ red-green cycle.
 
 ## 2. Behaviour
 
-- [ ] 2.1 Summaries with `--provider anthropic`: cut parts with a 131072-token context, send `max_tokens` 16000, read the text blocks as the answer, and record `in`/`out` from `usage`. Verify with `--provider anthropic --model claude-haiku-5-5 --case browser-tabs`: a summary row is written and the call stats hold tokens.
-- [ ] 2.2 Categories with `--provider anthropic`: send the answer's JSON schema as `output_config.format` and the eval's output cap as `max_tokens`. Treat `stop_reason: max_tokens` as "hit the output limit" and `refusal` as an error row. Verify with `--provider anthropic --model claude-haiku-5-5 --batch --limit 2`: verdict rows are written.
-- [ ] 2.3 Show provider and effort in both reports, and print the run's input and output token totals with an estimated cost from a price table in the script. Verify the report header and the printed totals of the runs from 2.1 and 2.2.
+- [x] 2.1 Summaries with `--provider anthropic`: cut parts with a 131072-token context, send `max_tokens` 16000, read the text blocks as the answer, and record `in`/`out` from `usage`. Verify with `--provider anthropic --model claude-haiku-5-5 --case browser-tabs`: a summary row is written and the call stats hold tokens.
+- [x] 2.2 Categories with `--provider anthropic`: send the answer's JSON schema as `output_config.format` and the eval's output cap as `max_tokens`. Treat `stop_reason: max_tokens` as "hit the output limit" and `refusal` as an error row. Verify with `--provider anthropic --model claude-haiku-5-5 --batch --limit 2`: verdict rows are written.
+- [x] 2.3 Show provider and effort in both reports, and print the run's input and output token totals with an estimated cost from a price table in the script. Verify the report header and the printed totals of the runs from 2.1 and 2.2.
 
 ## 3. Infrastructure adapters
 
-- [ ] 3.1 Implement `anthropic_chat` as `POST https://api.anthropic.com/v1/messages` with headers `x-api-key`, `anthropic-version` and `content-type`. Send no `temperature` and no `thinking`. Verify by hand with the 2.1 run, and by inspecting one logged request body.
-- [ ] 3.2 Error handling in `anthropic_chat`:
+- [x] 3.1 Implement `anthropic_chat` as `POST https://api.anthropic.com/v1/messages` with headers `x-api-key`, `anthropic-version` and `content-type`. Send no `temperature` and no `thinking`. Verify by hand with the 2.1 run, and by inspecting one logged request body.
+- [x] 3.2 Error handling in `anthropic_chat`:
   - Stop the run with a resumable message on: a connect error, 401/403, 404 (unknown model), or a 400 whose message says the credit balance is too low.
   - Return an error row on: any other 400, including "prompt is too long".
   - Raise on 429 / 5xx / 529, as the Ollama path does for non-400s.
