@@ -768,6 +768,32 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_never_print_the_api_key() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_status(401)
+            .with_body(error_body("authentication_error", "invalid x-api-key"))
+            .create();
+        let config = AnthropicConfig {
+            api_url: server.url(),
+            api_key: AnthropicApiKey::new("sk-ant-secret".to_string()),
+        };
+
+        let printed = [
+            format!("{config:?}"),
+            AnthropicLlmServerRepository::new(config)
+                .chat(&chat())
+                .map_or_else(|e| format!("{e:?}"), |_| String::new()),
+        ];
+
+        assert_eq!(
+            printed.map(|text| text.contains("sk-ant-secret")),
+            [false, false]
+        );
+    }
+
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {
         AnthropicLlmServerRepository::new(AnthropicConfig {
             api_url: server.url(),

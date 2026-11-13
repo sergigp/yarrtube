@@ -67,7 +67,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 3.14 `it_should_fail_on_an_overloaded_api_as_a_server_fault`
 - [x] 3.15 `it_should_list_models_across_pages`
 - [x] 3.16 `it_should_fail_the_check_on_an_answer_that_isnt_the_api`
-- [ ] 3.17 `it_should_never_print_the_api_key`
+- [x] 3.17 `it_should_never_print_the_api_key`
 - [ ] 3.18 `it_should_list_models_and_answer_on_the_real_api`: contract test, `#[ignore = "real Anthropic: run scripts/run-tests.sh --contract"]`. Make `--contract` run it only when `YARRTUBE_ANTHROPIC_API_KEY` is set, and skip it otherwise with a message saying why.
 
 `RoutingLlmServerRepository`:
