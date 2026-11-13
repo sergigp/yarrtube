@@ -9,6 +9,7 @@ use crate::domain::services::{
     CategoryVideoCollector, PlexEpisodeFinder, VideoOwnerFinder, VideoWatchStateUpdater,
 };
 use crate::domain::shared::{Quality, ReconcileInterval};
+use crate::domain::task::{ScheduledTask, TaskStatus};
 use crate::domain::video::{PlaybackPosition, Video, WatchProgress, WatchState, YoutubeVideoId};
 use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
@@ -631,6 +632,36 @@ fn it_should_push_the_others_if_plex_rejects_one() {
     );
 }
 
+#[test]
+fn it_should_retry_later_if_plex_is_unreachable() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    let video = seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(an_hour_ago()),
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        Arc::new(FakePlexLibraryRepository::failing()),
+        episode_watch_repository.clone(),
+        task_repository.clone(),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        watch_state(&db, &video),
+        WatchState::unwatched().mark_watched(an_hour_ago())
+    );
+    assert_eq!(episode_watch_repository.list().unwrap(), vec![]);
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_sync(1, now() + Duration::minutes(5))]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
@@ -683,6 +714,20 @@ fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {
         db.database(),
         Arc::new(FixedClock(now())),
     ))
+}
+
+/// The watch sync pending as task `id`, due at `run_at`.
+fn pending_sync(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
+    ScheduledTask {
+        id,
+        task: Task::SyncPlexWatchState,
+        status: TaskStatus::Pending,
+        retries: 0,
+        run_at,
+        created_at: now(),
+        updated_at: now(),
+        last_error: None,
+    }
 }
 
 /// A video of `my_channel()` downloaded to `Season 2023/<file_name>`.

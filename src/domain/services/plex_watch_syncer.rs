@@ -81,7 +81,13 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let library = self.plex_episode_finder.read_library()?;
+        let library = match self.plex_episode_finder.read_library() {
+            Ok(library) => library,
+            Err(e) => {
+                warn!(error = %e, "failed to reach Plex, retrying the watch sync later");
+                return self.request_sync(self.clock.now() + SYNC_INTERVAL);
+            }
+        };
         let rows = self.agreed_rows()?;
         self.forget_undownloaded(&rows)?;
         let merged = self.merge_videos(&library, &rows)?;
