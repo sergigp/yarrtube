@@ -45,6 +45,7 @@ const VIDEO_STEP_STATUSES_SQL: &str =
     include_str!("../../../migrations/0028_video_step_statuses.sql");
 const EVENT_RUN_AT_SQL: &str = include_str!("../../../migrations/0029_event_run_at.sql");
 const LOOKUP_INDEXES_SQL: &str = include_str!("../../../migrations/0030_lookup_indexes.sql");
+const EPISODE_WATCH_SQL: &str = include_str!("../../../migrations/0031_episode_watch.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(migrations())
@@ -89,6 +90,7 @@ fn migrations() -> Vec<M<'static>> {
         M::up(VIDEO_STEP_STATUSES_SQL),
         M::up(EVENT_RUN_AT_SQL),
         M::up(LOOKUP_INDEXES_SQL),
+        M::up(EPISODE_WATCH_SQL),
     ]
 }
 
@@ -154,6 +156,7 @@ mod tests {
                 "channels",
                 "domain_events_dead_letter",
                 "episode_labels",
+                "episode_watch",
                 "events",
                 "playlist_videos",
                 "playlists",

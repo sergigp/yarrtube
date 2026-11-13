@@ -8,12 +8,13 @@ use crate::domain::services::{
     ChannelViewSearcher, ChapterFetcher, DaemonHealthSearcher, DaemonHealthSearcherApi,
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, LlmServerSearcher,
     MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
-    PlaylistVideoReconciler, PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer,
-    PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
-    ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
-    VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
-    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
-    VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    PlaylistVideoReconciler, PlaylistViewSearcher, PlexEpisodeFinder, PlexFolderScanner,
+    PlexLabelSyncer, PlexLabelSyncerApi, PlexWatchSyncer, PlexWatchSyncerApi, PreferencesSearcher,
+    PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover, SubtitleFetcher,
+    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategorizer, VideoCategoryAssigner,
+    VideoCategoryChoiceSearcher, VideoCategoryEditor, VideoDownloader, VideoFileDeleter,
+    VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoRetrier, VideoSearcher,
+    VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -131,9 +132,20 @@ pub fn run() -> ExitCode {
     let plex_label_syncer = plex
         .clone()
         .map(|plex| plex_label_syncer(&infrastructure, plex));
-    let task_executor = Arc::new(task_executor(&infrastructure, plex_label_syncer.clone()));
-    if let Err(e) = prepare_task_queue(&infrastructure, &task_executor, plex_label_syncer.as_ref())
-    {
+    let plex_watch_syncer = plex
+        .clone()
+        .map(|plex| plex_watch_syncer(&infrastructure, plex));
+    let task_executor = Arc::new(task_executor(
+        &infrastructure,
+        plex_label_syncer.clone(),
+        plex_watch_syncer.clone(),
+    ));
+    if let Err(e) = prepare_task_queue(
+        &infrastructure,
+        &task_executor,
+        plex_label_syncer.as_ref(),
+        plex_watch_syncer.as_ref(),
+    ) {
         error!(error = %e, "failed to prepare the task queue");
         return ExitCode::FAILURE;
     }
@@ -488,11 +500,12 @@ fn run_startup_youtube_api_key_check() {
 
 /// Must run before the task executor starts polling: requeues tasks a
 /// previous run left `running`, seeds the recurring yt-dlp self-update and,
-/// with Plex configured, requests a Plex label sync.
+/// with Plex configured, requests a Plex label sync and a Plex watch sync.
 fn prepare_task_queue(
     infrastructure: &InfrastructureContainer,
     task_executor: &TaskExecutor,
     plex_label_syncer: Option<&PlexLabelSyncer>,
+    plex_watch_syncer: Option<&PlexWatchSyncer>,
 ) -> Result<()> {
     task_executor
         .recover_stuck_tasks()
@@ -509,6 +522,10 @@ fn prepare_task_queue(
         .map(|syncer| syncer.request_sync(infrastructure.clock.now()))
         .transpose()
         .context("failed to request the Plex label sync")?;
+    plex_watch_syncer
+        .map(|syncer| syncer.request_sync(infrastructure.clock.now()))
+        .transpose()
+        .context("failed to request the Plex watch sync")?;
     Ok(())
 }
 
@@ -612,16 +629,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         ),
         channel_video_reconciler: channel_video_reconciler(infrastructure),
         directory_searcher: DirectorySearcher::new(infrastructure.directory_repository.clone()),
-        video_watch_state_updater: VideoWatchStateUpdater::new(
-            infrastructure.video_repository.clone(),
-            infrastructure.channel_repository.clone(),
-            infrastructure.channel_video_repository.clone(),
-            infrastructure.playlist_repository.clone(),
-            infrastructure.playlist_video_repository.clone(),
-            infrastructure.clock.clone(),
-            infrastructure.category_repository.clone(),
-            category_video_collector(infrastructure),
-        ),
+        video_watch_state_updater: video_watch_state_updater(infrastructure),
         subtitle_reader: SubtitleReader::new(
             infrastructure.video_repository.clone(),
             video_owner_finder(infrastructure),
@@ -771,27 +779,66 @@ fn plex_label_syncer(
     plex: PlexIntegration,
 ) -> PlexLabelSyncer {
     PlexLabelSyncer::new(
-        plex.repository,
+        plex.repository.clone(),
         infrastructure.episode_labels_repository.clone(),
         infrastructure.category_playlist_repository.clone(),
         infrastructure.video_categories_repository.clone(),
         infrastructure.category_repository.clone(),
         infrastructure.video_repository.clone(),
-        video_owner_finder(infrastructure),
+        plex_episode_finder(infrastructure, plex),
         infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
+    )
+}
+
+fn plex_episode_finder(
+    infrastructure: &InfrastructureContainer,
+    plex: PlexIntegration,
+) -> PlexEpisodeFinder {
+    PlexEpisodeFinder::new(
+        plex.repository,
+        video_owner_finder(infrastructure),
         videos_path(),
         plex.plex_videos_path,
+    )
+}
+
+fn plex_watch_syncer(
+    infrastructure: &InfrastructureContainer,
+    plex: PlexIntegration,
+) -> PlexWatchSyncer {
+    PlexWatchSyncer::new(
+        plex.repository.clone(),
+        plex_episode_finder(infrastructure, plex),
+        infrastructure.episode_watch_repository.clone(),
+        infrastructure.video_repository.clone(),
+        video_watch_state_updater(infrastructure),
+        infrastructure.task_repository.clone(),
+        infrastructure.clock.clone(),
+    )
+}
+
+fn video_watch_state_updater(infrastructure: &InfrastructureContainer) -> VideoWatchStateUpdater {
+    VideoWatchStateUpdater::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.channel_repository.clone(),
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.playlist_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.clock.clone(),
+        infrastructure.category_repository.clone(),
+        category_video_collector(infrastructure),
     )
 }
 
 fn task_executor(
     infrastructure: &InfrastructureContainer,
     plex_label_syncer: Option<PlexLabelSyncer>,
+    plex_watch_syncer: Option<PlexWatchSyncer>,
 ) -> TaskExecutor {
     TaskExecutor::new(
         infrastructure.task_repository.clone(),
-        task_handlers(infrastructure, plex_label_syncer),
+        task_handlers(infrastructure, plex_label_syncer, plex_watch_syncer),
         infrastructure.clock.clone(),
         retry_base_delay_seconds(),
         download_concurrency(),
@@ -801,6 +848,7 @@ fn task_executor(
 fn task_handlers(
     infrastructure: &InfrastructureContainer,
     plex_label_syncer: Option<PlexLabelSyncer>,
+    plex_watch_syncer: Option<PlexWatchSyncer>,
 ) -> HandlerRegistry {
     tasks::registry(
         playlist_video_reconciler(infrastructure),
@@ -821,6 +869,7 @@ fn task_handlers(
         target_path(),
         ytdlp_self_update_enabled(),
         plex_label_syncer,
+        plex_watch_syncer,
     )
 }
 
@@ -1428,7 +1477,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_request_the_label_sync_at_startup_only_if_plex_is_configured() {
+    fn it_should_request_the_plex_syncs_at_startup_only_if_plex_is_configured() {
         let queued: Vec<Vec<String>> = [
             None,
             plex_integration_from(
@@ -1441,9 +1490,19 @@ mod tests {
         .map(|plex| {
             let db = TestDatabase::new();
             let infrastructure = test_infrastructure(&db);
-            let syncer = plex.map(|plex| plex_label_syncer(&infrastructure, plex));
-            let executor = task_executor(&infrastructure, syncer.clone());
-            prepare_task_queue(&infrastructure, &executor, syncer.as_ref()).unwrap();
+            let label_syncer = plex
+                .clone()
+                .map(|plex| plex_label_syncer(&infrastructure, plex));
+            let watch_syncer = plex.map(|plex| plex_watch_syncer(&infrastructure, plex));
+            let executor =
+                task_executor(&infrastructure, label_syncer.clone(), watch_syncer.clone());
+            prepare_task_queue(
+                &infrastructure,
+                &executor,
+                label_syncer.as_ref(),
+                watch_syncer.as_ref(),
+            )
+            .unwrap();
             infrastructure
                 .task_repository
                 .list_non_completed()
@@ -1458,7 +1517,11 @@ mod tests {
             queued,
             vec![
                 vec!["update_ytdlp".to_string()],
-                vec!["update_ytdlp".to_string(), "sync_plex_labels".to_string()],
+                vec![
+                    "update_ytdlp".to_string(),
+                    "sync_plex_labels".to_string(),
+                    "sync_plex_watch_state".to_string(),
+                ],
             ]
         );
     }
@@ -1468,7 +1531,7 @@ mod tests {
         let db = TestDatabase::new();
         let infrastructure = test_infrastructure(&db);
 
-        let handlers = task_handlers(&infrastructure, None);
+        let handlers = task_handlers(&infrastructure, None, None);
 
         assert_eq!(
             handlers.keys().map(String::as_str).collect::<BTreeSet<_>>(),
@@ -1574,7 +1637,7 @@ mod tests {
             Some("/plex/videos".to_string()),
         );
 
-        let handlers = task_handlers(&infrastructure, None);
+        let handlers = task_handlers(&infrastructure, None, None);
         let subscribers = event_subscribers(&infrastructure, plex, None);
 
         assert!(!handlers.contains_key("reconcile_plex_collections"));

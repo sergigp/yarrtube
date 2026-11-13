@@ -1191,7 +1191,7 @@ mod tests {
                             `reconcile_playlist`, `reconcile_channel`, `download_video`, \
                             `delete_video_file`, `delete_playlist_files`, `delete_channel_files`, \
                             `update_ytdlp`, `fetch_thumbnail`, `fetch_subtitles`, `sync_video`, \
-                            `sync_plex_labels`, `fetch_chapters`, `upgrade_quality`, \
+                            `sync_plex_labels`, `sync_plex_watch_state`, `fetch_chapters`, `upgrade_quality`, \
                             `summarize_video`, `categorize_video`"
                         .to_string(),
                 },
@@ -1293,6 +1293,7 @@ mod tests {
             },
             sync_video_task("rec1"),
             Task::SyncPlexLabels,
+            Task::SyncPlexWatchState,
             Task::FetchChapters {
                 video_id: "rec1".to_string(),
             },
@@ -1332,6 +1333,7 @@ mod tests {
             ("fetch_subtitles", r#"{"video_id":"rec1"}"#),
             ("sync_video", r#"{"video_id":"rec1"}"#),
             ("sync_plex_labels", "{}"),
+            ("sync_plex_watch_state", "{}"),
             ("fetch_chapters", r#"{"video_id":"rec1"}"#),
             ("upgrade_quality", r#"{"video_id":"rec1"}"#),
             ("summarize_video", r#"{"video_id":"rec1"}"#),

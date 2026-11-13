@@ -1,4 +1,8 @@
-use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection};
+use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState};
+use crate::domain::video::PlaybackPosition;
+use chrono::DateTime;
+#[cfg(test)]
+use chrono::Utc;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Deserialize;
 #[cfg(test)]
@@ -57,7 +61,23 @@ pub trait PlexLibraryRepository: Send + Sync {
     ) -> anyhow::Result<PlexPlaylist>;
     /// `DELETE /playlists/{rating_key}`.
     fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()>;
+    /// Whose watch state the watch calls read and write: the server's
+    /// machine identifier and a fingerprint of the token,
+    /// `"<machineIdentifier>/<fingerprint>"`.
+    fn viewer_id(&self) -> anyhow::Result<String>;
+    /// Marks the episode watched for the token user (`GET /:/scrobble`),
+    /// clearing its resume position.
+    fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()>;
+    /// Marks the episode unwatched for the token user (`GET /:/unscrobble`),
+    /// clearing its view count, resume position and last viewed time.
+    fn mark_unwatched(&self, rating_key: &str) -> anyhow::Result<()>;
+    /// Sets the episode's resume position for the token user
+    /// (`GET /:/progress`, in milliseconds); Plex ignores a position of 0.
+    fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()>;
 }
+
+/// The library every watch-state write targets.
+const LIBRARY_IDENTIFIER: &str = "com.plexapp.plugins.library";
 
 pub struct PlexConfig {
     pub base_url: String,
@@ -124,6 +144,14 @@ struct Metadata {
     media: Vec<Media>,
     #[serde(rename = "Label", default)]
     labels: Vec<Tag>,
+    #[serde(rename = "viewCount", default)]
+    view_count: u32,
+    #[serde(rename = "viewOffset")]
+    view_offset: Option<i64>,
+    /// Unix seconds.
+    #[serde(rename = "lastViewedAt")]
+    last_viewed_at: Option<i64>,
+    duration: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -285,9 +313,44 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         let request = self.client()?.delete(self.url(&endpoint));
         self.send(&endpoint, request).map(drop)
     }
+
+    fn viewer_id(&self) -> anyhow::Result<String> {
+        Ok(format!(
+            "{}/{}",
+            self.server_id()?,
+            token_fingerprint(&self.config.token)
+        ))
+    }
+
+    fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.send_watch("/:/scrobble", &[("key", rating_key)])
+    }
+
+    fn mark_unwatched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.send_watch("/:/unscrobble", &[("key", rating_key)])
+    }
+
+    fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()> {
+        let time = (position.seconds() * 1000).to_string();
+        self.send_watch(
+            "/:/progress",
+            &[("key", rating_key), ("time", &time), ("state", "stopped")],
+        )
+    }
 }
 
 impl HttpPlexLibraryRepository {
+    /// A watch-state write to the token user's library item, `GET endpoint`
+    /// with `query`.
+    fn send_watch(&self, endpoint: &str, query: &[(&str, &str)]) -> anyhow::Result<()> {
+        let request = self
+            .client()?
+            .get(self.url(endpoint))
+            .query(&[("identifier", LIBRARY_IDENTIFIER)])
+            .query(query);
+        self.send(endpoint, request).map(drop)
+    }
+
     /// The section's episodes from `start` on, one page per request.
     fn list_episodes_from(
         &self,
@@ -418,8 +481,25 @@ fn plex_escaped(value: &str) -> String {
     utf8_percent_encode(value, PLEX_ESCAPED).to_string()
 }
 
+/// A stable fingerprint of the token (FNV-1a 64, hex), so whose watch state
+/// it is can be stored without storing the token itself.
+fn token_fingerprint(token: &str) -> String {
+    let hash = token.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    });
+    format!("{hash:016x}")
+}
+
 /// One episode per file of `metadata`'s media parts.
 fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
+    let watch = PlexWatchState {
+        view_count: metadata.view_count,
+        view_offset_ms: metadata.view_offset,
+        last_viewed_at: metadata
+            .last_viewed_at
+            .and_then(|seconds| DateTime::from_timestamp(seconds, 0)),
+        duration_ms: metadata.duration,
+    };
     metadata
         .media
         .into_iter()
@@ -428,6 +508,7 @@ fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
             rating_key: metadata.rating_key.clone(),
             section_id: section_id.to_string(),
             file: part.file,
+            watch,
         })
         .collect()
 }
@@ -447,6 +528,9 @@ pub struct FakePlexLibraryRepository {
     unreachable: bool,
     /// Rating keys whose label writes Plex rejects.
     rejected: Vec<String>,
+    /// The server's time, stamped as the last viewed time of every watch
+    /// write, like Plex does (it cannot backdate one).
+    now: Option<DateTime<Utc>>,
 }
 
 #[cfg(test)]
@@ -475,6 +559,7 @@ pub struct FakePlaylist {
 #[cfg(test)]
 impl FakePlexLibraryRepository {
     pub const SERVER_ID: &str = "fake-server";
+    pub const VIEWER_ID: &str = "fake-server/viewer";
 
     /// The same fake with `location` added to `section_id`'s folders.
     pub fn with_location(self, section_id: &str, location: &str) -> Self {
@@ -513,9 +598,22 @@ impl FakePlexLibraryRepository {
                 rating_key: rating_key.to_string(),
                 section_id: section_id.to_string(),
                 file: file.to_string(),
+                watch: PlexWatchState::unplayed(),
             },
             labels: labels.iter().map(|label| label.to_string()).collect(),
         });
+        self
+    }
+
+    /// The same fake with the episode `rating_key`'s watch state set to
+    /// `watch`.
+    pub fn with_episode_watch(self, rating_key: &str, watch: PlexWatchState) -> Self {
+        self.episodes
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|fake| fake.episode.rating_key == rating_key)
+            .for_each(|fake| fake.episode.watch = watch);
         self
     }
 
@@ -529,10 +627,18 @@ impl FakePlexLibraryRepository {
         self
     }
 
-    /// The same fake rejecting every label write to `rating_key`.
+    /// The same fake rejecting every label and watch write to `rating_key`.
     pub fn rejecting(self, rating_key: &str) -> Self {
         Self {
             rejected: [self.rejected.clone(), vec![rating_key.to_string()]].concat(),
+            ..self
+        }
+    }
+
+    /// The same fake stamping watch writes with `now`.
+    pub fn at(self, now: DateTime<Utc>) -> Self {
+        Self {
+            now: Some(now),
             ..self
         }
     }
@@ -579,8 +685,24 @@ impl FakePlexLibraryRepository {
         Ok(())
     }
 
+    fn ensure_accepted(&self, rating_key: &str) -> anyhow::Result<()> {
+        if self.rejected.iter().any(|rejected| rejected == rating_key) {
+            anyhow::bail!("Plex rejected the watch state of {rating_key}");
+        }
+        Ok(())
+    }
+
     fn record(&self, mutation: String) {
         self.mutations.lock().unwrap().push(mutation);
+    }
+
+    fn update_watch(&self, rating_key: &str, update: impl Fn(PlexWatchState) -> PlexWatchState) {
+        self.episodes
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|fake| fake.episode.rating_key == rating_key)
+            .for_each(|fake| fake.episode.watch = update(fake.episode.watch));
     }
 }
 
@@ -696,6 +818,50 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             .lock()
             .unwrap()
             .retain(|playlist| playlist.rating_key != rating_key);
+        Ok(())
+    }
+
+    fn viewer_id(&self) -> anyhow::Result<String> {
+        self.ensure_reachable()?;
+        Ok(Self::VIEWER_ID.to_string())
+    }
+
+    fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        self.ensure_accepted(rating_key)?;
+        self.record(format!("scrobble:{rating_key}"));
+        self.update_watch(rating_key, |watch| PlexWatchState {
+            view_count: watch.view_count + 1,
+            view_offset_ms: None,
+            last_viewed_at: self.now,
+            ..watch
+        });
+        Ok(())
+    }
+
+    fn mark_unwatched(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        self.ensure_accepted(rating_key)?;
+        self.record(format!("unscrobble:{rating_key}"));
+        self.update_watch(rating_key, |watch| PlexWatchState {
+            view_count: 0,
+            view_offset_ms: None,
+            last_viewed_at: None,
+            ..watch
+        });
+        Ok(())
+    }
+
+    fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        self.ensure_accepted(rating_key)?;
+        let offset_ms = position.seconds() * 1000;
+        self.record(format!("progress:{rating_key}:{offset_ms}"));
+        self.update_watch(rating_key, |watch| PlexWatchState {
+            view_offset_ms: Some(offset_ms),
+            last_viewed_at: self.now,
+            ..watch
+        });
         Ok(())
     }
 }
@@ -901,6 +1067,65 @@ mod tests {
     }
 
     #[test]
+    fn it_should_list_an_episodes_watch_state() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "totalSize": 1, "offset": 0, "Metadata": [
+                    {"ratingKey": "101", "viewCount": 2, "viewOffset": 215540,
+                     "lastViewedAt": 1794073896, "duration": 3119000,
+                     "Media": [{"Part": [{"file": "/volume1/a.mp4"}]}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let episodes = repository.list_episodes("19");
+
+        assert_eq!(
+            episodes.map_err(|e| e.to_string()),
+            Ok(vec![PlexEpisode {
+                watch: PlexWatchState {
+                    view_count: 2,
+                    view_offset_ms: Some(215_540),
+                    last_viewed_at: DateTime::from_timestamp(1_794_073_896, 0),
+                    duration_ms: Some(3_119_000),
+                },
+                ..episode("101", "/volume1/a.mp4")
+            }])
+        );
+    }
+
+    #[test]
+    fn it_should_list_an_unplayed_episode() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "totalSize": 1, "offset": 0, "Metadata": [
+                    {"ratingKey": "101", "Media": [{"Part": [{"file": "/volume1/a.mp4"}]}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let episodes = repository.list_episodes("19");
+
+        assert_eq!(
+            episodes.map_err(|e| e.to_string()),
+            Ok(vec![PlexEpisode {
+                watch: PlexWatchState::unplayed(),
+                ..episode("101", "/volume1/a.mp4")
+            }])
+        );
+    }
+
+    #[test]
     fn it_should_read_an_episode_labels() {
         let mut server = mockito::Server::new();
         let _mock = server
@@ -1094,6 +1319,104 @@ mod tests {
     }
 
     #[test]
+    fn it_should_identify_the_viewer_by_server_and_token() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/identity")
+            .with_status(200)
+            .with_body(r#"{"MediaContainer": {"machineIdentifier": "abc123"}}"#)
+            .create();
+        let other_token = HttpPlexLibraryRepository::new(PlexConfig {
+            base_url: server.url(),
+            token: "another-token".to_string(),
+        });
+
+        let viewers = (
+            repository(&server).viewer_id().map_err(|e| e.to_string()),
+            other_token.viewer_id().map_err(|e| e.to_string()),
+        );
+
+        assert_eq!(
+            viewers,
+            (
+                Ok("abc123/5a1df1cf03604e11".to_string()),
+                Ok("abc123/8951b24986ac0d78".to_string())
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_mark_an_episode_watched() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/:/scrobble")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded(
+                    "identifier".into(),
+                    "com.plexapp.plugins.library".into(),
+                ),
+                mockito::Matcher::UrlEncoded("key".into(), "101".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.mark_watched("101");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_mark_an_episode_unwatched() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/:/unscrobble")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded(
+                    "identifier".into(),
+                    "com.plexapp.plugins.library".into(),
+                ),
+                mockito::Matcher::UrlEncoded("key".into(), "101".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.mark_unwatched("101");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_save_an_episode_position_in_milliseconds() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/:/progress")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded(
+                    "identifier".into(),
+                    "com.plexapp.plugins.library".into(),
+                ),
+                mockito::Matcher::UrlEncoded("key".into(), "101".into()),
+                mockito::Matcher::UrlEncoded("time".into(), "215000".into()),
+                mockito::Matcher::UrlEncoded("state".into(), "stopped".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_position("101", PlaybackPosition::new(215).unwrap());
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
     fn it_should_scan_a_path_in_a_section() {
         let mut server = mockito::Server::new();
         let mock = server
@@ -1142,6 +1465,7 @@ mod tests {
             rating_key: rating_key.to_string(),
             section_id: "19".to_string(),
             file: file.to_string(),
+            watch: PlexWatchState::unplayed(),
         }
     }
 
