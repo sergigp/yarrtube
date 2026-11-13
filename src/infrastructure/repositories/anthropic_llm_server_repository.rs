@@ -64,8 +64,12 @@ impl AnthropicLlmServerRepository {
             .header("anthropic-version", ANTHROPIC_VERSION)
             .json(&Self::message_body(chat))
             .send()?;
-        if response.status() == StatusCode::BAD_REQUEST {
-            return Self::bad_request(Self::error_message(response)?);
+        match response.status() {
+            StatusCode::BAD_REQUEST => return Self::bad_request(Self::error_message(response)?),
+            status @ (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => {
+                return Err(Self::unavailable(status, &Self::error_message(response)?));
+            }
+            _ => {}
         }
         let response: MessageResponse = response
             .json()
@@ -480,6 +484,24 @@ mod tests {
                 "the LLM provider is unavailable: Anthropic answered 400 Bad Request: Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.".to_string()
             ))
         );
+    }
+
+    #[test]
+    fn it_should_report_a_rejected_key_as_unreachable() {
+        let rejected =
+            [(401, "authentication_error"), (403, "permission_error")].map(|(status, kind)| {
+                let mut server = mockito::Server::new();
+                let _messages = server
+                    .mock("POST", "/v1/messages")
+                    .with_status(status)
+                    .with_body(error_body(kind, "invalid x-api-key"))
+                    .create();
+                repository(&server)
+                    .chat(&chat())
+                    .map_err(|e| e.is::<LlmServerUnreachable>())
+            });
+
+        assert_eq!(rejected, [Err(true), Err(true)]);
     }
 
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {
