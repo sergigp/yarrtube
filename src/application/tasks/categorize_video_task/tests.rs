@@ -2224,7 +2224,40 @@ fn it_should_mark_the_categorization_failed_without_asking_if_only_a_given_up_ca
     );
 }
 
-/// The run's summary lines among captured lines.
+#[test]
+fn it_should_size_the_anthropic_call_from_a_smaller_context_window() {
+    let db = TestDatabase::new();
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(LlmServer {
+            version: None,
+            models: vec![LlmModel {
+                name: "claude-haiku-5-5".to_string(),
+                display_name: Some("Claude Haiku 5.5".to_string()),
+                size_bytes: None,
+                thinking: false,
+                context_window: Some(64_000),
+            }],
+        })
+        .with_replies(vec![reply(&answers(&[("Tech", NO)]))]),
+    );
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        llm.chats()
+            .iter()
+            .map(|chat| chat.context_length)
+            .collect::<Vec<_>>(),
+        vec![64_000]
+    );
+}
 
 #[test]
 fn it_should_categorize_with_the_anthropic_model_and_effort() {
@@ -2434,6 +2467,7 @@ fn it_should_wait_when_the_anthropic_categorization_model_isnt_listed() {
     assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
 }
 
+/// The run's summary lines among captured lines.
 fn summary_lines(lines: &[String]) -> Vec<String> {
     lines
         .iter()

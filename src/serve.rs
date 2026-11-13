@@ -444,11 +444,12 @@ fn plex_integration_from(
     }
 }
 
+/// Where Anthropic's API is, unless `YARRTUBE_ANTHROPIC_API_URL` says otherwise.
+const DEFAULT_ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
+
 /// Anthropic's API, present only with a non-empty
 /// `YARRTUBE_ANTHROPIC_API_KEY`; `YARRTUBE_ANTHROPIC_API_URL` (default
 /// `https://api.anthropic.com`) points it at a fake in tests.
-const DEFAULT_ANTHROPIC_API_URL: &str = "https://api.anthropic.com";
-
 fn anthropic_config() -> Option<AnthropicConfig> {
     anthropic_config_from(
         non_empty_env("YARRTUBE_ANTHROPIC_API_KEY"),

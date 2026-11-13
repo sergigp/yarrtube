@@ -44,8 +44,10 @@ the answer's JSON schema as structured output. A summary call may write up to
 as `GET /v1/models` lists it, capped at 131,072 tokens. A categorization call
 gets 1,365 output tokens per category, at least 3,072. "Retry without
 thinking" never applies. The model list (`GET /api/llm/anthropic`) is what
-the key can use, newest first; a saved model Anthropic no longer lists shows
-`(not available)`, and runs wait for it as for an uninstalled Ollama model.
+the key can use, newest first, leaving out models whose capabilities say they
+don't take `low`/`medium`/`high` effort or structured output (e.g.
+`claude-haiku-4-5`, `claude-sonnet-4-5`), since every call would be rejected;
+a saved model Anthropic doesn't list shows `(not available)`, and runs wait for it as for an uninstalled Ollama model.
 
 ### Cost
 
@@ -66,8 +68,8 @@ They follow the same retry policy as Ollama's (`video-retries`):
 | `stop_reason: max_tokens` | stopped at the output limit |
 | `stop_reason: refusal`, any other 400, an empty answer | a rejected call: a failed attempt |
 | 400 "prompt is too long" | rejected as too long: the summary is cut smaller once |
-| can't connect, 401, 403, 404 (unknown model), 400 "credit balance is too low", no key set | unavailable: wait 6 hours, no attempt spent |
-| 429, 5xx, 529 (overloaded) | a server fault: a failed attempt |
+| can't connect, 401, 403, 404 (unknown model), no key set, or an exhausted budget: 402 `billing_error`, 400 "credit balance is too low" or "API usage limits" reached, 429 `enforced_spend_limit_reached` | unavailable: wait 6 hours, no attempt spent |
+| any other 429 (rate limited), 5xx, 529 (overloaded) | a server fault: a failed attempt |
 
 Changing the provider, or any Anthropic model or effort, resets Failed
 summaries and `failed` verdicts, as an Ollama URL or settings change does.

@@ -68,6 +68,13 @@ The daemon SHALL provide `GET /api/llm/anthropic`, which lists the models the ke
 - **WHEN** Anthropic lists the key's models over two pages
 - **THEN** the response holds the models of both pages
 
+### Requirement: Anthropic Models Offered
+Anthropic's models SHALL be listed, for the check and for a run's model check, only when they take every call the daemon makes: Anthropic lists them as supporting `low`, `medium` and `high` effort and structured output, or lists no capabilities for them.
+
+#### Scenario: Model without effort
+- **WHEN** Anthropic lists `claude-haiku-5-5` and `claude-haiku-4-5-20251001`, whose capabilities say it doesn't support effort
+- **THEN** only `claude-haiku-5-5` is listed, so a saved `claude-haiku-4-5-20251001` reads as not available and runs wait for it instead of failing
+
 ### Requirement: Anthropic Check Errors
 Without a key, the check SHALL respond with HTTP status 404 and the message `Anthropic isn't configured: set YARRTUBE_ANTHROPIC_API_KEY`. When Anthropic can't be connected to within 5 seconds, rejects the key, or answers with an error or something that isn't its API's response, the check SHALL respond with HTTP status 502 and the message `Could not reach Anthropic: <reason>`.
 
@@ -84,7 +91,7 @@ Without a key, the check SHALL respond with HTTP status 404 and the message `Ant
 - **THEN** the daemon responds with HTTP status 502 and a message starting `Could not reach Anthropic: `
 
 ### Requirement: Anthropic Call Outcomes
-An Anthropic call SHALL count as: an answer, its text blocks joined, with `usage` tokens, when it ends with `end_turn`; stopped at the limit on `stop_reason` `max_tokens`; refused on `stop_reason` `refusal` or any other 400, and refused as too long when the 400 says the prompt is too long; Anthropic unavailable on a connection failure, 401, 403, 404, or a 400 saying the credit balance is too low; and a server fault on 429, 5xx or 529.
+An Anthropic call SHALL count as: an answer, its text blocks joined, with `usage` tokens, when it ends with `end_turn`; stopped at the limit on `stop_reason` `max_tokens`; refused on `stop_reason` `refusal` or any other 400, and refused as too long when the 400 says the prompt is too long; Anthropic unavailable on a connection failure, 401, 403, 404, or an exhausted budget (see "Anthropic Budget Exhausted"); and a server fault on any other 429, 5xx or 529.
 
 #### Scenario: Answer
 - **WHEN** Anthropic answers with `stop_reason` `end_turn`, a text block `Three games.` and 900 input and 120 output tokens
@@ -120,3 +127,14 @@ Every Anthropic call SHALL send the model, `max_tokens`, the system message, one
 #### Scenario: Categorization call
 - **WHEN** a categorization call with a JSON schema is sent to Anthropic with effort `medium`
 - **THEN** the request holds the model, `max_tokens`, system and user messages, effort `medium` and the schema as structured output with `additionalProperties: false` on every object, and no temperature or thinking setting
+
+### Requirement: Anthropic Budget Exhausted
+An Anthropic call SHALL find Anthropic unavailable, not a server fault or a refusal, when the account's budget is exhausted: a 402 billing error, a 400 saying the credit balance is too low or that the API usage limits are reached, or a 429 with the error code `enforced_spend_limit_reached`.
+
+#### Scenario: Spend limit reached
+- **WHEN** Anthropic answers 400 with a message starting `You have reached your specified API usage limits`, 402 `billing_error`, or 429 with the error code `enforced_spend_limit_reached`
+- **THEN** Anthropic is unavailable
+
+#### Scenario: Rate limited
+- **WHEN** Anthropic answers 429 `rate_limit_error` without that error code
+- **THEN** the call is a server fault

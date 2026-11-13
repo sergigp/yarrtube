@@ -59,7 +59,10 @@ impl AnthropicLlmServerRepository {
         }
     }
 
-    /// The models the key can use, as Anthropic lists them, newest first.
+    /// The models the key can use, as Anthropic lists them, newest first:
+    /// only those that take every call it makes (low, medium and high effort,
+    /// and structured output), so a model that would reject each one isn't
+    /// offered.
     pub fn find(&self) -> anyhow::Result<LlmServer> {
         let client = Self::client(self.check_timeout)?;
         Ok(LlmServer {
@@ -80,35 +83,35 @@ impl AnthropicLlmServerRepository {
             .map_err(Self::send_error)?;
         let status = response.status();
         if !status.is_success() {
-            return Self::failed(status, &Self::error_message(response)?);
+            return Self::failed(status, &Self::api_error(response)?);
         }
         let response: MessageResponse = response
             .json()
             .context("/v1/messages didn't answer as Anthropic does")?;
         Ok(Self::reply(response))
     }
+
     /// What the model answered: refused when its safety classifiers
     /// declined, stopped at the limit on `max_tokens`.
     fn reply(response: MessageResponse) -> LlmReply {
-        let usage = LlmReply {
+        let stop_reason = response.stop_reason.as_deref();
+        let refusal = (stop_reason == Some("refusal")).then(|| {
+            format!(
+                "Anthropic declined to answer ({})",
+                response.refusal_category().unwrap_or("no category")
+            )
+        });
+        LlmReply {
+            content: match &refusal {
+                Some(_) => String::new(),
+                None => response.text(),
+            },
+            thinking: String::new(),
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
-            ..LlmReply::refused("")
-        };
-        match response.stop_reason.as_deref() {
-            Some("refusal") => LlmReply {
-                refusal: Some(format!(
-                    "Anthropic declined to answer ({})",
-                    response.refusal_category().unwrap_or("no category")
-                )),
-                ..usage
-            },
-            stop_reason => LlmReply {
-                content: response.text(),
-                stopped_at_limit: stop_reason == Some("max_tokens"),
-                refusal: None,
-                ..usage
-            },
+            stopped_at_limit: stop_reason == Some("max_tokens"),
+            refusal,
+            exceeded_context: false,
         }
     }
 
@@ -126,7 +129,11 @@ impl AnthropicLlmServerRepository {
             .and_then(Self::check_status)?
             .json()
             .context("/v1/models didn't answer as Anthropic does")?;
-        let models = page.data.into_iter().map(LlmModel::from);
+        let models = page
+            .data
+            .into_iter()
+            .filter(ListedModel::takes_the_calls)
+            .map(LlmModel::from);
         let rest = match (page.has_more, page.last_id) {
             (true, Some(last_id)) => self.models_after(client, Some(&last_id))?,
             _ => vec![],
@@ -161,21 +168,21 @@ impl AnthropicLlmServerRepository {
         if status.is_success() {
             return Ok(response);
         }
-        let message = Self::error_message(response)?;
+        let message = Self::api_error(response)?.message;
         Err(match status {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Self::unavailable(status, &message),
             _ => Self::answered(status, &message),
         })
     }
 
-    /// A call Anthropic answered `status` with `message`: unavailable for a
-    /// rejected key, an unknown model or no credit; refused (too long when
-    /// the prompt doesn't fit) for another bad request; else a server fault.
-    fn failed(status: StatusCode, message: &str) -> anyhow::Result<LlmReply> {
+    /// A call Anthropic answered `status` with `error`: unavailable for a
+    /// rejected key, an unknown model or an exhausted budget; refused (too
+    /// long when the prompt doesn't fit) for another bad request; else a
+    /// server fault.
+    fn failed(status: StatusCode, error: &ApiError) -> anyhow::Result<LlmReply> {
+        let message = error.message.as_str();
         match status {
-            StatusCode::BAD_REQUEST if message.to_lowercase().contains("credit balance") => {
-                Err(Self::unavailable(status, message))
-            }
+            _ if Self::budget_exhausted(status, error) => Err(Self::unavailable(status, message)),
             StatusCode::BAD_REQUEST if message.contains("prompt is too long") => {
                 Ok(LlmReply::refused_as_too_long(message))
             }
@@ -187,13 +194,32 @@ impl AnthropicLlmServerRepository {
         }
     }
 
+    /// Whether the account can't spend until its budget is back: a billing
+    /// problem (402), no credit or a spend limit reached (400), or the
+    /// monthly spend cap reached (429 `enforced_spend_limit_reached`). Only
+    /// waiting, or the user, fixes them, unlike a rate limit.
+    fn budget_exhausted(status: StatusCode, error: &ApiError) -> bool {
+        let message = error.message.to_lowercase();
+        match status {
+            StatusCode::PAYMENT_REQUIRED => true,
+            StatusCode::BAD_REQUEST => {
+                message.contains("credit balance") || message.contains("api usage limits")
+            }
+            StatusCode::TOO_MANY_REQUESTS => {
+                error.error_code.as_deref() == Some("enforced_spend_limit_reached")
+            }
+            _ => false,
+        }
+    }
+
     /// `error`, tagged `LlmServerUnreachable` when it is a connect error.
     fn send_error(error: reqwest::Error) -> anyhow::Error {
         let connect = error.is_connect();
         let error = anyhow::Error::new(error);
-        match connect {
-            true => error.context(LlmServerUnreachable),
-            false => error,
+        if connect {
+            error.context(LlmServerUnreachable)
+        } else {
+            error
         }
     }
 
@@ -206,33 +232,39 @@ impl AnthropicLlmServerRepository {
         anyhow::anyhow!("Anthropic answered {status}: {message}")
     }
 
-    /// The message of Anthropic's error body, or the start of a body that
-    /// isn't one (e.g. a proxy's page).
-    fn error_message(response: reqwest::blocking::Response) -> anyhow::Result<String> {
+    /// Anthropic's error body, or the start of a body that isn't one (e.g. a
+    /// proxy's page) as its message.
+    fn api_error(response: reqwest::blocking::Response) -> anyhow::Result<ApiError> {
         let body = response.text()?;
         Ok(serde_json::from_str::<ErrorResponse>(&body)
-            .map(|error| error.error.message)
-            .unwrap_or_else(|_| body.chars().take(ERROR_BODY_CHARS).collect()))
+            .map(|error| ApiError {
+                message: error.error.message,
+                error_code: error.error.details.and_then(|details| details.error_code),
+            })
+            .unwrap_or_else(|_| ApiError {
+                message: body.chars().take(ERROR_BODY_CHARS).collect(),
+                error_code: None,
+            }))
     }
 
     /// The request body: no temperature, context length or thinking, so the
-    /// model's default adaptive thinking applies.
-    /// The answer's schema, when the chat has one, goes as structured output.
+    /// model's default adaptive thinking applies. The answer's schema, when
+    /// the chat has one, goes as structured output.
     fn message_body(chat: &LlmChat) -> serde_json::Value {
-        let mut body = serde_json::json!({
+        let output_config = match &chat.format {
+            Some(schema) => serde_json::json!({
+                "effort": chat.effort.as_str(),
+                "format": {"type": "json_schema", "schema": Self::closed(schema)},
+            }),
+            None => serde_json::json!({"effort": chat.effort.as_str()}),
+        };
+        serde_json::json!({
             "model": chat.model,
             "max_tokens": chat.max_output_tokens,
             "system": chat.system,
             "messages": [{"role": "user", "content": chat.user}],
-            "output_config": {"effort": chat.effort.as_str()},
-        });
-        if let Some(schema) = &chat.format {
-            body["output_config"]["format"] = serde_json::json!({
-                "type": "json_schema",
-                "schema": Self::closed(schema),
-            });
-        }
-        body
+            "output_config": output_config,
+        })
     }
 
     /// `schema` with `additionalProperties: false` on every object, which
@@ -240,16 +272,21 @@ impl AnthropicLlmServerRepository {
     fn closed(schema: &serde_json::Value) -> serde_json::Value {
         match schema {
             serde_json::Value::Object(fields) => {
-                let mut closed: serde_json::Map<_, _> = fields
-                    .iter()
-                    .map(|(key, value)| (key.clone(), Self::closed(value)))
-                    .collect();
-                if closed.get("type").and_then(serde_json::Value::as_str) == Some("object") {
-                    closed
-                        .entry("additionalProperties")
-                        .or_insert(serde_json::Value::Bool(false));
-                }
-                serde_json::Value::Object(closed)
+                let open = fields.get("type").and_then(serde_json::Value::as_str) == Some("object")
+                    && !fields.contains_key("additionalProperties");
+                let closing = open.then(|| {
+                    (
+                        "additionalProperties".to_string(),
+                        serde_json::Value::Bool(false),
+                    )
+                });
+                serde_json::Value::Object(
+                    fields
+                        .iter()
+                        .map(|(key, value)| (key.clone(), Self::closed(value)))
+                        .chain(closing)
+                        .collect(),
+                )
             }
             serde_json::Value::Array(items) => items.iter().map(Self::closed).collect(),
             other => other.clone(),
@@ -278,6 +315,25 @@ struct ListedModel {
     id: String,
     display_name: Option<String>,
     max_input_tokens: Option<u32>,
+    /// The feature tree, `supported` at each leaf; absent from older answers.
+    capabilities: Option<serde_json::Value>,
+}
+
+impl ListedModel {
+    /// Whether the model takes the calls `chat` sends: low, medium and high
+    /// effort, and structured output. Without capabilities, assumed to.
+    fn takes_the_calls(&self) -> bool {
+        self.capabilities.as_ref().is_none_or(|capabilities| {
+            [
+                "/effort/low/supported",
+                "/effort/medium/supported",
+                "/effort/high/supported",
+                "/structured_outputs/supported",
+            ]
+            .iter()
+            .all(|leaf| capabilities.pointer(leaf) == Some(&serde_json::Value::Bool(true)))
+        })
+    }
 }
 
 impl From<ListedModel> for LlmModel {
@@ -309,6 +365,19 @@ struct ErrorResponse {
 #[derive(Deserialize)]
 struct ErrorDetails {
     message: String,
+    details: Option<ErrorCode>,
+}
+
+#[derive(Deserialize)]
+struct ErrorCode {
+    error_code: Option<String>,
+}
+
+/// What Anthropic said was wrong with a call.
+struct ApiError {
+    message: String,
+    /// e.g. `enforced_spend_limit_reached`, when Anthropic gives one.
+    error_code: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -794,6 +863,107 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_fail_a_call_the_api_doesnt_answer_in_time() {
+        // Connections queue in the backlog but nobody ever answers.
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let repository = AnthropicLlmServerRepository::new(AnthropicConfig {
+            api_url: format!("http://{}", silent.local_addr().unwrap()),
+            api_key: AnthropicApiKey::new("sk-ant-test".to_string()),
+        });
+        let quick = LlmChat {
+            timeout: Duration::from_millis(100),
+            ..chat()
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(repository.chat(&quick).is_err());
+        });
+
+        let failed = receiver.recv_timeout(Duration::from_secs(5));
+
+        assert_eq!(failed, Ok(true));
+    }
+
+    #[test]
+    fn it_should_report_an_exhausted_budget_as_unreachable() {
+        let exhausted = [
+            (
+                402,
+                error_body("billing_error", "There's an issue with your billing."),
+            ),
+            (
+                400,
+                error_body(
+                    "invalid_request_error",
+                    "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+                ),
+            ),
+            (
+                400,
+                error_body(
+                    "invalid_request_error",
+                    "You have reached your specified workspace API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+                ),
+            ),
+            (
+                429,
+                serde_json::json!({"type": "error", "error": {
+                    "type": "rate_limit_error",
+                    "message": "You have reached your API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+                    "details": {"error_code": "enforced_spend_limit_reached"},
+                }})
+                .to_string(),
+            ),
+        ]
+        .map(|(status, body)| {
+            let mut server = mockito::Server::new();
+            let _messages = server
+                .mock("POST", "/v1/messages")
+                .with_status(status)
+                .with_body(body)
+                .create();
+            repository(&server)
+                .chat(&chat())
+                .map_err(|e| e.is::<LlmServerUnreachable>())
+        });
+
+        assert_eq!(exhausted, [Err(true), Err(true), Err(true), Err(true)]);
+    }
+
+    #[test]
+    fn it_should_list_only_models_that_take_effort_and_structured_output() {
+        let mut server = mockito::Server::new();
+        let _models = server
+            .mock("GET", "/v1/models?limit=1000")
+            .with_body(
+                serde_json::json!({
+                    "data": [
+                        listed_with("claude-haiku-5-5", "Claude Haiku 5.5", true, true),
+                        listed_with("claude-haiku-4-5-20251001", "Claude Haiku 4.5", false, true),
+                        listed_with("claude-old", "Claude Old", true, false),
+                        {"id": "claude-unknown", "display_name": "Claude Unknown", "max_input_tokens": 200000},
+                    ],
+                    "has_more": false,
+                })
+                .to_string(),
+            )
+            .create();
+
+        let result = repository(&server).find();
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Ok(LlmServer {
+                version: None,
+                models: vec![
+                    listed("claude-haiku-5-5", "Claude Haiku 5.5", 200_000),
+                    listed("claude-unknown", "Claude Unknown", 200_000),
+                ],
+            })
+        );
+    }
+
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {
         AnthropicLlmServerRepository::new(AnthropicConfig {
             api_url: server.url(),
@@ -826,6 +996,26 @@ mod tests {
             thinking: false,
             context_window: Some(context_window),
         }
+    }
+
+    /// A listed model whose capabilities say whether it takes low, medium
+    /// and high effort and structured output.
+    fn listed_with(
+        id: &str,
+        display_name: &str,
+        effort: bool,
+        structured_outputs: bool,
+    ) -> serde_json::Value {
+        let level = serde_json::json!({"supported": effort});
+        serde_json::json!({
+            "id": id,
+            "display_name": display_name,
+            "max_input_tokens": 200000,
+            "capabilities": {
+                "effort": {"supported": effort, "low": level, "medium": level, "high": level},
+                "structured_outputs": {"supported": structured_outputs},
+            },
+        })
     }
 
     /// Anthropic's error body.
