@@ -508,6 +508,67 @@ fn it_should_count_a_short_rewatch_in_plex_as_still_watched() {
     assert_eq!(plex.mutations(), Vec::<String>::new());
 }
 
+#[test]
+fn it_should_skip_a_video_plex_has_not_imported() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex =
+        Arc::new(FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"));
+    seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(an_hour_ago()),
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+    assert_eq!(episode_watch_repository.list().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_push_to_an_episode_plex_reimported() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(two_hours_ago()),
+    );
+    episode_watch_repository
+        .save_many(&[agreed(&video, "99", WatchProgress::Watched)])
+        .unwrap();
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), vec!["scrobble:101".to_string()]);
+    assert_eq!(
+        watch_state(&db, &video),
+        WatchState::unwatched().mark_watched(two_hours_ago())
+    );
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(&video, "101", WatchProgress::Watched)]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(

@@ -20,8 +20,8 @@
 - [x] 2.10 `it_should_keep_the_most_recently_played_side_when_both_changed` — Plex later ⇒ pull; yarrtube later ⇒ push.
 - [x] 2.11 `it_should_seed_from_whichever_side_was_played_on_the_first_sync` — no rows: Plex-only watch pulled, yarrtube-only watch pushed, both unplayed ⇒ nothing.
 - [x] 2.12 `it_should_count_a_short_rewatch_in_plex_as_still_watched` — viewed once, offset 5% of duration ⇒ no change, no mutation.
-- [ ] 2.13 `it_should_skip_a_video_plex_has_not_imported` — no episode for the file ⇒ no mutation, no row.
-- [ ] 2.14 `it_should_push_to_an_episode_plex_reimported` — row agreed Watched under another rating key, new episode unplayed ⇒ `scrobble` on the new key, video stays watched.
+- [x] 2.13 `it_should_skip_a_video_plex_has_not_imported` — no episode for the file ⇒ no mutation, no row.
+- [x] 2.14 `it_should_push_to_an_episode_plex_reimported` — row agreed Watched under another rating key, new episode unplayed ⇒ `scrobble` on the new key, video stays watched.
 - [ ] 2.15 `it_should_forget_a_video_no_longer_downloaded` — its row is deleted.
 - [ ] 2.16 `it_should_push_the_others_if_plex_rejects_one` — other row agreed; rejected row unchanged.
 - [ ] 2.17 `it_should_retry_later_if_plex_is_unreachable` — `failing()` ⇒ no change, next `sync_plex_watch_state` at now + 5 min.
