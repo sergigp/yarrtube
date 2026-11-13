@@ -334,6 +334,38 @@ fn it_should_bring_every_copy_in_line_with_a_plex_change() {
     );
 }
 
+#[test]
+fn it_should_not_echo_a_pushed_change() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .at(now())
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_video(
+        &db,
+        Video {
+            watch: in_progress(300, an_hour_ago()),
+            ..downloaded_video("yt1", "S2023E1114 - One.mp4")
+        },
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+    run(&task).unwrap();
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), vec!["progress:101:300000".to_string()]);
+    assert_eq!(watch_state(&db, &video), in_progress(300, an_hour_ago()));
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(

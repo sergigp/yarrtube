@@ -470,6 +470,9 @@ pub struct FakePlexLibraryRepository {
     unreachable: bool,
     /// Rating keys whose label writes Plex rejects.
     rejected: Vec<String>,
+    /// The server's time, stamped as the last viewed time of every watch
+    /// write, like Plex does (it cannot backdate one).
+    now: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[cfg(test)]
@@ -579,6 +582,14 @@ impl FakePlexLibraryRepository {
     pub fn rejecting(self, rating_key: &str) -> Self {
         Self {
             rejected: [self.rejected.clone(), vec![rating_key.to_string()]].concat(),
+            ..self
+        }
+    }
+
+    /// The same fake stamping watch writes with `now`.
+    pub fn at(self, now: chrono::DateTime<chrono::Utc>) -> Self {
+        Self {
+            now: Some(now),
             ..self
         }
     }
@@ -760,6 +771,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         self.update_watch(rating_key, |watch| PlexWatchState {
             view_count: watch.view_count + 1,
             view_offset_ms: None,
+            last_viewed_at: self.now,
             ..watch
         });
         Ok(())
@@ -783,6 +795,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         self.record(format!("progress:{rating_key}:{offset_ms}"));
         self.update_watch(rating_key, |watch| PlexWatchState {
             view_offset_ms: Some(offset_ms),
+            last_viewed_at: self.now,
             ..watch
         });
         Ok(())
