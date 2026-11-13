@@ -1287,6 +1287,31 @@ async fn it_should_return_saved_preferences() {
     );
 }
 
+#[tokio::test]
+async fn it_should_read_the_anthropic_defaults_and_availability() {
+    let db = TestDatabase::new();
+    let preferences_searcher = PreferencesSearcher::new(
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        true,
+    );
+
+    let response = get(preferences_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            ai_provider: "ollama".to_string(),
+            anthropic_available: true,
+            anthropic_summaries_model: "claude-haiku-5-5".to_string(),
+            anthropic_summaries_effort: "medium".to_string(),
+            anthropic_categorization_model: "claude-haiku-5-5".to_string(),
+            anthropic_categorization_effort: "medium".to_string(),
+            ..all_on_response()
+        })
+    );
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await

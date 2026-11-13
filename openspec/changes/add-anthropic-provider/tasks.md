@@ -23,7 +23,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 2.2 `it_should_list_anthropic_models_in_the_listed_order`: `GET /api/llm/anthropic` returns the models in Anthropic's order.
 - [x] 2.3 `it_should_answer_404_when_anthropic_isnt_configured`: no key gives a 404 with the configure message.
 - [x] 2.4 `it_should_answer_502_when_anthropic_cant_be_reached`: an unreachable Anthropic gives a 502 `Could not reach Anthropic: `.
-- [ ] 2.5 `it_should_read_the_anthropic_defaults_and_availability`: the new preferences defaults and `anthropic_available`.
+- [x] 2.5 `it_should_read_the_anthropic_defaults_and_availability`: the new preferences defaults and `anthropic_available`.
 - [ ] 2.6 `it_should_save_the_anthropic_provider_and_settings`: the provider and Anthropic settings are saved, and the Ollama settings are untouched.
 - [ ] 2.7 `it_should_reject_the_anthropic_provider_without_a_key`: 400 `Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic`.
 - [ ] 2.8 `it_should_reject_an_unknown_provider`: 400 for the `AiProvider` validation.
