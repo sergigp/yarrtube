@@ -94,8 +94,8 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
   - `doc/ARCHITECTURE.md`: the routing repository and the two adapters.
   
   Check every env var and endpoint named in the docs against `serve.rs` and `http/mod.rs`.
-- [ ] 4.2 Run `scripts/run-tests.sh --lint --web --rust`; every suite passes.
-- [ ] 4.3 The e2e AI settings spec goes through the UI, so it follows the moved endpoint. The route-coverage reporter needs a 2xx from `GET /api/llm/anthropic` through the UI: add `e2e-tests/anthropic-stub.js`, start every daemon with a key pointed at it, and add one scenario that tests the Anthropic connection and saves it as the provider. Run `scripts/run-tests.sh --e2e` once to confirm nothing depends on `/api/ollama` and every route is covered.
+- [x] 4.2 Run `scripts/run-tests.sh --lint --web --rust`; every suite passes.
+- [x] 4.3 The e2e AI settings spec goes through the UI, so it follows the moved endpoint. The route-coverage reporter needs a 2xx from `GET /api/llm/anthropic` through the UI: add `e2e-tests/anthropic-stub.js`, start every daemon with a key pointed at it, and add one scenario that tests the Anthropic connection and saves it as the provider. Run `scripts/run-tests.sh --e2e` once to confirm nothing depends on `/api/ollama` and every route is covered.
 - [ ] 4.4 Manual (agent):
   1. Start `scripts/run-local.sh --port <free port> --fresh-videos` without `YARRTUBE_ANTHROPIC_API_KEY`. Open `/ai` with the Playwright MCP browser and assert that no provider choice is shown.
   2. Restart with a real key. Assert that "Anthropic" is offered; select it, then "Test connection" shows `Connected to Anthropic, <n> models`.
