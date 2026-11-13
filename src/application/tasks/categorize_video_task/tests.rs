@@ -2402,6 +2402,38 @@ fn it_should_wait_when_anthropic_is_unavailable_for_categorization() {
     assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
 }
 
+#[test]
+fn it_should_wait_when_the_anthropic_categorization_model_isnt_listed() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    let preferences = anthropic_categorization_on();
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            anthropic: AnthropicSettings {
+                categorization_model: CategorizationModel::new("claude-haiku-4-5").unwrap(),
+                ..preferences.anthropic.clone()
+            },
+            ..preferences
+        })
+        .unwrap();
+    let llm = anthropic_replying(vec![]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::hours(6),
+            reason: "claude-haiku-4-5 isn't listed by Anthropic".to_string(),
+        })
+    );
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
 fn summary_lines(lines: &[String]) -> Vec<String> {
     lines
         .iter()

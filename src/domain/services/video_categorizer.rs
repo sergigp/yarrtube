@@ -349,7 +349,7 @@ impl VideoCategorizer {
             .map_err(|error| Skip::from_server_error(error, job))?
             .model(model)
             .cloned()
-            .with_context(|| format!("{model} isn't installed on Ollama"))
+            .with_context(|| job.connection.missing_model(model))
             .map_err(Skip::Unavailable)
     }
 
