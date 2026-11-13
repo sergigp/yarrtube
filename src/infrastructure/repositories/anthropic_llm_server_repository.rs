@@ -70,7 +70,7 @@ impl AnthropicLlmServerRepository {
             thinking: String::new(),
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
-            stopped_at_limit: false,
+            stopped_at_limit: response.stop_reason.as_deref() == Some("max_tokens"),
             refusal: None,
             exceeded_context: false,
         })
@@ -130,6 +130,7 @@ impl AnthropicLlmServerRepository {
 struct MessageResponse {
     #[serde(default)]
     content: Vec<ContentBlock>,
+    stop_reason: Option<String>,
     usage: Usage,
 }
 
@@ -297,6 +298,32 @@ mod tests {
                 input_tokens: 900,
                 output_tokens: 120,
                 stopped_at_limit: false,
+                refusal: None,
+                exceeded_context: false,
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_max_tokens_stop_as_stopped_at_the_limit() {
+        let mut server = mockito::Server::new();
+        let _messages = server
+            .mock("POST", "/v1/messages")
+            .with_body(
+                r#"{"content": [{"type": "text", "text": "Three"}], "stop_reason": "max_tokens", "usage": {"input_tokens": 900, "output_tokens": 16000}}"#,
+            )
+            .create();
+
+        let reply = repository(&server).chat(&chat()).unwrap();
+
+        assert_eq!(
+            reply,
+            LlmReply {
+                content: "Three".to_string(),
+                thinking: String::new(),
+                input_tokens: 900,
+                output_tokens: 16000,
+                stopped_at_limit: true,
                 refusal: None,
                 exceeded_context: false,
             }

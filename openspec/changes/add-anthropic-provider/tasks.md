@@ -56,7 +56,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 3.3 `it_should_send_the_schema_as_structured_output`
 - [x] 3.4 `it_should_send_no_temperature_or_thinking`
 - [x] 3.5 `it_should_read_the_text_blocks_and_usage`
-- [ ] 3.6 `it_should_report_a_max_tokens_stop_as_stopped_at_the_limit`
+- [x] 3.6 `it_should_report_a_max_tokens_stop_as_stopped_at_the_limit`
 - [ ] 3.7 `it_should_report_a_refusal_stop_as_refused`
 - [ ] 3.8 `it_should_report_prompt_too_long_as_refused_as_too_long`
 - [ ] 3.9 `it_should_report_another_bad_request_as_refused`
