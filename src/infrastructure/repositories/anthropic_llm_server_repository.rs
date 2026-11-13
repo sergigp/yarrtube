@@ -834,3 +834,52 @@ mod tests {
             .to_string()
     }
 }
+
+#[cfg(test)]
+mod anthropic_contract_tests {
+    use super::*;
+    use crate::domain::llm_server::{Effort, MIN_CHAT_TIMEOUT};
+
+    #[test]
+    #[ignore = "real Anthropic: run scripts/run-tests.sh --contract"]
+    fn it_should_list_models_and_answer_on_the_real_api() {
+        let repository = AnthropicLlmServerRepository::new(AnthropicConfig {
+            api_url: std::env::var("YARRTUBE_ANTHROPIC_API_URL")
+                .unwrap_or_else(|_| "https://api.anthropic.com".to_string()),
+            api_key: AnthropicApiKey::new(
+                std::env::var("YARRTUBE_ANTHROPIC_API_KEY")
+                    .expect("YARRTUBE_ANTHROPIC_API_KEY must be set"),
+            ),
+        });
+
+        let haiku = repository
+            .find()
+            .unwrap()
+            .model("claude-haiku-5-5")
+            .map(|model| (model.display_name.is_some(), model.context_window.is_some()));
+        let reply = repository
+            .chat(&LlmChat {
+                model: "claude-haiku-5-5".to_string(),
+                system: "Answer with one word.".to_string(),
+                user: "What color is the sky on a clear day?".to_string(),
+                context_length: 131_072,
+                temperature: 0.0,
+                thinking: false,
+                effort: Effort::Low,
+                max_output_tokens: 1024,
+                format: None,
+                timeout: MIN_CHAT_TIMEOUT,
+            })
+            .unwrap();
+
+        assert_eq!(haiku, Some((true, true)));
+        assert_eq!(
+            (
+                reply.content.trim().is_empty(),
+                reply.refusal,
+                reply.stopped_at_limit,
+            ),
+            (false, None, false)
+        );
+    }
+}

@@ -4,8 +4,10 @@
 #                formatting and clippy
 #   --web        the web UI's tests (Vitest)
 #   --rust       the Rust tests (`cargo test`)
-#   --contract   the YouTube contract tests: adapters against the real yt-dlp
-#                and YouTube Data API (needs yt-dlp, ffprobe, YOUTUBE_API_KEY)
+#   --contract   the contract tests: adapters against the real yt-dlp and
+#                YouTube Data API (needs yt-dlp, ffprobe, YOUTUBE_API_KEY), and
+#                against the real Anthropic API when YARRTUBE_ANTHROPIC_API_KEY
+#                is set (skipped otherwise)
 #   --e2e        the end-to-end suite: the Docker image driven through real
 #                browsers against a fake YouTube (needs Docker)
 #   --all        every suite above
@@ -485,6 +487,19 @@ run_contract() {
   step "YouTube contract tests"
   YOUTUBE_API_KEY="$YOUTUBE_API_KEY" YTDLP_PATH="$YTDLP" \
     run_phase "tests" cargo cargo test --locked -- --ignored youtube_contract
+  run_anthropic_contract
+}
+
+# The Anthropic adapter's `#[ignore]`d test against the real API (module
+# `anthropic_contract_tests`): it lists the models and makes one tiny call,
+# billed to the key. Without a key there's nothing to call, so it's skipped.
+run_anthropic_contract() {
+  step "Anthropic contract tests"
+  if [[ -z "${YARRTUBE_ANTHROPIC_API_KEY:-}" ]]; then
+    echo "  - skipped: YARRTUBE_ANTHROPIC_API_KEY isn't set"
+    return
+  fi
+  run_phase "tests" cargo cargo test --locked -- --ignored anthropic_contract
 }
 
 # Builds the release Docker image (or takes `E2E_IMAGE`), runs it with fresh
