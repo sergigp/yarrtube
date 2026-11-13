@@ -93,8 +93,9 @@ impl Preferences {
     pub fn apply(
         self,
         change: PreferencesChange,
-        _anthropic_available: bool,
+        anthropic_available: bool,
     ) -> Result<Self, ValidationError> {
+        Self::ensure_anthropic_has_key(&change, anthropic_available)?;
         let summaries = SummarySettings {
             enabled: change.summaries_enabled.unwrap_or(self.summaries.enabled),
             model: change.summaries_model.unwrap_or(self.summaries.model),
@@ -161,6 +162,19 @@ impl Preferences {
             },
         }
         .ensure_ai_has_url()
+    }
+
+    /// Anthropic can't be picked without a key.
+    fn ensure_anthropic_has_key(
+        change: &PreferencesChange,
+        anthropic_available: bool,
+    ) -> Result<(), ValidationError> {
+        match (change.ai_provider, anthropic_available) {
+            (Some(AiProvider::Anthropic), false) => Err(ValidationError(
+                "Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic".to_string(),
+            )),
+            _ => Ok(()),
+        }
     }
 
     fn ensure_ai_has_url(self) -> Result<Self, ValidationError> {
