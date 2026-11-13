@@ -12,7 +12,7 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Duration, Utc};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::warn;
 
@@ -83,6 +83,7 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
     fn sync(&self) -> anyhow::Result<()> {
         let library = self.plex_episode_finder.read_library()?;
         let rows = self.agreed_rows()?;
+        self.forget_undownloaded(&rows)?;
         let merged = self.merge_videos(&library, &rows)?;
         let merged = if self.pull(&merged)? {
             self.merge_videos(&library, &rows)?
@@ -106,6 +107,22 @@ impl PlexWatchSyncer {
             .into_iter()
             .map(|row| (row.video_id.clone(), row))
             .collect())
+    }
+
+    /// Deletes the rows of videos no longer downloaded (or gone).
+    fn forget_undownloaded(&self, rows: &HashMap<VideoId, EpisodeWatch>) -> anyhow::Result<()> {
+        let downloaded: HashSet<VideoId> = self
+            .video_repository
+            .list_downloaded()?
+            .into_iter()
+            .map(|video| video.id)
+            .collect();
+        let gone: Vec<VideoId> = rows
+            .keys()
+            .filter(|id| !downloaded.contains(*id))
+            .cloned()
+            .collect();
+        self.episode_watch_repository.delete_many(&gone)
     }
 
     /// Each downloaded video with an episode in Plex, its episode and how

@@ -2,7 +2,7 @@ use crate::domain::plex_watch::EpisodeWatch;
 use crate::domain::video::{PlaybackPosition, VideoId, WatchProgress};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, params, params_from_iter};
 
 /// The watch state each stored video last agreed on with its Plex episode.
 pub trait EpisodeWatchRepository: Send + Sync {
@@ -53,8 +53,19 @@ impl EpisodeWatchRepository for SqliteEpisodeWatchRepository {
         tx.commit().context("failed to commit episode watch save")
     }
 
-    fn delete_many(&self, _video_ids: &[VideoId]) -> anyhow::Result<()> {
-        Ok(())
+    fn delete_many(&self, video_ids: &[VideoId]) -> anyhow::Result<()> {
+        if video_ids.is_empty() {
+            return Ok(());
+        }
+        let placeholders = vec!["?"; video_ids.len()].join(", ");
+        let conn = self.db.write()?;
+        conn.execute(
+            &format!("DELETE FROM episode_watch WHERE video_id IN ({placeholders})"),
+            params_from_iter(video_ids.iter().map(|id| id.as_str())),
+        )
+        .inspect_err(|e| tracing::error!(error = %e, "failed to delete episode watch rows"))
+        .context("failed to delete episode watch rows")
+        .map(drop)
     }
 }
 
