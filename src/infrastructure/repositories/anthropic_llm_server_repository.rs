@@ -202,6 +202,35 @@ mod tests {
         messages.assert();
     }
 
+    #[test]
+    fn it_should_send_no_temperature_or_thinking() {
+        let mut server = mockito::Server::new();
+        let messages = server
+            .mock("POST", "/v1/messages")
+            .match_body(mockito::Matcher::Json(serde_json::json!({
+                "model": "claude-haiku-5-5",
+                "max_tokens": 3072,
+                "system": "Be brief.",
+                "messages": [{"role": "user", "content": "Title: Sicilian"}],
+                "output_config": {"effort": "high"},
+            })))
+            .with_body(ANSWER)
+            .create();
+        let thinking_and_warm = LlmChat {
+            temperature: 1.0,
+            thinking: true,
+            context_length: 4096,
+            effort: Effort::High,
+            max_output_tokens: 3072,
+            ..chat()
+        };
+
+        let result = repository(&server).chat(&thinking_and_warm);
+
+        assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
+        messages.assert();
+    }
+
     fn repository(server: &mockito::Server) -> AnthropicLlmServerRepository {
         AnthropicLlmServerRepository::new(AnthropicConfig {
             api_url: server.url(),
