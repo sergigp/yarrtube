@@ -26,7 +26,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 2.5 `it_should_read_the_anthropic_defaults_and_availability`: the new preferences defaults and `anthropic_available`.
 - [x] 2.6 `it_should_save_the_anthropic_provider_and_settings`: the provider and Anthropic settings are saved, and the Ollama settings are untouched.
 - [x] 2.7 `it_should_reject_the_anthropic_provider_without_a_key`: 400 `Set YARRTUBE_ANTHROPIC_API_KEY to use Anthropic`.
-- [ ] 2.8 `it_should_reject_an_unknown_provider`: 400 for the `AiProvider` validation.
+- [x] 2.8 `it_should_reject_an_unknown_provider`: 400 for the `AiProvider` validation.
 - [ ] 2.9 `it_should_reject_an_unknown_effort`: 400 for the `Effort` validation.
 - [ ] 2.10 `it_should_enable_ai_on_anthropic_without_an_ollama_url`: "AI Needs An Ollama URL" applies only to Ollama.
 - [ ] 2.11 `it_should_ignore_a_sent_anthropic_available`: `anthropic_available` is read-only.

@@ -1396,6 +1396,23 @@ async fn it_should_reject_the_anthropic_provider_without_a_key() {
     assert_eq!(repository.find().unwrap(), None);
 }
 
+#[tokio::test]
+async fn it_should_reject_an_unknown_provider() {
+    let request = UpdatePreferencesRequest {
+        ai_provider: Some("openai".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(any_preferences_updater(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "AI provider must be \"ollama\" or \"anthropic\" (got \"openai\")"
+        ))
+    );
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await
