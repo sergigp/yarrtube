@@ -78,6 +78,33 @@ describe('AiSettingsView', () => {
     )
   })
 
+  it("shows Effort and Prompt only under Anthropic's Advanced and saves only the changed effort", async () => {
+    const saved = onAnthropic()
+    const fetchMock = mockApi({
+      'GET /api/preferences': saved,
+      'GET /api/llm/anthropic': anAnthropicServer(),
+      'PATCH /api/preferences': { ...saved, anthropic_summaries_effort: 'low' },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Advanced' }))
+    await user.click(screen.getByRole('button', { name: 'Advanced categorization settings' }))
+
+    expect(screen.getByRole('combobox', { name: 'Effort' })).toHaveValue('medium')
+    expect(screen.getByRole('combobox', { name: 'Categorization effort' })).toHaveValue('medium')
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(saved.summaries_prompt)
+    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
+      saved.categorization_prompt,
+    )
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: /thinking/i })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Effort' }), 'low')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'low' }])
+  })
+
   it('shows the Categorization section disabled on a fresh install', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)

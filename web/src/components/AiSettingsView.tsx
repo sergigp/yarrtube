@@ -9,6 +9,7 @@ import {
 } from '@/api/queries'
 import type {
   AiProvider,
+  Effort,
   OllamaServer,
   Preferences,
   PreferencesPatch,
@@ -231,38 +232,49 @@ function AiSettings({ saved }: { saved: Preferences }) {
             <AdvancedToggle open={advancedOpen} onToggle={setAdvancedOpen} />
             {advancedOpen && (
               <>
-                <Field id="summaries-context-length" label="Context length">
-                  <Input
-                    id="summaries-context-length"
-                    type="number"
-                    min={1024}
-                    max={131072}
-                    step={1024}
-                    value={form.summaries_context_length}
+                {onAnthropic ? (
+                  <EffortField
+                    id="summaries-effort"
+                    value={form.anthropic_summaries_effort}
                     disabled={aiOff}
-                    onChange={(event) => set('summaries_context_length', event.target.value)}
+                    onChange={(value) => set('anthropic_summaries_effort', value)}
                   />
-                </Field>
-                <Field id="summaries-temperature" label="Temperature">
-                  <Input
-                    id="summaries-temperature"
-                    type="number"
-                    min={0}
-                    max={2}
-                    step={0.1}
-                    value={form.summaries_temperature}
-                    disabled={aiOff}
-                    onChange={(event) => set('summaries_temperature', event.target.value)}
-                  />
-                </Field>
-                <ThinkingField
-                  id="summaries-thinking"
-                  model={form.summaries_model}
-                  cannotThink={summariesCannotThink}
-                  checked={form.summaries_thinking}
-                  disabled={aiOff}
-                  onChange={(value) => set('summaries_thinking', value)}
-                />
+                ) : (
+                  <>
+                    <Field id="summaries-context-length" label="Context length">
+                      <Input
+                        id="summaries-context-length"
+                        type="number"
+                        min={1024}
+                        max={131072}
+                        step={1024}
+                        value={form.summaries_context_length}
+                        disabled={aiOff}
+                        onChange={(event) => set('summaries_context_length', event.target.value)}
+                      />
+                    </Field>
+                    <Field id="summaries-temperature" label="Temperature">
+                      <Input
+                        id="summaries-temperature"
+                        type="number"
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        value={form.summaries_temperature}
+                        disabled={aiOff}
+                        onChange={(event) => set('summaries_temperature', event.target.value)}
+                      />
+                    </Field>
+                    <ThinkingField
+                      id="summaries-thinking"
+                      model={form.summaries_model}
+                      cannotThink={summariesCannotThink}
+                      checked={form.summaries_thinking}
+                      disabled={aiOff}
+                      onChange={(value) => set('summaries_thinking', value)}
+                    />
+                  </>
+                )}
                 <PromptField
                   id="summaries-prompt"
                   help={<PromptHelp />}
@@ -297,7 +309,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
             id="categorization-model"
             name="Categorization model"
             models={models}
-          missing={missingModel}
+            missing={missingModel}
             value={form[categorizationModelKey]}
             disabled={aiOff || !form.categorization_enabled}
             onChange={(value) => set(categorizationModelKey, value)}
@@ -311,55 +323,67 @@ function AiSettings({ saved }: { saved: Preferences }) {
               />
               {categorizationAdvancedOpen && (
                 <>
-                  <Field id="categorization-context-length" label="Context length">
-                    <Input
-                      id="categorization-context-length"
-                      aria-label="Categorization context length"
-                      type="number"
-                      min={1024}
-                      max={131072}
-                      step={1024}
-                      value={categorizationContextLength}
-                      readOnly={form.categorization_context_length_auto}
+                  {onAnthropic ? (
+                    <EffortField
+                      id="categorization-effort"
+                      name="Categorization effort"
+                      value={form.anthropic_categorization_effort}
                       disabled={aiOff}
-                      onChange={(event) => set('categorization_context_length', event.target.value)}
+                      onChange={(value) => set('anthropic_categorization_effort', value)}
                     />
-                    <p className="text-sm text-muted-foreground">
-                      Auto sizes it from your categories with an AI prompt, about 1,800 tokens
-                      each. Too small and videos are asked about one category at a time, which is
-                      slower.
-                    </p>
-                  </Field>
-                  <SwitchRow
-                    id="categorization-context-length-auto"
-                    label="Auto"
-                    name="Auto context length"
-                    checked={form.categorization_context_length_auto}
-                    disabled={aiOff}
-                    onChange={setCategorizationAuto}
-                  />
-                  <Field id="categorization-temperature" label="Temperature">
-                    <Input
-                      id="categorization-temperature"
-                      aria-label="Categorization temperature"
-                      type="number"
-                      min={0}
-                      max={2}
-                      step={0.1}
-                      value={form.categorization_temperature}
-                      disabled={aiOff}
-                      onChange={(event) => set('categorization_temperature', event.target.value)}
-                    />
-                  </Field>
-                  <ThinkingField
-                    id="categorization-thinking"
-                    name="Categorization thinking"
-                    model={form.categorization_model}
-                    cannotThink={categorizationCannotThink}
-                    checked={form.categorization_thinking}
-                    disabled={aiOff}
-                    onChange={(value) => set('categorization_thinking', value)}
-                  />
+                  ) : (
+                    <>
+                      <Field id="categorization-context-length" label="Context length">
+                        <Input
+                          id="categorization-context-length"
+                          aria-label="Categorization context length"
+                          type="number"
+                          min={1024}
+                          max={131072}
+                          step={1024}
+                          value={categorizationContextLength}
+                          readOnly={form.categorization_context_length_auto}
+                          disabled={aiOff}
+                          onChange={(event) => set('categorization_context_length', event.target.value)}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Auto sizes it from your categories with an AI prompt, about 1,800 tokens
+                          each. Too small and videos are asked about one category at a time, which is
+                          slower.
+                        </p>
+                      </Field>
+                      <SwitchRow
+                        id="categorization-context-length-auto"
+                        label="Auto"
+                        name="Auto context length"
+                        checked={form.categorization_context_length_auto}
+                        disabled={aiOff}
+                        onChange={setCategorizationAuto}
+                      />
+                      <Field id="categorization-temperature" label="Temperature">
+                        <Input
+                          id="categorization-temperature"
+                          aria-label="Categorization temperature"
+                          type="number"
+                          min={0}
+                          max={2}
+                          step={0.1}
+                          value={form.categorization_temperature}
+                          disabled={aiOff}
+                          onChange={(event) => set('categorization_temperature', event.target.value)}
+                        />
+                      </Field>
+                      <ThinkingField
+                        id="categorization-thinking"
+                        name="Categorization thinking"
+                        model={form.categorization_model}
+                        cannotThink={categorizationCannotThink}
+                        checked={form.categorization_thinking}
+                        disabled={aiOff}
+                        onChange={(value) => set('categorization_thinking', value)}
+                      />
+                    </>
+                  )}
                   <PromptField
                     id="categorization-prompt"
                     name="Categorization prompt"
@@ -463,7 +487,7 @@ function ModelField({
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+          className={SELECT_CLASS}
         >
           {modelOptions(models, value, missing).map((option) => (
             <option key={option.value} value={option.value}>
@@ -510,6 +534,46 @@ function AdvancedToggle({
     </button>
   )
 }
+
+/** "Effort": how much an Anthropic model reasons before answering. */
+function EffortField({
+  id,
+  name,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string
+  /** The field's accessible name, when the label alone is ambiguous. */
+  name?: string
+  value: Effort
+  disabled: boolean
+  onChange: (value: Effort) => void
+}) {
+  return (
+    <Field id={id} label="Effort" help={<PreferenceHelp label="Effort" help={EFFORT_HELP} />}>
+      <select
+        id={id}
+        aria-label={name}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as Effort)}
+        className={SELECT_CLASS}
+      >
+        {EFFORTS.map((effort) => (
+          <option key={effort} value={effort}>
+            {effort}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}
+
+const EFFORTS: Effort[] = ['low', 'medium', 'high']
+
+const EFFORT_HELP =
+  'Higher effort makes the model reason more before answering: slower, and it costs more tokens.'
 
 /** The "Thinking" switch, or a note when `model` is known not to support it. */
 function ThinkingField({
@@ -605,6 +669,9 @@ function PromptField({
     </Field>
   )
 }
+
+const SELECT_CLASS =
+  'h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30'
 
 const THINKING_HELP =
   'Lets the model reason before answering: slower, but more accurate. Some models, such as qwen3:4b, think even when it is off.'
