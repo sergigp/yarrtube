@@ -100,7 +100,8 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
             .into_iter()
             .filter_map(|(video, episode, outcome)| self.settle(&video, episode, outcome))
             .collect();
-        self.episode_watch_repository.save_many(&synced)
+        self.episode_watch_repository.save_many(&synced)?;
+        self.request_sync(self.clock.now() + SYNC_INTERVAL)
     }
 }
 

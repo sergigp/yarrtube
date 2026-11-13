@@ -662,6 +662,26 @@ fn it_should_retry_later_if_plex_is_unreachable() {
     );
 }
 
+#[test]
+fn it_should_schedule_the_next_sync_in_five_minutes() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        Arc::new(FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators")),
+        Arc::new(SqliteEpisodeWatchRepository::new(db.database())),
+        task_repository.clone(),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_sync(1, now() + Duration::minutes(5))]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
