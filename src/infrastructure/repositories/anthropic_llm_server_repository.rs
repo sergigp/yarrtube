@@ -66,14 +66,43 @@ impl AnthropicLlmServerRepository {
 
     /// The request body: no temperature, context length or thinking, so the
     /// model's default adaptive thinking applies.
+    /// The answer's schema, when the chat has one, goes as structured output.
     fn message_body(chat: &LlmChat) -> serde_json::Value {
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "model": chat.model,
             "max_tokens": chat.max_output_tokens,
             "system": chat.system,
             "messages": [{"role": "user", "content": chat.user}],
             "output_config": {"effort": chat.effort.as_str()},
-        })
+        });
+        if let Some(schema) = &chat.format {
+            body["output_config"]["format"] = serde_json::json!({
+                "type": "json_schema",
+                "schema": Self::closed(schema),
+            });
+        }
+        body
+    }
+
+    /// `schema` with `additionalProperties: false` on every object, which
+    /// structured output requires.
+    fn closed(schema: &serde_json::Value) -> serde_json::Value {
+        match schema {
+            serde_json::Value::Object(fields) => {
+                let mut closed: serde_json::Map<_, _> = fields
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Self::closed(value)))
+                    .collect();
+                if closed.get("type").and_then(serde_json::Value::as_str) == Some("object") {
+                    closed
+                        .entry("additionalProperties")
+                        .or_insert(serde_json::Value::Bool(false));
+                }
+                serde_json::Value::Object(closed)
+            }
+            serde_json::Value::Array(items) => items.iter().map(Self::closed).collect(),
+            other => other.clone(),
+        }
     }
 
     /// A fresh client per call, as for Ollama.
@@ -122,6 +151,52 @@ mod tests {
             .create();
 
         let result = repository(&server).chat(&chat());
+
+        assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
+        messages.assert();
+    }
+
+    #[test]
+    fn it_should_send_the_schema_as_structured_output() {
+        let mut server = mockito::Server::new();
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {"Tech": {
+                "type": "object",
+                "properties": {"reason": {"type": "string"}, "belongs": {"type": "boolean"}},
+                "required": ["reason", "belongs"],
+            }},
+            "required": ["Tech"],
+        });
+        let messages = server
+            .mock("POST", "/v1/messages")
+            .match_body(mockito::Matcher::PartialJson(serde_json::json!({
+                "output_config": {
+                    "effort": "medium",
+                    "format": {"type": "json_schema", "schema": {
+                        "type": "object",
+                        "properties": {"Tech": {
+                            "type": "object",
+                            "properties": {
+                                "reason": {"type": "string"},
+                                "belongs": {"type": "boolean"},
+                            },
+                            "required": ["reason", "belongs"],
+                            "additionalProperties": false,
+                        }},
+                        "required": ["Tech"],
+                        "additionalProperties": false,
+                    }},
+                },
+            })))
+            .with_body(ANSWER)
+            .create();
+        let with_schema = LlmChat {
+            format: Some(schema),
+            ..chat()
+        };
+
+        let result = repository(&server).chat(&with_schema);
 
         assert_eq!(result.map(|_| ()).map_err(|e| e.to_string()), Ok(()));
         messages.assert();
