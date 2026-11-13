@@ -38,7 +38,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 2.17 `it_should_wait_when_anthropic_is_unavailable_during_a_call`: an unreachable-tagged chat error makes the summary wait 6 hours.
 - [x] 2.18 `it_should_categorize_with_the_anthropic_model_and_effort`: `CategorizationCall::anthropic`, with the effort and schema sent.
 - [x] 2.19 `it_should_fall_back_per_category_without_dropping_thinking_on_anthropic`: no retry without thinking on Anthropic.
-- [ ] 2.20 `it_should_count_an_own_call_limit_stop_as_a_failed_attempt_on_anthropic`: Retrying, with no `failed` verdict.
+- [x] 2.20 `it_should_count_an_own_call_limit_stop_as_a_failed_attempt_on_anthropic`: Retrying, with no `failed` verdict.
 - [ ] 2.21 `it_should_wait_when_anthropic_is_unavailable_for_categorization`: the categorization waits 6 hours and keeps its attempts.
 - [ ] 2.22 Web: `it hides the provider choice without an Anthropic key`. The Provider section is unchanged without a key.
 - [ ] 2.23 Web: `it saves only ai_provider when switching to Anthropic and shows its settings`. Covers the provider choice and saving it.

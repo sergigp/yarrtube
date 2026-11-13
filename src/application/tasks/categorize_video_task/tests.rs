@@ -2314,6 +2314,53 @@ fn it_should_fall_back_per_category_without_dropping_thinking_on_anthropic() {
     assert_eq!(thinking_asked(&llm), vec![false, false, false]);
 }
 
+#[test]
+fn it_should_count_an_own_call_limit_stop_as_a_failed_attempt_on_anthropic() {
+    let db = TestDatabase::new();
+    let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Tech")]);
+    SqlitePreferencesRepository::new(db.database())
+        .save(&anthropic_categorization_on())
+        .unwrap();
+    let llm = anthropic_replying(vec![stopped_at_the_limit()]);
+    let task = categorize_video_task(&db, llm.clone());
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + chrono::Duration::minutes(10),
+            reason: "the model couldn't answer for Tech (it hit the 3072-token output limit)"
+                .to_string(),
+        })
+    );
+    assert_eq!(thinking_asked(&llm), vec![false]);
+    assert_eq!(
+        verdict_repository
+            .find_many(std::slice::from_ref(&video.id))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            categorization: StepState {
+                status: StepStatus::Retrying,
+                attempts: RetryAttempts {
+                    failed: 1,
+                    last_failed_at: Some(later()),
+                },
+            },
+            updated_at: later(),
+            ..video
+        })
+    );
+}
+
 fn summary_lines(lines: &[String]) -> Vec<String> {
     lines
         .iter()
