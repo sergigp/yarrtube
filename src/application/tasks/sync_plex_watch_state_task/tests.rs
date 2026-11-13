@@ -100,6 +100,43 @@ fn it_should_pull_an_episode_watched_in_plex() {
     );
 }
 
+#[test]
+fn it_should_push_a_playback_position() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_video(
+        &db,
+        Video {
+            watch: in_progress(300, an_hour_ago()),
+            ..downloaded_video("yt1", "S2023E1114 - One.mp4")
+        },
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), vec!["progress:101:300000".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(
+            &video,
+            "101",
+            WatchProgress::InProgress(position(300))
+        )]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
@@ -192,6 +229,19 @@ fn watch_state(db: &TestDatabase, video: &Video) -> WatchState {
         .unwrap()
         .unwrap()
         .watch
+}
+
+/// Unwatched in yarrtube, stopped at `seconds`, last played `at`.
+fn in_progress(seconds: i64, at: DateTime<Utc>) -> WatchState {
+    WatchState {
+        watched_at: None,
+        position: position(seconds),
+        last_played_at: Some(at),
+    }
+}
+
+fn position(seconds: i64) -> PlaybackPosition {
+    PlaybackPosition::new(seconds).unwrap()
 }
 
 /// Watched once in Plex, last viewed `at`.

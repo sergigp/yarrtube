@@ -188,7 +188,10 @@ impl PlexWatchSyncer {
             WatchProgress::Watched => self
                 .plex_library_repository
                 .mark_watched(&episode.rating_key),
-            _ => Ok(()),
+            WatchProgress::InProgress(position) => self
+                .plex_library_repository
+                .save_position(&episode.rating_key, position),
+            WatchProgress::Unplayed => Ok(()),
         }
     }
 }

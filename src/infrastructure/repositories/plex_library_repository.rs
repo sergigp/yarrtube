@@ -769,7 +769,14 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         Ok(())
     }
 
-    fn save_position(&self, _rating_key: &str, _position: PlaybackPosition) -> anyhow::Result<()> {
+    fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        let offset_ms = position.seconds() * 1000;
+        self.record(format!("progress:{rating_key}:{offset_ms}"));
+        self.update_watch(rating_key, |watch| PlexWatchState {
+            view_offset_ms: Some(offset_ms),
+            ..watch
+        });
         Ok(())
     }
 }
