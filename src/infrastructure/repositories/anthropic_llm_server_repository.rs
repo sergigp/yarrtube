@@ -6,6 +6,8 @@ use std::fmt;
 use std::time::Duration;
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
+/// How much of an error body that isn't Anthropic's is kept.
+const ERROR_BODY_CHARS: usize = 300;
 /// How long connecting may take before Anthropic counts as unreachable.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -65,12 +67,9 @@ impl AnthropicLlmServerRepository {
             .json(&Self::message_body(chat))
             .send()
             .map_err(Self::send_error)?;
-        match response.status() {
-            StatusCode::BAD_REQUEST => return Self::bad_request(Self::error_message(response)?),
-            status @ (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND) => {
-                return Err(Self::unavailable(status, &Self::error_message(response)?));
-            }
-            _ => {}
+        let status = response.status();
+        if !status.is_success() {
+            return Self::failed(status, &Self::error_message(response)?);
         }
         let response: MessageResponse = response
             .json()
@@ -102,16 +101,23 @@ impl AnthropicLlmServerRepository {
         }
     }
 
-    /// A rejected request, too long when the prompt doesn't fit; out of
-    /// credit, Anthropic is unavailable until it is topped up.
-    fn bad_request(message: String) -> anyhow::Result<LlmReply> {
-        if message.to_lowercase().contains("credit balance") {
-            return Err(Self::unavailable(StatusCode::BAD_REQUEST, &message));
+    /// A call Anthropic answered `status` with `message`: unavailable for a
+    /// rejected key, an unknown model or no credit; refused (too long when
+    /// the prompt doesn't fit) for another bad request; else a server fault.
+    fn failed(status: StatusCode, message: &str) -> anyhow::Result<LlmReply> {
+        match status {
+            StatusCode::BAD_REQUEST if message.to_lowercase().contains("credit balance") => {
+                Err(Self::unavailable(status, message))
+            }
+            StatusCode::BAD_REQUEST if message.contains("prompt is too long") => {
+                Ok(LlmReply::refused_as_too_long(message))
+            }
+            StatusCode::BAD_REQUEST => Ok(LlmReply::refused(message)),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND => {
+                Err(Self::unavailable(status, message))
+            }
+            _ => Err(Self::answered(status, message)),
         }
-        Ok(match message.contains("prompt is too long") {
-            true => LlmReply::refused_as_too_long(message),
-            false => LlmReply::refused(message),
-        })
     }
 
     /// `error`, tagged `LlmServerUnreachable` when it is a connect error.
@@ -126,15 +132,20 @@ impl AnthropicLlmServerRepository {
 
     /// Anthropic answering `status` with `message`, as unavailable.
     fn unavailable(status: StatusCode, message: &str) -> anyhow::Error {
-        anyhow::anyhow!("Anthropic answered {status}: {message}").context(LlmServerUnreachable)
+        Self::answered(status, message).context(LlmServerUnreachable)
     }
 
-    /// The message of Anthropic's error body.
+    fn answered(status: StatusCode, message: &str) -> anyhow::Error {
+        anyhow::anyhow!("Anthropic answered {status}: {message}")
+    }
+
+    /// The message of Anthropic's error body, or the start of a body that
+    /// isn't one (e.g. a proxy's page).
     fn error_message(response: reqwest::blocking::Response) -> anyhow::Result<String> {
-        let error: ErrorResponse = response
-            .json()
-            .context("/v1/messages didn't answer as Anthropic does")?;
-        Ok(error.error.message)
+        let body = response.text()?;
+        Ok(serde_json::from_str::<ErrorResponse>(&body)
+            .map(|error| error.error.message)
+            .unwrap_or_else(|_| body.chars().take(ERROR_BODY_CHARS).collect()))
     }
 
     /// The request body: no temperature, context length or thinking, so the
@@ -551,6 +562,44 @@ mod tests {
         assert_eq!(
             result.map_err(|e| e.is::<LlmServerUnreachable>()),
             Err(true)
+        );
+    }
+
+    #[test]
+    fn it_should_fail_on_an_overloaded_api_as_a_server_fault() {
+        let faults = [
+            (529, "overloaded_error"),
+            (429, "rate_limit_error"),
+            (500, "api_error"),
+        ]
+        .map(|(status, kind)| {
+            let mut server = mockito::Server::new();
+            let _messages = server
+                .mock("POST", "/v1/messages")
+                .with_status(status)
+                .with_body(error_body(kind, "Overloaded"))
+                .create();
+            repository(&server)
+                .chat(&chat())
+                .map_err(|e| (e.is::<LlmServerUnreachable>(), format!("{e:#}")))
+        });
+
+        assert_eq!(
+            faults,
+            [
+                Err((
+                    false,
+                    "Anthropic answered 529 <unknown status code>: Overloaded".to_string()
+                )),
+                Err((
+                    false,
+                    "Anthropic answered 429 Too Many Requests: Overloaded".to_string()
+                )),
+                Err((
+                    false,
+                    "Anthropic answered 500 Internal Server Error: Overloaded".to_string()
+                )),
+            ]
         );
     }
 
