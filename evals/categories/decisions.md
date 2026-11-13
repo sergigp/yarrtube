@@ -9,7 +9,52 @@ Nothing passes the bar yet. The app ships **`qwen3:4b` with thinking**, prompt
 [`v2-batch`](../../prompts/categorization/v2-batch.md), temperature 0, one call
 per video about all its pending categories (Auto `num_ctx`, 16384 for 9; output
 cap 1,365 per category, at least 3072), and one call per category for a video
-that call can't answer. See the two entries below.
+that call can't answer. See the two entries below the newest.
+
+**On Anthropic (`add-anthropic-provider`): `claude-haiku-5-5` at effort
+`low`**, same prompt and batching: 8 of 9 categories pass. See the newest
+entry.
+
+## 2026-11-13 · Anthropic · claude-haiku-5-5 with `--batch`, effort low
+
+Runs, the shipped setup (`--batch`, prompt `v2-batch`, output cap scaled to
+the categories, the schema as structured output, adaptive thinking):
+[`effort low`](results/2026-11-13_1016_prompt-v2-batch_claude-haiku-5-5_effort-low_batch/report.md),
+[`effort medium`](results/2026-11-13_1019_prompt-v2-batch_claude-haiku-5-5_effort-medium_batch/report.md),
+compared with the [`qwen3:4b` batch run](results/2026-11-09_1903_prompt-v2-batch_qwen3-4b_think-on_batch/report.md).
+Same 58 videos (2 still have no summary).
+
+Wrong / missed / errors. Pass needs at most 1 wrong and no errors:
+
+| Category | Labeled | qwen3:4b batch | Pass | Haiku low | Pass | Haiku medium | Pass |
+|---|---|---|---|---|---|---|---|
+| Jobava London | 5 | 0 / 1 / 1 | no | 0 / 1 / 0 | yes | 0 / 1 / 0 | yes |
+| Sicilian | 7 | 0 / 0 / 1 | no | 0 / 0 / 0 | yes | 0 / 0 / 0 | yes |
+| Chess gameplays | 13 | 1 / 0 / 1 | no | 1 / 0 / 0 | yes | 1 / 0 / 0 | yes |
+| Science News | 9 | 1 / 1 / 1 | no | 1 / 0 / 0 | yes | 1 / 0 / 0 | yes |
+| AI news | 10 | 1 / 3 / 1 | no | 2 / 3 / 0 | no | 2 / 3 / 0 | no |
+| Tech | 4 | 0 / 2 / 1 | no | 0 / 2 / 0 | yes | 0 / 2 / 0 | yes |
+| Politics and Economy News | 4 | 2 / 1 / 1 | no | 0 / 0 / 0 | yes | 0 / 0 / 0 | yes |
+| Food for thought | 9 | 2 / 2 / 1 | no | 1 / 2 / 0 | yes | 2 / 1 / 0 | no |
+| Coding tutorials | 5 | 1 / 1 / 1 | no | 1 / 0 / 0 | yes | 3 / 0 / 0 | no |
+| **Total** | | **8 / 11 / 9** | **0** | **6 / 8 / 0** | **8** | **9 / 7 / 0** | **6** |
+
+| | Calls | Output tokens per video | Time per video | Cost (58 videos) |
+|---|---|---|---|---|
+| Haiku low | 58 | 482 | 2.8 s | $0.031 |
+| Haiku medium | 58 | 594 | 3.3 s | $0.035 |
+
+- **Decision: Haiku at effort `low`** for Anthropic categorization. 8 of 9
+  categories pass (qwen3:4b: 0), no errors and no fallback: every call
+  answered all 9 categories. `medium` wrote 23% more tokens for 3 more wrong
+  answers and 2 fewer passes. `add-anthropic-provider` assumed `medium`.
+- AI news is the one failure, as with qwen: 2 wrong, 3 missed, the same
+  videos at both efforts. A category prompt to tune, not a model limit.
+- Cost: 174,394 input tokens per run, about $0.0005 per video for 9
+  categories.
+- Every object in the schema needs `additionalProperties: false` for
+  Anthropic's structured outputs (a 400 otherwise); the eval adds it, and the
+  app's adapter must too.
 
 ## 2026-11-10 · batch shipped with its fallback · single calls on `v2-batch` unmeasured
 

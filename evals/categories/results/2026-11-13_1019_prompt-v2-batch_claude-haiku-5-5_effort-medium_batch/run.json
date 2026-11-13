@@ -1,0 +1,13 @@
+{
+  "model": "claude-haiku-5-5",
+  "think": false,
+  "prompt_version": "v2-batch",
+  "system_sha": "b242d553ae",
+  "num_ctx": 16384,
+  "temperature": null,
+  "max_output": null,
+  "batch": true,
+  "fallback": true,
+  "provider": "anthropic",
+  "effort": "medium"
+}
