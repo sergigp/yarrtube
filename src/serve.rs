@@ -8,9 +8,9 @@ use crate::domain::services::{
     ChannelViewSearcher, ChapterFetcher, DaemonHealthSearcher, DaemonHealthSearcherApi,
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, LlmServerSearcher,
     MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
-    PlaylistVideoReconciler, PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer,
-    PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
-    ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
+    PlaylistVideoReconciler, PlaylistViewSearcher, PlexEpisodeFinder, PlexFolderScanner,
+    PlexLabelSyncer, PlexLabelSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader,
+    ShowFileWriter, ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
     VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
     VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
     VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
@@ -736,15 +736,25 @@ fn plex_label_syncer(
     plex: PlexIntegration,
 ) -> PlexLabelSyncer {
     PlexLabelSyncer::new(
-        plex.repository,
+        plex.repository.clone(),
         infrastructure.episode_labels_repository.clone(),
         infrastructure.category_playlist_repository.clone(),
         infrastructure.video_categories_repository.clone(),
         infrastructure.category_repository.clone(),
         infrastructure.video_repository.clone(),
-        video_owner_finder(infrastructure),
+        plex_episode_finder(infrastructure, plex),
         infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
+    )
+}
+
+fn plex_episode_finder(
+    infrastructure: &InfrastructureContainer,
+    plex: PlexIntegration,
+) -> PlexEpisodeFinder {
+    PlexEpisodeFinder::new(
+        plex.repository,
+        video_owner_finder(infrastructure),
         videos_path(),
         plex.plex_videos_path,
     )

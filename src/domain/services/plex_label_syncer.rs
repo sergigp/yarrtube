@@ -1,7 +1,7 @@
 use crate::domain::category::{CategoryId, CategoryName};
-use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection, plex_folder_path};
+use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection};
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
-use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::services::{PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary};
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId};
 use crate::domain::video_category::VideoCategories;
@@ -15,7 +15,6 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -31,14 +30,6 @@ pub const CATEGORY_CHANGE_DELAY: Duration = Duration::seconds(10);
 /// Dirty videos labelled per sync; a full batch that made progress ⇒ the
 /// next sync runs now.
 pub const BATCH_SIZE: usize = 500;
-
-/// The Plex library sections holding yarrtube's videos, as one sync reads
-/// them.
-struct PlexLibrary {
-    sections: Vec<PlexSection>,
-    /// Every episode of `sections`, by its server-side file.
-    episodes: HashMap<String, PlexEpisode>,
-}
 
 /// A smart playlist a category should have in a section.
 struct DesiredPlaylist {
@@ -58,8 +49,7 @@ impl DesiredPlaylist {
 }
 
 /// Mirrors each stored video's categories into its Plex episode's labels,
-/// and keeps one smart playlist per category and Plex library on them. Plex
-/// sees yarrtube's `videos_path` at `plex_videos_path`.
+/// and keeps one smart playlist per category and Plex library on them.
 #[derive(Clone)]
 pub struct PlexLabelSyncer {
     plex_library_repository: Arc<dyn PlexLibraryRepository>,
@@ -68,11 +58,9 @@ pub struct PlexLabelSyncer {
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     category_repository: Arc<dyn CategoryRepository>,
     video_repository: Arc<dyn VideoRepository>,
-    video_owner_finder: Arc<VideoOwnerFinder>,
+    plex_episode_finder: PlexEpisodeFinder,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
-    videos_path: String,
-    plex_videos_path: String,
 }
 
 impl PlexLabelSyncer {
@@ -84,11 +72,9 @@ impl PlexLabelSyncer {
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         category_repository: Arc<dyn CategoryRepository>,
         video_repository: Arc<dyn VideoRepository>,
-        video_owner_finder: Arc<VideoOwnerFinder>,
+        plex_episode_finder: PlexEpisodeFinder,
         task_repository: Arc<dyn TaskRepository>,
         clock: Arc<dyn Clock>,
-        videos_path: impl Into<String>,
-        plex_videos_path: impl Into<String>,
     ) -> Self {
         Self {
             plex_library_repository,
@@ -97,11 +83,9 @@ impl PlexLabelSyncer {
             video_categories_repository,
             category_repository,
             video_repository,
-            video_owner_finder,
+            plex_episode_finder,
             task_repository,
             clock,
-            videos_path: videos_path.into(),
-            plex_videos_path: plex_videos_path.into(),
         }
     }
 }
@@ -149,7 +133,7 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let library = match self.read_library() {
+        let library = match self.plex_episode_finder.read_library() {
             Ok(library) => library,
             Err(e) => {
                 warn!(error = %e, "failed to reach Plex, retrying the label sync later");
@@ -158,7 +142,7 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         };
         self.mark_reimported(&library.episodes)?;
         self.track_categorized_videos()?;
-        let backlog = self.label_dirty_videos(&library.episodes)?;
+        let backlog = self.label_dirty_videos(&library)?;
         self.reconcile_playlists(&library.sections)?;
         self.request_next_sync(backlog)
     }
@@ -169,7 +153,7 @@ impl PlexLabelSyncer {
     /// returns whether more may be labellable right away: the batch was full
     /// and at least one of its rows was synced or deleted, so a batch of
     /// videos none of which can be labelled yet never chains syncs.
-    fn label_dirty_videos(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<bool> {
+    fn label_dirty_videos(&self, library: &PlexLibrary) -> anyhow::Result<bool> {
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
         let taken = rows.len();
         let desired = self.desired_labels(&rows)?;
@@ -184,7 +168,7 @@ impl PlexLabelSyncer {
             .into_iter()
             .filter_map(|row| {
                 let video = videos.get(&row.video_id);
-                self.label(row, video, &desired, episodes).transpose()
+                self.label(row, video, &desired, library).transpose()
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
         let progressed = labelled.len() < taken || labelled.iter().any(|row| !row.dirty);
@@ -294,41 +278,6 @@ impl PlexLabelSyncer {
         self.request_sync(if backlog { now } else { now + SYNC_INTERVAL })
     }
 
-    /// The sections holding yarrtube's videos and their episodes.
-    fn read_library(&self) -> anyhow::Result<PlexLibrary> {
-        let sections = self.served_sections()?;
-        let episodes = self.episodes_by_file(&sections)?;
-        Ok(PlexLibrary { sections, episodes })
-    }
-
-    /// The library sections holding yarrtube's videos.
-    fn served_sections(&self) -> anyhow::Result<Vec<PlexSection>> {
-        Ok(self
-            .plex_library_repository
-            .list_sections()?
-            .into_iter()
-            .filter(|section| section.serves(&self.plex_videos_path))
-            .collect())
-    }
-
-    /// Every episode of `sections`, by its server-side file.
-    fn episodes_by_file(
-        &self,
-        sections: &[PlexSection],
-    ) -> anyhow::Result<HashMap<String, PlexEpisode>> {
-        sections
-            .iter()
-            .map(|section| self.plex_library_repository.list_episodes(&section.id))
-            .collect::<anyhow::Result<Vec<_>>>()
-            .map(|episodes| {
-                episodes
-                    .into_iter()
-                    .flatten()
-                    .map(|episode| (episode.file.clone(), episode))
-                    .collect()
-            })
-    }
-
     /// Marks dirty every synced row whose episode Plex no longer lists,
     /// forgetting that episode: one Plex re-imported under a new rating key
     /// is labelled again, and one gone for good keeps no playlist alive.
@@ -414,13 +363,13 @@ impl PlexLabelSyncer {
         row: EpisodeLabels,
         video: Option<&Video>,
         desired: &HashMap<VideoId, PlexLabels>,
-        episodes: &HashMap<String, PlexEpisode>,
+        library: &PlexLibrary,
     ) -> anyhow::Result<Option<EpisodeLabels>> {
         let Some(video) = video else {
             self.episode_labels_repository.delete(&row.video_id)?;
             return Ok(None);
         };
-        let Some(episode) = self.find_episode(video, episodes)? else {
+        let Some(episode) = self.plex_episode_finder.find_episode(video, library)? else {
             return Ok(Some(row.checked(self.clock.now())));
         };
         let desired = desired
@@ -458,25 +407,6 @@ impl PlexLabelSyncer {
         }
         self.plex_library_repository
             .save_labels(episode, desired, &current.missing_from(desired))
-    }
-
-    /// The Plex episode of the video's file.
-    fn find_episode<'a>(
-        &self,
-        video: &Video,
-        episodes: &'a HashMap<String, PlexEpisode>,
-    ) -> anyhow::Result<Option<&'a PlexEpisode>> {
-        let Some(owner) = self.video_owner_finder.find(video)? else {
-            return Ok(None);
-        };
-        Ok(video
-            .download
-            .filename()
-            .map(|filename| owner.target.output_dir.join(filename))
-            .and_then(|file| {
-                plex_folder_path(Path::new(&self.videos_path), &self.plex_videos_path, &file)
-            })
-            .and_then(|file| episodes.get(&file)))
     }
 }
 
