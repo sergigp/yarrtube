@@ -33,8 +33,8 @@
 
 `PlexLibraryRepository` (`mockito`)
 
-- [ ] 3.1 `it_should_list_an_episodes_watch_state` — `viewCount`, `viewOffset`, `lastViewedAt`, `duration` ⇒ `PlexWatchState`.
-- [ ] 3.2 `it_should_list_an_unplayed_episode` — fields absent ⇒ `PlexWatchState::unplayed()`.
+- [x] 3.1 `it_should_list_an_episodes_watch_state` — `viewCount`, `viewOffset`, `lastViewedAt`, `duration` ⇒ `PlexWatchState`.
+- [x] 3.2 `it_should_list_an_unplayed_episode` — fields absent ⇒ `PlexWatchState::unplayed()`.
 - [ ] 3.3 `it_should_mark_an_episode_watched` — `GET /:/scrobble` with `identifier` and `key`, token header.
 - [ ] 3.4 `it_should_mark_an_episode_unwatched` — `GET /:/unscrobble`.
 - [ ] 3.5 `it_should_save_an_episode_position_in_milliseconds` — `GET /:/progress` with `time=215000&state=stopped`.

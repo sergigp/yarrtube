@@ -134,6 +134,14 @@ struct Metadata {
     media: Vec<Media>,
     #[serde(rename = "Label", default)]
     labels: Vec<Tag>,
+    #[serde(rename = "viewCount", default)]
+    view_count: u32,
+    #[serde(rename = "viewOffset")]
+    view_offset: Option<i64>,
+    /// Unix seconds.
+    #[serde(rename = "lastViewedAt")]
+    last_viewed_at: Option<i64>,
+    duration: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -442,6 +450,14 @@ fn plex_escaped(value: &str) -> String {
 
 /// One episode per file of `metadata`'s media parts.
 fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
+    let watch = PlexWatchState {
+        view_count: metadata.view_count,
+        view_offset_ms: metadata.view_offset,
+        last_viewed_at: metadata
+            .last_viewed_at
+            .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0)),
+        duration_ms: metadata.duration,
+    };
     metadata
         .media
         .into_iter()
@@ -450,7 +466,7 @@ fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
             rating_key: metadata.rating_key.clone(),
             section_id: section_id.to_string(),
             file: part.file,
-            watch: PlexWatchState::unplayed(),
+            watch,
         })
         .collect()
 }
@@ -999,6 +1015,65 @@ mod tests {
                 episode("102", "/volume1/b.mkv"),
                 episode("103", "/volume1/c.mp4"),
             ])
+        );
+    }
+
+    #[test]
+    fn it_should_list_an_episodes_watch_state() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "totalSize": 1, "offset": 0, "Metadata": [
+                    {"ratingKey": "101", "viewCount": 2, "viewOffset": 215540,
+                     "lastViewedAt": 1794073896, "duration": 3119000,
+                     "Media": [{"Part": [{"file": "/volume1/a.mp4"}]}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let episodes = repository.list_episodes("19");
+
+        assert_eq!(
+            episodes.map_err(|e| e.to_string()),
+            Ok(vec![PlexEpisode {
+                watch: PlexWatchState {
+                    view_count: 2,
+                    view_offset_ms: Some(215_540),
+                    last_viewed_at: chrono::DateTime::from_timestamp(1_794_073_896, 0),
+                    duration_ms: Some(3_119_000),
+                },
+                ..episode("101", "/volume1/a.mp4")
+            }])
+        );
+    }
+
+    #[test]
+    fn it_should_list_an_unplayed_episode() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "totalSize": 1, "offset": 0, "Metadata": [
+                    {"ratingKey": "101", "Media": [{"Part": [{"file": "/volume1/a.mp4"}]}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let episodes = repository.list_episodes("19");
+
+        assert_eq!(
+            episodes.map_err(|e| e.to_string()),
+            Ok(vec![PlexEpisode {
+                watch: PlexWatchState::unplayed(),
+                ..episode("101", "/volume1/a.mp4")
+            }])
         );
     }
 
