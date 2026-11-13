@@ -45,7 +45,7 @@ tests 2.5, 2.14 and 2.18, and the defaults in the specs, either through
 - [x] 2.24 Web: `it lists Anthropic models and marks a saved one not listed as (not available)`. Covers the Anthropic model picker.
 - [x] 2.25 Web: `it shows Effort and Prompt only under Anthropic's Advanced and saves only the changed effort`. Covers the Effort field.
 - [x] 2.26 Web: `it shows "Connected to Anthropic, <n> models" after testing the connection`. Covers the Anthropic connection test.
-- [ ] 2.27 Web: `it says the key isn't set when Anthropic is saved without one`. Covers the key-removed notice.
+- [x] 2.27 Web: `it says the key isn't set when Anthropic is saved without one`. Covers the key-removed notice.
 
 ## 3. Infrastructure adapters (TDD)
 

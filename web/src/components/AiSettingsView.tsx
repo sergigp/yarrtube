@@ -62,6 +62,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
     setForm((current) => ({ ...current, [key]: value }))
   const aiOff = !form.ai_enabled
   const onAnthropic = form.ai_provider === 'anthropic'
+  // Saved before the key was removed: only Ollama can be picked now.
+  const keyRemoved = !saved.anthropic_available && saved.ai_provider === 'anthropic'
   // Each provider keeps its own models: the fields edit the selected one's.
   const summariesModelKey = onAnthropic ? 'anthropic_summaries_model' : 'summaries_model'
   const categorizationModelKey = onAnthropic
@@ -190,8 +192,17 @@ function AiSettings({ saved }: { saved: Preferences }) {
           checked={form.ai_enabled}
           onChange={(value) => set('ai_enabled', value)}
         />
-        {saved.anthropic_available && (
-          <ProviderChoice value={form.ai_provider} onChange={(value) => set('ai_provider', value)} />
+        {keyRemoved && (
+          <p className="text-sm text-destructive">
+            Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set
+          </p>
+        )}
+        {(saved.anthropic_available || keyRemoved) && (
+          <ProviderChoice
+            providers={saved.anthropic_available ? PROVIDERS : OLLAMA_ONLY}
+            value={form.ai_provider}
+            onChange={(value) => set('ai_provider', value)}
+          />
         )}
         {!onAnthropic && (
           <Field id="ollama-url" label="Ollama URL">
@@ -447,15 +458,17 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
 /** The provider every AI feature runs on. */
 function ProviderChoice({
+  providers,
   value,
   onChange,
 }: {
+  providers: { value: AiProvider; label: string }[]
   value: AiProvider
   onChange: (value: AiProvider) => void
 }) {
   return (
     <div role="radiogroup" aria-label="Provider" className="flex gap-6">
-      {PROVIDERS.map((provider) => (
+      {providers.map((provider) => (
         <label key={provider.value} className="flex items-center gap-2 text-sm">
           <input
             type="radio"
@@ -475,6 +488,8 @@ const PROVIDERS: { value: AiProvider; label: string }[] = [
   { value: 'ollama', label: 'Ollama' },
   { value: 'anthropic', label: 'Anthropic' },
 ]
+
+const OLLAMA_ONLY = PROVIDERS.filter((provider) => provider.value === 'ollama')
 
 /** "Model": the server's models when known, otherwise a text field. */
 function ModelField({

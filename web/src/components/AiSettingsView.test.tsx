@@ -123,6 +123,23 @@ describe('AiSettingsView', () => {
     ])
   })
 
+  it("says the key isn't set when Anthropic is saved without one", async () => {
+    mockApi({
+      'GET /api/preferences': onAnthropic({ anthropic_available: false }),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    const section = within(await screen.findByRole('group', { name: 'Provider' }))
+    expect(
+      section.getByText("Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set"),
+    ).toBeInTheDocument()
+    expect(
+      within(section.getByRole('radiogroup', { name: 'Provider' }))
+        .getAllByRole('radio')
+        .map((radio) => radio.getAttribute('value')),
+    ).toEqual(['ollama'])
+  })
+
   it('shows the Categorization section disabled on a fresh install', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)
