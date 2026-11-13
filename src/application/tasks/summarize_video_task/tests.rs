@@ -2788,6 +2788,46 @@ fn it_should_summarize_with_the_anthropic_model_and_effort() {
     assert_eq!(llm.connections(), vec![LlmConnection::Anthropic]);
 }
 
+#[test]
+fn it_should_budget_from_the_capped_anthropic_context() {
+    // 400 lines of 1000 characters: two parts within ~326400, the budget at
+    // the 131072 cap, where Ollama's default 12288 would need fourteen.
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(
+        FakeLlmServerRepository::new(anthropic_server()).with_replies(vec![
+            reply("A."),
+            reply("B."),
+            reply("All."),
+        ]),
+    );
+    let video = subtitled_video();
+    video_repository.insert(&video).unwrap();
+    preferences_repository
+        .save(&anthropic_summaries_on())
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository,
+        preferences_repository,
+        summary_repository,
+        llm.clone(),
+        files_with(&srt_of(400, 4)),
+    );
+
+    run(&task, &video).unwrap();
+
+    let within_budget = sent_messages(&llm)
+        .iter()
+        .map(|messages| messages.chars() <= 326_400)
+        .collect::<Vec<_>>();
+    assert_eq!(within_budget, vec![true, true, true]);
+}
+
 fn summarize_video_task(
     db: &TestDatabase,
     video_repository: Arc<SqliteVideoRepository>,
