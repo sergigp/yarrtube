@@ -356,7 +356,7 @@ impl VideoCategorizer {
     /// Re-queues the categorization once Ollama may be back, leaving the
     /// video and its verdicts as they are: no attempt spent.
     fn wait_for_server(&self, video: &Video, reason: anyhow::Error) -> VideoStepOutcome {
-        warn!(video_id = %video.id, %reason, "Ollama is unavailable, waiting to categorize video");
+        warn!(video_id = %video.id, %reason, "the AI provider is unavailable, waiting to categorize video");
         VideoStepOutcome::RetryAt {
             at: self.clock.now() + UNAVAILABLE_SERVER_WAIT,
             reason: error_report::cause_chain(&reason),

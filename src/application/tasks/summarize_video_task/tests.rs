@@ -8,7 +8,8 @@ use crate::domain::llm_server::{
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::{
-    AiProvider, ContextLength, Preferences, SummaryPrompt, SummarySettings, Temperature,
+    AiProvider, AnthropicSettings, ContextLength, Preferences, SummaryModel, SummaryPrompt,
+    SummarySettings, Temperature,
 };
 use crate::domain::services::VideoOwnerFinder;
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -2826,6 +2827,53 @@ fn it_should_budget_from_the_capped_anthropic_context() {
         .map(|messages| messages.chars() <= 326_400)
         .collect::<Vec<_>>();
     assert_eq!(within_budget, vec![true, true, true]);
+}
+
+#[test]
+fn it_should_wait_when_the_anthropic_model_isnt_listed() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let summary_repository = Arc::new(SqliteVideoSummaryRepository::new(db.database()));
+    let llm = Arc::new(FakeLlmServerRepository::new(anthropic_server()));
+    let video = Video {
+        summary: retrying_summary(4),
+        ..subtitled_video()
+    };
+    video_repository.insert(&video).unwrap();
+    let preferences = anthropic_summaries_on();
+    preferences_repository
+        .save(&Preferences {
+            anthropic: AnthropicSettings {
+                summaries_model: SummaryModel::new("claude-haiku-4-5").unwrap(),
+                ..preferences.anthropic.clone()
+            },
+            ..preferences
+        })
+        .unwrap();
+    seed_channel(&db, &video, true);
+    seed_transcript(&db, &video, "es");
+    let task = summarize_video_task(
+        &db,
+        video_repository.clone(),
+        preferences_repository,
+        summary_repository.clone(),
+        llm.clone(),
+        files_with(SHORT_SRT),
+    );
+
+    let result = run(&task, &video);
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: later() + Duration::hours(6),
+            reason: "claude-haiku-4-5 isn't listed by Anthropic".to_string(),
+        })
+    );
+    assert_eq!(llm.chats(), vec![]);
+    assert_eq!(summary_repository.find(&video.id).unwrap(), None);
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
 }
 
 fn summarize_video_task(

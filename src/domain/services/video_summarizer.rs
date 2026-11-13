@@ -302,14 +302,14 @@ impl VideoSummarizer {
         server
             .model(model)
             .cloned()
-            .with_context(|| format!("{model} isn't installed on Ollama"))
+            .with_context(|| connection.missing_model(model))
             .map_err(Skip::Unavailable)
     }
 
     /// Re-queues the summary once Ollama may be back, leaving the video as
     /// it is: no attempt spent.
     fn wait_for_server(&self, video: &Video, reason: anyhow::Error) -> VideoStepOutcome {
-        warn!(video_id = %video.id, %reason, "Ollama is unavailable, waiting to summarize video");
+        warn!(video_id = %video.id, %reason, "the AI provider is unavailable, waiting to summarize video");
         VideoStepOutcome::RetryAt {
             at: self.clock.now() + UNAVAILABLE_SERVER_WAIT,
             reason: error_report::cause_chain(&reason),
