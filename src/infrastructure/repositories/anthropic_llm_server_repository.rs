@@ -122,7 +122,8 @@ impl AnthropicLlmServerRepository {
             .request(client.get(format!("{}/v1/models", self.config.api_url)))
             .query(&Self::page_query(after_id))
             .send()
-            .map_err(Self::send_error)?
+            .map_err(Self::send_error)
+            .and_then(Self::check_status)?
             .json()
             .context("/v1/models didn't answer as Anthropic does")?;
         let models = page.data.into_iter().map(LlmModel::from);
@@ -149,6 +150,22 @@ impl AnthropicLlmServerRepository {
         request
             .header("x-api-key", self.config.api_key.as_str())
             .header("anthropic-version", ANTHROPIC_VERSION)
+    }
+
+    /// `response` when it succeeded; else an error, unavailable for a
+    /// rejected key.
+    fn check_status(
+        response: reqwest::blocking::Response,
+    ) -> anyhow::Result<reqwest::blocking::Response> {
+        let status = response.status();
+        if status.is_success() {
+            return Ok(response);
+        }
+        let message = Self::error_message(response)?;
+        Err(match status {
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Self::unavailable(status, &message),
+            _ => Self::answered(status, &message),
+        })
     }
 
     /// A call Anthropic answered `status` with `message`: unavailable for a
@@ -709,6 +726,45 @@ mod tests {
                     listed("claude-haiku-4-5", "Claude Haiku 4.5", 200_000),
                 ],
             })
+        );
+    }
+
+    #[test]
+    fn it_should_report_a_rejected_key_on_the_check_as_unreachable() {
+        let mut server = mockito::Server::new();
+        let _models = server
+            .mock("GET", "/v1/models?limit=1000")
+            .with_status(401)
+            .with_body(error_body("authentication_error", "invalid x-api-key"))
+            .create();
+
+        let result = repository(&server).find();
+
+        assert_eq!(
+            result.map_err(|e| (e.is::<LlmServerUnreachable>(), format!("{e:#}"))),
+            Err((
+                true,
+                "the LLM provider is unavailable: Anthropic answered 401 Unauthorized: invalid x-api-key".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_fail_the_check_on_an_answer_that_isnt_the_api() {
+        let mut server = mockito::Server::new();
+        let _models = server
+            .mock("GET", "/v1/models?limit=1000")
+            .with_body("<html>Router login</html>")
+            .create();
+
+        let result = repository(&server).find();
+
+        assert_eq!(
+            result.map_err(|e| (e.is::<LlmServerUnreachable>(), e.to_string())),
+            Err((
+                false,
+                "/v1/models didn't answer as Anthropic does".to_string()
+            ))
         );
     }
 
