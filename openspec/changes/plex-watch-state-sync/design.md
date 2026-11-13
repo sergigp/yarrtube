@@ -12,9 +12,9 @@ classDiagram
   class PlexEpisodeFinder:::new { +read_library() +find_episode(video, library) }
   class PlexLabelSyncer:::changed
   class merge:::new { <<fn>> }
-  class EpisodeWatch:::new { video_id rating_key agreed }
+  class EpisodeWatch:::new { video_id rating_key viewer_id agreed }
   class EpisodeWatchRepository:::new { <<port>> }
-  class PlexLibraryRepository:::changed { <<port>> +mark_watched +mark_unwatched +save_position }
+  class PlexLibraryRepository:::changed { <<port>> +viewer_id +mark_watched +mark_unwatched +save_position }
   class PlexEpisode:::changed { +watch: PlexWatchState }
   class PlexWatchState:::new { +progress() }
   class WatchProgress:::new { Unplayed InProgress Watched }
@@ -50,26 +50,28 @@ sequenceDiagram
   T->>S: sync()
   S->>F: read_library()
   F->>P: list_sections(), list_episodes(section_id)
+  S->>P: viewer_id()
   alt Plex unreachable
     S->>S: request_sync(now + SYNC_INTERVAL)
   end
   S->>V: list_downloaded()
   S->>R: list()
   S->>R: delete_many(ids of rows whose video is not downloaded)
+  S->>F: find_episode(video, library) per video
   loop each video with an episode
-    S->>S: merge(local, remote, agreed)
+    S->>S: merge(local, remote, agreed_with(row, episode, viewer_id))
   end
   loop each Pull, newest per YouTube video
     S->>U: adopt(id, progress, played_at)
   end
-  S->>V: list_downloaded() (only if something was pulled)
+  S->>V: find_many(matched ids) (only if something was pulled)
   loop each video with an episode, Push up to BATCH_SIZE
     S->>P: mark_watched / mark_unwatched / save_position(rating_key, ..)
     alt Plex rejects
       S->>S: warn, agreed unchanged (retried next sync)
     end
   end
-  S->>R: save_many(rows whose agreed state changed)
+  S->>R: save_many(rows that differ from the stored ones)
   S->>S: request_sync(now if backlog else now + SYNC_INTERVAL)
 ```
 
@@ -79,6 +81,7 @@ erDiagram
   episode_watch {
     TEXT video_id PK
     TEXT rating_key
+    TEXT viewer_id
     INTEGER agreed_watched
     INTEGER agreed_position_seconds
   }
@@ -93,6 +96,7 @@ erDiagram
 CREATE TABLE episode_watch (
   video_id TEXT PRIMARY KEY,
   rating_key TEXT NOT NULL,
+  viewer_id TEXT NOT NULL, -- whose watch state: PlexLibraryRepository::viewer_id()
   agreed_watched INTEGER NOT NULL,
   agreed_position_seconds INTEGER NOT NULL
 );
@@ -112,7 +116,7 @@ pub enum WatchProgress {
 ```rust
 // src/domain/video/watch_state.rs
 impl WatchState {
-    /// Watched ⇒ Watched; position > 0 ⇒ InProgress; else Unplayed.
+    /// Watched ⇒ Watched; position > 30 s ⇒ InProgress; else Unplayed.
     pub fn progress(&self) -> WatchProgress;
     /// The latest of `watched_at` and `last_played_at`.
     pub fn changed_at(&self) -> Option<DateTime<Utc>>;
@@ -139,8 +143,8 @@ pub struct PlexWatchState {
     pub duration_ms: Option<i64>,
 }
 impl PlexWatchState {
-    pub fn unplayed() -> Self;
-    /// An offset counts (InProgress, offset floored to seconds) unless the
+    #[cfg(test)] pub fn unplayed() -> Self; // test-only
+    /// An offset over 30 s counts (InProgress, floored to seconds) unless the
     /// episode is watched and the offset is at or below 10% of its duration
     /// (a rewatch just started, like yarrtube's rule); else view_count > 0 ⇒
     /// Watched; else Unplayed.
@@ -158,19 +162,22 @@ pub struct PlexEpisode {
 
 ```rust
 // src/domain/plex_watch/episode_watch.rs (domain/plex_watch/mod.rs, declared in domain/mod.rs)
-/// The watch state yarrtube and the Plex episode `rating_key` last agreed on.
+/// The watch state yarrtube and the Plex episode `rating_key` last agreed on,
+/// for the viewer `viewer_id` (the Plex server and token).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EpisodeWatch {
     pub video_id: VideoId,
     pub rating_key: String,
+    pub viewer_id: String,
     pub agreed: WatchProgress,
 }
 impl EpisodeWatch {
-    pub fn new(video_id: VideoId, episode: &PlexEpisode, agreed: WatchProgress) -> Self;
-    /// What was agreed with `episode`: Unplayed when there is no row or it was
-    /// agreed with another episode (Plex re-imported the file), so a re-imported
-    /// episode's empty state never reads as "unwatched in Plex".
-    pub fn agreed_with(row: Option<&EpisodeWatch>, episode: &PlexEpisode) -> WatchProgress;
+    pub fn new(video_id: VideoId, episode: &PlexEpisode, viewer_id: &str, agreed: WatchProgress) -> Self;
+    /// What was agreed with `episode` for `viewer_id`: Unplayed when there is no
+    /// row, or it was agreed with another episode (Plex re-imported the file) or
+    /// another viewer (token or server changed), so an empty state that isn't
+    /// the one agreed on never reads as "unwatched in Plex".
+    pub fn agreed_with(row: Option<&EpisodeWatch>, episode: &PlexEpisode, viewer_id: &str) -> WatchProgress;
 }
 
 // src/domain/plex_watch/watch_merge.rs
@@ -274,6 +281,9 @@ pub enum Task {
 pub trait PlexLibraryRepository: Send + Sync {
     // ...existing; list_episodes now fills PlexEpisode::watch from
     // viewCount / viewOffset / lastViewedAt / duration...
+    /// Whose watch state the calls read and write:
+    /// `"<machineIdentifier>/<FNV-1a 64 hex fingerprint of the token>"`.
+    fn viewer_id(&self) -> anyhow::Result<String>;
     /// `GET /:/scrobble?identifier=com.plexapp.plugins.library&key={rating_key}`;
     /// clears the offset.
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()>;
@@ -284,7 +294,8 @@ pub trait PlexLibraryRepository: Send + Sync {
     /// (Plex ignores time=0).
     fn save_position(&self, rating_key: &str, position: PlaybackPosition) -> anyhow::Result<()>;
 }
-// FakePlexLibraryRepository: with_episode_watch(rating_key, PlexWatchState); the three
+// FakePlexLibraryRepository: viewer_id() = "fake-server/viewer", with_viewer(id);
+// with_episode_watch(rating_key, PlexWatchState); the three
 // calls update that state as Plex does and are recorded in mutations()
 // ("scrobble:{key}", "unscrobble:{key}", "progress:{key}:{ms}"); rejecting(key) applies.
 ```
@@ -317,23 +328,23 @@ impl TaskHandler for SyncPlexWatchStateTask; // registered in tasks/mod.rs when 
 **Startup** (Plex configured) — `serve::prepare_task_queue(.., Some(&label_syncer), Some(&watch_syncer))` → `PlexWatchSyncer::request_sync(now)`. `serve.rs` builds one `PlexEpisodeFinder` shared by both syncers, and passes `Option<PlexWatchSyncer>` to `tasks::registry`.
 
 **Sync** — executor (lane `Plex`) → `SyncPlexWatchStateTask::handle(task)` → `PlexWatchSyncer::sync()`
-1. `PlexEpisodeFinder::read_library()` → `Err` ⇒ `warn!`, `request_sync(now + SYNC_INTERVAL)`, `Ok(())`
-2. `VideoRepository::list_downloaded()`; `EpisodeWatchRepository::list()` ⇒ rows by `video_id`
+1. `PlexEpisodeFinder::read_library()` and `PlexLibraryRepository::viewer_id()` → `Err` ⇒ `warn!`, `request_sync(now + SYNC_INTERVAL)`, `Ok(())`
+2. `VideoRepository::list_downloaded()` (once); `EpisodeWatchRepository::list()` ⇒ rows by `video_id`
 3. `delete_many(rows whose video_id is not a downloaded video)`
-4. Per downloaded video: `find_episode(&video, &library)` → `None` ⇒ skip (not imported yet). Else:
+4. Per downloaded video, once: `find_episode(&video, &library)` → `None` ⇒ skip (not imported yet). Else per matched (video, episode):
    - `local = WatchSide { video.watch.progress(), video.watch.changed_at() }`
    - `remote = WatchSide { episode.watch.progress(), episode.watch.last_viewed_at }`
-   - `agreed = EpisodeWatch::agreed_with(rows.get(id), episode)`
+   - `agreed = EpisodeWatch::agreed_with(rows.get(id), episode, &viewer_id)`
    - `merge(local, remote, agreed)`
 5. Pulls, one per YouTube video (the newest `remote.changed_at` when several copies' episodes changed): `VideoWatchStateUpdater::adopt(&id, progress, remote.changed_at.unwrap_or(now))` (every copy).
-6. Something pulled ⇒ re-run steps 2 and 4 on fresh videos (each pulled copy is now InSync; the other copies of the same YouTube video now Push).
+6. Something pulled ⇒ `VideoRepository::find_many(matched ids)` and re-merge each with its same episode (each pulled copy is now InSync; the other copies of the same YouTube video now Push).
 7. Per outcome:
-   - `InSync(p)` ⇒ `EpisodeWatch::new(id, episode, p)` if it differs from the stored row
+   - `InSync(p)` ⇒ `EpisodeWatch::new(id, episode, &viewer_id, p)` only if it differs from the stored row
    - `Push(p)`, while fewer than `BATCH_SIZE` pushed:
      - `Watched` ⇒ `mark_watched(key)`
      - `InProgress(pos)` ⇒ `mark_unwatched(key)` if `episode.watch.view_count > 0`, then `save_position(key, pos)`
      - `Unplayed` ⇒ `mark_unwatched(key)`
-     - `Ok` ⇒ `EpisodeWatch::new(id, episode, p)`; `Err` ⇒ `warn!`, row unchanged (still differs ⇒ retried next sync)
+     - `Ok` ⇒ `EpisodeWatch::new(id, episode, &viewer_id, p)`; `Err` ⇒ `warn!`, row unchanged (still differs ⇒ retried next sync)
    - `Push` past `BATCH_SIZE` ⇒ backlog
    - `Pull` left after step 6 (changed again meanwhile) ⇒ nothing; next sync
 8. `EpisodeWatchRepository::save_many(changed rows)`
@@ -367,6 +378,17 @@ Behaviour tests (application layer):
 19. `it_should_schedule_the_next_sync_now_if_pushes_exceeded_the_batch` — BATCH_SIZE + 1 pushes ⇒ BATCH_SIZE mutations, next sync at now.
 20. `web/src/lib/tasks.test.ts`: `describes a Plex watch sync` — "Syncing Plex watch state", Other tab.
 
+Added after the audit:
+21. `it_should_count_an_episode_stopped_under_a_second_as_unplayed`
+22. `it_should_pull_a_long_rewatch_in_plex_as_in_progress`
+23. `it_should_keep_the_yarrtube_side_if_both_changed_at_the_same_time`
+24. `it_should_schedule_the_next_sync_in_five_minutes_if_pushes_filled_the_batch`
+25. `it_should_bring_every_copy_in_line_with_the_latest_plex_change_if_listed_last`
+26. `it_should_rewind_a_video_unwatched_in_plex_while_in_progress`
+27. `it_should_not_push_a_position_of_30_seconds_or_less` — video unwatched at 12 s, episode unplayed ⇒ no mutation, row agreed Unplayed.
+28. `it_should_not_pull_a_plex_position_of_30_seconds_or_less` — episode offset 20 000 ms, video unplayed ⇒ video unchanged.
+29. `it_should_push_instead_of_unwatching_after_a_token_switch` — row agreed Watched under another viewer id, video watched, episode unplayed ⇒ `scrobble`, video stays watched, row under the current viewer id.
+
 Existing `sync_plex_labels_task` tests stay green after the `PlexEpisodeFinder` extraction.
 
 Infrastructure tests:
@@ -377,6 +399,7 @@ Infrastructure tests:
 23. `it_should_mark_an_episode_watched` — `GET /:/scrobble` with `identifier` and `key`, token header.
 24. `it_should_mark_an_episode_unwatched` — `GET /:/unscrobble`.
 25. `it_should_save_an_episode_position_in_milliseconds` — `GET /:/progress` with `time=215000&state=stopped`.
+25b. `it_should_identify_the_viewer_by_server_and_token` — `GET /identity` ⇒ `"<machineIdentifier>/<fingerprint>"`; another token gives another id.
 
 `SqliteEpisodeWatchRepository`
 26. `it_should_round_trip_each_agreed_progress` — Unplayed, InProgress(215), Watched.

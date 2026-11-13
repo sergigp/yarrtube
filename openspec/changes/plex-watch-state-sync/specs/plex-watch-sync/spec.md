@@ -32,6 +32,17 @@ The system SHALL compare a video and its Plex episode as one of three states: un
 - **WHEN** Plex reports a watched 40-minute episode with a resume position of 10 minutes
 - **THEN** it counts as in progress at 600 seconds
 
+### Requirement: Short Positions Count As Unplayed
+On both sides, a position of 30 seconds or less SHALL count as unplayed, like yarrtube's own "Continue watching", so a video only sampled for a few seconds is never offered to resume elsewhere.
+
+#### Scenario: Sampled for a few seconds in the web UI
+- **WHEN** an unwatched video is stopped at 12 seconds in the web UI and its episode is unplayed in Plex
+- **THEN** the watch sync sends nothing to Plex for it
+
+#### Scenario: Opened briefly in Plex
+- **WHEN** an unplayed video's episode is stopped at 20 seconds in Plex
+- **THEN** the watch sync leaves the video unplayed
+
 ### Requirement: Changes Made In Plex Reach yarrtube
 When an episode's state in Plex changes and the video's state in yarrtube does not, the next watch sync SHALL give the video the episode's state, on every stored copy of its YouTube video. Watched or in progress SHALL set the video's last played time to when Plex last played the episode.
 
@@ -88,11 +99,15 @@ A change the sync copied to one side SHALL NOT be taken as a new change of that 
 - **THEN** the second sync sends no change to Plex and changes no video
 
 ### Requirement: First Sync Copies What Was Played
-For a video whose state has never been synced with its episode, the sync SHALL treat both as having last matched as unplayed: a side that was played or marked is copied to an unplayed other side, and when both were played the most recent change wins.
+For a video whose state has never been synced with its episode for the current Plex server and token, the sync SHALL treat both as having last matched as unplayed: a side that was played or marked is copied to an unplayed other side, and when both were played the most recent change wins.
 
 #### Scenario: Upgrade with history on both sides
 - **WHEN** the daemon starts after this change with an episode watched only in Plex and another video watched only in the web UI
 - **THEN** after the first watch sync the first video is watched in yarrtube and the second video's episode is watched in Plex
+
+#### Scenario: Token switched to another Plex user
+- **WHEN** videos synced as watched stay watched in yarrtube, and the token is switched to a Plex user who never watched their episodes
+- **THEN** the next watch sync keeps them watched in yarrtube and marks their episodes watched for the new user
 
 #### Scenario: Neither side played
 - **WHEN** a video and its episode were never played

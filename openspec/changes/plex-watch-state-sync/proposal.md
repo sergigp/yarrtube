@@ -26,6 +26,12 @@ state (`viewCount`, `viewOffset`, `lastViewedAt`), and that `/:/scrobble`,
   episodes of those other copies. Plex playback counts as played: it sets
   the last played time, so a video started in Plex shows under "Continue
   watching".
+- A position of 30 seconds or less counts as unplayed on both sides, like
+  yarrtube's own "Continue watching": a video sampled for a few seconds
+  never lands in Plex's Continue Watching.
+- What both sides last agreed on is tied to the Plex server and token:
+  switching the token (e.g. to another Plex user) re-seeds from yarrtube
+  and never unwatches anything in yarrtube.
 - The sync runs every 5 minutes in the Plex task lane, and right away again
   while a backlog of changes remains. On the first sync after the upgrade,
   whatever was watched or started on either side is copied to the other.
