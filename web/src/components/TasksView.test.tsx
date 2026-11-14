@@ -216,4 +216,27 @@ describe('TasksView', () => {
       expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toEqual([{ ids: [2] }]),
     )
   })
+
+  it('explains a failing task in plain words, showing the raw error on demand', async () => {
+    const user = userEvent.setup()
+    const raw = 'ERROR: unable to download video data: HTTP Error 403: Forbidden'
+    mockApi({ 'GET /api/tasks': aProdLikeQueue() })
+    renderWithProviders(<TasksView />)
+
+    const card = (
+      await screen.findByText('Download My Apps from Starter Story Build')
+    ).closest('li')!
+    expect(
+      within(card).getByText(
+        `YouTube refused the request (403). Yarrtube tries again at ${clockAt(inMinutes(5))}, in 5 min.`,
+      ),
+    ).toBeInTheDocument()
+    expect(within(card).queryByText(raw)).not.toBeInTheDocument()
+
+    await user.click(within(card).getByRole('button', { name: 'Show error' }))
+    expect(within(card).getByText(raw)).toBeInTheDocument()
+
+    await user.click(within(card).getByRole('button', { name: 'Hide error' }))
+    expect(within(card).queryByText(raw)).not.toBeInTheDocument()
+  })
 })

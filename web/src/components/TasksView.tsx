@@ -10,6 +10,7 @@ import {
 } from '@/lib/tasks'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { Beacon } from './Beacon'
+import { AttentionCard } from './tasks/AttentionCard'
 import { TaskBatchRow } from './tasks/TaskBatchRow'
 import { TaskFilterChips } from './tasks/TaskFilterChips'
 import { TaskRow } from './tasks/TaskRow'
@@ -67,7 +68,7 @@ function TaskList() {
           </h3>
           <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
             {section.entries.map((entry) => (
-              <Entry key={entryKey(entry)} entry={entry} now={now} />
+              <Entry key={entryKey(entry)} entry={entry} section={section.id} now={now} />
             ))}
           </ul>
         </section>
@@ -86,9 +87,18 @@ function StatusLine({ tasks, now }: { tasks: Task[]; now: Date }) {
   )
 }
 
-function Entry({ entry, now }: { entry: TaskEntry; now: Date }) {
-  return entry.kind === 'batch' ? (
-    <TaskBatchRow tasks={entry.tasks} sources={entry.sources} runAt={entry.runAt} now={now} />
+interface EntryProps {
+  entry: TaskEntry
+  section: TaskSectionId
+  now: Date
+}
+
+function Entry({ entry, section, now }: EntryProps) {
+  if (entry.kind === 'batch') {
+    return <TaskBatchRow tasks={entry.tasks} sources={entry.sources} runAt={entry.runAt} now={now} />
+  }
+  return section === 'attention' ? (
+    <AttentionCard task={entry.task} now={now} />
   ) : (
     <TaskRow task={entry.task} now={now} />
   )
