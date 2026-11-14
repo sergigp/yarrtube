@@ -115,6 +115,7 @@ async fn it_should_include_running_tasks() {
         response,
         Ok(vec![TaskResponse {
             status: "running".to_string(),
+            started_at: Some(fixed_timestamp()),
             ..pending_task("update_ytdlp", &[])
         }])
     );
@@ -1096,6 +1097,42 @@ async fn it_should_include_video_id_when_the_video_no_longer_exists() {
             "fetch_thumbnail",
             &[("video_id", "gone1")]
         )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_started_at_for_a_running_task() {
+    let db = TestDatabase::new();
+    let started_at = fixed_timestamp() + chrono::Duration::seconds(30);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+        .unwrap();
+    let running = task_repository.list_non_completed().unwrap()[0]
+        .clone()
+        .start(started_at);
+    task_repository.update(&running).unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![TaskResponse {
+            status: "running".to_string(),
+            started_at: Some(started_at),
+            ..pending_task("update_ytdlp", &[])
+        }])
     );
 }
 
