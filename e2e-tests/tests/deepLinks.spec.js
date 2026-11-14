@@ -59,7 +59,7 @@ test('reloading each route shows its view; unknown playlist says Playlist not fo
       path: `/categories/${encodeURIComponent(categoryId)}`,
       shown: main.getByRole('heading', { level: 2, name: 'Deep links', exact: true }),
     },
-    { path: '/tasks', shown: main.getByRole('tab', { name: /^Syncs/ }) },
+    { path: '/tasks', shown: main.getByRole('button', { name: /^Syncs/ }) },
   ]
   for (const { path, shown } of views) {
     await test.step(path, async () => {

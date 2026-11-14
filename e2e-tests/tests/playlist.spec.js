@@ -22,7 +22,7 @@ import {
   setItemUnwatchedCountHidden,
   unwatchedBadge,
 } from '../helpers/sidebar.js'
-import { expectPendingSync } from '../helpers/tasks.js'
+import { expectPendingSync, syncRow } from '../helpers/tasks.js'
 
 const PLAYLIST_ID = PLAYLIST.id
 const PLAYLIST_NAME = PLAYLIST.title
@@ -275,21 +275,19 @@ test.describe('with a downloaded playlist', () => {
 
     // The shorter interval brought the playlist's next sync forward: it was
     // due in 3 hours, now in about 30 minutes.
-    await expectPendingSync(page, { label: `Syncing playlist ${PLAYLIST_NAME}`, due: /^in (29|30)m$/ })
+    await expectPendingSync(page, { name: PLAYLIST_NAME, due: /^in (29|30) min$/ })
   })
 
   test('runs its sync now from the Tasks view', async ({ page }) => {
-    // Covers the Tasks view's "Run now".
+    // Covers the Tasks view's "Run now", which brings the scheduled sync forward.
     await page.goto('/tasks')
-    await page.getByRole('tab', { name: /^Syncs/ }).click()
-    const syncRow = page.locator('main li', { hasText: `Syncing playlist ${PLAYLIST_NAME}` })
+    const row = await syncRow(page, PLAYLIST_NAME)
     const ranNow = page.waitForResponse(
-      (response) => response.url().endsWith('/reconcile') && response.request().method() === 'POST',
+      (response) => response.url().endsWith('/api/tasks/run-now') && response.request().method() === 'POST',
     )
-    await syncRow.getByRole('button', { name: /^Run now: / }).click()
-    expect((await ranNow).ok()).toBe(true)
-    await expect(syncRow.getByRole('button', { name: /^Run now: / })).toBeEnabled()
-    await expect(syncRow.getByText(/^Sync failed/)).toHaveCount(0)
+    await row.getByRole('button', { name: 'Run now' }).click()
+    expect((await ranNow).status()).toBe(204)
+    await expect(row.getByText(/failed/)).toHaveCount(0)
   })
 
   test('rejects adding it twice', async ({ page }) => {
@@ -341,15 +339,15 @@ test.describe('with a downloaded playlist', () => {
   })
 })
 
-test('Downloads tab lists a running download', async ({ page }) => {
+test('Tasks view lists a running download under Running now', async ({ page }) => {
   // The slow fixture video takes about 8 s to download, long enough to be
   // seen running.
   const playlist = await addPlaylist(page.request, SLOW_PLAYLIST, { downloaded: false })
 
   await page.goto('/tasks')
-  await page.getByRole('tab', { name: /^Downloads/ }).click()
 
-  const download = page.locator('main li', { hasText: new RegExp(`^Downloading .+ in ${playlist.name}`) })
+  const running = page.getByRole('region', { name: 'Running now' })
+  const download = running.locator('li', { hasText: new RegExp(`Downloading .+ from ${playlist.name}`) })
   await expect(download).toHaveCount(1, { timeout: 15_000 })
   // Still listed while it runs: the video isn't downloaded yet.
   const [video] = await (await page.request.get(`/api/playlists/${encodeURIComponent(playlist.id)}/videos`)).json()

@@ -40,7 +40,7 @@ test.describe('with a downloaded playlist, a channel and a category', () => {
         path: `/categories/${encodeURIComponent(categoryId)}`,
         shown: page.getByRole('heading', { level: 2, name: 'Mobile layout', exact: true }),
       },
-      { path: '/tasks', shown: page.getByRole('tab').first() },
+      { path: '/tasks', shown: page.getByRole('button', { name: /^All/ }) },
     ]
     for (const { path, shown } of views) {
       await page.goto(path)
@@ -106,7 +106,7 @@ test('add, edit-settings and delete dialogs fit the screen and submit @mobile', 
   })
 })
 
-test('icon-only Tasks tabs and Run now work by accessible name @mobile', async ({ page }) => {
+test('Tasks chips keep their names and Run now works on a phone @mobile', async ({ page }) => {
   // A tracked playlist brings a sync to run; it is added through the API, with
   // the Add dialog's body, since only the Tasks view's controls are under test.
   const created = await page.request.post('/api/playlists', {
@@ -136,20 +136,23 @@ test('icon-only Tasks tabs and Run now work by accessible name @mobile', async (
     expect((await synced).ok()).toBe(true)
   })
 
-  await test.step('the Syncs tab and its Run now', async () => {
+  await test.step('the Syncs chip and its Run now', async () => {
     await page.goto('/tasks')
-    const syncsTab = page.getByRole('tab', { name: /^Syncs/ })
-    await syncsTab.tap()
-    await expect(syncsTab).toHaveAttribute('aria-selected', 'true')
+    // The chip is found by its visible name: a phone keeps it.
+    const syncsChip = page.getByRole('button', { name: /^Syncs/ })
+    await expect(syncsChip).toHaveText(/^Syncs\s*\d+$/, { useInnerText: true })
+    await syncsChip.tap()
+    await expect(syncsChip).toHaveAttribute('aria-pressed', 'true')
 
-    const syncRow = page.locator('main li', { hasText: `Syncing playlist ${PLAYLIST_NAME}` })
-    const runNow = syncRow.getByRole('button', { name: /^Run now: / })
+    const syncRow = page.locator('main li', { hasText: `Check ${PLAYLIST_NAME} for new videos` })
+    const runNow = syncRow.getByRole('button', { name: 'Run now' })
     // The header's Sync may still be running it; Run now shows once it's pending again.
     await expect(runNow).toBeVisible({ timeout: 15_000 })
-    await expect(runNow).toHaveText('', { useInnerText: true })
-    const ranNow = reconciled(page)
+    const ranNow = page.waitForResponse(
+      (response) => response.url().endsWith('/api/tasks/run-now') && response.request().method() === 'POST',
+    )
     await runNow.tap()
-    expect((await ranNow).ok()).toBe(true)
-    await expect(syncRow.getByText(/^Sync failed/)).toHaveCount(0)
+    expect((await ranNow).status()).toBe(204)
+    await expect(syncRow.getByText(/failed/)).toHaveCount(0)
   })
 })
