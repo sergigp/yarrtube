@@ -43,7 +43,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `SqliteTaskRepository` `it_should_list_only_pending_tasks_among_the_given_ids`: pending, running and missing ids → only the pending task
+- [x] 3.1 `SqliteTaskRepository` `it_should_list_only_pending_tasks_among_the_given_ids`: pending, running and missing ids → only the pending task
 - [ ] 3.2 `SqliteTaskRepository` `it_should_list_nothing_for_an_empty_id_list`
 
 ## 4. Verification

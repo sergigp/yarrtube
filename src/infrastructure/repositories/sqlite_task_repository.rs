@@ -488,6 +488,20 @@ mod tests {
     }
 
     #[test]
+    fn it_should_list_only_pending_tasks_among_the_given_ids() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let running = Task::UpdateYtdlp;
+        repo.schedule(&task(), now).unwrap();
+        repo.schedule(&running, now).unwrap();
+        repo.claim(2, now).unwrap();
+
+        let listed = repo.list_pending_by_ids(&[1, 2, 99]).unwrap();
+
+        assert_eq!(listed, vec![pending_task(1, &task(), now, now)]);
+    }
+
+    #[test]
     fn it_should_list_a_task_scheduled_for_now_as_eligible() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);
