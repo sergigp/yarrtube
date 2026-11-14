@@ -108,10 +108,7 @@ export function PlexSettingsView() {
         </SettingsCard>
       )}
       {status?.configured && (
-        <SettingsCard
-          title="Sync"
-          description={<p>Runs on its own. Use Sync now after changing something in Plex.</p>}
-        >
+        <SettingsCard title="Sync">
           <div className="flex flex-col divide-y divide-border">
             {status.syncs.map((sync) => (
               <SyncRow key={sync.kind} sync={sync} />
@@ -333,9 +330,6 @@ function PlaylistOptions({
               disabled={disabled}
               onChange={(value) => onSave({ plex_playlist_watched: value })}
             />
-            <p className="text-muted-foreground">
-              Removing them turns each playlist into a queue of what&apos;s left to watch.
-            </p>
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-[15px] font-medium text-foreground" aria-hidden="true">

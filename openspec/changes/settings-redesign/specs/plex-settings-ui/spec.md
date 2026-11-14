@@ -41,7 +41,7 @@ The "Server" card SHALL show a badge, "Connected" or "Can't reach Plex". Under i
 - **THEN** the card says "Not checked yet. Server details appear after the first sync."
 
 ### Requirement: Plex Sync Rows
-The "Sync" card SHALL say "Runs on its own. Use Sync now after changing something in Plex." It SHALL show two rows:
+The "Sync" card SHALL show two rows:
 - "Watched status", described "Both ways: watch a video here or in Plex and it's marked watched in both.";
 - "Categories to Plex", described "Category labels and playlists in Plex follow your categories.".
 
@@ -65,7 +65,7 @@ Each row SHALL show its status on one line. A successful run shows "Last run <re
 
 ### Requirement: Category Playlist Options
 The "Category playlists" card SHALL say "Each category becomes a smart playlist in Plex with all its episodes. These options apply to every category playlist." It SHALL offer two segmented choices, filled with the saved preferences:
-- "Watched episodes": "Keep them" or "Remove them", with the hint "Removing them turns each playlist into a queue of what's left to watch.";
+- "Watched episodes": "Keep them" or "Remove them";
 - "Order": "Newest first" or "Oldest first".
 
 Choosing one SHALL save it at once with only that preference and show "Saved". Beside the choices, a preview SHALL show example episode rows in the chosen order. With "Keep them", the preview SHALL include a row marked watched; with "Remove them", it SHALL leave that row out and say "Watched episodes are left out."

@@ -162,9 +162,7 @@ describe('PlexSettingsView', () => {
     renderWithProviders(<PlexSettingsView />)
 
     const sync = await screen.findByRole('group', { name: 'Sync' })
-    expect(
-      within(sync).getByText('Runs on its own. Use Sync now after changing something in Plex.'),
-    ).toBeInTheDocument()
+    expect(sync).not.toHaveTextContent('Runs on its own')
     const watched = within(sync).getByRole('group', { name: 'Watched status' })
     const labels = within(sync).getByRole('group', { name: 'Categories to Plex' })
     expect(lines(watched)).toEqual([
@@ -240,11 +238,7 @@ describe('PlexSettingsView', () => {
     const preview = within(playlists).getByRole('figure', { name: 'Preview in Plex' })
     expect(within(watched).getByRole('radio', { name: 'Keep them' })).toBeChecked()
     expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
-    expect(
-      within(playlists).getByText(
-        "Removing them turns each playlist into a queue of what's left to watch.",
-      ),
-    ).toBeInTheDocument()
+    expect(playlists).not.toHaveTextContent('queue of what')
     expect(previewRowTexts(preview)).toEqual([
       'Published today',
       'Published last week · Watched',
