@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
 import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
@@ -48,6 +48,32 @@ function aProdLikeQueue() {
       payload: { playlist_id: 'PL1', playlist_name: 'chess' },
     }),
   ]
+}
+
+/** The JSON bodies `fetchMock` sent to `key`, e.g. `"POST /api/tasks/run-now"`. */
+function bodiesSentTo(fetchMock: ReturnType<typeof mockApi>, key: string): unknown[] {
+  return fetchMock.mock.calls
+    .filter(([url, init]) => `${init?.method ?? 'GET'} ${url}` === key)
+    .map(([, init]) => JSON.parse(String(init?.body)))
+}
+
+/** Five channel and playlist checks due a minute apart, from 20:20. */
+function aBatchOfSyncs() {
+  return ['3Blue1Brown', 'Eric Rosen', 'chess', 'Jobava fans', 'Openings'].map((name, index) =>
+    index % 2 === 0
+      ? aTask({
+          id: index + 1,
+          task_type: 'reconcile_channel',
+          run_at: inMinutes(17 + index),
+          payload: { channel_id: `@${index}`, channel_name: name },
+        })
+      : aTask({
+          id: index + 1,
+          task_type: 'reconcile_playlist',
+          run_at: inMinutes(17 + index),
+          payload: { playlist_id: `PL${index}`, playlist_name: name },
+        }),
+  )
 }
 
 describe('TasksView', () => {
@@ -112,5 +138,40 @@ describe('TasksView', () => {
     expect(screen.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByText('Fetch the thumbnail of Intro in Chan')).toBeInTheDocument()
     expect(screen.queryByText('Sync watch state with Plex')).not.toBeInTheDocument()
+  })
+
+  it('expands and collapses a batch of syncs, and syncs all of them now', async () => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi({
+      'GET /api/tasks': aBatchOfSyncs(),
+      'POST /api/tasks/run-now': null,
+    })
+    renderWithProviders(<TasksView />)
+
+    const batch = (
+      await screen.findByText('Check 5 channels and playlists for new videos')
+    ).closest('li')!
+    expect(within(batch).getByText('3Blue1Brown, Eric Rosen, chess and 2 more')).toBeInTheDocument()
+
+    await user.click(within(batch).getByRole('button', { name: 'Show sources' }))
+    expect(
+      within(batch)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining('3Blue1BrownChannel'),
+      expect.stringContaining('Eric RosenPlaylist'),
+      expect.stringContaining('chessChannel'),
+      expect.stringContaining('Jobava fansPlaylist'),
+      expect.stringContaining('OpeningsChannel'),
+    ])
+
+    await user.click(within(batch).getByRole('button', { name: 'Hide sources' }))
+    expect(within(batch).queryAllByRole('listitem')).toEqual([])
+
+    await user.click(within(batch).getByRole('button', { name: 'Sync all now' }))
+    await waitFor(() =>
+      expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toEqual([{ ids: [1, 2, 3, 4, 5] }]),
+    )
   })
 })
