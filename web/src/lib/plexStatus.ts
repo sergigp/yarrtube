@@ -2,7 +2,7 @@ import type { PlexSync } from '@/api/types'
 
 /** The Plex Media Server version without its build suffix. */
 export function plexVersionLabel(version: string): string {
-  return version
+  return version.split('-')[0]
 }
 
 /** Whether `sync` is running, or was requested at `requestedAt` and hasn't finished since. */

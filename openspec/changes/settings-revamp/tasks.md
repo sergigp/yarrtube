@@ -40,7 +40,7 @@ Preferences (`http/preferences`)
 - [x] 2.25 `it_should_save_a_playlist_preference_without_plex_configured`
 
 Web (Vitest), one red-green-refactor cycle each
-- [ ] 2.26 `lib/plexStatus.test.ts` — `plexVersionLabel` drops the build suffix.
+- [x] 2.26 `lib/plexStatus.test.ts` — `plexVersionLabel` drops the build suffix.
 - [ ] 2.27 `lib/plexStatus.test.ts` — `isSyncing`: running; requested and not finished since; idle.
 - [ ] 2.28 `SettingsMenu.test.tsx` — the menu lists Tasks, Settings, Report a bug; "Settings" goes to `/settings/general`.
 - [ ] 2.29 `SettingsView.test.tsx` — the section nav switches route and marks the open section.
