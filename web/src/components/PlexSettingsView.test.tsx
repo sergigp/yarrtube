@@ -180,6 +180,34 @@ describe('PlexSettingsView', () => {
     )
     expect(within(labels).getByRole('button', { name: 'Sync now' })).toBeEnabled()
   })
+
+  it('saves a category playlist option on its own', async () => {
+    const fetchMock = mockApi({
+      'GET /api/plex': aPlexStatus(),
+      'GET /api/preferences': aPreferences(),
+      'PATCH /api/preferences': aPreferences({ plex_playlist_watched: 'drop' }),
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup()
+    const playlists = await screen.findByRole('group', { name: 'Category playlists' })
+    const watched = within(playlists).getByRole('radiogroup', { name: 'Watched episodes' })
+    const order = within(playlists).getByRole('radiogroup', { name: 'Order' })
+    expect(within(watched).getByRole('radio', { name: 'Stay in the playlist' })).toBeChecked()
+    expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
+
+    await user.click(within(watched).getByRole('radio', { name: 'Drop out' }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
+    expect(within(watched).getByRole('radio', { name: 'Drop out' })).toBeChecked()
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
+        .map(([, init]) => JSON.parse(String((init as RequestInit).body))),
+    ).toEqual([{ plex_playlist_watched: 'drop' }])
+    expect(playlists).toHaveTextContent(
+      "Plex Web and the Mac app don't show watched badges in playlists, so dropping watched episodes is the way to tell what's left.",
+    )
+  })
 })
 
 /** The text of each line (paragraph) in `element`. */
