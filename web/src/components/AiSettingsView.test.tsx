@@ -58,6 +58,24 @@ describe('AiSettingsView', () => {
     expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument()
   })
 
+  it('lists the unsaved changes in the save bar', async () => {
+    mockApi({
+      'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+    await openAdvanced()
+    await user.click(screen.getByRole('button', { name: 'Advanced categorization settings' }))
+
+    await user.type(screen.getByRole('spinbutton', { name: 'Temperature' }), '5')
+    await user.type(screen.getByRole('spinbutton', { name: 'Categorization temperature' }), '5')
+
+    expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent(
+      '2 unsaved changes · Summaries temperature, Categorization temperature',
+    )
+  })
+
   it('describes each provider option', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: true }) })
     renderWithProviders(<AiSettingsView />)
