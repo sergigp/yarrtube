@@ -83,6 +83,10 @@ function VideoActions({ videoId }: { videoId: string }) {
       >
         Stop retrying
       </Button>
+      {retry.error && <span className="text-xs text-destructive">Retry failed: {retry.error}</span>}
+      {stop.error && (
+        <span className="text-xs text-destructive">Stopping failed: {stop.error}</span>
+      )}
     </>
   )
 }

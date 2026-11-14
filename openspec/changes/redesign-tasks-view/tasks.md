@@ -36,7 +36,7 @@
 - [x] 2.28 Web: **Sync now** on one source posts its id; **Run now** on a Plex sync posts its id; per-video and running tasks offer no Run now
 - [x] 2.29 Web: the Needs attention card shows the plain reason and the next try; **Show error** / **Hide error** toggles the raw text
 - [x] 2.30 Web: **Retry now** posts to `/api/videos/{id}/retry` and **Stop retrying** to `/api/videos/{id}/stop-retrying`, each refreshing the list and disabling the card's actions while in flight
-- [ ] 2.31 Web: a failed run-now, retry or stop shows the failure and the action can be used again
+- [x] 2.31 Web: a failed run-now, retry or stop shows the failure and the action can be used again
 - [ ] 2.32 Web: search is always shown, filters within the selected chip, keeps its text when the chip changes, and says nothing matches when nothing does
 - [ ] 2.33 Web: an empty listing shows "All quiet. Nothing is scheduled." with no chips
 - [ ] 2.34 Web: the phone layout keeps chip names in a sideways-scrolling row and stacks each row's time above its description; the controls use the 44 px size classes (asserted on classes in jsdom, and checked for real in 4.3)

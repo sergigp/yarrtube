@@ -66,7 +66,7 @@ export function TaskBatchRow({ tasks, sources, runAt, now }: TaskBatchRowProps) 
         </span>
       </div>
       {syncAll.error && (
-        <p className="text-xs text-destructive">Sync failed: {syncAll.error}</p>
+        <p className="text-xs text-destructive">Sync all now failed: {syncAll.error}</p>
       )}
       {expanded && (
         <ul className="flex flex-col divide-y divide-border rounded-md bg-muted/40 sm:ml-40">

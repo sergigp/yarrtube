@@ -11,7 +11,9 @@ export function RunNowButton({ label, action }: RunNowButtonProps) {
   const { run, working, error } = useTaskAction(action)
   return (
     <span className="flex shrink-0 items-center gap-2">
-      {error && <span className="text-xs text-destructive">Failed: {error}</span>}
+      {error && <span className="text-xs text-destructive">
+          {label} failed: {error}
+        </span>}
       <Button
         variant="outline"
         size="sm"

@@ -288,4 +288,39 @@ describe('TasksView', () => {
     )
     expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument()
   })
+
+  it('says when retrying or stopping fails, keeping both usable', async () => {
+    const user = userEvent.setup()
+    mockApi({
+      'GET /api/tasks': aProdLikeQueue(),
+      'POST /api/videos/rec1/retry': { status: 500, error: 'db locked' },
+      'POST /api/videos/rec1/stop-retrying': { status: 500, error: 'disk full' },
+    })
+    renderWithProviders(<TasksView />)
+    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
+
+    await user.click(within(card).getByRole('button', { name: 'Retry now' }))
+    expect(await within(card).findByText('Retry failed: db locked')).toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Stop retrying' }))
+
+    expect(await within(card).findByText('Stopping failed: disk full')).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Retry now' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Stop retrying' })).toBeEnabled()
+  })
+
+  it('says when running a task now fails, and lets it be tried again', async () => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi({
+      'GET /api/tasks': aProdLikeQueue(),
+      'POST /api/tasks/run-now': { status: 500, error: 'db locked' },
+    })
+    renderWithProviders(<TasksView />)
+    const plex = (await screen.findByText('Sync watch state with Plex')).closest('li')!
+
+    await user.click(within(plex).getByRole('button', { name: 'Run now' }))
+    expect(await within(plex).findByText('Run now failed: db locked')).toBeInTheDocument()
+    await user.click(within(plex).getByRole('button', { name: 'Run now' }))
+
+    await waitFor(() => expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toHaveLength(2))
+  })
 })
