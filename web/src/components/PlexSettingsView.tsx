@@ -272,9 +272,15 @@ function PlaylistOptions({
   return (
     <div className="flex flex-col gap-4 text-sm">
       {disabled && (
-        <p className="text-muted-foreground">
-          Category playlists need categories on, in General settings.
-        </p>
+        <div
+          role="note"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <p>Category playlists need categories, which are off.</p>
+          <Button size="sm" onClick={() => onSave({ categories_enabled: true })}>
+            Turn on categories
+          </Button>
+        </div>
       )}
       <div className="flex flex-wrap gap-8">
         <div className="flex min-w-64 flex-1 flex-col gap-5">

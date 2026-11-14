@@ -38,7 +38,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 - [x] 2.24 `it tells what to check when Plex is unreachable`
 - [x] 2.25 `it shows Retry now on a failed sync`
 - [x] 2.26 `it saves a playlist choice and updates the preview`
-- [ ] 2.27 `it turns categories on from the Plex page`
+- [x] 2.27 `it turns categories on from the Plex page`
 - [ ] 2.28 `it shows the setup card when Plex isn't configured`
 - [ ] 2.29 `it copies a variable name`
 

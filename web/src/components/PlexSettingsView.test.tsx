@@ -275,9 +275,38 @@ describe('PlexSettingsView', () => {
         .getAllByRole('radio')
         .map((radio) => (radio as HTMLInputElement).disabled),
     ).toEqual([true, true, true, true])
-    expect(playlists).toHaveTextContent(
-      'Category playlists need categories on, in General settings.',
+    expect(playlists).toHaveTextContent('Category playlists need categories, which are off.')
+  })
+
+  it('turns categories on from the Plex page', async () => {
+    let categoriesEnabled = false
+    const fetchMock = mockApi({
+      'GET /api/plex': aPlexStatus(),
+      'GET /api/preferences': () => aPreferences({ categories_enabled: categoriesEnabled }),
+      'PATCH /api/preferences': () => {
+        categoriesEnabled = true
+        return aPreferences({ categories_enabled: true })
+      },
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Turn on categories' }))
+
+    const playlists = screen.getByRole('group', { name: 'Category playlists' })
+    await waitFor(() =>
+      expect(
+        within(playlists)
+          .getAllByRole('radio')
+          .every((radio) => !(radio as HTMLInputElement).disabled),
+      ).toBe(true),
     )
+    expect(playlists).not.toHaveTextContent('Category playlists need categories')
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
+        .map(([, init]) => JSON.parse(String((init as RequestInit).body))),
+    ).toEqual([{ categories_enabled: true }])
   })
 })
 
