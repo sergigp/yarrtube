@@ -343,6 +343,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_model_changes()
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             false,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -412,6 +413,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_generation_sett
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             false,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -491,6 +493,7 @@ async fn it_should_keep_failed_verdicts_when_the_same_settings_are_saved() {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             false,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -518,6 +521,7 @@ async fn it_should_keep_failed_verdicts_when_the_shipped_categorization_prompt_i
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         false,
+        None,
     );
     let request = UpdatePreferencesRequest {
         categorization_prompt: Some(Some(CategorizationPrompt::shipped().as_str().to_string())),
@@ -1335,6 +1339,7 @@ async fn it_should_save_the_anthropic_provider_and_settings() {
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         true,
+        None,
     );
     let request = UpdatePreferencesRequest {
         ai_provider: Some("anthropic".to_string()),
@@ -1443,6 +1448,7 @@ async fn it_should_enable_ai_on_anthropic_without_an_ollama_url() {
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         true,
+        None,
     );
     let request = UpdatePreferencesRequest {
         ai_enabled: Some(true),
@@ -1522,6 +1528,7 @@ async fn it_should_reset_failed_summaries_when_the_provider_changes() {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             true,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -1587,6 +1594,7 @@ async fn it_should_reset_failed_verdicts_when_the_anthropic_categorization_effor
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             true,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -1662,6 +1670,7 @@ fn any_preferences_updater() -> PreferencesUpdater {
         Arc::new(SqliteCategoryRepository::new(database())),
         categorization_resetter(database()),
         false,
+        None,
     )
 }
 
@@ -1678,6 +1687,7 @@ fn preferences_updater(
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         false,
+        None,
     )
 }
 

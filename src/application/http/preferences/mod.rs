@@ -101,6 +101,8 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
             .as_deref()
             .map(Effort::new)
             .transpose()?,
+        plex_playlist_watched: None,
+        plex_playlist_order: None,
     })
 }
 

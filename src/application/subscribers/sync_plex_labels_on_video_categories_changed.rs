@@ -52,6 +52,8 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::SqlitePlexSyncRunRepository;
+    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -179,6 +181,8 @@ mod tests {
                 "/plex/videos",
             ),
             task_repository,
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+            Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
             Arc::new(FixedClock(now())),
         )
     }

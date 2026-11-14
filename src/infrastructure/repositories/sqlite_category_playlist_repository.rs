@@ -74,6 +74,7 @@ impl SqliteCategoryPlaylistRepository {
             label: row.get(1)?,
             rating_key: row.get(2)?,
             title: row.get(3)?,
+            options: None,
         })
     }
 }
@@ -122,6 +123,7 @@ mod tests {
             label: label.to_string(),
             rating_key: rating_key.to_string(),
             title: label.to_string(),
+            options: None,
         }
     }
 }

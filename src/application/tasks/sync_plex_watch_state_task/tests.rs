@@ -29,6 +29,7 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::{
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
     PlaylistVideoRepository, SqlitePlaylistVideoRepository,
 };
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::SqlitePlexSyncRunRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
@@ -1100,6 +1101,7 @@ fn syncer(
             ),
         ),
         task_repository,
+        Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
         clock,
     )
 }

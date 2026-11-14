@@ -1,7 +1,7 @@
 use crate::domain::preferences::{
     Preferences, PreferencesChange, ResolvedPreferences, UpdatePreferencesError,
 };
-use crate::domain::services::{CategorizationResetter, CategorizationResetterApi};
+use crate::domain::services::{CategorizationResetter, CategorizationResetterApi, PlexLabelSyncer};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -21,6 +21,8 @@ pub struct PreferencesUpdater {
     category_lock: Arc<CategoryLock>,
     category_repository: Arc<dyn CategoryRepository>,
     anthropic_available: bool,
+    #[allow(dead_code)]
+    plex_label_syncer: Option<PlexLabelSyncer>,
 }
 
 impl PreferencesUpdater {
@@ -34,6 +36,7 @@ impl PreferencesUpdater {
         category_repository: Arc<dyn CategoryRepository>,
         categorization_resetter: CategorizationResetter,
         anthropic_available: bool,
+        plex_label_syncer: Option<PlexLabelSyncer>,
     ) -> Self {
         Self {
             repository,
@@ -44,6 +47,7 @@ impl PreferencesUpdater {
             category_lock,
             category_repository,
             anthropic_available,
+            plex_label_syncer,
         }
     }
 }

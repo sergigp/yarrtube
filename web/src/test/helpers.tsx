@@ -20,6 +20,9 @@ import type {
   AnthropicServer,
   OllamaServer,
   PlaylistListItem,
+  PlexConnection,
+  PlexStatus,
+  PlexSync,
   Preferences,
   Step,
   Task,
@@ -383,6 +386,39 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     anthropic_summaries_effort: 'low',
     anthropic_categorization_model: 'claude-haiku-5-5',
     anthropic_categorization_effort: 'low',
+    plex_playlist_watched: 'keep',
+    plex_playlist_order: 'newest_first',
+    ...overrides,
+  }
+}
+
+export function aPlexStatus(overrides: Partial<PlexStatus> = {}): PlexStatus {
+  return {
+    configured: true,
+    connection: aPlexConnection(),
+    syncs: [aPlexSync({ kind: 'watch_state' }), aPlexSync({ kind: 'labels' })],
+    ...overrides,
+  }
+}
+
+export function aPlexConnection(overrides: Partial<PlexConnection> = {}): PlexConnection {
+  return {
+    checked_at: '2026-11-14T10:00:00Z',
+    reachable: true,
+    error: null,
+    version: '1.43.5.11079-b3b13e506',
+    libraries: ['Subscriptions'],
+    ...overrides,
+  }
+}
+
+export function aPlexSync(overrides: Partial<PlexSync> = {}): PlexSync {
+  return {
+    kind: 'watch_state',
+    last_run_at: '2026-11-14T10:00:00Z',
+    last_error: null,
+    next_run_at: '2026-11-14T10:05:00Z',
+    running: false,
     ...overrides,
   }
 }

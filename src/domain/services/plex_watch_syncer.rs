@@ -8,6 +8,7 @@ use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, WatchProgress, YoutubeVideoId};
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_episode_watch_repository::EpisodeWatchRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::PlexSyncRunRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -31,6 +32,8 @@ pub struct PlexWatchSyncer {
     video_repository: Arc<dyn VideoRepository>,
     video_watch_state_updater: VideoWatchStateUpdater,
     task_repository: Arc<dyn TaskRepository>,
+    #[allow(dead_code)]
+    plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     clock: Arc<dyn Clock>,
 }
 
@@ -42,6 +45,7 @@ impl PlexWatchSyncer {
         video_repository: Arc<dyn VideoRepository>,
         video_watch_state_updater: VideoWatchStateUpdater,
         task_repository: Arc<dyn TaskRepository>,
+        plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -51,6 +55,7 @@ impl PlexWatchSyncer {
             video_repository,
             video_watch_state_updater,
             task_repository,
+            plex_sync_run_repository,
             clock,
         }
     }
@@ -102,7 +107,7 @@ impl PlexWatchSyncer {
     /// The library and whose watch state it holds.
     fn read_plex(&self) -> anyhow::Result<(PlexLibrary, String)> {
         let library = self.plex_episode_finder.read_library()?;
-        let viewer_id = self.plex_library_repository.viewer_id()?;
+        let viewer_id = self.plex_library_repository.identity()?.viewer_id;
         Ok((library, viewer_id))
     }
 

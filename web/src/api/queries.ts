@@ -10,6 +10,8 @@ import {
 } from '@tanstack/react-query'
 import {
   fetchAnnouncements,
+  fetchPlexStatus,
+  requestPlexSync,
   fetchChannels,
   fetchChannelVideos,
   fetchHomeVideos,
@@ -50,6 +52,8 @@ import type {
   VideoSearchResults,
   PlaylistListItem,
   PlaylistPreview,
+  PlexStatus,
+  PlexSyncKind,
   Preferences,
   PreferencesPatch,
   Task,
@@ -91,6 +95,7 @@ export const queryKeys = {
   announcements: ['announcements'] as const,
   version: ['version'] as const,
   preferences: ['preferences'] as const,
+  plexStatus: ['plex'] as const,
   ollama: (url: string) => ['ollama', url] as const,
   anthropic: ['anthropic'] as const,
   // Outside the `['playlists']` and `['channels']` prefixes so refetching the
@@ -250,6 +255,19 @@ export function usePreferences(): UseQueryResult<Preferences, Error> {
     queryKey: queryKeys.preferences,
     queryFn: fetchPreferences,
   })
+}
+
+/** The Plex integration's status, refreshed while it is shown. */
+export function usePlexStatus(): UseQueryResult<PlexStatus, Error> {
+  return useQuery({
+    queryKey: queryKeys.plexStatus,
+    queryFn: fetchPlexStatus,
+  })
+}
+
+/** Returns a function that makes a Plex sync due now. */
+export function useRequestPlexSync(): (kind: PlexSyncKind) => Promise<void> {
+  return useCallback(async (kind: PlexSyncKind) => requestPlexSync(kind), [])
 }
 
 /**

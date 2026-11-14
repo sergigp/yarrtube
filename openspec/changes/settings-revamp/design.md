@@ -342,7 +342,7 @@ export interface PlexSync { kind: PlexSyncKind; last_run_at: string | null; last
 // Preferences gains plex_playlist_watched: 'keep' | 'drop'; plex_playlist_order: 'newest_first' | 'oldest_first'
 // web/src/api/queries.ts
 export function usePlexStatus(): UseQueryResult<PlexStatus, Error> // refetchInterval 5 s
-export function useRequestPlexSync(): UseMutationResult<void, Error, PlexSyncKind>
+export function useRequestPlexSync(): (kind: PlexSyncKind) => Promise<void> // like useSavePreferences
 // web/src/lib/plexStatus.ts
 export function plexVersionLabel(version: string): string // "1.43.5.11079-b3b13e506" → "1.43.5.11079"
 /** Running, or requested at `requestedAt` and not finished since. */
@@ -368,7 +368,7 @@ export function PlexSettingsView(): JSX.Element
 
 **Playlist preference saved** — `PATCH /api/preferences` → `PreferencesUpdater::update(change)` → save → `stored.changes_plex_playlists(&updated)` and `plex_label_syncer` is `Some` ⇒ `request_sync(clock.now())`.
 
-**Web** — gear menu "Settings" → `/settings/general`; `SettingsView` renders nav + `Outlet`; `PlexSettingsView` → `usePlexStatus()`; "Sync now" → `useRequestPlexSync().mutate(kind)`, stores `requestedAt`; button label/disabled from `isSyncing(sync, requestedAt)`; option radios → `useSavePreferences({plex_playlist_watched})`.
+**Web** — gear menu "Settings" → `/settings/general`; `SettingsView` renders nav + `Outlet`; `PlexSettingsView` → `usePlexStatus()`; "Sync now" → `useRequestPlexSync()(kind)`, stores `requestedAt`; button label/disabled from `isSyncing(sync, requestedAt)`; option radios → `useSavePreferences({plex_playlist_watched})`.
 
 ## Test Plan
 

@@ -1,6 +1,7 @@
 use crate::domain::category::{CategoryId, CategoryName};
 use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection};
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
+use crate::domain::preferences::PlexPlaylistSettings;
 use crate::domain::services::{PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary};
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId};
@@ -9,6 +10,8 @@ use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRep
 use crate::infrastructure::repositories::sqlite_category_playlist_repository::CategoryPlaylistRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_episode_labels_repository::EpisodeLabelsRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::PlexSyncRunRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -60,6 +63,10 @@ pub struct PlexLabelSyncer {
     video_repository: Arc<dyn VideoRepository>,
     plex_episode_finder: PlexEpisodeFinder,
     task_repository: Arc<dyn TaskRepository>,
+    #[allow(dead_code)]
+    preferences_repository: Arc<dyn PreferencesRepository>,
+    #[allow(dead_code)]
+    plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     clock: Arc<dyn Clock>,
 }
 
@@ -74,6 +81,8 @@ impl PlexLabelSyncer {
         video_repository: Arc<dyn VideoRepository>,
         plex_episode_finder: PlexEpisodeFinder,
         task_repository: Arc<dyn TaskRepository>,
+        preferences_repository: Arc<dyn PreferencesRepository>,
+        plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -85,6 +94,8 @@ impl PlexLabelSyncer {
             video_repository,
             plex_episode_finder,
             task_repository,
+            preferences_repository,
+            plex_sync_run_repository,
             clock,
         }
     }
@@ -256,18 +267,21 @@ impl PlexLabelSyncer {
     }
 
     fn create_playlist(&self, desired: DesiredPlaylist) -> anyhow::Result<()> {
-        let server_id = self.plex_library_repository.server_id()?;
+        let server_id = self.plex_library_repository.identity()?.server_id;
+        let options = PlexPlaylistSettings::default();
         let playlist = self.plex_library_repository.create_smart_playlist(
             &server_id,
             &desired.section_id,
             &desired.label,
             &desired.title,
+            &options,
         )?;
         self.category_playlist_repository.save(&CategoryPlaylist {
             section_id: desired.section_id,
             label: desired.label,
             rating_key: playlist.rating_key,
             title: playlist.title,
+            options: Some(options),
         })
     }
 

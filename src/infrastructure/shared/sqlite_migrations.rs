@@ -46,6 +46,7 @@ const VIDEO_STEP_STATUSES_SQL: &str =
 const EVENT_RUN_AT_SQL: &str = include_str!("../../../migrations/0029_event_run_at.sql");
 const LOOKUP_INDEXES_SQL: &str = include_str!("../../../migrations/0030_lookup_indexes.sql");
 const EPISODE_WATCH_SQL: &str = include_str!("../../../migrations/0031_episode_watch.sql");
+const PLEX_SETTINGS_SQL: &str = include_str!("../../../migrations/0032_plex_settings.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(migrations())
@@ -91,6 +92,7 @@ fn migrations() -> Vec<M<'static>> {
         M::up(EVENT_RUN_AT_SQL),
         M::up(LOOKUP_INDEXES_SQL),
         M::up(EPISODE_WATCH_SQL),
+        M::up(PLEX_SETTINGS_SQL),
     ]
 }
 
@@ -160,6 +162,7 @@ mod tests {
                 "events",
                 "playlist_videos",
                 "playlists",
+                "plex_sync_runs",
                 "preferences",
                 "tasks",
                 "tasks_dead_letter",

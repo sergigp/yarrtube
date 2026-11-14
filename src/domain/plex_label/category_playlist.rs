@@ -1,3 +1,5 @@
+use crate::domain::preferences::PlexPlaylistSettings;
+
 /// A smart playlist yarrtube created for a category in a Plex library
 /// section, keyed by section and label (ignoring case).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -7,4 +9,7 @@ pub struct CategoryPlaylist {
     pub label: String,
     pub rating_key: String,
     pub title: String,
+    /// How it lists its episodes; `None` for one created before this was
+    /// recorded.
+    pub options: Option<PlexPlaylistSettings>,
 }

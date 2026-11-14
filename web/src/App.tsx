@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
-import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelDetail } from './components/ChannelDetail'
@@ -12,6 +12,8 @@ import { CategoryDialog } from './components/CategoryDialog'
 import { SIDEBAR_ID, Sidebar } from './components/Sidebar'
 import { SettingsMenu } from './components/SettingsMenu'
 import { AiSettingsView } from './components/AiSettingsView'
+import { SettingsView } from './components/SettingsView'
+import { PlexSettingsView } from './components/PlexSettingsView'
 import { ThemeToggle } from './components/ThemeToggle'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { MobileNavToggle } from './components/MobileNavToggle'
@@ -152,8 +154,14 @@ export function AppShell() {
               <Route path="/playlists/:id" element={<PlaylistDetail />} />
               <Route path="/channels/:id" element={<ChannelDetail />} />
               <Route path="/tasks" element={<TasksView />} />
-              <Route path="/preferences" element={<PreferencesView />} />
-              <Route path="/ai" element={<AiSettingsView />} />
+              <Route path="/settings" element={<SettingsView />}>
+                <Route index element={<Navigate to="general" replace />} />
+                <Route path="general" element={<PreferencesView />} />
+                <Route path="ai" element={<AiSettingsView />} />
+                <Route path="plex" element={<PlexSettingsView />} />
+              </Route>
+              <Route path="/preferences" element={<Navigate to="/settings/general" replace />} />
+              <Route path="/ai" element={<Navigate to="/settings/ai" replace />} />
               <Route path="/categories/:id" element={<CategoryDetail />} />
             </Routes>
           </div>

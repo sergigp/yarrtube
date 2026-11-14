@@ -250,6 +250,7 @@ impl From<StoredPreferences> for Preferences {
                     .and_then(|effort| Effort::new(&effort).ok())
                     .unwrap_or(defaults.anthropic.categorization_effort),
             },
+            plex_playlists: defaults.plex_playlists,
         }
     }
 }

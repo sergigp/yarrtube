@@ -1,4 +1,7 @@
-use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState};
+use crate::domain::plex::{
+    PlexEpisode, PlexIdentity, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState,
+};
+use crate::domain::preferences::PlexPlaylistSettings;
 use crate::domain::video::PlaybackPosition;
 use chrono::DateTime;
 #[cfg(test)]
@@ -33,8 +36,9 @@ pub trait PlexLibraryRepository: Send + Sync {
     /// Asks Plex to scan only `path` (a server-side folder) in the section,
     /// so a new video is imported without waiting for a library scan.
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()>;
-    /// The server's machine identifier (`GET /identity`).
-    fn server_id(&self) -> anyhow::Result<String>;
+    /// The server's machine identifier and version, and whose watch state
+    /// the token reads and writes (`GET /identity`).
+    fn identity(&self) -> anyhow::Result<PlexIdentity>;
     /// Every episode in the section, one per media file
     /// (`GET /library/sections/{id}/all?type=4`, paged).
     fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>>;
@@ -59,13 +63,10 @@ pub trait PlexLibraryRepository: Send + Sync {
         section_id: &str,
         label: &str,
         title: &str,
+        options: &PlexPlaylistSettings,
     ) -> anyhow::Result<PlexPlaylist>;
     /// `DELETE /playlists/{rating_key}`.
     fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()>;
-    /// Whose watch state the watch calls read and write: the server's
-    /// machine identifier and a fingerprint of the token,
-    /// `"<machineIdentifier>/<fingerprint>"`.
-    fn viewer_id(&self) -> anyhow::Result<String>;
     /// Marks the episode watched for the token user (`GET /:/scrobble`),
     /// clearing its resume position.
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()>;
@@ -237,9 +238,14 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         self.send(&endpoint, request).map(drop)
     }
 
-    fn server_id(&self) -> anyhow::Result<String> {
+    fn identity(&self) -> anyhow::Result<PlexIdentity> {
         let response: IdentityResponse = self.get_json("/identity", &[])?;
-        Ok(response.media_container.machine_identifier)
+        let server_id = response.media_container.machine_identifier;
+        Ok(PlexIdentity {
+            viewer_id: format!("{server_id}/{}", token_fingerprint(&self.config.token)),
+            server_id,
+            version: String::new(),
+        })
     }
 
     fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
@@ -291,8 +297,9 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         section_id: &str,
         label: &str,
         title: &str,
+        options: &PlexPlaylistSettings,
     ) -> anyhow::Result<PlexPlaylist> {
-        let uri = smart_playlist_uri(server_id, section_id, label);
+        let uri = smart_playlist_uri(server_id, section_id, label, options);
         let request = self.client()?.post(self.url("/playlists")).query(&[
             ("type", "video"),
             ("title", title),
@@ -313,14 +320,6 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         let endpoint = format!("/playlists/{rating_key}");
         let request = self.client()?.delete(self.url(&endpoint));
         self.send(&endpoint, request).map(drop)
-    }
-
-    fn viewer_id(&self) -> anyhow::Result<String> {
-        Ok(format!(
-            "{}/{}",
-            self.server_id()?,
-            token_fingerprint(&self.config.token)
-        ))
     }
 
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
@@ -471,7 +470,12 @@ fn label_edit_query(
 /// episode number first (a channel's same-day episodes newest first). A
 /// space in it is `%20`, as python-plexapi sends it, not the form
 /// encoding's `+`.
-fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> String {
+fn smart_playlist_uri(
+    server_id: &str,
+    section_id: &str,
+    label: &str,
+    _options: &PlexPlaylistSettings,
+) -> String {
     format!(
         "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all\
          ?type=4&episode.label={}&sort=originallyAvailableAt%3Adesc%2Cindex%3Adesc",
@@ -557,12 +561,15 @@ pub struct FakePlaylist {
     pub rating_key: String,
     pub title: String,
     pub filter: Option<(String, String)>,
+    /// How a playlist the fake created lists its episodes.
+    pub options: Option<PlexPlaylistSettings>,
 }
 
 #[cfg(test)]
 impl FakePlexLibraryRepository {
     pub const SERVER_ID: &str = "fake-server";
     pub const VIEWER_ID: &str = "fake-server/viewer";
+    pub const VERSION: &str = "1.43.5.11079-b3b13e506";
 
     /// The same fake with `location` added to `section_id`'s folders.
     pub fn with_location(self, section_id: &str, location: &str) -> Self {
@@ -626,6 +633,7 @@ impl FakePlexLibraryRepository {
             rating_key: rating_key.to_string(),
             title: title.to_string(),
             filter: None,
+            options: None,
         });
         self
     }
@@ -732,9 +740,13 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         Ok(())
     }
 
-    fn server_id(&self) -> anyhow::Result<String> {
+    fn identity(&self) -> anyhow::Result<PlexIdentity> {
         self.ensure_reachable()?;
-        Ok(Self::SERVER_ID.to_string())
+        Ok(PlexIdentity {
+            server_id: Self::SERVER_ID.to_string(),
+            version: Self::VERSION.to_string(),
+            viewer_id: Self::VIEWER_ID.to_string(),
+        })
     }
 
     fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
@@ -797,6 +809,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         section_id: &str,
         label: &str,
         title: &str,
+        options: &PlexPlaylistSettings,
     ) -> anyhow::Result<PlexPlaylist> {
         self.ensure_reachable()?;
         anyhow::ensure!(server_id == Self::SERVER_ID, "unknown server {server_id}");
@@ -806,6 +819,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             rating_key: format!("pl{}", playlists.len() + 1),
             title: title.to_string(),
             filter: Some((section_id.to_string(), label.to_string())),
+            options: Some(*options),
         };
         playlists.push(playlist.clone());
         Ok(PlexPlaylist {
@@ -822,11 +836,6 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             .unwrap()
             .retain(|playlist| playlist.rating_key != rating_key);
         Ok(())
-    }
-
-    fn viewer_id(&self) -> anyhow::Result<String> {
-        self.ensure_reachable()?;
-        Ok(Self::VIEWER_ID.to_string())
     }
 
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
@@ -1011,7 +1020,7 @@ mod tests {
             .create();
         let repository = repository(&server);
 
-        let server_id = repository.server_id();
+        let server_id = repository.identity().map(|identity| identity.server_id);
 
         assert_eq!(
             server_id.map_err(|e| e.to_string()),
@@ -1293,6 +1302,7 @@ mod tests {
             "19",
             "Sci & Tech",
             "Sci & Tech · Subscriptions",
+            &PlexPlaylistSettings::default(),
         );
 
         assert_eq!(
@@ -1335,8 +1345,14 @@ mod tests {
         });
 
         let viewers = (
-            repository(&server).viewer_id().map_err(|e| e.to_string()),
-            other_token.viewer_id().map_err(|e| e.to_string()),
+            repository(&server)
+                .identity()
+                .map(|identity| identity.viewer_id)
+                .map_err(|e| e.to_string()),
+            other_token
+                .identity()
+                .map(|identity| identity.viewer_id)
+                .map_err(|e| e.to_string()),
         );
 
         assert_eq!(

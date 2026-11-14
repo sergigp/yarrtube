@@ -5,6 +5,7 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::plex::PlexLabels;
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
+use crate::domain::preferences::PlexPlaylistSettings;
 use crate::domain::services::plex_label_syncer::BATCH_SIZE;
 use crate::domain::services::{PlexEpisodeFinder, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -31,6 +32,8 @@ use crate::infrastructure::repositories::sqlite_episode_labels_repository::{
 };
 use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::SqlitePlexSyncRunRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
@@ -630,6 +633,7 @@ fn it_should_create_a_smart_playlist_for_a_category() {
             rating_key: "pl1".to_string(),
             title: "Chess".to_string(),
             filter: Some(("19".to_string(), "Chess".to_string())),
+            options: Some(PlexPlaylistSettings::default()),
         }]
     );
     assert_eq!(
@@ -670,6 +674,7 @@ fn it_should_keep_a_playlist_already_in_sync() {
             rating_key: "pl1".to_string(),
             title: "Chess".to_string(),
             filter: Some(("19".to_string(), "Chess".to_string())),
+            options: Some(PlexPlaylistSettings::default()),
         }]
     );
     assert_eq!(
@@ -713,11 +718,13 @@ fn it_should_title_playlists_by_library_if_a_category_spans_libraries() {
                 rating_key: "pl1".to_string(),
                 title: "Chess · Subscriptions".to_string(),
                 filter: Some(("19".to_string(), "Chess".to_string())),
+                options: Some(PlexPlaylistSettings::default()),
             },
             FakePlaylist {
                 rating_key: "pl2".to_string(),
                 title: "Chess · Sergi's Playlists".to_string(),
                 filter: Some(("21".to_string(), "Chess".to_string())),
+                options: Some(PlexPlaylistSettings::default()),
             },
         ]
     );
@@ -798,6 +805,7 @@ fn it_should_replace_the_playlist_of_a_renamed_category() {
             rating_key: "pl1".to_string(),
             title: "Humor".to_string(),
             filter: Some(("19".to_string(), "Humor".to_string())),
+            options: Some(PlexPlaylistSettings::default()),
         }]
     );
     assert_eq!(
@@ -886,6 +894,7 @@ fn it_should_keep_one_playlist_for_a_category_renamed_by_case() {
             rating_key: "pl1".to_string(),
             title: "Chess".to_string(),
             filter: Some(("19".to_string(), "Chess".to_string())),
+            options: Some(PlexPlaylistSettings::default()),
         }]
     );
     assert_eq!(
@@ -930,6 +939,7 @@ fn it_should_recreate_a_playlist_deleted_in_plex() {
             rating_key: "pl1".to_string(),
             title: "Chess".to_string(),
             filter: Some(("19".to_string(), "Chess".to_string())),
+            options: Some(PlexPlaylistSettings::default()),
         }]
     );
     assert_eq!(
@@ -968,16 +978,19 @@ fn it_should_not_touch_playlists_it_did_not_create() {
                 rating_key: "900".to_string(),
                 title: "Chess".to_string(),
                 filter: None,
+                options: None,
             },
             FakePlaylist {
                 rating_key: "901".to_string(),
                 title: "Funny".to_string(),
                 filter: None,
+                options: None,
             },
             FakePlaylist {
                 rating_key: "pl3".to_string(),
                 title: "Chess".to_string(),
                 filter: Some(("19".to_string(), "Chess".to_string())),
+                options: Some(PlexPlaylistSettings::default()),
             },
         ]
     );
@@ -1064,6 +1077,8 @@ fn syncer(
             "/plex/videos",
         ),
         task_repository,
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
         Arc::new(FixedClock(now())),
     )
 }
@@ -1178,6 +1193,7 @@ fn category_playlist(
         label: label.to_string(),
         rating_key: rating_key.to_string(),
         title: title.to_string(),
+        options: None,
     }
 }
 

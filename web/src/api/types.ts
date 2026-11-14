@@ -343,6 +343,41 @@ export interface Preferences {
   anthropic_summaries_effort: Effort
   anthropic_categorization_model: string
   anthropic_categorization_effort: Effort
+  plex_playlist_watched: PlexPlaylistWatched
+  plex_playlist_order: PlexPlaylistOrder
+}
+
+/** Whether a category's Plex playlist keeps watched episodes or drops them. */
+export type PlexPlaylistWatched = 'keep' | 'drop'
+
+/** The order a category's Plex playlist lists its episodes in. */
+export type PlexPlaylistOrder = 'newest_first' | 'oldest_first'
+
+/** Response of `GET /api/plex`: the Plex integration as its syncs last saw it. */
+export interface PlexStatus {
+  configured: boolean
+  connection: PlexConnection | null
+  syncs: PlexSync[]
+}
+
+/** The Plex server as the latest sync of any kind saw it. */
+export interface PlexConnection {
+  checked_at: string
+  reachable: boolean
+  error: string | null
+  version: string | null
+  libraries: string[]
+}
+
+export type PlexSyncKind = 'watch_state' | 'labels'
+
+/** Where one Plex sync stands. */
+export interface PlexSync {
+  kind: PlexSyncKind
+  last_run_at: string | null
+  last_error: string | null
+  next_run_at: string | null
+  running: boolean
 }
 
 /**
