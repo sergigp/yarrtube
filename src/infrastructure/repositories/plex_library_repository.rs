@@ -1,7 +1,7 @@
 use crate::domain::plex::{
     PlexEpisode, PlexIdentity, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState,
 };
-use crate::domain::preferences::PlexPlaylistSettings;
+use crate::domain::preferences::{PlaylistOrder, PlaylistWatched, PlexPlaylistSettings};
 use crate::domain::video::PlaybackPosition;
 use chrono::DateTime;
 #[cfg(test)]
@@ -55,8 +55,7 @@ pub trait PlexLibraryRepository: Send + Sync {
     /// The token user's video playlists (`GET /playlists?playlistType=video`).
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>>;
     /// Creates a smart playlist of the section's episodes labelled `label`,
-    /// watched or not, newest air date first, then highest episode number
-    /// first.
+    /// listed as `options` say (see `smart_playlist_uri`).
     fn create_smart_playlist(
         &self,
         server_id: &str,
@@ -472,19 +471,29 @@ fn label_edit_query(
 }
 
 /// The library URI a smart playlist filters: the section's episodes
-/// labelled `label`, watched or not, newest air date first, then highest
-/// episode number first (a channel's same-day episodes newest first). A
-/// space in it is `%20`, as python-plexapi sends it, not the form
+/// labelled `label`, only unwatched ones when `options` drop watched
+/// episodes, by air date then episode number, both descending newest first
+/// (a channel's same-day episodes newest first) or both ascending oldest
+/// first. A space in it is `%20`, as python-plexapi sends it, not the form
 /// encoding's `+`.
 fn smart_playlist_uri(
     server_id: &str,
     section_id: &str,
     label: &str,
-    _options: &PlexPlaylistSettings,
+    options: &PlexPlaylistSettings,
 ) -> String {
+    let unwatched = match options.watched {
+        PlaylistWatched::Keep => "",
+        PlaylistWatched::Drop => "&episode.unwatched=1",
+    };
+    let direction = match options.order {
+        PlaylistOrder::NewestFirst => "desc",
+        PlaylistOrder::OldestFirst => "asc",
+    };
     format!(
         "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all\
-         ?type=4&episode.label={}&sort=originallyAvailableAt%3Adesc%2Cindex%3Adesc",
+         ?type=4&episode.label={}{unwatched}\
+         &sort=originallyAvailableAt%3A{direction}%2Cindex%3A{direction}",
         plex_escaped(label)
     )
 }
@@ -1320,6 +1329,48 @@ mod tests {
             Ok(PlexPlaylist {
                 rating_key: "503".to_string(),
                 title: "Sci & Tech · Subscriptions".to_string(),
+            })
+        );
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_create_a_smart_playlist_of_unwatched_episodes_oldest_first() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("POST", "/playlists")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "uri".into(),
+                "server://abc123/com.plexapp.plugins.library/library/sections/19/all\
+                 ?type=4&episode.label=Chess&episode.unwatched=1\
+                 &sort=originallyAvailableAt%3Aasc%2Cindex%3Aasc"
+                    .into(),
+            ))
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "Metadata": [
+                    {"ratingKey": "504", "title": "Chess", "smart": true}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let playlist = repository.create_smart_playlist(
+            "abc123",
+            "19",
+            "Chess",
+            "Chess",
+            &PlexPlaylistSettings {
+                watched: PlaylistWatched::Drop,
+                order: PlaylistOrder::OldestFirst,
+            },
+        );
+
+        assert_eq!(
+            playlist.map_err(|e| e.to_string()),
+            Ok(PlexPlaylist {
+                rating_key: "504".to_string(),
+                title: "Chess".to_string(),
             })
         );
         mock.assert();

@@ -62,8 +62,8 @@ Web (Vitest), one red-green-refactor cycle each
 
 `HttpPlexLibraryRepository`
 - [x] 3.1 `it_should_read_the_server_identity_with_its_version`
-- [ ] 3.2 `it_should_create_a_smart_playlist_filtered_by_label` (update: passes default options, URI unchanged)
-- [ ] 3.3 `it_should_create_a_smart_playlist_of_unwatched_episodes_oldest_first`
+- [x] 3.2 `it_should_create_a_smart_playlist_filtered_by_label` (update: passes default options, URI unchanged)
+- [x] 3.3 `it_should_create_a_smart_playlist_of_unwatched_episodes_oldest_first`
 
 `SqlitePlexSyncRunRepository`
 - [ ] 3.4 `it_should_list_the_latest_run_of_each_sync`
