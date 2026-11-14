@@ -70,7 +70,7 @@ describe('PlexSettingsView', () => {
     )
   })
 
-  it('says Plex cannot be reached, with the error and what was seen last', async () => {
+  it('tells what to check when Plex is unreachable', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date('2026-11-14T10:05:00Z'))
     mockApi({
@@ -89,7 +89,10 @@ describe('PlexSettingsView', () => {
     renderWithProviders(<PlexSettingsView />)
 
     const server = await screen.findByRole('group', { name: 'Server' })
-    expect(lines(server)).toEqual(["Can't reach Plex: connection refused"])
+    expect(within(server).getByText("Can't reach Plex", { selector: 'span' })).toBeInTheDocument()
+    expect(lines(server)).toEqual([
+      "Can't reach Plex: connection refused. Check YARRTUBE_PLEX_URL and that the server is running.",
+    ])
     expect(details(server)).toEqual([
       ['Version', '1.43.5.11079'],
       ['Libraries', 'Subscriptions'],

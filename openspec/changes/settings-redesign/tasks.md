@@ -35,7 +35,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 - [x] 2.21 `it says when a failed sync retries`
 - [x] 2.22 `it orders rows and drops the watched one when removing`
 - [x] 2.23 `it shows the server badge, version, libraries and last checked`
-- [ ] 2.24 `it tells what to check when Plex is unreachable`
+- [x] 2.24 `it tells what to check when Plex is unreachable`
 - [ ] 2.25 `it shows Retry now on a failed sync`
 - [ ] 2.26 `it saves a playlist choice and updates the preview`
 - [ ] 2.27 `it turns categories on from the Plex page`

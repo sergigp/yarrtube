@@ -171,7 +171,10 @@ function ConnectionStatus({ connection }: { connection: PlexConnection }) {
   return (
     <div className="flex flex-col gap-3 text-sm">
       {!connection.reachable && (
-        <p className="text-destructive">Can&apos;t reach Plex: {connection.error}</p>
+        <p className="text-destructive">
+          Can&apos;t reach Plex: {connection.error}. Check YARRTUBE_PLEX_URL and that the server
+          is running.
+        </p>
       )}
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {connection.version && (
