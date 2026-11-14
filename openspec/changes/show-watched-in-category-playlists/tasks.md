@@ -6,12 +6,12 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 No new behaviour test: the existing `sync_plex_labels_task` suite (incl. `it_should_recreate_a_playlist_deleted_in_plex`) must stay green.
+- [x] 2.1 No new behaviour test: the existing `sync_plex_labels_task` suite (incl. `it_should_recreate_a_playlist_deleted_in_plex`) must stay green.
 
 ## 3. Infrastructure adapters (TDD)
 
 `HttpPlexLibraryRepository`
-- [ ] 3.1 `it_should_create_a_smart_playlist_filtered_by_label` (update) — URI lists every labelled episode, no `episode.unwatched`, sorted `originallyAvailableAt:desc,index:desc`; update `smart_playlist_uri` and its doc comment.
+- [x] 3.1 `it_should_create_a_smart_playlist_filtered_by_label` (update) — URI lists every labelled episode, no `episode.unwatched`, sorted `originallyAvailableAt:desc,index:desc`; update `smart_playlist_uri` and its doc comment.
 
 ## 4. Docs
 
