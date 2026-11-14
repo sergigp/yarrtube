@@ -5,7 +5,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::shared::{Quality, ReconcileInterval};
-use crate::domain::task::Task;
+use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
     Chapters, Download, DownloadedQuality, StepState, Subtitles, Thumbnail, Video, VideoId,
     WatchState, YoutubeVideoId,
@@ -30,6 +30,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::{
 };
 use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 use crate::infrastructure::shared::system_clock::FixedClock;
+use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1172,6 +1173,35 @@ async fn it_should_have_null_started_at_for_a_pending_task() {
     );
 }
 
+#[tokio::test]
+async fn it_should_bring_a_pending_task_forward_when_run_now() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::UpdateYtdlp,
+            fixed_timestamp() + chrono::Duration::hours(1),
+        )
+        .unwrap();
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![ScheduledTask {
+            run_at: now,
+            updated_at: now,
+            ..scheduled_task(1, Task::UpdateYtdlp)
+        }]
+    );
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
@@ -1251,4 +1281,31 @@ async fn list(task_view_searcher: TaskViewSearcher) -> Result<Vec<TaskResponse>,
     list_tasks(State(task_view_searcher))
         .await
         .map(|Json(tasks)| tasks)
+}
+
+async fn run_now(
+    requester: TaskRunNowRequester,
+    request: RunTasksNowRequest,
+) -> Result<StatusCode, ApiError> {
+    run_tasks_now(State(requester), Json(request)).await
+}
+
+fn run_now_request(ids: &[i64]) -> RunTasksNowRequest {
+    RunTasksNowRequest {
+        ids: Some(ids.to_vec()),
+    }
+}
+
+/// A pending task as `schedule` stores it at `fixed_timestamp()`.
+fn scheduled_task(id: i64, task: Task) -> ScheduledTask {
+    ScheduledTask {
+        id,
+        task,
+        status: TaskStatus::Pending,
+        retries: 0,
+        run_at: fixed_timestamp(),
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        last_error: None,
+    }
 }

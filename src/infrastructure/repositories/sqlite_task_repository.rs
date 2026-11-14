@@ -169,8 +169,13 @@ impl TaskRepository for SqliteTaskRepository {
         self.list_where("status IN ('pending', 'running')")
     }
 
-    fn list_pending_by_ids(&self, _ids: &[i64]) -> anyhow::Result<Vec<ScheduledTask>> {
-        Ok(vec![])
+    fn list_pending_by_ids(&self, ids: &[i64]) -> anyhow::Result<Vec<ScheduledTask>> {
+        let ids = ids
+            .iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.list_where(&format!("status = 'pending' AND id IN ({ids})"))
     }
 
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>> {

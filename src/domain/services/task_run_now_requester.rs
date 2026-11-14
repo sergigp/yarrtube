@@ -25,8 +25,11 @@ pub trait TaskRunNowRequesterApi: Send + Sync {
 }
 
 impl TaskRunNowRequesterApi for TaskRunNowRequester {
-    fn run_now(&self, _ids: &[i64]) -> anyhow::Result<()> {
-        let _ = (&self.task_repository, &self.clock);
-        Ok(())
+    fn run_now(&self, ids: &[i64]) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        self.task_repository
+            .list_pending_by_ids(ids)?
+            .into_iter()
+            .try_for_each(|task| self.task_repository.update(&task.bring_forward(now, now)))
     }
 }
