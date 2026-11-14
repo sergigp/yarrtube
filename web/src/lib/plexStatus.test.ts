@@ -73,4 +73,17 @@ describe('syncStatusLine', () => {
       'Not run yet',
     )
   })
+
+  it('says when a failed sync retries', () => {
+    expect(
+      syncStatusLine(
+        aPlexSync({
+          last_run_at: '2026-11-14T09:59:00Z',
+          last_error: 'timed out',
+          next_run_at: '2026-11-14T10:14:00Z',
+        }),
+        at,
+      ),
+    ).toBe('Failed 4 minutes ago: timed out. Retries in 11 minutes.')
+  })
 })
