@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { SettingsCard } from '@/components/SettingsCard'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
-import { errorMessage } from '@/lib/errorMessage'
+import { couldntSave, errorMessage } from '@/lib/errorMessage'
 import { useSavedFlash } from '@/hooks/useSavedFlash'
 
 /** The preferences shown as switches here; the theme has its header toggle. */
@@ -114,7 +114,7 @@ export function PreferencesView() {
       )}
       {saveError && (
         <p role="alert" className="text-sm text-destructive">
-          Failed to save preferences: {saveError}
+          {couldntSave(saveError)}
         </p>
       )}
       {!error && !preferences && (

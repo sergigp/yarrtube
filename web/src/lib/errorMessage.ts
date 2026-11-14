@@ -5,5 +5,5 @@ export function errorMessage(err: unknown): string {
 
 /** What to show when a save failed with `error`. */
 export function couldntSave(error: string): string {
-  return error
+  return `Couldn't save: ${error}. Try again.`
 }

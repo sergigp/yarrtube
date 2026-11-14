@@ -89,7 +89,7 @@ describe('PreferencesView', () => {
     ).toEqual([['/api/preferences', { home_show_quick_watches: false }]])
   })
 
-  it('reports a failed save and keeps the saved value', async () => {
+  it("shows Couldn't save when a toggle fails", async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
       'PATCH /api/preferences': { status: 500, error: 'disk full' },
@@ -100,7 +100,7 @@ describe('PreferencesView', () => {
     await user.click(await screen.findByRole('switch', { name: 'Quick watches' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Failed to save preferences: disk full',
+      "Couldn't save: disk full. Try again.",
     )
     expect(screen.getByRole('switch', { name: 'Quick watches' })).toBeChecked()
   })
