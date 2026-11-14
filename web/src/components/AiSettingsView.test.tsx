@@ -881,7 +881,7 @@ describe('AiSettingsView', () => {
     expect(patchBodies(fetchMock)).toEqual([{ summaries_prompt: null }])
   })
 
-  it('explains each prompt section and its variables behind a "?" next to the prompt', async () => {
+  it('lists the prompt variables behind a "?" next to the prompt', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
     await openPrompt('Summaries')
@@ -891,14 +891,11 @@ describe('AiSettingsView', () => {
     await user.click(await screen.findByRole('button', { name: 'About Prompt' }))
 
     const guide = await screen.findByRole('region', { name: 'Prompt guide' })
-    const reducePart = within(guide).getByRole('group', { name: 'reduce part' })
-
-    expect(within(reducePart).getByText('How each part summary is written into {part_summaries}.')).toBeInTheDocument()
-    expect(within(reducePart).getAllByRole('term').map((term) => term.textContent)).toEqual([
-      '{part}',
-      '{span}',
-      '{summary}',
-    ])
+    const terms = within(guide).getAllByRole('term').map((term) => term.textContent)
+    expect(terms).toEqual(expect.arrayContaining(['{part}', '{span}', '{summary}']))
+    expect(new Set(terms).size).toBe(terms.length)
+    expect(within(guide).queryByRole('heading')).not.toBeInTheDocument()
+    expect(guide).not.toHaveTextContent('## ')
   })
 })
 

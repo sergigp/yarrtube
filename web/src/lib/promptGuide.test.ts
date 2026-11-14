@@ -1,46 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import SHIPPED_PROMPT from '../../../prompts/summaries/v3.md?raw'
-import { PROMPT_SECTIONS } from './promptGuide'
+import { PROMPT_VARIABLES } from './promptGuide'
 
-/** Each `## heading` of the prompt with the `{variables}` its text uses. */
-function shippedSections(): Map<string, Set<string>> {
-  const sections = new Map<string, Set<string>>()
-  let current: Set<string> | null = null
-  for (const line of SHIPPED_PROMPT.split('\n')) {
-    const heading = line.startsWith('## ') ? line.slice(3).trim() : null
-    if (heading !== null) {
-      current = new Set()
-      sections.set(heading, current)
-    } else if (current) {
-      for (const [, name] of line.matchAll(/\{([a-z_]+)\}/g)) {
-        current.add(name)
-      }
-    }
-  }
-  return sections
-}
+describe('PROMPT_VARIABLES', () => {
+  it('lists every variable the shipped prompt uses, once each, with a description', () => {
+    const used = new Set([...SHIPPED_PROMPT.matchAll(/\{([a-z_]+)\}/g)].map(([, name]) => name))
+    const listed = PROMPT_VARIABLES.map((variable) => variable.name)
 
-describe('PROMPT_SECTIONS', () => {
-  it('lists every section of the shipped prompt, in order', () => {
-    expect(PROMPT_SECTIONS.map((section) => section.heading)).toEqual([
-      ...shippedSections().keys(),
-    ])
-  })
-
-  it('lists every variable the shipped prompt uses under its section', () => {
-    for (const [heading, used] of shippedSections()) {
-      const guide = PROMPT_SECTIONS.find((section) => section.heading === heading)
-      const listed = guide?.variables.map((variable) => variable.name) ?? []
-      expect(listed, heading).toEqual(expect.arrayContaining([...used]))
-    }
-  })
-
-  it('describes every section and variable', () => {
-    for (const section of PROMPT_SECTIONS) {
-      expect(section.purpose, section.heading).not.toBe('')
-      for (const variable of section.variables) {
-        expect(variable.description, `${section.heading} {${variable.name}}`).not.toBe('')
-      }
+    expect(new Set(listed).size).toBe(listed.length)
+    expect(listed).toEqual(expect.arrayContaining([...used]))
+    for (const variable of PROMPT_VARIABLES) {
+      expect(variable.description, variable.name).not.toBe('')
     }
   })
 })

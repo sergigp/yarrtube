@@ -176,3 +176,14 @@ While Anthropic is selected, the "Summaries" and "Categorization" cards SHALL ea
 #### Scenario: Changing effort
 - **WHEN** Anthropic is selected and a user chooses "Low" in "Summaries effort" and activates "Save changes"
 - **THEN** a `PATCH /api/preferences` with only `anthropic_summaries_effort` `"low"` is sent
+
+### Requirement: Prompt Guide
+The prompt guide SHALL list every variable the summary prompt can use, once each, written as `{name}`, with what it is replaced by. It SHALL NOT explain the prompt's sections.
+
+#### Scenario: Variables for a section
+- **WHEN** a user opens the guide
+- **THEN** it lists `{part}`, `{span}` and `{summary}` among the variables, each with a description, and no section headings
+
+#### Scenario: Every variable described
+- **WHEN** a user reads the guide
+- **THEN** every variable the shipped prompt uses is listed once, with a description
