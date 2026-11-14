@@ -122,6 +122,8 @@ struct IdentityResponse {
 struct IdentityContainer {
     #[serde(rename = "machineIdentifier")]
     machine_identifier: String,
+    #[serde(default)]
+    version: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -240,11 +242,15 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 
     fn identity(&self) -> anyhow::Result<PlexIdentity> {
         let response: IdentityResponse = self.get_json("/identity", &[])?;
-        let server_id = response.media_container.machine_identifier;
+        let container = response.media_container;
         Ok(PlexIdentity {
-            viewer_id: format!("{server_id}/{}", token_fingerprint(&self.config.token)),
-            server_id,
-            version: String::new(),
+            viewer_id: format!(
+                "{}/{}",
+                container.machine_identifier,
+                token_fingerprint(&self.config.token)
+            ),
+            server_id: container.machine_identifier,
+            version: container.version,
         })
     }
 
@@ -1007,7 +1013,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_read_the_server_id() {
+    fn it_should_read_the_server_identity_with_its_version() {
         let mut server = mockito::Server::new();
         let _mock = server
             .mock("GET", "/identity")
@@ -1015,16 +1021,20 @@ mod tests {
             .with_status(200)
             .with_body(
                 r#"{"MediaContainer": {"size": 0, "claimed": true,
-                    "machineIdentifier": "abc123", "version": "1.43.4"}}"#,
+                    "machineIdentifier": "abc123", "version": "1.43.5.11079-b3b13e506"}}"#,
             )
             .create();
         let repository = repository(&server);
 
-        let server_id = repository.identity().map(|identity| identity.server_id);
+        let identity = repository.identity();
 
         assert_eq!(
-            server_id.map_err(|e| e.to_string()),
-            Ok("abc123".to_string())
+            identity.map_err(|e| e.to_string()),
+            Ok(PlexIdentity {
+                server_id: "abc123".to_string(),
+                version: "1.43.5.11079-b3b13e506".to_string(),
+                viewer_id: "abc123/5a1df1cf03604e11".to_string(),
+            })
         );
     }
 
