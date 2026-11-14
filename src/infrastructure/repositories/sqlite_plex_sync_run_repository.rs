@@ -122,3 +122,66 @@ impl SqlitePlexSyncRunRepository {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+
+    #[test]
+    fn it_should_list_the_latest_run_of_each_sync() {
+        let db = TestDatabase::new();
+        let repository = SqlitePlexSyncRunRepository::new(db.database());
+        let reached = PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: at(10),
+            outcome: PlexSyncOutcome::Reached {
+                version: "1.43.5.11079-b3b13e506".to_string(),
+                libraries: vec!["Subscriptions".to_string(), "Sergi's Playlists".to_string()],
+            },
+        };
+        let failed = PlexSyncRun {
+            kind: PlexSyncKind::Labels,
+            finished_at: at(20),
+            outcome: PlexSyncOutcome::Failed {
+                error: "timed out".to_string(),
+            },
+        };
+
+        repository.save(&reached).unwrap();
+        repository.save(&failed).unwrap();
+
+        assert_eq!(repository.list().unwrap(), vec![failed, reached]);
+    }
+
+    #[test]
+    fn it_should_replace_a_syncs_previous_run() {
+        let db = TestDatabase::new();
+        let repository = SqlitePlexSyncRunRepository::new(db.database());
+        repository
+            .save(&PlexSyncRun {
+                kind: PlexSyncKind::Labels,
+                finished_at: at(10),
+                outcome: PlexSyncOutcome::Failed {
+                    error: "timed out".to_string(),
+                },
+            })
+            .unwrap();
+        let latest = PlexSyncRun {
+            kind: PlexSyncKind::Labels,
+            finished_at: at(25),
+            outcome: PlexSyncOutcome::Reached {
+                version: "1.43.5.11079-b3b13e506".to_string(),
+                libraries: vec![],
+            },
+        };
+
+        repository.save(&latest).unwrap();
+
+        assert_eq!(repository.list().unwrap(), vec![latest]);
+    }
+
+    fn at(minute: i64) -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000 + minute * 60, 0).unwrap()
+    }
+}

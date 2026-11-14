@@ -66,16 +66,16 @@ Web (Vitest), one red-green-refactor cycle each
 - [x] 3.3 `it_should_create_a_smart_playlist_of_unwatched_episodes_oldest_first`
 
 `SqlitePlexSyncRunRepository`
-- [ ] 3.4 `it_should_list_the_latest_run_of_each_sync`
-- [ ] 3.5 `it_should_replace_a_syncs_previous_run`
+- [x] 3.4 `it_should_list_the_latest_run_of_each_sync`
+- [x] 3.5 `it_should_replace_a_syncs_previous_run`
 
 `SqliteCategoryPlaylistRepository`
-- [ ] 3.6 `it_should_round_trip_a_playlists_options`
-- [ ] 3.7 `it_should_read_a_playlist_without_options_as_unknown`
+- [x] 3.6 `it_should_round_trip_a_playlists_options`
+- [x] 3.7 `it_should_read_a_playlist_without_options_as_unknown`
 
 `SqlitePreferencesRepository`
-- [ ] 3.8 `it_should_round_trip_the_plex_playlist_preferences`
-- [ ] 3.9 `it_should_read_missing_plex_playlist_keys_as_defaults`
+- [x] 3.8 `it_should_round_trip_the_plex_playlist_preferences`
+- [x] 3.9 `it_should_read_missing_plex_playlist_keys_as_defaults`
 
 ## 4. Docs
 

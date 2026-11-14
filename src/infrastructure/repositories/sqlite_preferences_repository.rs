@@ -498,6 +498,43 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_plex_playlist_preferences() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            plex_playlists: PlexPlaylistSettings {
+                watched: PlaylistWatched::Drop,
+                order: PlaylistOrder::OldestFirst,
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_missing_plex_playlist_keys_as_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"theme\": \"dark\"}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences {
+                theme: Theme::Dark,
+                ..Preferences::default()
+            }))
+        );
+    }
+
+    #[test]
     fn it_should_round_trip_the_provider_and_anthropic_settings() {
         let db = TestDatabase::new();
         let repository = SqlitePreferencesRepository::new(db.database());

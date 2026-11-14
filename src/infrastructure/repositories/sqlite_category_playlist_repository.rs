@@ -131,6 +131,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_round_trip_a_playlists_options() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryPlaylistRepository::new(db.database());
+        let unwatched_oldest_first = CategoryPlaylist {
+            options: Some(PlexPlaylistSettings {
+                watched: PlaylistWatched::Drop,
+                order: PlaylistOrder::OldestFirst,
+            }),
+            ..playlist("19", "Chess", "pl1")
+        };
+
+        repository.save(&unwatched_oldest_first).unwrap();
+
+        assert_eq!(repository.list().unwrap(), vec![unwatched_oldest_first]);
+    }
+
+    #[test]
+    fn it_should_read_a_playlist_without_options_as_unknown() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryPlaylistRepository::new(db.database());
+        let unknown = CategoryPlaylist {
+            options: None,
+            ..playlist("19", "Chess", "pl1")
+        };
+
+        repository.save(&unknown).unwrap();
+
+        assert_eq!(repository.list().unwrap(), vec![unknown]);
+    }
+
     fn playlist(section_id: &str, label: &str, rating_key: &str) -> CategoryPlaylist {
         CategoryPlaylist {
             section_id: section_id.to_string(),
