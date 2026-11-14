@@ -1,9 +1,17 @@
+import { useState } from 'react'
 import { useAiEnabled, useTasks } from '@/api/queries'
 import type { Task } from '@/api/types'
-import { buildTaskList, statusLine, type TaskEntry, type TaskSectionId } from '@/lib/tasks'
+import {
+  buildTaskList,
+  statusLine,
+  type TaskEntry,
+  type TaskFilter,
+  type TaskSectionId,
+} from '@/lib/tasks'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { Beacon } from './Beacon'
 import { TaskBatchRow } from './tasks/TaskBatchRow'
+import { TaskFilterChips } from './tasks/TaskFilterChips'
 import { TaskRow } from './tasks/TaskRow'
 
 const SECTION_TITLES: Record<TaskSectionId, string> = {
@@ -32,6 +40,7 @@ export function TasksView() {
 function TaskList() {
   const { data: tasks, error } = useTasks()
   const aiEnabled = useAiEnabled()
+  const [filter, setFilter] = useState<TaskFilter>('all')
 
   if (error) {
     return <p className="text-sm text-destructive">Failed to load tasks: {error.message}</p>
@@ -42,11 +51,12 @@ function TaskList() {
   }
 
   const now = new Date()
-  const { sections } = buildTaskList(tasks, { filter: 'all', query: '', aiEnabled, now })
+  const { chips, sections } = buildTaskList(tasks, { filter, query: '', aiEnabled, now })
 
   return (
     <div className="flex flex-col gap-6">
       <StatusLine tasks={tasks} now={now} />
+      <TaskFilterChips chips={chips} selected={filter} onSelect={setFilter} />
       {sections.map((section) => (
         <section key={section.id} aria-labelledby={`tasks-${section.id}`}>
           <h3

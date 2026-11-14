@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
 import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
 
@@ -93,5 +94,23 @@ describe('TasksView', () => {
     expect(screen.getByText(clockAt(inMinutes(2)))).toBeInTheDocument()
     expect(screen.getByText('in 2 min')).toBeInTheDocument()
     expect(screen.queryByText(/^(pending|queued|running)$/)).not.toBeInTheDocument()
+  })
+
+  it('filters by chip, hiding chips with no tasks and marking the selected one pressed', async () => {
+    const user = userEvent.setup()
+    mockApi({ 'GET /api/tasks': aProdLikeQueue() })
+    renderWithProviders(<TasksView />)
+
+    const chips = await screen.findAllByRole('button', { pressed: false })
+    expect(
+      [screen.getByRole('button', { pressed: true }), ...chips].map((chip) => chip.textContent),
+    ).toEqual(['All7', 'Downloads2', 'Syncs2', 'Plex & upkeep3'])
+
+    await user.click(screen.getByRole('button', { name: /^Downloads/ }))
+
+    expect(screen.getByRole('button', { name: /^Downloads/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByText('Fetch the thumbnail of Intro in Chan')).toBeInTheDocument()
+    expect(screen.queryByText('Sync watch state with Plex')).not.toBeInTheDocument()
   })
 })

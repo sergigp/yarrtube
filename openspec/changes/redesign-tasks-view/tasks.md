@@ -31,7 +31,7 @@
 - [x] 2.23 Web `formatRunTime` / `formatStartedAgo` (`lib/taskTimes.test.ts`): today, tomorrow, already due → "Starting soon", "started 12 s ago"
 - [x] 2.24 Web `explainTaskError` (`lib/taskErrors.test.ts`): 403, private, age-gated, members-only, unavailable, unknown → first line without "ERROR:"
 - [x] 2.25 Web `TasksView` opens on All with the status line and sections for a prod-like fixture, and shows no status badges (rewrite `TasksView.test.tsx`; delete the tab tests)
-- [ ] 2.26 Web: selecting a chip filters the list; a chip with no tasks is hidden; chips are marked pressed when selected
+- [x] 2.26 Web: selecting a chip filters the list; a chip with no tasks is hidden; chips are marked pressed when selected
 - [ ] 2.27 Web: a batch row expands and collapses, and **Sync all now** posts every id of the batch to `/api/tasks/run-now`
 - [ ] 2.28 Web: **Sync now** on one source posts its id; **Run now** on a Plex sync posts its id; per-video and running tasks offer no Run now
 - [ ] 2.29 Web: the Needs attention card shows the plain reason and the next try; **Show error** / **Hide error** toggles the raw text
