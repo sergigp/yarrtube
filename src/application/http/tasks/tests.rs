@@ -1064,6 +1064,41 @@ async fn it_should_include_video_id_for_a_download_task() {
     );
 }
 
+#[tokio::test]
+async fn it_should_include_video_id_when_the_video_no_longer_exists() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::FetchThumbnail {
+                video_id: "gone1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "fetch_thumbnail",
+            &[("video_id", "gone1")]
+        )])
+    );
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
