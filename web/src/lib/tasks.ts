@@ -56,14 +56,14 @@ function humanizeType(type: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Task'
 }
 
-export type TaskFamily = 'downloads' | 'syncs' | 'ai' | 'other'
-export type TaskTab = 'active' | 'downloads' | 'syncs' | 'ai' | 'other'
+export type TaskFamily = 'downloads' | 'syncs' | 'ai' | 'upkeep'
+export type TaskTab = 'active' | TaskFamily
 
 /** The tabs shown, in order; "ai" only while `aiEnabled`. */
 export function taskTabs(aiEnabled: boolean): readonly TaskTab[] {
   return aiEnabled
-    ? ['active', 'downloads', 'syncs', 'ai', 'other']
-    : ['active', 'downloads', 'syncs', 'other']
+    ? ['active', 'downloads', 'syncs', 'ai', 'upkeep']
+    : ['active', 'downloads', 'syncs', 'upkeep']
 }
 
 /** Above this many tasks in a tab, the search field is worth showing. */
@@ -82,10 +82,10 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   categorize_video: 'ai',
 }
 
-/** A task's family; AI tasks are 'other' unless `aiEnabled`. */
+/** A task's family; AI tasks are Plex & upkeep unless `aiEnabled`. */
 export function taskFamily(task: Task, aiEnabled: boolean): TaskFamily {
-  const family = FAMILY_BY_TYPE[task.task_type] ?? 'other'
-  return family === 'ai' && !aiEnabled ? 'other' : family
+  const family = FAMILY_BY_TYPE[task.task_type] ?? 'upkeep'
+  return family === 'ai' && !aiEnabled ? 'upkeep' : family
 }
 
 export function tasksForTab(tasks: Task[], tab: TaskTab, aiEnabled: boolean): Task[] {
@@ -175,7 +175,7 @@ export function byCategory(a: Task, b: Task): number {
   return new Date(a.run_at).getTime() - new Date(b.run_at).getTime()
 }
 
-export type TaskFilter = 'all' | 'downloads' | 'syncs' | 'ai' | 'upkeep'
+export type TaskFilter = 'all' | TaskFamily
 export type TaskSectionId = 'running' | 'attention' | 'nextHour' | 'later'
 
 export interface BatchSource {

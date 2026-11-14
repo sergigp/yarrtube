@@ -50,7 +50,7 @@ const TAB_LABELS: Record<TaskTab, string> = {
   downloads: 'Downloads',
   syncs: 'Syncs',
   ai: 'AI',
-  other: 'Other',
+  upkeep: 'Other',
 }
 
 const TAB_ICON: Record<TaskTab, LucideIcon> = {
@@ -58,7 +58,7 @@ const TAB_ICON: Record<TaskTab, LucideIcon> = {
   downloads: Download,
   syncs: RotateCw,
   ai: Sparkles,
-  other: Wrench,
+  upkeep: Wrench,
 }
 
 const KIND_ICON: Record<TaskKind, LucideIcon> = {

@@ -13,6 +13,62 @@ import {
 } from './tasks'
 import { aTask } from '@/test/helpers'
 
+describe('taskFamily', () => {
+  it('puts downloads, fetches and quality checks under downloads', () => {
+    const types = [
+      'download_video',
+      'fetch_thumbnail',
+      'fetch_subtitles',
+      'fetch_chapters',
+      'upgrade_quality',
+    ]
+
+    expect(types.map((type) => taskFamily(aTask({ task_type: type }), false))).toEqual([
+      'downloads',
+      'downloads',
+      'downloads',
+      'downloads',
+      'downloads',
+    ])
+  })
+
+  it('puts playlist, channel and video syncs under syncs', () => {
+    const types = ['reconcile_playlist', 'reconcile_channel', 'sync_video']
+
+    expect(types.map((type) => taskFamily(aTask({ task_type: type }), false))).toEqual([
+      'syncs',
+      'syncs',
+      'syncs',
+    ])
+  })
+
+  it('puts summaries and categorizations under ai only while AI is on', () => {
+    const types = ['summarize_video', 'categorize_video']
+
+    expect(types.map((type) => taskFamily(aTask({ task_type: type }), true))).toEqual(['ai', 'ai'])
+    expect(types.map((type) => taskFamily(aTask({ task_type: type }), false))).toEqual([
+      'upkeep',
+      'upkeep',
+    ])
+  })
+
+  it('puts Plex syncs, yt-dlp updates, deletions and unknown types under Plex & upkeep', () => {
+    const types = [
+      'sync_plex_watch_state',
+      'sync_plex_labels',
+      'update_ytdlp',
+      'delete_video_file',
+      'delete_playlist_files',
+      'delete_channel_files',
+      'mystery_task',
+    ]
+
+    expect(types.map((type) => taskFamily(aTask({ task_type: type }), true))).toEqual(
+      types.map(() => 'upkeep'),
+    )
+  })
+})
+
 describe('describeTask', () => {
   it('describes syncing tasks by their target name', () => {
     expect(
@@ -204,22 +260,7 @@ describe('taskCategory and byCategory', () => {
 })
 
 describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
-  it('maps each task type to downloads, syncs or other, and unknown types to other', () => {
-    expect(taskFamily(aTask({ task_type: 'download_video' }), false)).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }), false)).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'fetch_subtitles' }), false)).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }), false)).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'reconcile_channel' }), false)).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'update_ytdlp' }), false)).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'delete_video_file' }), false)).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'delete_playlist_files' }), false)).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'delete_channel_files' }), false)).toBe('other')
-    expect(taskFamily(aTask({ task_type: 'mystery_task' }), false)).toBe('other')
-  })
 
-  it('puts video summaries in the ai family while AI is on', () => {
-    expect(taskFamily(aTask({ task_type: 'summarize_video' }), true)).toBe('ai')
-  })
 
   it('labels a categorize_video task and files it under AI', () => {
     const task = aTask({
@@ -234,13 +275,10 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     ])
   })
 
-  it('puts video summaries in the other family while AI is off', () => {
-    expect(taskFamily(aTask({ task_type: 'summarize_video' }), false)).toBe('other')
-  })
 
   it('lists the ai tab between syncs and other only while AI is on', () => {
-    expect(taskTabs(true)).toEqual(['active', 'downloads', 'syncs', 'ai', 'other'])
-    expect(taskTabs(false)).toEqual(['active', 'downloads', 'syncs', 'other'])
+    expect(taskTabs(true)).toEqual(['active', 'downloads', 'syncs', 'ai', 'upkeep'])
+    expect(taskTabs(false)).toEqual(['active', 'downloads', 'syncs', 'upkeep'])
   })
 
   it('counts every task once across tabs while AI is on', () => {
@@ -252,24 +290,15 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       aTask({ id: 5, task_type: 'update_ytdlp' }),
     ]
 
-    expect(tabCounts(tasks, true)).toEqual({ active: 1, downloads: 1, syncs: 1, ai: 2, other: 1 })
+    expect(tabCounts(tasks, true)).toEqual({ active: 1, downloads: 1, syncs: 1, ai: 2, upkeep: 1 })
   })
 
   it('gives video summaries the ai kind', () => {
     expect(taskKind(aTask({ task_type: 'summarize_video' }))).toBe('ai')
   })
 
-  it('puts Plex label syncs in the other family', () => {
-    expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }), false)).toBe('other')
-  })
 
-  it('puts Plex watch syncs in the other family', () => {
-    expect(taskFamily(aTask({ task_type: 'sync_plex_watch_state' }), false)).toBe('other')
-  })
 
-  it('puts video syncs in the syncs family', () => {
-    expect(taskFamily(aTask({ task_type: 'sync_video' }), false)).toBe('syncs')
-  })
 
   it("returns only running tasks of any type for the 'active' tab", () => {
     const runningSync = aTask({ id: 1, task_type: 'reconcile_channel', status: 'running' })
@@ -309,7 +338,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       aTask({ id: 7, task_type: 'reconcile_channel' }),
     ]
 
-    expect(tasksForTab(tasks, 'other', false).map((task) => task.id)).toEqual([1, 2, 3, 4, 5])
+    expect(tasksForTab(tasks, 'upkeep', false).map((task) => task.id)).toEqual([1, 2, 3, 4, 5])
   })
 
   it('returns counts where downloads, syncs and other add up to every task', () => {
@@ -321,7 +350,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       aTask({ id: 5, task_type: 'update_ytdlp', status: 'running' }),
     ]
 
-    expect(tabCounts(tasks, false)).toEqual({ active: 2, downloads: 2, syncs: 1, ai: 0, other: 2 })
+    expect(tabCounts(tasks, false)).toEqual({ active: 2, downloads: 2, syncs: 1, ai: 0, upkeep: 2 })
   })
 
   it('maps each task type to its icon kind', () => {
