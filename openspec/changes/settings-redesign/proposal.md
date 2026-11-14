@@ -22,7 +22,7 @@ The Settings page grew section by section. Each section saves in its own way: Ge
   - Groups are renamed "Server" and "Sync".
   - The server card shows a status badge and a Version / Libraries / Last checked row.
   - The sync rows are renamed "Watched status" and "Categories to Plex", each with a description. Their status fits on one line: "Last run … · Next …", or on failure "Failed …: error. Retries …" with "Retry now".
-  - The playlist options become segmented choices: "Keep them / Remove them" and "Newest first / Oldest first". A preview shows how the playlist reacts to the choice.
+  - The playlist options become segmented choices: "Keep them / Remove them from playlist" and "Newest first / Oldest first".
   - While categories are off, the section shows a "Turn on categories" button that turns them on from the Plex page.
   - When Plex isn't set up, the section shows a setup screen: what you get, one row per environment variable with a Copy button, and a link to the Plex guide.
 - **Copy**: every renamed label, description and error follows the before/after sheet on the canvas. Errors start with "Couldn't" and say what to do next.
@@ -38,7 +38,7 @@ None.
 
 - `web-ui`: the Settings page nav gains statuses. The General section ("Preferences View", "Preferences Help", "Preferences Save Confirmation", "Home Category Switch Needs Categories") changes labels, descriptions and the cross-links.
 - `ai-settings-ui`: the AI page layout, the master switch, the feature switches, the provider choice, Effort, the prompt disclosure and the save bar.
-- `plex-settings-ui`: group names, the server status, sync rows, segmented playlist options with a preview, "Turn on categories", and the setup screen.
+- `plex-settings-ui`: group names, the server status, sync rows, segmented playlist options, "Turn on categories", and the setup screen.
 
 ## Impact
 

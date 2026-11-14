@@ -24,7 +24,6 @@ classDiagram
   class CopyButton:::new
   class aiChanges:::new { changedSettingNames(patch) unsavedChangesLabel(n) }
   class plexStatusLib:::changed { syncStatusLine(sync, now) }
-  class playlistPreview:::new { previewRows(watched, order) }
   class PreferencesView:::changed
   class AiSettingsView:::changed
   class PlexSettingsView:::changed
@@ -37,7 +36,6 @@ classDiagram
   PlexSettingsView --> Segmented
   PlexSettingsView --> CopyButton
   PlexSettingsView --> plexStatusLib
-  PlexSettingsView --> playlistPreview
   SettingsCard <.. SettingsSection : replaces
 ```
 
@@ -137,12 +135,6 @@ export function syncStatusLine(sync: PlexSync, now?: Date): string
 ```
 
 ```ts
-// web/src/lib/playlistPreview.ts
-export interface PreviewRow { label: string; watched: boolean }
-export function previewRows(watched: PlexPlaylistWatched, order: PlexPlaylistOrder): PreviewRow[]
-```
-
-```ts
 // web/src/lib/errorMessage.ts (added)
 export function couldntSave(error: string): string // "Couldn't save: <error>. Try again."
 ```
@@ -207,7 +199,7 @@ export function PromptDisclosure(props: { isDefault: boolean; children: ReactNod
 - **AI save**: `SaveBar.onSave` → existing `save()` (validation → `savePreferences(patch)`) → `savedFlash.flash()` in `PageHeader` | `setSaveError(msg)` → `SaveBar.error`.
 - **AI discard**: `SaveBar.onDiscard` → `setForm(formFrom(saved))`, `setSaveError(null)`.
 - **Plex sync row**: `syncStatusLine(sync)` + button label `sync.last_error ? 'Retry now' : 'Sync now'` → `requestSync(kind)` unchanged.
-- **Plex playlist option**: `Segmented.onChange(value)` → `save({plex_playlist_*: value})` → `previewRows(watched, order)`.
+- **Plex playlist option**: `Segmented.onChange(value)` → `save({plex_playlist_*: value})`.
 - **Turn on categories**: button → `save({categories_enabled: true})`.
 - **Copy**: `CopyButton` → `navigator.clipboard.writeText(text)` → "Copied" for 2 s.
 
@@ -237,11 +229,10 @@ Vitest + Testing Library. Only `fetch` is mocked (`mockApi`). One test = one cyc
    - `AiSettingsView.test.tsx`: `it names the missing Anthropic key and the restart`.
    - `plexStatus.test.ts`: `it puts last and next run on one line`.
    - `plexStatus.test.ts`: `it says when a failed sync retries`.
-   - `playlistPreview.test.ts`: `it orders rows and drops the watched one when removing`.
    - `PlexSettingsView.test.tsx`: `it shows the server badge, version, libraries and last checked`.
    - `PlexSettingsView.test.tsx`: `it tells what to check when Plex is unreachable`.
    - `PlexSettingsView.test.tsx`: `it shows Retry now on a failed sync`.
-   - `PlexSettingsView.test.tsx`: `it saves a playlist choice and updates the preview`.
+   - `PlexSettingsView.test.tsx`: `it saves a playlist choice on its own`.
    - `PlexSettingsView.test.tsx`: `it turns categories on from the Plex page`.
    - `PlexSettingsView.test.tsx`: `it shows the setup card when Plex isn't configured`.
    - `PlexSettingsView.test.tsx`: `it copies a variable name`.

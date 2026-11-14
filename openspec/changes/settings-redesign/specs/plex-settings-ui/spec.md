@@ -65,22 +65,18 @@ Each row SHALL show its status on one line. A successful run shows "Last run <re
 
 ### Requirement: Category Playlist Options
 The "Category playlists" card SHALL say "Each category becomes a smart playlist in Plex with all its episodes. These options apply to every category playlist." It SHALL offer two segmented choices, filled with the saved preferences:
-- "Watched episodes": "Keep them" or "Remove them";
+- "Watched episodes": "Keep them" or "Remove them from playlist";
 - "Order": "Newest first" or "Oldest first".
 
-Choosing one SHALL save it at once with only that preference and show "Saved". Beside the choices, a preview SHALL show example episode rows in the chosen order. With "Keep them", the preview SHALL include a row marked watched; with "Remove them", it SHALL leave that row out and say "Watched episodes are left out."
+Choosing one SHALL save it at once with only that preference and show "Saved".
 
 #### Scenario: Defaults
 - **WHEN** a user opens the section and nothing has been saved
 - **THEN** "Keep them" and "Newest first" are selected
 
 #### Scenario: Dropping watched episodes
-- **WHEN** a user chooses "Remove them"
-- **THEN** a `PATCH /api/preferences` with only `plex_playlist_watched` `"drop"` is sent, "Saved" is shown, and the preview loses its watched row and says "Watched episodes are left out."
-
-#### Scenario: Preview follows the order
-- **WHEN** a user chooses "Oldest first"
-- **THEN** the preview lists its oldest example row first
+- **WHEN** a user chooses "Remove them from playlist"
+- **THEN** a `PATCH /api/preferences` with only `plex_playlist_watched` `"drop"` is sent and "Saved" is shown
 
 #### Scenario: Save fails
 - **WHEN** a user chooses "Oldest first" and the save fails with "database is locked"
