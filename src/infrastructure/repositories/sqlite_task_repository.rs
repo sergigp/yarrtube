@@ -502,6 +502,15 @@ mod tests {
     }
 
     #[test]
+    fn it_should_list_nothing_for_an_empty_id_list() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&task(), now).unwrap();
+
+        assert_eq!(repo.list_pending_by_ids(&[]).unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_list_a_task_scheduled_for_now_as_eligible() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);
