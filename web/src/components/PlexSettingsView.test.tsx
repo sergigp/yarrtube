@@ -36,7 +36,7 @@ describe('PlexSettingsView', () => {
     expect(screen.queryByRole('group', { name: 'Category playlists' })).not.toBeInTheDocument()
   })
 
-  it('shows the connection the latest sync saw', async () => {
+  it('shows the server badge, version, libraries and last checked', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date('2026-11-14T10:02:00Z'))
     mockApi({
@@ -52,13 +52,22 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const connection = await screen.findByRole('group', { name: 'Connection' })
-    expect(lines(connection)).toEqual([
-      'Connected',
-      'Plex Media Server 1.43.5.11079',
-      "Libraries: Subscriptions, Sergi's Playlists",
-      'Checked 2 minutes ago',
+    const server = await screen.findByRole('group', { name: 'Server' })
+    expect(within(server).getByText('Connected')).toBeInTheDocument()
+    expect(details(server)).toEqual([
+      ['Version', '1.43.5.11079'],
+      ['Libraries', "Subscriptions, Sergi's Playlists"],
+      ['Last checked', '2 minutes ago'],
     ])
+    expect(
+      screen.getByText(
+        'Keep watched status in sync with Plex and turn categories into Plex playlists.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Plex guide' })).toHaveAttribute(
+      'href',
+      'https://github.com/sergigp/yarrtube/blob/main/doc/PLEX.md',
+    )
   })
 
   it('says Plex cannot be reached, with the error and what was seen last', async () => {
@@ -79,16 +88,16 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const connection = await screen.findByRole('group', { name: 'Connection' })
-    expect(lines(connection)).toEqual([
-      "Can't reach Plex: connection refused",
-      'Plex Media Server 1.43.5.11079',
-      'Libraries: Subscriptions',
-      'Checked 1 minute ago',
+    const server = await screen.findByRole('group', { name: 'Server' })
+    expect(lines(server)).toEqual(["Can't reach Plex: connection refused"])
+    expect(details(server)).toEqual([
+      ['Version', '1.43.5.11079'],
+      ['Libraries', 'Subscriptions'],
+      ['Last checked', '1 minute ago'],
     ])
   })
 
-  it('says the status shows after the first sync', async () => {
+  it('says the server is not checked yet before the first sync', async () => {
     mockApi({
       'GET /api/plex': aPlexStatus({ connection: null }),
       'GET /api/preferences': aPreferences(),
@@ -96,8 +105,8 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const connection = await screen.findByRole('group', { name: 'Connection' })
-    expect(lines(connection)).toEqual(['The connection shows here after the first Plex sync.'])
+    const server = await screen.findByRole('group', { name: 'Server' })
+    expect(lines(server)).toEqual(['Not checked yet. Server details appear after the first sync.'])
   })
 
   it('shows when each sync last ran, how it ended and when it runs next', async () => {
@@ -247,6 +256,13 @@ describe('PlexSettingsView', () => {
     )
   })
 })
+
+/** Each term of the description list in `element`, with its description. */
+function details(element: HTMLElement): [string, string][] {
+  const terms = within(element).getAllByRole('term')
+  const definitions = within(element).getAllByRole('definition')
+  return terms.map((term, index) => [term.textContent ?? '', definitions[index]?.textContent ?? ''])
+}
 
 /** The text of each line (paragraph) in `element`. */
 function lines(element: HTMLElement): string[] {

@@ -61,18 +61,39 @@ export function PlexSettingsView() {
 
   return (
     <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
-      <PageHeader title="Plex" saved={saved.shown} />
+      <PageHeader
+        title="Plex"
+        description={
+          status?.configured && (
+            <>
+              Keep watched status in sync with Plex and turn categories into Plex playlists.{' '}
+              <a
+                href={PLEX_GUIDE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                Plex guide
+              </a>
+            </>
+          )
+        }
+        saved={saved.shown}
+      />
       {error && (
         <p className="text-sm text-destructive">Failed to load the Plex status: {error.message}</p>
       )}
       {status && !status.configured && <NotConfigured />}
       {status?.configured && (
-        <SettingsCard title="Connection">
+        <SettingsCard
+          title="Server"
+          action={status.connection && <ConnectionBadge connection={status.connection} />}
+        >
           {status.connection ? (
             <ConnectionStatus connection={status.connection} />
           ) : (
             <p className="text-sm text-muted-foreground">
-              The connection shows here after the first Plex sync.
+              Not checked yet. Server details appear after the first sync.
             </p>
           )}
         </SettingsCard>
@@ -122,19 +143,52 @@ function NotConfigured() {
   )
 }
 
+/** "Connected" or "Can't reach Plex", as a badge. */
+function ConnectionBadge({ connection }: { connection: PlexConnection }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold',
+        connection.reachable
+          ? 'bg-accent text-primary'
+          : 'bg-destructive/10 text-destructive',
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          'size-1.5 rounded-full',
+          connection.reachable ? 'bg-primary' : 'bg-destructive',
+        )}
+      />
+      {connection.reachable ? 'Connected' : "Can't reach Plex"}
+    </span>
+  )
+}
+
+/** What the latest sync saw of the server: version, libraries, and when. */
 function ConnectionStatus({ connection }: { connection: PlexConnection }) {
   return (
-    <div className="flex flex-col gap-1 text-sm">
-      {connection.reachable ? (
-        <p className="font-medium text-foreground">Connected</p>
-      ) : (
-        <p className="font-medium text-destructive">Can&apos;t reach Plex: {connection.error}</p>
+    <div className="flex flex-col gap-3 text-sm">
+      {!connection.reachable && (
+        <p className="text-destructive">Can&apos;t reach Plex: {connection.error}</p>
       )}
-      {connection.version && (
-        <p className="text-muted-foreground">Plex Media Server {plexVersionLabel(connection.version)}</p>
-      )}
-      <p className="text-muted-foreground">Libraries: {connection.libraries.join(', ')}</p>
-      <p className="text-muted-foreground">Checked {relativeTime(connection.checked_at)}</p>
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {connection.version && (
+          <div>
+            <dt className="text-xs text-muted-foreground">Version</dt>
+            <dd className="mt-0.5">{plexVersionLabel(connection.version)}</dd>
+          </div>
+        )}
+        <div>
+          <dt className="text-xs text-muted-foreground">Libraries</dt>
+          <dd className="mt-0.5">{connection.libraries.join(', ')}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Last checked</dt>
+          <dd className="mt-0.5">{relativeTime(connection.checked_at)}</dd>
+        </div>
+      </dl>
     </div>
   )
 }

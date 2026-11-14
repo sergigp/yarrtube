@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Routes } from 'react-router-dom'
 import { settingsRoutes } from './settingsRoutes'
@@ -23,7 +23,9 @@ describe('SettingsView', () => {
     expect(screen.getByRole('link', { name: 'Plex' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'General' })).not.toHaveAttribute('aria-current')
     expect(
-      screen.getAllByRole('link').map((link) => link.getAttribute('aria-label')),
+      within(screen.getByRole('navigation', { name: 'Settings sections' }))
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('aria-label')),
     ).toEqual(['General', 'AI', 'Plex'])
   })
 
