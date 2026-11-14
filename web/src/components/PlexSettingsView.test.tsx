@@ -227,6 +227,25 @@ describe('PlexSettingsView', () => {
     expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
     expect(screen.getByRole('status')).toHaveTextContent('')
   })
+
+  it('disables the playlist options while categories are off', async () => {
+    mockApi({
+      'GET /api/plex': aPlexStatus(),
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    })
+
+    renderWithProviders(<PlexSettingsView />)
+
+    const playlists = await screen.findByRole('group', { name: 'Category playlists' })
+    expect(
+      within(playlists)
+        .getAllByRole('radio')
+        .map((radio) => (radio as HTMLInputElement).disabled),
+    ).toEqual([true, true, true, true])
+    expect(playlists).toHaveTextContent(
+      'Category playlists need categories on, in General settings.',
+    )
+  })
 })
 
 /** The text of each line (paragraph) in `element`. */

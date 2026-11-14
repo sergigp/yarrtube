@@ -56,7 +56,7 @@ Web (Vitest), one red-green-refactor cycle each
 - [x] 2.39 `PlexSettingsView.test.tsx` — "Sync now" request fails: error shown, button enabled again.
 - [x] 2.40 `PlexSettingsView.test.tsx` — playlist options: defaults selected; "Drop out" PATCHes only `plex_playlist_watched` and shows "Saved".
 - [x] 2.41 `PlexSettingsView.test.tsx` — playlist option save fails: error shown, previous choice selected.
-- [ ] 2.42 `PlexSettingsView.test.tsx` — categories off: options disabled with the note.
+- [x] 2.42 `PlexSettingsView.test.tsx` — categories off: options disabled with the note.
 
 ## 3. Infrastructure adapters (TDD)
 

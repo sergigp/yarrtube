@@ -202,8 +202,14 @@ function PlaylistOptions({
   preferences: Preferences
   onSave: (patch: PreferencesPatch) => void
 }) {
+  const disabled = !preferences.categories_enabled
   return (
     <div className="flex flex-col gap-4 text-sm">
+      {disabled && (
+        <p className="text-muted-foreground">
+          Category playlists need categories on, in General settings.
+        </p>
+      )}
       <p className="text-muted-foreground">
         Plex Web and the Mac app don&apos;t show watched badges in playlists, so dropping watched
         episodes is the way to tell what&apos;s left.
@@ -212,12 +218,14 @@ function PlaylistOptions({
         name="Watched episodes"
         choices={WATCHED_CHOICES}
         value={preferences.plex_playlist_watched}
+        disabled={disabled}
         onChange={(value) => onSave({ plex_playlist_watched: value })}
       />
       <Choice
         name="Order"
         choices={ORDER_CHOICES}
         value={preferences.plex_playlist_order}
+        disabled={disabled}
         onChange={(value) => onSave({ plex_playlist_order: value })}
       />
     </div>
@@ -228,11 +236,13 @@ function Choice<T extends string>({
   name,
   choices,
   value,
+  disabled,
   onChange,
 }: {
   name: string
   choices: { value: T; label: string }[]
   value: T
+  disabled: boolean
   onChange: (value: T) => void
 }) {
   return (
@@ -248,6 +258,7 @@ function Choice<T extends string>({
               name={name}
               value={choice.value}
               checked={value === choice.value}
+              disabled={disabled}
               onChange={() => onChange(choice.value)}
             />
             {choice.label}
