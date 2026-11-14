@@ -6,7 +6,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_include_video_id_for_a_download_task`: the listing adds `payload.video_id` for per-video tasks
+- [x] 2.1 `it_should_include_video_id_for_a_download_task`: the listing adds `payload.video_id` for per-video tasks
 - [ ] 2.2 `it_should_include_video_id_when_the_video_no_longer_exists`: `video_id` comes from the stored payload, not from the resolved video
 - [ ] 2.3 `it_should_not_include_video_id_for_a_ytdlp_update`: tasks that don't work on a video have no `video_id`
 - [ ] 2.4 `it_should_include_started_at_for_a_running_task`: `started_at` is the claim time (`updated_at`) while the task runs

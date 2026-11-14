@@ -312,6 +312,7 @@ async fn it_should_include_video_and_playlist_in_download_tasks() {
         Ok(vec![pending_task(
             "download_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -365,6 +366,7 @@ async fn it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "fetch_thumbnail",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -418,6 +420,7 @@ async fn it_should_list_a_fetch_subtitles_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "fetch_subtitles",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -471,6 +474,7 @@ async fn it_should_list_a_fetch_chapters_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "fetch_chapters",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -524,6 +528,7 @@ async fn it_should_list_a_summarize_video_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "summarize_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -577,6 +582,7 @@ async fn it_should_list_a_summarize_video_task_with_video_and_channel_names() {
         Ok(vec![pending_task(
             "summarize_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("channel_name", "Some Channel")
             ]
@@ -610,7 +616,13 @@ async fn it_should_list_a_summarize_video_task_whose_video_is_gone() {
 
     let response = list(task_view_searcher).await;
 
-    assert_eq!(response, Ok(vec![pending_task("summarize_video", &[])]));
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "summarize_video",
+            &[("video_id", "rec1")]
+        )])
+    );
 }
 
 #[tokio::test]
@@ -659,6 +671,7 @@ async fn it_should_list_a_categorize_video_task_with_video_and_channel_names() {
         Ok(vec![pending_task(
             "categorize_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("channel_name", "Some Channel")
             ]
@@ -712,6 +725,7 @@ async fn it_should_list_an_upgrade_quality_task_with_its_video_context() {
         Ok(vec![pending_task(
             "upgrade_quality",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -765,6 +779,7 @@ async fn it_should_list_a_video_sync_with_its_video_title_and_owner_name() {
         Ok(vec![pending_task(
             "sync_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -813,6 +828,7 @@ async fn it_should_include_video_and_channel_in_download_tasks() {
         Ok(vec![pending_task(
             "download_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("channel_name", "Some Channel")
             ]
@@ -841,7 +857,13 @@ async fn it_should_omit_details_if_video_is_untracked() {
 
     let response = list(task_view_searcher).await;
 
-    assert_eq!(response, Ok(vec![pending_task("download_video", &[])]));
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "download_video",
+            &[("video_id", "rec1")]
+        )])
+    );
 }
 
 #[tokio::test]
@@ -1008,6 +1030,38 @@ async fn it_should_omit_details_for_update_ytdlp_tasks() {
     let response = list(task_view_searcher).await;
 
     assert_eq!(response, Ok(vec![pending_task("update_ytdlp", &[])]));
+}
+
+#[tokio::test]
+async fn it_should_include_video_id_for_a_download_task() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    task_repository
+        .schedule(&download_video_task("rec1"), fixed_timestamp())
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "download_video",
+            &[("video_id", "rec1"), ("video_title", "My Video")]
+        )])
+    );
 }
 
 fn download_video_task(video_id: &str) -> Task {
