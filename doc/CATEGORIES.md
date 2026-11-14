@@ -119,9 +119,6 @@ Good to know:
 - A playlist shows up within 15 minutes after Plex imports its first episode, and
   follows renames and deletes of its category. A playlist you delete in Plex
   comes back; delete the category instead.
-- Playlists created before watched episodes were included keep listing
-  only unwatched ones. Delete them in Plex once: they come back within 15
-  minutes listing every episode.
 - yarrtube builds the playlists from Plex labels named after your
   categories. It owns the labels of its episodes, so labels you add to them by
   hand are removed. If you restrict shared users by label, don't use a

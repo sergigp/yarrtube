@@ -15,7 +15,7 @@
 
 ## 4. Docs
 
-- [x] 4.1 `doc/CATEGORIES.md` (In Plex): playlists list all a category's episodes, watched ones shown as watched, newest first; same-day episodes of one channel newest first, of different shows in Plex's order; after upgrading, delete the category playlists in Plex once and they come back with watched episodes within 15 minutes.
+- [x] 4.1 `doc/CATEGORIES.md` (In Plex): playlists list all a category's episodes, watched ones shown as watched, newest first; same-day episodes of one channel newest first, of different shows in Plex's order.
 - [x] 4.2 `doc/PLEX.md` (Watch state): drop "so it leaves your category smart playlists too".
 
 ## 5. Verification

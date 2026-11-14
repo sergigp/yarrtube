@@ -21,8 +21,7 @@ publish time.
   NFO air date has no time).
 - Only playlists created from now on use the new query. Existing ones keep
   the old one until deleted in Plex: the next label sync recreates a
-  deleted playlist (existing behaviour) with the new query. The docs tell
-  users to delete their category playlists once after upgrading.
+  deleted playlist (existing behaviour) with the new query.
 - `doc/CATEGORIES.md` and `doc/PLEX.md` stop saying watched episodes leave
   the playlists.
 
