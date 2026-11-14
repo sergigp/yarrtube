@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aPlexSync } from '@/test/helpers'
-import { isSyncing, plexVersionLabel } from './plexStatus'
+import { isSyncing, plexVersionLabel, relativeTime } from './plexStatus'
 
 describe('plexVersionLabel', () => {
   it('drops the build suffix', () => {
@@ -27,5 +27,34 @@ describe('isSyncing', () => {
 
   it('is idle otherwise', () => {
     expect(isSyncing(aPlexSync({ running: false }), null)).toBe(false)
+  })
+})
+
+describe('relativeTime', () => {
+  const now = new Date('2026-11-14T10:00:00Z')
+  const from = (ms: number) => new Date(now.getTime() + ms).toISOString()
+
+  it('names past minutes', () => {
+    expect(relativeTime(from(-2 * 60_000), now)).toBe('2 minutes ago')
+  })
+
+  it('names future minutes', () => {
+    expect(relativeTime(from(3 * 60_000), now)).toBe('in 3 minutes')
+  })
+
+  it('uses the singular for one minute', () => {
+    expect(relativeTime(from(-60_000), now)).toBe('1 minute ago')
+  })
+
+  it('names future seconds', () => {
+    expect(relativeTime(from(30_000), now)).toBe('in 30 seconds')
+  })
+
+  it('names hours', () => {
+    expect(relativeTime(from(-3 * 3_600_000), now)).toBe('3 hours ago')
+  })
+
+  it('names days', () => {
+    expect(relativeTime(from(2 * 86_400_000), now)).toBe('in 2 days')
   })
 })

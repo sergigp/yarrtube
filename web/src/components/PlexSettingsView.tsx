@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { SettingsSection } from '@/components/SettingsSection'
+import { useState } from 'react'
 import type {
   PlexConnection,
   PlexPlaylistOrder,
@@ -75,7 +76,7 @@ export function PlexSettingsView() {
       )}
       {status && !status.configured && <NotConfigured />}
       {status?.configured && (
-        <Section title="Connection">
+        <SettingsSection title="Connection">
           {status.connection ? (
             <ConnectionStatus connection={status.connection} />
           ) : (
@@ -83,24 +84,24 @@ export function PlexSettingsView() {
               The connection shows here after the first Plex sync.
             </p>
           )}
-        </Section>
+        </SettingsSection>
       )}
       {status?.configured && (
-        <Section title="Syncs">
+        <SettingsSection title="Syncs">
           {status.syncs.map((sync) => (
             <SyncRow key={sync.kind} sync={sync} />
           ))}
-        </Section>
+        </SettingsSection>
       )}
       {status?.configured && preferences && (
-        <Section title="Category playlists">
+        <SettingsSection title="Category playlists">
           {saveError && (
             <p role="alert" className="text-sm text-destructive">
               Failed to save: {saveError}
             </p>
           )}
           <PlaylistOptions preferences={preferences} onSave={(patch) => void save(patch)} />
-        </Section>
+        </SettingsSection>
       )}
     </div>
   )
@@ -269,11 +270,3 @@ function Choice<T extends string>({
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <fieldset className="flex flex-col gap-4">
-      <legend className="mb-4 font-heading text-lg font-semibold text-foreground">{title}</legend>
-      {children}
-    </fieldset>
-  )
-}
