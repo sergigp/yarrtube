@@ -138,14 +138,25 @@ export interface TaskListModel {
   sections: TaskSection[]
 }
 
-/** Whether the task works on one video. */
-export function isPerVideoTask(_task: Task): boolean {
-  return false
+const PER_VIDEO_TYPES = new Set([
+  'download_video',
+  'fetch_thumbnail',
+  'fetch_subtitles',
+  'fetch_chapters',
+  'upgrade_quality',
+  'summarize_video',
+  'categorize_video',
+  'sync_video',
+])
+
+/** Whether the task works on one video, whose steps retry on their own schedule. */
+export function isPerVideoTask(task: Task): boolean {
+  return PER_VIDEO_TYPES.has(task.task_type)
 }
 
-/** Whether the task offers a Run now (or Sync now) action. */
-export function offersRunNow(_task: Task): boolean {
-  return false
+/** Whether the task offers Run now: pending, and not working on one video. */
+export function offersRunNow(task: Task): boolean {
+  return task.status !== 'running' && !isPerVideoTask(task)
 }
 
 const HOUR_MS = 60 * 60 * 1000

@@ -7,6 +7,7 @@ import type { BatchSource } from '@/lib/tasks'
 import { formatRunTime } from '@/lib/taskTimes'
 import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
+import { RunNowButton } from './RunNowButton'
 import { useTaskAction } from './useTaskAction'
 
 /** How many sources a collapsed batch names before "and N more". */
@@ -75,6 +76,7 @@ export function TaskBatchRow({ tasks, sources, runAt, now }: TaskBatchRowProps) 
               <span className="text-xs text-muted-foreground">
                 {source.kind === 'channel' ? 'Channel' : 'Playlist'}
               </span>
+              <RunNowButton label="Sync now" action={() => runTasksNow([source.taskId])} />
             </li>
           ))}
         </ul>

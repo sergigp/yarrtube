@@ -174,4 +174,46 @@ describe('TasksView', () => {
       expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toEqual([{ ids: [1, 2, 3, 4, 5] }]),
     )
   })
+
+  it('syncs one source of an open batch now', async () => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi({
+      'GET /api/tasks': aBatchOfSyncs(),
+      'POST /api/tasks/run-now': null,
+    })
+    renderWithProviders(<TasksView />)
+
+    await user.click(await screen.findByRole('button', { name: 'Show sources' }))
+    const chess = screen.getByText('chess', { selector: 'li span' }).closest('li')!
+    await user.click(within(chess).getByRole('button', { name: 'Sync now' }))
+
+    await waitFor(() =>
+      expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toEqual([{ ids: [3] }]),
+    )
+  })
+
+  it('runs a pending Plex sync now, and offers no Run now on per-video or running tasks', async () => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi({
+      'GET /api/tasks': [
+        ...aProdLikeQueue(),
+        aTask({ id: 8, task_type: 'update_ytdlp', status: 'running', started_at: NOW.toISOString() }),
+      ],
+      'POST /api/tasks/run-now': null,
+    })
+    renderWithProviders(<TasksView />)
+
+    const rowOf = (text: string) => screen.getByText(text).closest('li')!
+    const plex = (await screen.findByText('Sync watch state with Plex')).closest('li')!
+    expect([
+      within(rowOf('Fetch the thumbnail of Intro in Chan')).queryByRole('button', { name: 'Run now' }),
+      within(rowOf('Updating yt-dlp')).queryByRole('button', { name: 'Run now' }),
+    ]).toEqual([null, null])
+
+    await user.click(within(plex).getByRole('button', { name: 'Run now' }))
+
+    await waitFor(() =>
+      expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toEqual([{ ids: [2] }]),
+    )
+  })
 })

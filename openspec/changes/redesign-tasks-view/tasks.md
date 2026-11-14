@@ -33,7 +33,7 @@
 - [x] 2.25 Web `TasksView` opens on All with the status line and sections for a prod-like fixture, and shows no status badges (rewrite `TasksView.test.tsx`; delete the tab tests)
 - [x] 2.26 Web: selecting a chip filters the list; a chip with no tasks is hidden; chips are marked pressed when selected
 - [x] 2.27 Web: a batch row expands and collapses, and **Sync all now** posts every id of the batch to `/api/tasks/run-now`
-- [ ] 2.28 Web: **Sync now** on one source posts its id; **Run now** on a Plex sync posts its id; per-video and running tasks offer no Run now
+- [x] 2.28 Web: **Sync now** on one source posts its id; **Run now** on a Plex sync posts its id; per-video and running tasks offer no Run now
 - [ ] 2.29 Web: the Needs attention card shows the plain reason and the next try; **Show error** / **Hide error** toggles the raw text
 - [ ] 2.30 Web: **Retry now** posts to `/api/videos/{id}/retry` and **Stop retrying** to `/api/videos/{id}/stop-retrying`, each refreshing the list and disabling the card's actions while in flight
 - [ ] 2.31 Web: a failed run-now, retry or stop shows the failure and the action can be used again

@@ -1,7 +1,9 @@
+import { runTasksNow } from '@/api/client'
 import type { Task } from '@/api/types'
-import { describeTask } from '@/lib/tasks'
+import { describeTask, offersRunNow } from '@/lib/tasks'
 import { formatRunTime, formatStartedAgo } from '@/lib/taskTimes'
 import { Beacon } from '../Beacon'
+import { RunNowButton } from './RunNowButton'
 
 interface TaskRowProps {
   task: Task
@@ -14,6 +16,9 @@ export function TaskRow({ task, now }: TaskRowProps) {
     <li className="flex flex-col gap-1 px-3 py-3 sm:flex-row sm:items-center sm:gap-4">
       <RowTime task={task} now={now} />
       <span className="min-w-0 flex-1 truncate text-sm text-foreground">{describeTask(task)}</span>
+      {offersRunNow(task) && (
+        <RunNowButton label="Run now" action={() => runTasksNow([task.id])} />
+      )}
     </li>
   )
 }
