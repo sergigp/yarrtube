@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Routes } from 'react-router-dom'
 import { settingsRoutes } from './settingsRoutes'
@@ -25,6 +25,25 @@ describe('SettingsView', () => {
     expect(
       screen.getAllByRole('link').map((link) => link.getAttribute('aria-label')),
     ).toEqual(['General', 'AI', 'Plex'])
+  })
+
+  it("shows each section's status under its name", async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({ ai_enabled: true, ai_provider: 'anthropic' }),
+      'GET /api/plex': aPlexStatus(),
+    })
+
+    renderSettings('/settings/general')
+
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'AI' })).toHaveAccessibleDescription('On · Anthropic'),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Plex' })).toHaveAccessibleDescription('Connected'),
+    )
+    expect(screen.getByRole('link', { name: 'General' })).toHaveAccessibleDescription(
+      'Home and categories',
+    )
   })
 
   it.each([
