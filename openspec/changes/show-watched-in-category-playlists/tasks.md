@@ -20,5 +20,5 @@
 
 ## 5. Verification
 
-- [ ] 5.1 `scripts/run-tests.sh --lint --web --rust`.
+- [x] 5.1 `scripts/run-tests.sh --lint --web --rust`.
 - [ ] 5.2 Manual (human): after deploying, delete the category playlists in Plex; within 15 minutes they're back with the same titles; "Chess gameplays" lists watched episodes marked watched and a channel's same-day episodes newest first; watching an episode keeps it in the playlist.
