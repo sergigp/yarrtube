@@ -1055,8 +1055,6 @@ fn it_should_retitle_a_playlist_once_its_category_spans_libraries() {
     );
 }
 
-/// The syncer over the test database, with Plex seeing `/videos` at
-/// `/plex/videos`.
 #[test]
 fn it_should_record_the_plex_version_and_libraries_when_a_label_sync_reaches_plex() {
     let db = TestDatabase::new();
@@ -1313,6 +1311,43 @@ fn it_should_replace_a_playlist_whose_options_are_unknown() {
     );
 }
 
+#[test]
+fn it_should_record_the_error_when_a_label_sync_fails_after_reaching_plex() {
+    let db = TestDatabase::new();
+    let plex_sync_run_repository = SqlitePlexSyncRunRepository::new(db.database());
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .rejecting_playlists(),
+    );
+    let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+    seed_category(&db, "chess", "Chess", &[&video]);
+    let task = SyncPlexLabelsTask::new(syncer(
+        &db,
+        plex,
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Err("Plex rejected the playlist Chess".to_string()));
+    assert_eq!(
+        plex_sync_run_repository.list().unwrap(),
+        vec![PlexSyncRun {
+            kind: PlexSyncKind::Labels,
+            finished_at: now(),
+            outcome: PlexSyncOutcome::Failed {
+                error: "Plex rejected the playlist Chess".to_string(),
+            },
+        }]
+    );
+}
+
+/// The syncer over the test database, with Plex seeing `/videos` at
+/// `/plex/videos`.
 fn syncer(
     db: &TestDatabase,
     plex: Arc<FakePlexLibraryRepository>,

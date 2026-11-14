@@ -91,14 +91,10 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
             Ok(plex) => plex,
             Err(e) => return self.retry_later(e),
         };
-        let rows = self.agreed_rows()?;
-        let videos = self.video_repository.list_downloaded()?;
-        self.forget_undownloaded(&rows, &videos)?;
-        let matched = self.match_episodes(videos, &library)?;
-        let merged = self.pull_then_merge(matched, &rows, &identity.viewer_id)?;
-        let backlog = self.settle_all(merged, &rows, &identity.viewer_id)?;
-        self.request_next_sync(backlog)?;
-        self.record(PlexSyncOutcome::reached(&identity, &library.sections))
+        match self.sync_reached(&library, &identity.viewer_id) {
+            Ok(()) => self.record(PlexSyncOutcome::reached(&identity, &library.sections)),
+            Err(e) => self.record_failure(e),
+        }
     }
 }
 
@@ -118,6 +114,26 @@ impl PlexWatchSyncer {
         self.record(PlexSyncOutcome::Failed {
             error: error.to_string(),
         })
+    }
+
+    /// The sync's work once Plex is reached: pull, push, next sync.
+    fn sync_reached(&self, library: &PlexLibrary, viewer_id: &str) -> anyhow::Result<()> {
+        let rows = self.agreed_rows()?;
+        let videos = self.video_repository.list_downloaded()?;
+        self.forget_undownloaded(&rows, &videos)?;
+        let matched = self.match_episodes(videos, library)?;
+        let merged = self.pull_then_merge(matched, &rows, viewer_id)?;
+        let backlog = self.settle_all(merged, &rows, viewer_id)?;
+        self.request_next_sync(backlog)
+    }
+
+    /// Records the sync as failed with `error`, then fails with it so the
+    /// task is retried.
+    fn record_failure(&self, error: anyhow::Error) -> anyhow::Result<()> {
+        self.record(PlexSyncOutcome::Failed {
+            error: error.to_string(),
+        })?;
+        Err(error)
     }
 
     /// Records how this sync ended.

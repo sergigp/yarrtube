@@ -150,12 +150,10 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
             Ok(plex) => plex,
             Err(e) => return self.retry_later(e),
         };
-        self.mark_reimported(&library.episodes)?;
-        self.track_categorized_videos()?;
-        let backlog = self.label_dirty_videos(&library)?;
-        self.reconcile_playlists(&library.sections, &identity.server_id)?;
-        self.request_next_sync(backlog)?;
-        self.record(PlexSyncOutcome::reached(&identity, &library.sections))
+        match self.sync_reached(&library, &identity) {
+            Ok(()) => self.record(PlexSyncOutcome::reached(&identity, &library.sections)),
+            Err(e) => self.record_failure(e),
+        }
     }
 }
 
@@ -175,6 +173,24 @@ impl PlexLabelSyncer {
         self.record(PlexSyncOutcome::Failed {
             error: error.to_string(),
         })
+    }
+
+    /// The sync's work once Plex is reached: labels, playlists, next sync.
+    fn sync_reached(&self, library: &PlexLibrary, identity: &PlexIdentity) -> anyhow::Result<()> {
+        self.mark_reimported(&library.episodes)?;
+        self.track_categorized_videos()?;
+        let backlog = self.label_dirty_videos(library)?;
+        self.reconcile_playlists(&library.sections, &identity.server_id)?;
+        self.request_next_sync(backlog)
+    }
+
+    /// Records the sync as failed with `error`, then fails with it so the
+    /// task is retried.
+    fn record_failure(&self, error: anyhow::Error) -> anyhow::Result<()> {
+        self.record(PlexSyncOutcome::Failed {
+            error: error.to_string(),
+        })?;
+        Err(error)
     }
 
     /// Records how this sync ended.

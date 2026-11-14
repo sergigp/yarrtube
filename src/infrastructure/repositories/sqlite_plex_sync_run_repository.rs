@@ -88,9 +88,7 @@ impl SqlitePlexSyncRunRepository {
     /// The run a row holds; `None` for a kind this version doesn't know.
     fn to_run(row: StoredRun) -> Option<anyhow::Result<PlexSyncRun>> {
         let (kind, finished_at, error, version, libraries) = row;
-        let kind = PlexSyncKind::ALL
-            .into_iter()
-            .find(|known| known.as_str() == kind)?;
+        let kind = PlexSyncKind::new(&kind)?;
         Some(
             Self::outcome(error, version, libraries).and_then(|outcome| {
                 Ok(PlexSyncRun {

@@ -31,3 +31,40 @@ impl PlexSyncKind {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_parse_watch_state() {
+        assert_eq!(
+            PlexSyncKind::new("watch_state"),
+            Some(PlexSyncKind::WatchState)
+        );
+    }
+
+    #[test]
+    fn it_should_parse_labels() {
+        assert_eq!(PlexSyncKind::new("labels"), Some(PlexSyncKind::Labels));
+    }
+
+    #[test]
+    fn it_should_reject_any_other_value() {
+        assert_eq!(PlexSyncKind::new("scan"), None);
+    }
+
+    #[test]
+    fn it_should_round_trip_through_its_string() {
+        assert_eq!(
+            PlexSyncKind::new(PlexSyncKind::Labels.as_str()),
+            Some(PlexSyncKind::Labels)
+        );
+    }
+
+    #[test]
+    fn it_should_name_the_task_that_runs_it() {
+        assert_eq!(PlexSyncKind::WatchState.task(), Task::SyncPlexWatchState);
+        assert_eq!(PlexSyncKind::Labels.task(), Task::SyncPlexLabels);
+    }
+}

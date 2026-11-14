@@ -1061,8 +1061,6 @@ fn it_should_push_instead_of_unwatching_after_a_token_switch() {
     );
 }
 
-/// The syncer over the test database, with Plex seeing `/videos` at
-/// `/plex/videos`.
 #[test]
 fn it_should_record_the_plex_version_and_libraries_when_a_watch_sync_reaches_plex() {
     let db = TestDatabase::new();
@@ -1120,6 +1118,8 @@ fn it_should_record_the_error_when_a_watch_sync_cant_reach_plex() {
     );
 }
 
+/// The syncer over the test database, with Plex seeing `/videos` at
+/// `/plex/videos`.
 fn syncer(
     db: &TestDatabase,
     plex: Arc<FakePlexLibraryRepository>,

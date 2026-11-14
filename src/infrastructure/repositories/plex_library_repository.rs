@@ -550,6 +550,8 @@ pub struct FakePlexLibraryRepository {
     unreachable: bool,
     /// Rating keys whose label writes Plex rejects.
     rejected: Vec<String>,
+    /// Whether Plex rejects every smart playlist it's asked to create.
+    playlists_rejected: bool,
     /// The server's time, stamped as the last viewed time of every watch
     /// write, like Plex does (it cannot backdate one).
     now: Option<DateTime<Utc>>,
@@ -657,6 +659,14 @@ impl FakePlexLibraryRepository {
     pub fn rejecting(self, rating_key: &str) -> Self {
         Self {
             rejected: [self.rejected.clone(), vec![rating_key.to_string()]].concat(),
+            ..self
+        }
+    }
+
+    /// The same fake rejecting every smart playlist it's asked to create.
+    pub fn rejecting_playlists(self) -> Self {
+        Self {
+            playlists_rejected: true,
             ..self
         }
     }
@@ -828,6 +838,10 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
     ) -> anyhow::Result<PlexPlaylist> {
         self.ensure_reachable()?;
         anyhow::ensure!(server_id == Self::SERVER_ID, "unknown server {server_id}");
+        anyhow::ensure!(
+            !self.playlists_rejected,
+            "Plex rejected the playlist {title}"
+        );
         self.record(format!("create_playlist:{section_id}:{label}:{title}"));
         let mut playlists = self.playlists.lock().unwrap();
         let playlist = FakePlaylist {
