@@ -1,11 +1,27 @@
 use super::*;
 use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
-use crate::domain::task::Task;
+use crate::domain::services::{
+    CategoryVideoCollector, PlexEpisodeFinder, PlexLabelSyncer, PlexWatchSyncer, VideoOwnerFinder,
+    VideoWatchStateUpdater,
+};
+use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
+use crate::infrastructure::repositories::sqlite_category_playlist_repository::SqliteCategoryPlaylistRepository;
+use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
+use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
+use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_episode_labels_repository::SqliteEpisodeLabelsRepository;
+use crate::infrastructure::repositories::sqlite_episode_watch_repository::SqliteEpisodeWatchRepository;
+use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::{
     PlexSyncRunRepository, SqlitePlexSyncRunRepository,
 };
+use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
+use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
 use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 use crate::infrastructure::shared::system_clock::FixedClock;
 use chrono::{DateTime, Duration, Utc};
@@ -200,8 +216,109 @@ async fn it_should_report_a_running_sync() {
     );
 }
 
+#[tokio::test]
+async fn it_should_bring_the_pending_sync_forward_when_synced_now() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    task_repository
+        .schedule(&Task::SyncPlexWatchState, now() + Duration::minutes(4))
+        .unwrap();
+    let plex_sync_requester = PlexSyncRequester::new(
+        Some(watch_syncer(&db, task_repository.clone())),
+        Some(label_syncer(&db, task_repository.clone())),
+        Arc::new(FixedClock(now())),
+    );
+
+    let response = sync_now(plex_sync_requester, "watch_state").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_sync(1, Task::SyncPlexWatchState)]
+    );
+}
+
 fn now() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+}
+
+fn watch_syncer(db: &TestDatabase, task_repository: Arc<SqliteTaskRepository>) -> PlexWatchSyncer {
+    let plex = Arc::new(FakePlexLibraryRepository::default());
+    let clock = Arc::new(FixedClock(now()));
+    PlexWatchSyncer::new(
+        plex.clone(),
+        plex_episode_finder(db, plex),
+        Arc::new(SqliteEpisodeWatchRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        VideoWatchStateUpdater::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            clock.clone(),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            CategoryVideoCollector::new(
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            ),
+        ),
+        task_repository,
+        Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
+        clock,
+    )
+}
+
+fn label_syncer(db: &TestDatabase, task_repository: Arc<SqliteTaskRepository>) -> PlexLabelSyncer {
+    let plex = Arc::new(FakePlexLibraryRepository::default());
+    PlexLabelSyncer::new(
+        plex.clone(),
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        plex_episode_finder(db, plex),
+        task_repository,
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
+        Arc::new(FixedClock(now())),
+    )
+}
+
+fn plex_episode_finder(
+    db: &TestDatabase,
+    plex: Arc<FakePlexLibraryRepository>,
+) -> PlexEpisodeFinder {
+    PlexEpisodeFinder::new(
+        plex,
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        "/videos",
+        "/plex/videos",
+    )
+}
+
+fn pending_sync(id: i64, task: Task) -> ScheduledTask {
+    ScheduledTask {
+        id,
+        task,
+        status: TaskStatus::Pending,
+        retries: 0,
+        run_at: now(),
+        created_at: now(),
+        updated_at: now(),
+        last_error: None,
+    }
 }
 
 fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {
@@ -226,6 +343,13 @@ fn never_run_sync(kind: &str) -> PlexSyncResponse {
         next_run_at: None,
         running: false,
     }
+}
+
+async fn sync_now(
+    plex_sync_requester: PlexSyncRequester,
+    kind: &str,
+) -> Result<StatusCode, ApiError> {
+    request_plex_sync(State(plex_sync_requester), Path(kind.to_string())).await
 }
 
 async fn status(plex_status_searcher: PlexStatusSearcher) -> Result<PlexStatusResponse, ApiError> {

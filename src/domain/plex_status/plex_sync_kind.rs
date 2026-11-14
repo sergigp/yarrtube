@@ -12,8 +12,8 @@ impl PlexSyncKind {
 
     /// The kind named `value` (`watch_state` or `labels`), `None` for any
     /// other.
-    pub fn new(_value: &str) -> Option<Self> {
-        None
+    pub fn new(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == value)
     }
 
     pub fn as_str(&self) -> &'static str {

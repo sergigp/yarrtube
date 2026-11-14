@@ -1,16 +1,15 @@
 use crate::domain::plex_status::{PlexSyncKind, RequestPlexSyncError};
-use crate::domain::services::{PlexLabelSyncer, PlexWatchSyncer};
+use crate::domain::services::{
+    PlexLabelSyncer, PlexLabelSyncerApi, PlexWatchSyncer, PlexWatchSyncerApi,
+};
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 
 /// Makes a Plex sync due now.
 #[derive(Clone)]
 pub struct PlexSyncRequester {
-    #[allow(dead_code)]
     watch_syncer: Option<PlexWatchSyncer>,
-    #[allow(dead_code)]
     label_syncer: Option<PlexLabelSyncer>,
-    #[allow(dead_code)]
     clock: Arc<dyn Clock>,
 }
 
@@ -35,7 +34,13 @@ pub trait PlexSyncRequesterApi: Send + Sync {
 }
 
 impl PlexSyncRequesterApi for PlexSyncRequester {
-    fn request(&self, _kind: PlexSyncKind) -> Result<(), RequestPlexSyncError> {
-        Ok(())
+    fn request(&self, kind: PlexSyncKind) -> Result<(), RequestPlexSyncError> {
+        let now = self.clock.now();
+        match kind {
+            PlexSyncKind::WatchState => self.watch_syncer.as_ref().map(|s| s.request_sync(now)),
+            PlexSyncKind::Labels => self.label_syncer.as_ref().map(|s| s.request_sync(now)),
+        }
+        .unwrap_or(Ok(()))
+        .map_err(RequestPlexSyncError::Repository)
     }
 }
