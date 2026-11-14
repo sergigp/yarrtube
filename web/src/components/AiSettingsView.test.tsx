@@ -205,7 +205,7 @@ describe('AiSettingsView', () => {
     ])
   })
 
-  it("says the key isn't set when Anthropic is saved without one", async () => {
+  it('names the missing Anthropic key and the restart', async () => {
     mockApi({
       'GET /api/preferences': onAnthropic({ anthropic_available: false }),
     })
@@ -213,7 +213,9 @@ describe('AiSettingsView', () => {
 
     const section = within(await screen.findByRole('group', { name: 'Provider' }))
     expect(
-      section.getByText("Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set"),
+      section.getByText(
+        'Anthropic needs an API key. Set YARRTUBE_ANTHROPIC_API_KEY and restart yarrtube.',
+      ),
     ).toBeInTheDocument()
     expect(
       within(section.getByRole('radiogroup', { name: 'Provider' }))

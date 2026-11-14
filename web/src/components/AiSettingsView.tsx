@@ -216,7 +216,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
       <SettingsCard title="Provider">
         {keyRemoved && (
           <p className="text-sm text-destructive">
-            Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set
+            Anthropic needs an API key. Set YARRTUBE_ANTHROPIC_API_KEY and restart yarrtube.
           </p>
         )}
         {(saved.anthropic_available || keyRemoved) && (
