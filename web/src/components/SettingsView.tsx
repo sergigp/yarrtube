@@ -31,6 +31,8 @@ export function SettingsView() {
           <NavLink
             key={path}
             to={`/settings/${path}`}
+            aria-label={label}
+            aria-describedby={statuses[path] ? `settings-status-${path}` : undefined}
             className={({ isActive }) =>
               cn(
                 'whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',
@@ -42,7 +44,7 @@ export function SettingsView() {
             }
           >
             {label}
-            {statuses[path] && <span>{statuses[path]}</span>}
+            {statuses[path] && <span id={`settings-status-${path}`}>{statuses[path]}</span>}
           </NavLink>
         ))}
       </nav>

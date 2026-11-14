@@ -23,7 +23,7 @@ describe('SettingsView', () => {
     expect(screen.getByRole('link', { name: 'Plex' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'General' })).not.toHaveAttribute('aria-current')
     expect(
-      screen.getAllByRole('link').map((link) => link.textContent),
+      screen.getAllByRole('link').map((link) => link.getAttribute('aria-label')),
     ).toEqual(['General', 'AI', 'Plex'])
   })
 

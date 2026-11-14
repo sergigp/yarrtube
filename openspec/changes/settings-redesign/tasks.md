@@ -12,7 +12,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it shows Off, On · Ollama and On · Anthropic for AI`: AI nav status
+- [x] 2.1 `it shows Off, On · Ollama and On · Anthropic for AI`: AI nav status
 - [ ] 2.2 `it shows Not set up, Not checked yet, Connected and Can't reach Plex`: Plex nav status
 - [ ] 2.3 `it shows each section's status under its name`: nav renders statuses, hidden on mobile
 - [ ] 2.4 `it shows the renamed switches with their descriptions`: General cards, inline help, no tooltips
