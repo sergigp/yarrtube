@@ -341,4 +341,13 @@ describe('TasksView', () => {
     await user.clear(search)
     expect(screen.getByText('Fetch the thumbnail of Intro in Chan')).toBeInTheDocument()
   })
+
+  it('says all is quiet, with no chips, when nothing is scheduled', async () => {
+    mockApi({ 'GET /api/tasks': [] })
+    renderWithProviders(<TasksView />)
+
+    expect(await screen.findByText('All quiet. Nothing is scheduled.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
 })

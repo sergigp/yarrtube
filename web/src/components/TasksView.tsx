@@ -53,6 +53,10 @@ function TaskList() {
     return <p className="text-sm text-muted-foreground">Loading tasks…</p>
   }
 
+  if (tasks.length === 0) {
+    return <p className="text-sm text-muted-foreground">All quiet. Nothing is scheduled.</p>
+  }
+
   const now = new Date()
   const { chips, sections } = buildTaskList(tasks, { filter, query, aiEnabled, now })
 
