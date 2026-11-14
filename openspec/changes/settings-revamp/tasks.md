@@ -26,9 +26,9 @@ Plex status endpoints (`http/plex`)
 - [x] 2.13 `it_should_keep_the_version_and_libraries_last_seen_when_the_latest_run_failed`
 - [x] 2.14 `it_should_report_a_running_sync`
 - [x] 2.15 `it_should_bring_the_pending_sync_forward_when_synced_now`
-- [ ] 2.16 `it_should_schedule_a_sync_now_when_none_is_pending`
-- [ ] 2.17 `it_should_leave_one_pending_sync_when_synced_now_twice`
-- [ ] 2.18 `it_should_respond_404_for_an_unknown_sync`
+- [x] 2.16 `it_should_schedule_a_sync_now_when_none_is_pending`
+- [x] 2.17 `it_should_leave_one_pending_sync_when_synced_now_twice`
+- [x] 2.18 `it_should_respond_404_for_an_unknown_sync`
 - [ ] 2.19 `it_should_respond_409_when_plex_isnt_configured`
 
 Preferences (`http/preferences`)

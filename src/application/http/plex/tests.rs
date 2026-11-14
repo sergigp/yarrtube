@@ -238,6 +238,66 @@ async fn it_should_bring_the_pending_sync_forward_when_synced_now() {
     );
 }
 
+#[tokio::test]
+async fn it_should_schedule_a_sync_now_when_none_is_pending() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    let plex_sync_requester = PlexSyncRequester::new(
+        Some(watch_syncer(&db, task_repository.clone())),
+        Some(label_syncer(&db, task_repository.clone())),
+        Arc::new(FixedClock(now())),
+    );
+
+    let response = sync_now(plex_sync_requester, "labels").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_sync(1, Task::SyncPlexLabels)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_leave_one_pending_sync_when_synced_now_twice() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    let plex_sync_requester = PlexSyncRequester::new(
+        Some(watch_syncer(&db, task_repository.clone())),
+        Some(label_syncer(&db, task_repository.clone())),
+        Arc::new(FixedClock(now())),
+    );
+    sync_now(plex_sync_requester.clone(), "labels")
+        .await
+        .unwrap();
+
+    let response = sync_now(plex_sync_requester, "labels").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_sync(1, Task::SyncPlexLabels)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_respond_404_for_an_unknown_sync() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    let plex_sync_requester = PlexSyncRequester::new(
+        Some(watch_syncer(&db, task_repository.clone())),
+        Some(label_syncer(&db, task_repository.clone())),
+        Arc::new(FixedClock(now())),
+    );
+
+    let response = sync_now(plex_sync_requester, "scan").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(StatusCode::NOT_FOUND, "No Plex sync scan"))
+    );
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
 fn now() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
 }
