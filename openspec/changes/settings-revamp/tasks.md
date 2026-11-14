@@ -51,7 +51,7 @@ Web (Vitest), one red-green-refactor cycle each
 - [x] 2.34 `PlexSettingsView.test.tsx` — connected: "Connected", "Plex Media Server 1.43.5.11079", libraries, relative time.
 - [x] 2.35 `PlexSettingsView.test.tsx` — unreachable: "Can't reach Plex", the error, last seen version.
 - [x] 2.36 `PlexSettingsView.test.tsx` — no sync yet: status shows after the first sync.
-- [ ] 2.37 `PlexSettingsView.test.tsx` — sync rows: last run, its error, next run.
+- [x] 2.37 `PlexSettingsView.test.tsx` — sync rows: last run, its error, next run.
 - [ ] 2.38 `PlexSettingsView.test.tsx` — "Sync now" POSTs and shows "Syncing…" disabled until a newer run.
 - [ ] 2.39 `PlexSettingsView.test.tsx` — "Sync now" request fails: error shown, button enabled again.
 - [ ] 2.40 `PlexSettingsView.test.tsx` — playlist options: defaults selected; "Drop out" PATCHes only `plex_playlist_watched` and shows "Saved".

@@ -4,6 +4,7 @@ import { PlexSettingsView } from './PlexSettingsView'
 import {
   aPlexConnection,
   aPlexStatus,
+  aPlexSync,
   aPreferences,
   mockApi,
   renderWithProviders,
@@ -95,6 +96,40 @@ describe('PlexSettingsView', () => {
 
     const connection = await screen.findByRole('group', { name: 'Connection' })
     expect(lines(connection)).toEqual(['The connection shows here after the first Plex sync.'])
+  })
+
+  it('shows when each sync last ran, how it ended and when it runs next', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-11-14T10:03:00Z'))
+    mockApi({
+      'GET /api/plex': aPlexStatus({
+        syncs: [
+          aPlexSync({
+            kind: 'watch_state',
+            last_run_at: '2026-11-14T10:00:00Z',
+            next_run_at: '2026-11-14T10:05:00Z',
+          }),
+          aPlexSync({
+            kind: 'labels',
+            last_run_at: '2026-11-14T09:58:00Z',
+            last_error: 'timed out',
+            next_run_at: '2026-11-14T10:13:00Z',
+          }),
+        ],
+      }),
+      'GET /api/preferences': aPreferences(),
+    })
+
+    renderWithProviders(<PlexSettingsView />)
+
+    const watchState = await screen.findByRole('group', { name: 'Watch state' })
+    const labels = screen.getByRole('group', { name: 'Labels & playlists' })
+    expect(lines(watchState)).toEqual(['Last run 3 minutes ago', 'Next run in 2 minutes'])
+    expect(lines(labels)).toEqual([
+      'Last run 5 minutes ago: timed out',
+      'Next run in 10 minutes',
+    ])
+    expect(within(watchState).getByRole('button', { name: 'Sync now' })).toBeEnabled()
   })
 })
 
