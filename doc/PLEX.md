@@ -150,9 +150,8 @@ in sync between the web UI and Plex, both ways. Nothing else to set up.
   halfway in Plex and it appears under _Continue watching_ at that point.
   The same goes the other way: mark a video watched in the web UI (or a
   whole channel, playlist or category) and it is watched in Plex. A video
-  stopped within its
-  first 30 seconds counts as not started, so a quick look never lands in
-  Plex's Continue Watching.
+  stopped within its first 30 seconds counts as not started, so a quick
+  look never lands in Plex's Continue Watching.
 - **When**: every 5 minutes, and right after yarrtube starts. A large batch
   (e.g. marking a whole channel watched) is sent over a few back-to-back
   syncs.

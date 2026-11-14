@@ -51,7 +51,8 @@ pub trait PlexLibraryRepository: Send + Sync {
     /// The token user's video playlists (`GET /playlists?playlistType=video`).
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>>;
     /// Creates a smart playlist of the section's episodes labelled `label`,
-    /// watched or not, newest air date first, then highest episode first.
+    /// watched or not, newest air date first, then highest episode number
+    /// first.
     fn create_smart_playlist(
         &self,
         server_id: &str,
