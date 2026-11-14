@@ -212,8 +212,8 @@ function PlaylistOptions({
         </p>
       )}
       <p className="text-muted-foreground">
-        Plex Web and the Mac app don&apos;t show watched badges in playlists, so dropping watched
-        episodes is the way to tell what&apos;s left.
+        With categories on, each category becomes a smart playlist in Plex with all its episodes.
+        These options apply to every category playlist.
       </p>
       <Choice
         name="Watched episodes"
