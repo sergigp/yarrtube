@@ -13,17 +13,20 @@ test('Plex settings: show how the syncs are doing and run one now', async ({ pag
     .click()
   await expect(page).toHaveURL(/\/settings\/plex$/)
 
-  await expect(page.getByRole('group', { name: 'Connection' })).toBeVisible()
-  const watchState = page.getByRole('group', { name: 'Watch state' })
-  await expect(page.getByRole('group', { name: 'Labels & playlists' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Server' })).toBeVisible()
+  const watchState = page.getByRole('group', { name: 'Watched status' })
+  const labels = page.getByRole('group', { name: 'Categories to Plex' })
+  await expect(labels).toBeVisible()
   await expect(page.getByRole('group', { name: 'Category playlists' })).toBeVisible()
 
-  await watchState.getByRole('button', { name: 'Sync now' }).click()
+  // Every sync fails against the stub, so each row offers a retry.
+  await expect(labels.getByRole('button', { name: 'Retry now' })).toBeVisible({ timeout: 15_000 })
+  await watchState.getByRole('button', { name: /^(Sync|Retry) now$/ }).click()
 
   // The page refreshes the status every 5 s, so the finished run can take
   // that long to show.
-  await expect(watchState.getByRole('button', { name: 'Sync now' })).toBeEnabled({
+  await expect(watchState.getByRole('button', { name: 'Retry now' })).toBeEnabled({
     timeout: 15_000,
   })
-  await expect(watchState).toContainText('Last run')
+  await expect(watchState).toContainText('Failed')
 })

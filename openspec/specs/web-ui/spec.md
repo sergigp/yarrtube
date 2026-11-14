@@ -2152,36 +2152,44 @@ Each category section on the home view SHALL be headed "More about <category nam
 - **THEN** no "More about" section is shown
 
 ### Requirement: Preferences View
-The Settings page's "General" section, at `/settings/general`, SHALL show a labelled switch per preference: "Enable categories" in a "Categories" group, and "Show continue watching", "Show categories", "Show quick watches" and "Show latest videos" in a "Home" group. Toggling a switch SHALL save the preferences at once and update the whole application.
+The Settings page's "General" section, at `/settings/general`, SHALL show its preferences as switches, each in a card with a heading. The "Categories" card SHALL hold a "Categories" switch. Under it SHALL be the description "Group channels and playlists by topic and browse by category." and an "Also used by" row of links: "AI categorization" to `/settings/ai`, "Plex category playlists" to `/settings/plex` and "Home: More about" to the "Home sections" card. The "Home sections" card SHALL hold "Continue watching", "More about…", "Quick watches" and "Latest videos", in that order. Toggling a switch SHALL save the preferences at once and update the whole application.
 
 #### Scenario: Current values shown
 - **WHEN** a user opens the General section and only `home_show_latest` is off
-- **THEN** every switch is on except "Show latest videos"
+- **THEN** every switch is on except "Latest videos"
 
 #### Scenario: Toggling saves
-- **WHEN** a user turns off "Show quick watches"
+- **WHEN** a user turns off "Quick watches"
 - **THEN** the preferences are saved with `home_show_quick_watches` off and the switch stays off after reloading the page
 
 #### Scenario: Save fails
-- **WHEN** a user toggles a switch and the save fails
-- **THEN** the view shows the error and the switch returns to its saved value
+- **WHEN** a user toggles a switch and the save fails with "database is locked"
+- **THEN** the view shows "Couldn't save: database is locked. Try again." and the switch returns to its saved value
+
+#### Scenario: Following a cross-link
+- **WHEN** a user activates "Plex category playlists"
+- **THEN** the URL becomes `/settings/plex`
 
 ### Requirement: Preferences Help
-Each preference switch SHALL have a help control shown as a "?" icon with the accessible name "About <switch label>". Hovering, focusing or activating it SHALL show a tooltip saying what the preference does and what turning it off changes. The "Home" group SHALL say that its sections show in the listed order and that a video shows in one section only, so turning a section off can move its videos to a section below.
+Each preference switch SHALL show its description as text under its label, not in a tooltip, and SHALL have that description as its accessible description. The descriptions SHALL be:
+- "Continue watching": "Videos you started in the last 7 days and haven't finished."
+- "More about…": "One section for each of up to 3 categories with unwatched videos."
+- "Quick watches": "Unwatched videos under 15 minutes."
+- "Latest videos": "Your newest downloads that aren't in a section above."
 
 #### Scenario: Explaining a preference
-- **WHEN** a user activates the "About Enable categories" control
-- **THEN** a tooltip explains that turning categories off hides every category control and section, and that categories and their videos are kept
+- **WHEN** a user opens the General section
+- **THEN** "Unwatched videos under 15 minutes." shows under "Quick watches" without any interaction
 
 #### Scenario: Help on touch screens
-- **WHEN** a user taps the "About Show quick watches" control
-- **THEN** its tooltip shows
+- **WHEN** a user opens the General section
+- **THEN** no "About <label>" control is shown
 
 ### Requirement: Preferences Save Confirmation
-After a preference is saved, the General section SHALL show "Saved" next to its title, "General", for about 2 seconds. A failed save SHALL NOT show it.
+After a preference is saved, the General section SHALL show "Saved" next to its title, "General", for about 2 seconds. A failed save SHALL NOT show it. The section SHALL say "Changes save as you make them." under its title.
 
 #### Scenario: Saved
-- **WHEN** a user turns off "Show quick watches" and the save succeeds
+- **WHEN** a user turns off "Quick watches" and the save succeeds
 - **THEN** "Saved" shows next to "General" and is gone about 2 seconds later
 
 #### Scenario: Not saved
@@ -2196,11 +2204,11 @@ The preferences view SHALL be aligned to the left edge of the content area, like
 - **THEN** both start at the left edge of the content area with the same maximum width
 
 ### Requirement: Home Category Switch Needs Categories
-While "Enable categories" is off, the "Show categories" switch SHALL be disabled, keeping its saved value.
+While "Categories" is off, the "More about…" switch SHALL be disabled, keeping its saved value.
 
 #### Scenario: Categories off
-- **WHEN** a user turns off "Enable categories"
-- **THEN** "Show categories" is disabled and keeps its value
+- **WHEN** a user turns off "Categories"
+- **THEN** "More about…" is disabled and keeps its value
 
 ### Requirement: No Category UI While Categories Are Off
 While `categories_enabled` is off, or the preferences are still loading, the application SHALL NOT show the sidebar Categories section, the Categories field in the add and edit channel and playlist dialogs, home category sections or home card category chips, and the header search SHALL NOT list a Categories group. When the preferences cannot be loaded, the application SHALL behave as with the defaults.
@@ -2634,7 +2642,7 @@ The video detail pane SHALL show a "Retry now" button when any step of the selec
 - **THEN** the application tells the user and the video is shown as before
 
 ### Requirement: Settings Page
-The application SHALL have a Settings page with the sections "General", "AI" and "Plex", in that order, at `/settings/general`, `/settings/ai` and `/settings/plex`. A section nav SHALL list them, marking the open one: a column beside the section on wide viewports, a row of tabs above it on mobile-width ones. `/settings` SHALL open "General".
+The application SHALL have a Settings page with the sections "General", "AI" and "Plex", in that order, at `/settings/general`, `/settings/ai` and `/settings/plex`. A section nav SHALL list them, marking the open one: a column beside the section on wide viewports, a row of tabs above it on mobile-width ones. Under each name the nav SHALL show the section's status: "Home and categories" for General; "Off", "On · Ollama" or "On · Anthropic" for AI, from the saved `ai_enabled` and `ai_provider`; and for Plex "Not set up" when Plex isn't configured, "Not checked yet" before its first sync, "Connected" when the latest sync reached it, or "Can't reach Plex" when it didn't. A status SHALL NOT show while its data is loading or failed to load. On mobile-width viewports the statuses SHALL NOT show. `/settings` SHALL open "General".
 
 #### Scenario: Switching sections
 - **WHEN** a user on `/settings/general` activates "Plex" in the section nav
@@ -2651,6 +2659,14 @@ The application SHALL have a Settings page with the sections "General", "AI" and
 #### Scenario: Mobile width
 - **WHEN** a user opens `/settings/ai` on a mobile-width viewport
 - **THEN** the sections show as tabs above the AI section, with no horizontal page scroll
+
+#### Scenario: Statuses
+- **WHEN** AI is on with Anthropic and the latest Plex sync reached the server
+- **THEN** the nav shows "On · Anthropic" under "AI" and "Connected" under "Plex"
+
+#### Scenario: Plex not set up
+- **WHEN** Plex isn't configured and AI is off
+- **THEN** the nav shows "Off" under "AI" and "Not set up" under "Plex"
 
 ### Requirement: Old Settings Routes Redirect
 `/preferences` SHALL redirect to `/settings/general` and `/ai` to `/settings/ai`, replacing the history entry.
