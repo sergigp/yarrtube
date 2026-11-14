@@ -1,4 +1,5 @@
 use crate::domain::plex_label::CategoryPlaylist;
+use crate::domain::preferences::{PlaylistOrder, PlaylistWatched, PlexPlaylistSettings};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use rusqlite::params;
@@ -27,7 +28,8 @@ impl CategoryPlaylistRepository for SqliteCategoryPlaylistRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT section_id, label, rating_key, title FROM category_playlists
+                "SELECT section_id, label, rating_key, title, watched, playlist_order
+                 FROM category_playlists
                  ORDER BY section_id, label",
             )
             .context("failed to prepare category playlists query")?;
@@ -41,13 +43,16 @@ impl CategoryPlaylistRepository for SqliteCategoryPlaylistRepository {
     fn save(&self, playlist: &CategoryPlaylist) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT OR REPLACE INTO category_playlists (section_id, label, rating_key, title)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT OR REPLACE INTO category_playlists
+                 (section_id, label, rating_key, title, watched, playlist_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 playlist.section_id,
                 playlist.label,
                 playlist.rating_key,
-                playlist.title
+                playlist.title,
+                playlist.options.map(|options| options.watched.as_str()),
+                playlist.options.map(|options| options.order.as_str()),
             ],
         )
         .inspect_err(|e| tracing::error!(label = %playlist.label, error = %e, "failed to save category playlist"))
@@ -74,7 +79,16 @@ impl SqliteCategoryPlaylistRepository {
             label: row.get(1)?,
             rating_key: row.get(2)?,
             title: row.get(3)?,
-            options: None,
+            options: Self::options(row.get(4)?, row.get(5)?),
+        })
+    }
+
+    /// The options both columns hold; `None` when either is missing or no
+    /// longer valid, so the playlist is replaced.
+    fn options(watched: Option<String>, order: Option<String>) -> Option<PlexPlaylistSettings> {
+        Some(PlexPlaylistSettings {
+            watched: PlaylistWatched::new(&watched?).ok()?,
+            order: PlaylistOrder::new(&order?).ok()?,
         })
     }
 }

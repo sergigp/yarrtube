@@ -1190,6 +1190,84 @@ fn it_should_create_playlists_oldest_first_when_the_preference_says_so() {
     );
 }
 
+#[test]
+fn it_should_keep_a_playlist_whose_options_match_the_preferences() {
+    let db = TestDatabase::new();
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+    seed_category(&db, "chess", "Chess", &[&video]);
+    let drop_watched = PlexPlaylistSettings {
+        watched: PlaylistWatched::Drop,
+        ..PlexPlaylistSettings::default()
+    };
+    seed_playlist_preferences(&db, drop_watched);
+    let task = SyncPlexLabelsTask::new(syncer(
+        &db,
+        plex.clone(),
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        task_repository(&db),
+    ));
+    run(&task).unwrap();
+    let first_sync_mutations = plex.mutations();
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), first_sync_mutations);
+}
+
+#[test]
+fn it_should_replace_a_playlist_whose_options_differ_from_the_preferences() {
+    let db = TestDatabase::new();
+    let category_playlist_repository =
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+    seed_category(&db, "chess", "Chess", &[&video]);
+    let task = SyncPlexLabelsTask::new(syncer(
+        &db,
+        plex.clone(),
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        category_playlist_repository.clone(),
+        task_repository(&db),
+    ));
+    run(&task).unwrap();
+    let drop_watched = PlexPlaylistSettings {
+        watched: PlaylistWatched::Drop,
+        ..PlexPlaylistSettings::default()
+    };
+    seed_playlist_preferences(&db, drop_watched);
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex.playlists(),
+        vec![FakePlaylist {
+            rating_key: "pl1".to_string(),
+            title: "Chess".to_string(),
+            filter: Some(("19".to_string(), "Chess".to_string())),
+            options: Some(drop_watched),
+        }]
+    );
+    assert_eq!(
+        category_playlist_repository.list().unwrap(),
+        vec![CategoryPlaylist {
+            options: Some(drop_watched),
+            ..category_playlist("19", "Chess", "pl1", "Chess")
+        }]
+    );
+}
+
 fn syncer(
     db: &TestDatabase,
     plex: Arc<FakePlexLibraryRepository>,
@@ -1342,7 +1420,7 @@ fn category_playlist(
         label: label.to_string(),
         rating_key: rating_key.to_string(),
         title: title.to_string(),
-        options: None,
+        options: Some(PlexPlaylistSettings::default()),
     }
 }
 

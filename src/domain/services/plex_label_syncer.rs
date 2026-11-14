@@ -40,15 +40,18 @@ struct DesiredPlaylist {
     section_id: String,
     label: String,
     title: String,
+    options: PlexPlaylistSettings,
 }
 
 impl DesiredPlaylist {
     /// Whether `playlist` is this one: for this section and label, under
-    /// this title. One with another title is replaced.
+    /// this title, listing its episodes as these options say. One with
+    /// another title or options, or options unknown, is replaced.
     fn is(&self, playlist: &CategoryPlaylist) -> bool {
         playlist.section_id == self.section_id
             && playlist.label.to_lowercase() == self.label.to_lowercase()
             && playlist.title == self.title
+            && playlist.options == Some(self.options)
     }
 }
 
@@ -213,7 +216,7 @@ impl PlexLabelSyncer {
     /// Keeps one smart playlist per label and section holding labelled
     /// episodes.
     fn reconcile_playlists(&self, sections: &[PlexSection], server_id: &str) -> anyhow::Result<()> {
-        let desired = self.desired_playlists(sections)?;
+        let desired = self.desired_playlists(sections, self.playlist_options()?)?;
         let (live, gone) = self.stored_playlists()?;
         gone.iter()
             .try_for_each(|playlist| self.category_playlist_repository.delete(playlist))?;
@@ -247,7 +250,11 @@ impl PlexLabelSyncer {
     /// spans sections, the section's title. A label no category carries any
     /// more (renamed or deleted, its episode not relabelled yet) counts for
     /// none, and one differing from its category only in case counts as it.
-    fn desired_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<Vec<DesiredPlaylist>> {
+    fn desired_playlists(
+        &self,
+        sections: &[PlexSection],
+        options: PlexPlaylistSettings,
+    ) -> anyhow::Result<Vec<DesiredPlaylist>> {
         let names: HashMap<String, String> = self
             .category_repository
             .list()?
@@ -279,6 +286,7 @@ impl PlexLabelSyncer {
                 section_id: section_id.clone(),
                 label: label.clone(),
                 title: playlist_title(label, section_id, &labelled, sections),
+                options,
             })
             .collect())
     }
@@ -290,20 +298,19 @@ impl PlexLabelSyncer {
     }
 
     fn create_playlist(&self, desired: DesiredPlaylist, server_id: &str) -> anyhow::Result<()> {
-        let options = self.playlist_options()?;
         let playlist = self.plex_library_repository.create_smart_playlist(
             server_id,
             &desired.section_id,
             &desired.label,
             &desired.title,
-            &options,
+            &desired.options,
         )?;
         self.category_playlist_repository.save(&CategoryPlaylist {
             section_id: desired.section_id,
             label: desired.label,
             rating_key: playlist.rating_key,
             title: playlist.title,
-            options: Some(options),
+            options: Some(desired.options),
         })
     }
 
