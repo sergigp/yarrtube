@@ -7137,6 +7137,19 @@ async fn it_should_change_nothing_when_no_step_is_retrying() {
 }
 
 #[tokio::test]
+async fn it_should_answer_404_when_stopping_retrying_an_unknown_video() {
+    let db = TestDatabase::new();
+
+    let response =
+        stop_retrying_video(State(video_retry_stopper(&db)), Path("rec1".to_string())).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found"))
+    );
+}
+
+#[tokio::test]
 async fn it_should_rerun_a_videos_ai_categorization() {
     let db = TestDatabase::new();
     SqliteChannelRepository::new(db.database())
