@@ -323,4 +323,22 @@ describe('TasksView', () => {
 
     await waitFor(() => expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toHaveLength(2))
   })
+
+  it('searches within the selected chip, keeping the text when the chip changes', async () => {
+    const user = userEvent.setup()
+    mockApi({ 'GET /api/tasks': [...aProdLikeQueue(), ...aBatchOfSyncs().map((task) => ({ ...task, id: task.id + 10 }))] })
+    renderWithProviders(<TasksView />)
+
+    const search = await screen.findByRole('searchbox', { name: 'Search tasks' })
+    await user.type(search, 'jobava')
+    expect(screen.getByText('Check Jobava fans for new videos')).toBeInTheDocument()
+    expect(screen.queryByText('Sync watch state with Plex')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^Downloads/ }))
+    expect(search).toHaveValue('jobava')
+    expect(screen.getByText('Nothing matches your search.')).toBeInTheDocument()
+
+    await user.clear(search)
+    expect(screen.getByText('Fetch the thumbnail of Intro in Chan')).toBeInTheDocument()
+  })
 })

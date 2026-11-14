@@ -10,6 +10,7 @@ import {
 } from '@/lib/tasks'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { Beacon } from './Beacon'
+import { Input } from './ui/input'
 import { AttentionCard } from './tasks/AttentionCard'
 import { TaskBatchRow } from './tasks/TaskBatchRow'
 import { TaskFilterChips } from './tasks/TaskFilterChips'
@@ -42,6 +43,7 @@ function TaskList() {
   const { data: tasks, error } = useTasks()
   const aiEnabled = useAiEnabled()
   const [filter, setFilter] = useState<TaskFilter>('all')
+  const [query, setQuery] = useState('')
 
   if (error) {
     return <p className="text-sm text-destructive">Failed to load tasks: {error.message}</p>
@@ -52,12 +54,25 @@ function TaskList() {
   }
 
   const now = new Date()
-  const { chips, sections } = buildTaskList(tasks, { filter, query: '', aiEnabled, now })
+  const { chips, sections } = buildTaskList(tasks, { filter, query, aiEnabled, now })
 
   return (
     <div className="flex flex-col gap-6">
       <StatusLine tasks={tasks} now={now} />
-      <TaskFilterChips chips={chips} selected={filter} onSelect={setFilter} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <TaskFilterChips chips={chips} selected={filter} onSelect={setFilter} />
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search"
+          aria-label="Search tasks"
+          className="min-h-11 sm:min-h-8 sm:w-56"
+        />
+      </div>
+      {sections.length === 0 && (
+        <p className="text-sm text-muted-foreground">Nothing matches your search.</p>
+      )}
       {sections.map((section) => (
         <section key={section.id} aria-labelledby={`tasks-${section.id}`}>
           <h3
