@@ -17,7 +17,7 @@ describe('PlexSettingsView', () => {
     vi.useRealTimers()
   })
 
-  it('explains how to set Plex up when it is not configured', async () => {
+  it("shows the setup card when Plex isn't configured", async () => {
     mockApi({
       'GET /api/plex': aPlexStatus({ configured: false, connection: null, syncs: [] }),
       'GET /api/preferences': aPreferences(),
@@ -25,10 +25,20 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    expect(await screen.findByText(/Plex isn't configured/)).toHaveTextContent(
-      "Plex isn't configured. Set YARRTUBE_PLEX_URL, YARRTUBE_PLEX_TOKEN and YARRTUBE_PLEX_VIDEOS_PATH to connect yarrtube to your Plex server.",
-    )
-    expect(screen.getByRole('link', { name: 'Plex guide' })).toHaveAttribute(
+    const setup = await screen.findByRole('group', { name: 'Watch your downloads in Plex' })
+    expect(lines(setup)).toEqual([
+      'Connect yarrtube to your Plex server and every channel and playlist shows up as a TV show.',
+      'New episodes appear in Plex right after they download.',
+      'Watched status stays in sync between yarrtube and Plex.',
+      'Each category becomes a smart playlist.',
+      'Set these environment variables and restart the container',
+    ])
+    expect(within(setup).getAllByRole('listitem').map((row) => row.textContent)).toEqual([
+      "YARRTUBE_PLEX_URL · your server's addressCopy",
+      'YARRTUBE_PLEX_TOKEN · your Plex tokenCopy',
+      'YARRTUBE_PLEX_VIDEOS_PATH · where Plex sees the videos folderCopy',
+    ])
+    expect(within(setup).getByRole('link', { name: 'Open the Plex guide' })).toHaveAttribute(
       'href',
       'https://github.com/sergigp/yarrtube/blob/main/doc/PLEX.md',
     )

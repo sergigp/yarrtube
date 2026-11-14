@@ -1,6 +1,8 @@
 import { SettingsCard } from '@/components/SettingsCard'
 import { PageHeader } from '@/components/PageHeader'
 import { Segmented } from '@/components/Segmented'
+import { CopyButton } from '@/components/CopyButton'
+import { Check } from 'lucide-react'
 import { useState } from 'react'
 import type {
   PlexConnection,
@@ -139,27 +141,63 @@ export function PlexSettingsView() {
   )
 }
 
+const PLEX_VARIABLES: { name: string; description: string }[] = [
+  { name: 'YARRTUBE_PLEX_URL', description: "your server's address" },
+  { name: 'YARRTUBE_PLEX_TOKEN', description: 'your Plex token' },
+  { name: 'YARRTUBE_PLEX_VIDEOS_PATH', description: 'where Plex sees the videos folder' },
+]
+
+const PLEX_BENEFITS = [
+  'New episodes appear in Plex right after they download.',
+  'Watched status stays in sync between yarrtube and Plex.',
+  'Each category becomes a smart playlist.',
+]
+
+/** What Plex brings and how to set it up, while it isn't configured. */
 function NotConfigured() {
   return (
-    <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-      <p>
-        Plex isn&apos;t configured. Set <code>YARRTUBE_PLEX_URL</code>,{' '}
-        <code>YARRTUBE_PLEX_TOKEN</code> and <code>YARRTUBE_PLEX_VIDEOS_PATH</code> to connect
-        yarrtube to your Plex server.
-      </p>
-      <p>
-        See the{' '}
-        <a
-          href={PLEX_GUIDE_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="underline hover:text-foreground"
-        >
-          Plex guide
-        </a>{' '}
-        for every step.
-      </p>
-    </div>
+    <SettingsCard
+      title="Watch your downloads in Plex"
+      description={
+        <p>
+          Connect yarrtube to your Plex server and every channel and playlist shows up as a TV
+          show.
+        </p>
+      }
+    >
+      <div className="flex flex-col gap-2.5 text-sm">
+        {PLEX_BENEFITS.map((benefit) => (
+          <p key={benefit} className="flex items-start gap-2.5">
+            <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+            {benefit}
+          </p>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2 text-sm">
+        <p className="font-semibold text-foreground">
+          Set these environment variables and restart the container
+        </p>
+        <ul className="flex flex-col gap-2">
+          {PLEX_VARIABLES.map((variable) => (
+            <li
+              key={variable.name}
+              className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2.5"
+            >
+              <span className="min-w-0 break-all">
+                <code className="font-mono text-[13px]">{variable.name}</code>
+                <span className="text-xs text-muted-foreground"> · {variable.description}</span>
+              </span>
+              <CopyButton text={variable.name} />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Button asChild className="self-start">
+        <a href={PLEX_GUIDE_URL} target="_blank" rel="noreferrer">
+          Open the Plex guide
+        </a>
+      </Button>
+    </SettingsCard>
   )
 }
 
