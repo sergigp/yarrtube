@@ -14,7 +14,7 @@ Label sync (`sync_plex_labels_task`)
 - [x] 2.3 `it_should_record_the_plex_version_and_libraries_when_a_label_sync_reaches_plex`
 - [x] 2.4 `it_should_record_the_error_when_a_label_sync_cant_reach_plex`
 - [x] 2.5 `it_should_create_playlists_that_drop_watched_episodes_when_the_preference_says_drop` — the label syncer reads the playlist preferences.
-- [ ] 2.6 `it_should_create_playlists_oldest_first_when_the_preference_says_so`
+- [x] 2.6 `it_should_create_playlists_oldest_first_when_the_preference_says_so`
 - [ ] 2.7 `it_should_keep_a_playlist_whose_options_match_the_preferences`
 - [ ] 2.8 `it_should_replace_a_playlist_whose_options_differ_from_the_preferences`
 - [ ] 2.9 `it_should_replace_a_playlist_whose_options_are_unknown`

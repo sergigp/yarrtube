@@ -1153,6 +1153,43 @@ fn it_should_create_playlists_that_drop_watched_episodes_when_the_preference_say
     );
 }
 
+#[test]
+fn it_should_create_playlists_oldest_first_when_the_preference_says_so() {
+    let db = TestDatabase::new();
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+    seed_category(&db, "chess", "Chess", &[&video]);
+    let oldest_first = PlexPlaylistSettings {
+        order: PlaylistOrder::OldestFirst,
+        ..PlexPlaylistSettings::default()
+    };
+    seed_playlist_preferences(&db, oldest_first);
+    let task = SyncPlexLabelsTask::new(syncer(
+        &db,
+        plex.clone(),
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex.playlists(),
+        vec![FakePlaylist {
+            rating_key: "pl1".to_string(),
+            title: "Chess".to_string(),
+            filter: Some(("19".to_string(), "Chess".to_string())),
+            options: Some(oldest_first),
+        }]
+    );
+}
+
 fn syncer(
     db: &TestDatabase,
     plex: Arc<FakePlexLibraryRepository>,
