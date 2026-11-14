@@ -21,7 +21,7 @@ Label sync (`sync_plex_labels_task`)
 
 Plex status endpoints (`http/plex`)
 - [x] 2.10 `it_should_report_plex_not_configured`
-- [ ] 2.11 `it_should_report_each_sync_with_its_next_run_before_any_run`
+- [x] 2.11 `it_should_report_each_sync_with_its_next_run_before_any_run`
 - [ ] 2.12 `it_should_report_the_connection_from_the_latest_run`
 - [ ] 2.13 `it_should_keep_the_version_and_libraries_last_seen_when_the_latest_run_failed`
 - [ ] 2.14 `it_should_report_a_running_sync`

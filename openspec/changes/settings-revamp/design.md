@@ -318,9 +318,9 @@ pub enum RequestPlexSyncError { #[error("Plex isn't configured")] NotConfigured,
 pub async fn get_plex_status(State(s): State<PlexStatusSearcher>) -> Result<Json<PlexStatusResponse>, ApiError>;
 pub async fn request_plex_sync(State(s): State<PlexSyncRequester>, Path(kind): Path<String>) -> Result<StatusCode, ApiError>;
 // src/application/http/plex/dto.rs
-pub struct PlexStatusResponse { pub configured: bool, pub connection: Option<PlexConnectionDto>, pub syncs: Vec<PlexSyncDto> }
-pub struct PlexConnectionDto { pub checked_at: String, pub reachable: bool, pub error: Option<String>, pub version: Option<String>, pub libraries: Vec<String> }
-pub struct PlexSyncDto { pub kind: String, pub last_run_at: Option<String>, pub last_error: Option<String>, pub next_run_at: Option<String>, pub running: bool }
+pub struct PlexStatusResponse { pub configured: bool, pub connection: Option<PlexConnectionResponse>, pub syncs: Vec<PlexSyncResponse> }
+pub struct PlexConnectionResponse { pub checked_at: DateTime<Utc>, pub reachable: bool, pub error: Option<String>, pub version: Option<String>, pub libraries: Vec<String> }
+pub struct PlexSyncResponse { pub kind: String, pub last_run_at: Option<DateTime<Utc>>, pub last_error: Option<String>, pub next_run_at: Option<DateTime<Utc>>, pub running: bool }
 // src/application/http/preferences/dto.rs: request + response gain plex_playlist_watched, plex_playlist_order (String)
 // src/application/http/mod.rs: ApiServices gains plex_status_searcher, plex_sync_requester;
 //   routes GET /plex, POST /plex/syncs/{kind}
