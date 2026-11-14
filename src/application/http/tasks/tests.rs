@@ -1236,6 +1236,30 @@ async fn it_should_bring_every_listed_task_forward() {
     );
 }
 
+#[tokio::test]
+async fn it_should_ignore_running_and_unknown_ids_when_run_now() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let later = fixed_timestamp() + chrono::Duration::hours(1);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository.schedule(&Task::UpdateYtdlp, later).unwrap();
+    let running = ScheduledTask {
+        run_at: later,
+        ..scheduled_task(1, Task::UpdateYtdlp)
+    }
+    .start(fixed_timestamp());
+    task_repository.update(&running).unwrap();
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1, 99])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![running]);
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
