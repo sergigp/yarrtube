@@ -1136,6 +1136,42 @@ async fn it_should_include_started_at_for_a_running_task() {
     );
 }
 
+#[tokio::test]
+async fn it_should_have_null_started_at_for_a_pending_task() {
+    let db = TestDatabase::new();
+    let requeued_at = fixed_timestamp() + chrono::Duration::seconds(30);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+        .unwrap();
+    let requeued = task_repository.list_non_completed().unwrap()[0]
+        .clone()
+        .start(fixed_timestamp())
+        .run_again_at(fixed_timestamp(), "busy".to_string(), requeued_at);
+    task_repository.update(&requeued).unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![TaskResponse {
+            last_error: Some("busy".to_string()),
+            ..pending_task("update_ytdlp", &[])
+        }])
+    );
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
