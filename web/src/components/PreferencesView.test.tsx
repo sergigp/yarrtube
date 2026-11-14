@@ -116,6 +116,14 @@ describe('PreferencesView', () => {
     ).toBeInTheDocument()
   })
 
+  it('is headed General', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+
+    renderWithProviders(<PreferencesView />)
+
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('General')
+  })
+
   it('says "Saved" after a save, for 2 seconds', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     mockApi({

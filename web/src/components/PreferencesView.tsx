@@ -100,7 +100,7 @@ export function PreferencesView() {
     <TooltipProvider>
       <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
         <div className="flex items-center justify-between gap-4">
-          <h1 className="font-heading text-xl font-semibold text-foreground">Preferences</h1>
+          <h1 className="font-heading text-xl font-semibold text-foreground">General</h1>
           <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
             {saved.shown && (
               <>
