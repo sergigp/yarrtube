@@ -16,7 +16,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 - [x] 2.2 `it shows Not set up, Not checked yet, Connected and Can't reach Plex`: Plex nav status
 - [x] 2.3 `it shows each section's status under its name`: nav renders statuses, hidden on mobile
 - [x] 2.4 `it shows the renamed switches with their descriptions`: General cards, inline help, no tooltips
-- [ ] 2.5 `it links categories to where they are also used`: "Also used by" links
+- [x] 2.5 `it links categories to where they are also used`: "Also used by" links
 - [ ] 2.6 `it disables More about while categories are off`
 - [ ] 2.7 `it shows Couldn't save when a toggle fails`
 - [ ] 2.8 `it names changed settings once each, in page order`

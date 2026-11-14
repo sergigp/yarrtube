@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { usePreferences, useSavePreferences } from '@/api/queries'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -19,6 +20,8 @@ type PreferenceKey =
 
 interface PreferenceGroup {
   title: string
+  /** The card's element id, for links to it. */
+  id?: string
   description?: string
   /** `needsCategories` switches are disabled while categories are off. */
   switches: {
@@ -26,6 +29,8 @@ interface PreferenceGroup {
     label: string
     help: string
     needsCategories?: boolean
+    /** Shown under the help, e.g. links to related settings. */
+    extra?: ReactNode
   }[]
 }
 
@@ -37,11 +42,13 @@ const GROUPS: PreferenceGroup[] = [
         key: 'categories_enabled',
         label: 'Categories',
         help: 'Group channels and playlists by topic and browse by category. Turning this off hides categories but keeps them and their videos.',
+        extra: <AlsoUsedBy />,
       },
     ],
   },
   {
     title: 'Home sections',
+    id: 'home-sections',
     description:
       'Shown top to bottom in this order. A video appears in one section only, so turning a section off can move its videos to the next one.',
     switches: [
@@ -117,11 +124,12 @@ export function PreferencesView() {
         GROUPS.map((group) => (
           <SettingsCard
             key={group.title}
+            id={group.id}
             title={group.title}
             description={group.description}
           >
             <div className="flex flex-col divide-y divide-border">
-            {group.switches.map(({ key, label, help, needsCategories }) => (
+            {group.switches.map(({ key, label, help, needsCategories, extra }) => (
               <div
                 key={key}
                 className="flex items-center justify-between gap-6 py-3.5 first:pt-0 last:pb-0"
@@ -133,6 +141,7 @@ export function PreferencesView() {
                   <p id={`preference-${key}-help`} className="text-sm text-muted-foreground">
                     {help}
                   </p>
+                  {extra}
                 </div>
                 <Switch
                   id={`preference-${key}`}
@@ -146,6 +155,27 @@ export function PreferencesView() {
             </div>
           </SettingsCard>
         ))}
+    </div>
+  )
+}
+
+const CHIP_CLASS =
+  'rounded-full bg-accent px-2.5 py-0.5 text-xs text-accent-foreground hover:bg-accent/70'
+
+/** Where else categories show: AI categorization, Plex playlists and home. */
+function AlsoUsedBy() {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">Also used by</span>
+      <Link to="/settings/ai" className={CHIP_CLASS}>
+        AI categorization
+      </Link>
+      <Link to="/settings/plex" className={CHIP_CLASS}>
+        Plex category playlists
+      </Link>
+      <a href="#home-sections" className={CHIP_CLASS}>
+        Home: More about
+      </a>
     </div>
   )
 }

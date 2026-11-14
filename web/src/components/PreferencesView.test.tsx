@@ -49,6 +49,26 @@ describe('PreferencesView', () => {
     expect(screen.queryByRole('button', { name: /^About / })).not.toBeInTheDocument()
   })
 
+  it('links categories to where they are also used', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+
+    renderWithProviders(<PreferencesView />)
+
+    const categories = await screen.findByRole('group', { name: 'Categories' })
+    expect(within(categories).getByText('Also used by')).toBeInTheDocument()
+    expect(within(categories).getByRole('link', { name: 'AI categorization' })).toHaveAttribute(
+      'href',
+      '/settings/ai',
+    )
+    expect(
+      within(categories).getByRole('link', { name: 'Plex category playlists' }),
+    ).toHaveAttribute('href', '/settings/plex')
+    expect(within(categories).getByRole('link', { name: 'Home: More about' })).toHaveAttribute(
+      'href',
+      '#home-sections',
+    )
+  })
+
   it('saves only the toggled preference', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences(),

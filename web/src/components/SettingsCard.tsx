@@ -6,11 +6,13 @@ import { useId, type ReactNode } from 'react'
  * its fields. Exposed as a group named after its heading.
  */
 export function SettingsCard({
+  id,
   title,
   description,
   action,
   children,
 }: {
+  id?: string
   title: string
   description?: ReactNode
   action?: ReactNode
@@ -19,6 +21,7 @@ export function SettingsCard({
   const headingId = useId()
   return (
     <section
+      id={id}
       role="group"
       aria-labelledby={headingId}
       className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6 text-card-foreground"
