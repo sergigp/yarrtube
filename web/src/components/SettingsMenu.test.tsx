@@ -1,11 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SettingsMenu } from './SettingsMenu'
-import { renderWithProviders } from '@/test/helpers'
+import { aTask, mockApi, renderWithProviders } from '@/test/helpers'
 import { RouteProbe } from '@/test/RouteProbe'
 
 describe('SettingsMenu', () => {
+  beforeEach(() => {
+    mockApi({ 'GET /api/tasks': [] })
+  })
+
   it('offers Tasks', async () => {
     renderWithProviders(
       <>
@@ -51,5 +55,32 @@ describe('SettingsMenu', () => {
 
     expect(item).toHaveAttribute('href', 'https://github.com/sergigp/yarrtube/issues/new')
     expect(item).toHaveAttribute('target', '_blank')
+  })
+
+  it('shows how many tasks are running next to Tasks', async () => {
+    mockApi({
+      'GET /api/tasks': [
+        aTask({ status: 'running' }),
+        aTask({ status: 'running' }),
+        aTask({ status: 'pending' }),
+      ],
+    })
+    renderWithProviders(<SettingsMenu />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+
+    expect(await screen.findByText('2 running')).toBeInTheDocument()
+  })
+
+  it('shows no running count when no task is running', async () => {
+    mockApi({ 'GET /api/tasks': [aTask({ status: 'pending' })] })
+    renderWithProviders(<SettingsMenu />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Tasks' })).toBeInTheDocument()
+    expect(screen.queryByText(/running/)).not.toBeInTheDocument()
   })
 })
