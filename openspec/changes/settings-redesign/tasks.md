@@ -51,7 +51,7 @@ None: no adapter changes.
 - [x] 4.1 Update `e2e-tests/tests/preferences.spec.js`, `aiSettings.spec.js` and `plexSettings.spec.js` to the new names. Renames: "Enable categories" → "Categories", "Show …" → the new switch names, "Enable AI" → "AI features", "Save" → "Save changes", "Watch state" → "Watched status", "Labels & playlists" → "Categories to Plex".
 - [x] 4.2 `scripts/run-tests.sh --lint --web --rust`
 - [x] 4.3 `scripts/run-tests.sh --e2e`, because e2e specs changed.
-- [ ] 4.4 Manual (agent):
+- [x] 4.4 Manual (agent):
   - Start `scripts/run-local.sh --port <free port> --fresh-videos`.
   - With the Playwright MCP browser, open `/settings/general`, `/settings/ai` and `/settings/plex`, and check:
     - the nav statuses;
