@@ -2,8 +2,6 @@ import { useState } from 'react'
 import { usePreferences, useSavePreferences } from '@/api/queries'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { PreferenceHelp } from '@/components/PreferenceHelp'
 import { PageHeader } from '@/components/PageHeader'
 import { SettingsCard } from '@/components/SettingsCard'
 import { cn } from '@/lib/utils'
@@ -37,36 +35,36 @@ const GROUPS: PreferenceGroup[] = [
     switches: [
       {
         key: 'categories_enabled',
-        label: 'Enable categories',
-        help: 'Use categories across Yarrtube: the sidebar section, category pages, the Categories field when adding or editing a channel or playlist, and category sections on home. Turning it off only hides them: your categories and their videos are kept.',
+        label: 'Categories',
+        help: 'Group channels and playlists by topic and browse by category. Turning this off hides categories but keeps them and their videos.',
       },
     ],
   },
   {
-    title: 'Home',
+    title: 'Home sections',
     description:
-      'Sections show in this order, and a video shows in one section only: turning a section off can move its videos to a section below.',
+      'Shown top to bottom in this order. A video appears in one section only, so turning a section off can move its videos to the next one.',
     switches: [
       {
         key: 'home_show_continue_watching',
-        label: 'Show continue watching',
+        label: 'Continue watching',
         help: "Videos you started in the last 7 days and haven't finished.",
       },
       {
         key: 'home_show_categories',
-        label: 'Show categories',
-        help: 'A "More about" section for each of up to 3 categories with unwatched videos. Needs categories enabled.',
+        label: 'More about…',
+        help: 'One section for each of up to 3 categories with unwatched videos.',
         needsCategories: true,
       },
       {
         key: 'home_show_quick_watches',
-        label: 'Show quick watches',
-        help: 'Unwatched videos shorter than 15 minutes.',
+        label: 'Quick watches',
+        help: 'Unwatched videos under 15 minutes.',
       },
       {
         key: 'home_show_latest',
-        label: 'Show latest videos',
-        help: 'The most recently downloaded videos not shown in a section above.',
+        label: 'Latest videos',
+        help: "Your newest downloads that aren't in a section above.",
       },
     ],
   },
@@ -98,48 +96,56 @@ export function PreferencesView() {
   }
 
   return (
-    <TooltipProvider>
-      <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
-        <PageHeader title="General" saved={saved.shown} />
-        {error && (
-          <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
-        )}
-        {saveError && (
-          <p role="alert" className="text-sm text-destructive">
-            Failed to save preferences: {saveError}
-          </p>
-        )}
-        {!error && !preferences && (
-          <p className="text-sm text-muted-foreground">Loading preferences…</p>
-        )}
-        {preferences &&
-          GROUPS.map((group) => (
-            <SettingsCard
-              key={group.title}
-              title={group.title}
-              description={
-                group.description && (
-                  <p className="-mt-2 text-sm text-muted-foreground">{group.description}</p>
-                )
-              }
-            >
-              {group.switches.map(({ key, label, help, needsCategories }) => (
-                <div key={key} className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-1.5">
-                    <Label htmlFor={`preference-${key}`}>{label}</Label>
-                    <PreferenceHelp label={label} help={help} />
-                  </div>
-                  <Switch
-                    id={`preference-${key}`}
-                    checked={preferences[key]}
-                    disabled={saving || (needsCategories && !preferences.categories_enabled)}
-                    onCheckedChange={(value) => void toggle(key, value)}
-                  />
+    <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
+      <PageHeader
+        title="General"
+        description="Changes save as you make them."
+        saved={saved.shown}
+      />
+      {error && (
+        <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
+      )}
+      {saveError && (
+        <p role="alert" className="text-sm text-destructive">
+          Failed to save preferences: {saveError}
+        </p>
+      )}
+      {!error && !preferences && (
+        <p className="text-sm text-muted-foreground">Loading preferences…</p>
+      )}
+      {preferences &&
+        GROUPS.map((group) => (
+          <SettingsCard
+            key={group.title}
+            title={group.title}
+            description={group.description}
+          >
+            <div className="flex flex-col divide-y divide-border">
+            {group.switches.map(({ key, label, help, needsCategories }) => (
+              <div
+                key={key}
+                className="flex items-center justify-between gap-6 py-3.5 first:pt-0 last:pb-0"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <Label htmlFor={`preference-${key}`} className="text-[15px]">
+                    {label}
+                  </Label>
+                  <p id={`preference-${key}-help`} className="text-sm text-muted-foreground">
+                    {help}
+                  </p>
                 </div>
-              ))}
-            </SettingsCard>
-          ))}
-      </div>
-    </TooltipProvider>
+                <Switch
+                  id={`preference-${key}`}
+                  aria-describedby={`preference-${key}-help`}
+                  checked={preferences[key]}
+                  disabled={saving || (needsCategories && !preferences.categories_enabled)}
+                  onCheckedChange={(value) => void toggle(key, value)}
+                />
+              </div>
+            ))}
+            </div>
+          </SettingsCard>
+        ))}
+    </div>
   )
 }

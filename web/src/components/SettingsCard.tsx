@@ -1,6 +1,10 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 
-/** One group of settings: a heading, an optional description and action, and its fields. */
+/**
+ * One group of settings: a card with a heading, an optional description and
+ * an action beside the heading (e.g. the switch turning the group on), then
+ * its fields. Exposed as a group named after its heading.
+ */
 export function SettingsCard({
   title,
   description,
@@ -12,12 +16,23 @@ export function SettingsCard({
   action?: ReactNode
   children?: ReactNode
 }) {
+  const headingId = useId()
   return (
-    <fieldset className="flex flex-col gap-4">
-      <legend className="mb-4 font-heading text-lg font-semibold text-foreground">{title}</legend>
-      {description}
-      {action}
+    <section
+      role="group"
+      aria-labelledby={headingId}
+      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6 text-card-foreground"
+    >
+      <div className="flex items-start justify-between gap-6">
+        <div className="flex flex-col gap-1">
+          <h2 id={headingId} className="font-heading text-lg font-semibold text-foreground">
+            {title}
+          </h2>
+          {description && <div className="text-sm text-muted-foreground">{description}</div>}
+        </div>
+        {action}
+      </div>
       {children}
-    </fieldset>
+    </section>
   )
 }
