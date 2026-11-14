@@ -201,7 +201,7 @@ describe('PlexSettingsView', () => {
     expect(within(labels).getByRole('button', { name: 'Sync now' })).toBeEnabled()
   })
 
-  it('saves a category playlist option on its own', async () => {
+  it('saves a playlist choice and updates the preview', async () => {
     const fetchMock = mockApi({
       'GET /api/plex': aPlexStatus(),
       'GET /api/preferences': aPreferences(),
@@ -212,20 +212,33 @@ describe('PlexSettingsView', () => {
     const playlists = await screen.findByRole('group', { name: 'Category playlists' })
     const watched = within(playlists).getByRole('radiogroup', { name: 'Watched episodes' })
     const order = within(playlists).getByRole('radiogroup', { name: 'Order' })
-    expect(within(watched).getByRole('radio', { name: 'Stay in the playlist' })).toBeChecked()
+    const preview = within(playlists).getByRole('figure', { name: 'Preview in Plex' })
+    expect(within(watched).getByRole('radio', { name: 'Keep them' })).toBeChecked()
     expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
+    expect(
+      within(playlists).getByText(
+        "Removing them turns each playlist into a queue of what's left to watch.",
+      ),
+    ).toBeInTheDocument()
+    expect(previewRowTexts(preview)).toEqual([
+      'Published today',
+      'Published last week · Watched',
+      'Published last month',
+    ])
 
-    await user.click(within(watched).getByRole('radio', { name: 'Drop out' }))
+    await user.click(within(watched).getByRole('radio', { name: 'Remove them' }))
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
-    expect(within(watched).getByRole('radio', { name: 'Drop out' })).toBeChecked()
+    expect(within(watched).getByRole('radio', { name: 'Remove them' })).toBeChecked()
     expect(
       fetchMock.mock.calls
         .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
         .map(([, init]) => JSON.parse(String((init as RequestInit).body))),
     ).toEqual([{ plex_playlist_watched: 'drop' }])
+    expect(previewRowTexts(preview)).toEqual(['Published today', 'Published last month'])
+    expect(preview).toHaveTextContent('Watched episodes are left out.')
     expect(playlists).toHaveTextContent(
-      'With categories on, each category becomes a smart playlist in Plex with all its episodes. These options apply to every category playlist.',
+      'Each category becomes a smart playlist in Plex with all its episodes. These options apply to every category playlist.',
     )
   })
 
@@ -242,7 +255,7 @@ describe('PlexSettingsView', () => {
     await user.click(within(order).getByRole('radio', { name: 'Oldest first' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Failed to save: database is locked',
+      "Couldn't save: database is locked. Try again.",
     )
     expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
     expect(screen.getByRole('status')).toHaveTextContent('')
@@ -267,6 +280,13 @@ describe('PlexSettingsView', () => {
     )
   })
 })
+
+/** The text of each example episode in the playlist `preview`. */
+function previewRowTexts(preview: HTMLElement): string[] {
+  return within(preview)
+    .getAllByRole('listitem')
+    .map((row) => row.textContent ?? '')
+}
 
 /** Each term of the description list in `element`, with its description. */
 function details(element: HTMLElement): [string, string][] {

@@ -20,7 +20,8 @@ import {
 import { useSavedFlash } from '@/hooks/useSavedFlash'
 import { isSyncing, plexVersionLabel, relativeTime, syncStatusLine } from '@/lib/plexStatus'
 import { Button } from '@/components/ui/button'
-import { errorMessage } from '@/lib/errorMessage'
+import { couldntSave, errorMessage } from '@/lib/errorMessage'
+import { previewRows } from '@/lib/playlistPreview'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 
@@ -36,8 +37,8 @@ const SYNCS: Record<PlexSyncKind, { label: string; description: string }> = {
 }
 
 const WATCHED_CHOICES: { value: PlexPlaylistWatched; label: string }[] = [
-  { value: 'keep', label: 'Stay in the playlist' },
-  { value: 'drop', label: 'Drop out' },
+  { value: 'keep', label: 'Keep them' },
+  { value: 'drop', label: 'Remove them' },
 ]
 
 const ORDER_CHOICES: { value: PlexPlaylistOrder; label: string }[] = [
@@ -117,10 +118,18 @@ export function PlexSettingsView() {
         </SettingsCard>
       )}
       {status?.configured && preferences && (
-        <SettingsCard title="Category playlists">
+        <SettingsCard
+          title="Category playlists"
+          description={
+            <p>
+              Each category becomes a smart playlist in Plex with all its episodes. These options
+              apply to every category playlist.
+            </p>
+          }
+        >
           {saveError && (
             <p role="alert" className="text-sm text-destructive">
-              Failed to save: {saveError}
+              {couldntSave(saveError)}
             </p>
           )}
           <PlaylistOptions preferences={preferences} onSave={(patch) => void save(patch)} />
@@ -267,24 +276,78 @@ function PlaylistOptions({
           Category playlists need categories on, in General settings.
         </p>
       )}
-      <p className="text-muted-foreground">
-        With categories on, each category becomes a smart playlist in Plex with all its episodes.
-        These options apply to every category playlist.
-      </p>
-      <Segmented
-        name="Watched episodes"
-        choices={WATCHED_CHOICES}
-        value={preferences.plex_playlist_watched}
-        disabled={disabled}
-        onChange={(value) => onSave({ plex_playlist_watched: value })}
-      />
-      <Segmented
-        name="Order"
-        choices={ORDER_CHOICES}
-        value={preferences.plex_playlist_order}
-        disabled={disabled}
-        onChange={(value) => onSave({ plex_playlist_order: value })}
-      />
+      <div className="flex flex-wrap gap-8">
+        <div className="flex min-w-64 flex-1 flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <span className="text-[15px] font-medium text-foreground" aria-hidden="true">
+              Watched episodes
+            </span>
+            <Segmented
+              name="Watched episodes"
+              choices={WATCHED_CHOICES}
+              value={preferences.plex_playlist_watched}
+              disabled={disabled}
+              onChange={(value) => onSave({ plex_playlist_watched: value })}
+            />
+            <p className="text-muted-foreground">
+              Removing them turns each playlist into a queue of what&apos;s left to watch.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-[15px] font-medium text-foreground" aria-hidden="true">
+              Order
+            </span>
+            <Segmented
+              name="Order"
+              choices={ORDER_CHOICES}
+              value={preferences.plex_playlist_order}
+              disabled={disabled}
+              onChange={(value) => onSave({ plex_playlist_order: value })}
+            />
+          </div>
+        </div>
+        <PlaylistPreview
+          watched={preferences.plex_playlist_watched}
+          order={preferences.plex_playlist_order}
+        />
+      </div>
     </div>
+  )
+}
+
+/** Example episodes of a category playlist, as Plex lists them with the options chosen. */
+function PlaylistPreview({
+  watched,
+  order,
+}: {
+  watched: PlexPlaylistWatched
+  order: PlexPlaylistOrder
+}) {
+  return (
+    <figure
+      aria-label="Preview in Plex"
+      className="m-0 flex min-w-60 flex-1 flex-col gap-1.5 rounded-lg border border-border p-3.5"
+    >
+      <figcaption className="mb-1 text-xs text-muted-foreground" aria-hidden="true">
+        Preview in Plex
+      </figcaption>
+      <ul className="flex flex-col gap-1.5">
+        {previewRows(watched, order).map((row) => (
+          <li
+            key={row.label}
+            className="flex items-center gap-2.5 rounded-md bg-muted/60 px-2.5 py-2 text-sm"
+          >
+            <span aria-hidden="true" className="h-7 w-12 shrink-0 rounded bg-accent" />
+            <span className={row.watched ? 'text-muted-foreground' : 'text-foreground'}>
+              {row.label}
+              {row.watched && ' · Watched'}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {watched === 'drop' && (
+        <p className="mt-1 text-xs text-muted-foreground">Watched episodes are left out.</p>
+      )}
+    </figure>
   )
 }
