@@ -26,6 +26,10 @@ describe('AiSettingsView', () => {
         'Summaries and automatic categorization, run on a local Ollama server or on Anthropic.',
       ),
     ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'AI guide' })).toHaveAttribute(
+      'href',
+      'https://github.com/sergigp/yarrtube/blob/main/doc/AI.md',
+    )
     expect(
       within(screen.getByRole('group', { name: 'Provider' })).queryByRole('switch'),
     ).not.toBeInTheDocument()

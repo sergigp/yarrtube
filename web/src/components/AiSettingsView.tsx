@@ -62,8 +62,21 @@ export function AiSettingsView() {
   )
 }
 
-const AI_DESCRIPTION =
-  'Summaries and automatic categorization, run on a local Ollama server or on Anthropic.'
+const AI_GUIDE_URL = 'https://github.com/sergigp/yarrtube/blob/main/doc/AI.md'
+
+const AI_DESCRIPTION = (
+  <>
+    Summaries and automatic categorization, run on a local Ollama server or on Anthropic.{' '}
+    <a
+      href={AI_GUIDE_URL}
+      target="_blank"
+      rel="noreferrer"
+      className="text-primary underline-offset-4 hover:underline"
+    >
+      AI guide
+    </a>
+  </>
+)
 
 /** The form, filled once from the saved preferences. */
 function AiSettings({ saved }: { saved: Preferences }) {

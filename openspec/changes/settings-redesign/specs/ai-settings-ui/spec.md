@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: AI Page
-The web UI SHALL show, as the Settings page's "AI" section at `/settings/ai`, a page titled "AI". Beside the title SHALL be an "AI features" switch. Under the title SHALL be "Summaries and automatic categorization, run on a local Ollama server or on Anthropic." Below them SHALL come these cards, in order:
+The web UI SHALL show, as the Settings page's "AI" section at `/settings/ai`, a page titled "AI". Beside the title SHALL be an "AI features" switch. Under the title SHALL be "Summaries and automatic categorization, run on a local Ollama server or on Anthropic." and an "AI guide" link to `doc/AI.md` on GitHub. Below them SHALL come these cards, in order:
 - "Provider": the provider choice described in "Provider Choice", plus, while Ollama is selected, an "Ollama URL" field and a "Test connection" button.
 - "Summaries".
 - "Categorization", as "Categorization Section" describes.
