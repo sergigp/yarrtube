@@ -50,8 +50,9 @@ pub trait PlexLibraryRepository: Send + Sync {
     ) -> anyhow::Result<()>;
     /// The token user's video playlists (`GET /playlists?playlistType=video`).
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>>;
-    /// Creates a smart playlist of the section's unwatched episodes labelled
-    /// `label`, newest air date first.
+    /// Creates a smart playlist of the section's episodes labelled `label`,
+    /// watched or not, newest air date first, then highest episode number
+    /// first.
     fn create_smart_playlist(
         &self,
         server_id: &str,
@@ -465,13 +466,15 @@ fn label_edit_query(
     .collect()
 }
 
-/// The library URI a smart playlist filters: the section's unwatched
-/// episodes labelled `label`, newest air date first. A space in it is
-/// `%20`, as python-plexapi sends it, not the form encoding's `+`.
+/// The library URI a smart playlist filters: the section's episodes
+/// labelled `label`, watched or not, newest air date first, then highest
+/// episode number first (a channel's same-day episodes newest first). A
+/// space in it is `%20`, as python-plexapi sends it, not the form
+/// encoding's `+`.
 fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> String {
     format!(
         "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all\
-         ?type=4&episode.label={}&episode.unwatched=1&sort=originallyAvailableAt%3Adesc",
+         ?type=4&episode.label={}&sort=originallyAvailableAt%3Adesc%2Cindex%3Adesc",
         plex_escaped(label)
     )
 }
@@ -1270,8 +1273,8 @@ mod tests {
                 mockito::Matcher::UrlEncoded(
                     "uri".into(),
                     "server://abc123/com.plexapp.plugins.library/library/sections/19/all\
-                     ?type=4&episode.label=Sci%20%26%20Tech&episode.unwatched=1\
-                     &sort=originallyAvailableAt%3Adesc"
+                     ?type=4&episode.label=Sci%20%26%20Tech\
+                     &sort=originallyAvailableAt%3Adesc%2Cindex%3Adesc"
                         .into(),
                 ),
             ]))

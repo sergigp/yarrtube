@@ -96,8 +96,11 @@ Good to know:
 
 ## In Plex
 
-Each category becomes a **smart playlist** in Plex: its unwatched episodes,
-newest first, across all its channels and playlists.
+Each category becomes a **smart playlist** in Plex: all its episodes,
+newest first, across all its channels and playlists, like its page in the
+web UI. Watched episodes stay in it, shown as watched. A channel's episodes
+from the same day are newest first; episodes of different shows on the
+same day are in Plex's own order.
 
 It needs the Plex integration working: a TV Shows library and the scan
 trigger, steps 1 and 2 of the [Plex guide](PLEX.md). Nothing else to set up.
