@@ -36,8 +36,8 @@ Preferences (`http/preferences`)
 - [x] 2.21 `it_should_save_a_plex_playlist_preference`
 - [x] 2.22 `it_should_reject_an_invalid_plex_playlist_order`
 - [x] 2.23 `it_should_request_a_label_sync_now_when_a_playlist_preference_changes`
-- [ ] 2.24 `it_should_not_request_a_label_sync_when_a_playlist_preference_is_saved_unchanged`
-- [ ] 2.25 `it_should_save_a_playlist_preference_without_plex_configured`
+- [x] 2.24 `it_should_not_request_a_label_sync_when_a_playlist_preference_is_saved_unchanged`
+- [x] 2.25 `it_should_save_a_playlist_preference_without_plex_configured`
 
 Web (Vitest), one red-green-refactor cycle each
 - [ ] 2.26 `lib/plexStatus.test.ts` — `plexVersionLabel` drops the build suffix.
