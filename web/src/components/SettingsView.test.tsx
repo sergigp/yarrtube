@@ -26,6 +26,24 @@ describe('SettingsView', () => {
       screen.getAllByRole('link').map((link) => link.textContent),
     ).toEqual(['General', 'AI', 'Plex'])
   })
+
+  it.each([
+    ['/settings', '/settings/general', 'General'],
+    ['/preferences', '/settings/general', 'General'],
+    ['/ai', '/settings/ai', 'AI'],
+  ])('opens %s at %s', async (route, expected, section) => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+
+    renderSettings(route)
+
+    expect(await screen.findByRole('link', { name: section })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
+      new RegExp(`^${expected}$`),
+    )
+  })
 })
 
 function renderSettings(route: string) {
