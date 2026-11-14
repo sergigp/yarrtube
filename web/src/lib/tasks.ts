@@ -231,9 +231,74 @@ export function sectionOf(task: Task, now: Date): TaskSectionId {
   return new Date(task.run_at).getTime() - now.getTime() <= HOUR_MS ? 'nextHour' : 'later'
 }
 
-/** The tasks in run-time order, reconciles due close together grouped into batches. */
+/** Reconciles due within this long of the previous one join its batch. */
+const BATCH_GAP_MS = 10 * 60 * 1000
+
+/**
+ * The tasks in run-time order, pending reconciles without an error that are
+ * each due within 10 minutes of the previous one grouped into batches of two
+ * or more. A batch takes the place of its first reconcile.
+ */
 export function batchReconciles(tasks: Task[]): TaskEntry[] {
-  return tasks.map((task) => ({ kind: 'task', task }))
+  const sorted = [...tasks].sort(byRunAt)
+  const chains = chainReconciles(sorted.filter(isBatchable))
+  const batched = new Set(chains.flat().map((task) => task.id))
+  const batchByFirst = new Map(chains.map((chain) => [chain[0].id, chain]))
+
+  return sorted.flatMap((task): TaskEntry[] => {
+    const chain = batchByFirst.get(task.id)
+    if (chain) {
+      return [{ kind: 'batch', tasks: chain, sources: chain.map(batchSource), runAt: task.run_at }]
+    }
+    return batched.has(task.id) ? [] : [{ kind: 'task', task }]
+  })
+}
+
+function isBatchable(task: Task): boolean {
+  return (
+    (task.task_type === 'reconcile_playlist' || task.task_type === 'reconcile_channel') &&
+    task.status !== 'running' &&
+    !task.last_error
+  )
+}
+
+/** Runs of reconciles each due within the gap of the previous, of two or more. */
+function chainReconciles(reconciles: Task[]): Task[][] {
+  const chains = reconciles.reduce<Task[][]>((chains, task) => {
+    const last = chains.at(-1)
+    const previous = last?.at(-1)
+    if (last && previous && runAtMs(task) - runAtMs(previous) <= BATCH_GAP_MS) {
+      last.push(task)
+    } else {
+      chains.push([task])
+    }
+    return chains
+  }, [])
+  return chains.filter((chain) => chain.length >= 2)
+}
+
+function batchSource(task: Task): BatchSource {
+  return task.task_type === 'reconcile_playlist'
+    ? {
+        taskId: task.id,
+        name: task.payload.playlist_name ?? 'an unknown playlist',
+        kind: 'playlist',
+        sourceId: task.payload.playlist_id ?? '',
+      }
+    : {
+        taskId: task.id,
+        name: task.payload.channel_name ?? 'an unknown channel',
+        kind: 'channel',
+        sourceId: task.payload.channel_id ?? '',
+      }
+}
+
+function runAtMs(task: Task): number {
+  return new Date(task.run_at).getTime()
+}
+
+function byRunAt(a: Task, b: Task): number {
+  return runAtMs(a) - runAtMs(b)
 }
 
 /** The chips and sections the Tasks view shows. */

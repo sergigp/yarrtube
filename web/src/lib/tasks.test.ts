@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  batchReconciles,
   byCategory,
   describeTask,
   matchesTask,
@@ -311,5 +312,73 @@ describe('sectionOf', () => {
 
   it('puts a pending task due in over an hour under later', () => {
     expect(sectionOf(aTask({ run_at: '2026-11-14T21:04:00Z' }), now)).toBe('later')
+  })
+})
+
+describe('batchReconciles', () => {
+  const channelCheck = (id: number, name: string, run_at: string) =>
+    aTask({ id, task_type: 'reconcile_channel', run_at, payload: { channel_id: `@${name}`, channel_name: name } })
+  const playlistCheck = (id: number, name: string, run_at: string) =>
+    aTask({ id, task_type: 'reconcile_playlist', run_at, payload: { playlist_id: `PL${id}`, playlist_name: name } })
+
+  it('groups reconciles each due within 10 minutes of the previous one into one batch', () => {
+    const tasks = [
+      playlistCheck(3, 'chess', '2026-11-14T20:22:00Z'),
+      channelCheck(1, '3Blue1Brown', '2026-11-14T20:20:00Z'),
+      channelCheck(2, 'Eric Rosen', '2026-11-14T20:21:00Z'),
+    ]
+
+    expect(batchReconciles(tasks)).toEqual([
+      {
+        kind: 'batch',
+        tasks: [tasks[1], tasks[2], tasks[0]],
+        runAt: '2026-11-14T20:20:00Z',
+        sources: [
+          { taskId: 1, name: '3Blue1Brown', kind: 'channel', sourceId: '@3Blue1Brown' },
+          { taskId: 2, name: 'Eric Rosen', kind: 'channel', sourceId: '@Eric Rosen' },
+          { taskId: 3, name: 'chess', kind: 'playlist', sourceId: 'PL3' },
+        ],
+      },
+    ])
+  })
+
+  it('splits a chain where the gap is over 10 minutes', () => {
+    const tasks = [
+      channelCheck(1, 'A', '2026-11-14T20:00:00Z'),
+      channelCheck(2, 'B', '2026-11-14T20:10:00Z'),
+      channelCheck(3, 'C', '2026-11-14T20:20:01Z'),
+      channelCheck(4, 'D', '2026-11-14T20:25:00Z'),
+    ]
+
+    expect(
+      batchReconciles(tasks).map((entry) =>
+        entry.kind === 'batch' ? entry.tasks.map((task) => task.id) : entry.task.id,
+      ),
+    ).toEqual([
+      [1, 2],
+      [3, 4],
+    ])
+  })
+
+  it('keeps a lone reconcile and every other task as their own entries, in run-time order', () => {
+    const download = aTask({ id: 2, task_type: 'download_video', run_at: '2026-11-14T20:05:00Z' })
+    const lone = channelCheck(1, 'A', '2026-11-14T20:00:00Z')
+
+    expect(batchReconciles([download, lone])).toEqual([
+      { kind: 'task', task: lone },
+      { kind: 'task', task: download },
+    ])
+  })
+
+  it('never batches an errored or running reconcile', () => {
+    const errored = { ...channelCheck(1, 'A', '2026-11-14T20:00:00Z'), last_error: 'boom' }
+    const running = { ...channelCheck(2, 'B', '2026-11-14T20:01:00Z'), status: 'running' }
+    const pending = channelCheck(3, 'C', '2026-11-14T20:02:00Z')
+
+    expect(batchReconciles([errored, running, pending])).toEqual([
+      { kind: 'task', task: errored },
+      { kind: 'task', task: running },
+      { kind: 'task', task: pending },
+    ])
   })
 })
