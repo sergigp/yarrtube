@@ -97,7 +97,9 @@ export function fetchPlexStatus(): Promise<PlexStatus> {
 }
 
 /** Makes the `kind` Plex sync due now. */
-export async function requestPlexSync(_kind: PlexSyncKind): Promise<void> {}
+export async function requestPlexSync(kind: PlexSyncKind): Promise<void> {
+  await send(`/plex/syncs/${kind}`, { method: 'POST', label: `Plex ${kind} sync` })
+}
 
 /** Changes only the preferences in `patch`; resolves with every preference. */
 export function patchPreferences(patch: PreferencesPatch): Promise<Preferences> {

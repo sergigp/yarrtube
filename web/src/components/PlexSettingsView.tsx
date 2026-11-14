@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { PlexConnection, PlexSync, PlexSyncKind } from '@/api/types'
-import { usePlexStatus } from '@/api/queries'
-import { plexVersionLabel, relativeTime } from '@/lib/plexStatus'
+import { usePlexStatus, useRequestPlexSync } from '@/api/queries'
+import { isSyncing, plexVersionLabel, relativeTime } from '@/lib/plexStatus'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
@@ -89,6 +89,15 @@ function ConnectionStatus({ connection }: { connection: PlexConnection }) {
 
 function SyncRow({ sync }: { sync: PlexSync }) {
   const label = SYNC_LABELS[sync.kind]
+  const requestSync = useRequestPlexSync()
+  const [requestedAt, setRequestedAt] = useState<Date | null>(null)
+  const syncing = isSyncing(sync, requestedAt)
+
+  async function syncNow() {
+    setRequestedAt(new Date())
+    await requestSync(sync.kind)
+  }
+
   return (
     <div
       role="group"
@@ -107,8 +116,8 @@ function SyncRow({ sync }: { sync: PlexSync }) {
           <p className="text-muted-foreground">Next run {relativeTime(sync.next_run_at)}</p>
         )}
       </div>
-      <Button variant="outline" size="sm">
-        Sync now
+      <Button variant="outline" size="sm" disabled={syncing} onClick={() => void syncNow()}>
+        {syncing ? 'Syncing…' : 'Sync now'}
       </Button>
     </div>
   )

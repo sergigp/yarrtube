@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { PlexSettingsView } from './PlexSettingsView'
 import {
   aPlexConnection,
   aPlexStatus,
   aPlexSync,
   aPreferences,
+  heldUntilReleased,
   mockApi,
   renderWithProviders,
 } from '@/test/helpers'
@@ -130,6 +132,35 @@ describe('PlexSettingsView', () => {
       'Next run in 10 minutes',
     ])
     expect(within(watchState).getByRole('button', { name: 'Sync now' })).toBeEnabled()
+  })
+
+  it('runs a sync now and shows it syncing until a newer run finishes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-11-14T10:00:00Z'))
+    let lastRunAt = '2026-11-14T09:58:00Z'
+    const post = heldUntilReleased()
+    const fetchMock = mockApi({
+      'GET /api/plex': () =>
+        aPlexStatus({ syncs: [aPlexSync({ kind: 'watch_state', last_run_at: lastRunAt })] }),
+      'POST /api/plex/syncs/watch_state': post.route,
+      'GET /api/preferences': aPreferences(),
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const watchState = await screen.findByRole('group', { name: 'Watch state' })
+
+    await user.click(within(watchState).getByRole('button', { name: 'Sync now' }))
+
+    expect(within(watchState).getByRole('button', { name: 'Syncing…' })).toBeDisabled()
+    await waitFor(() => expect(post.route).toHaveBeenCalled())
+    lastRunAt = '2026-11-14T10:00:30Z'
+    post.release()
+    await waitFor(() =>
+      expect(within(watchState).getByRole('button', { name: 'Sync now' })).toBeEnabled(),
+    )
+    expect(fetchMock).toHaveBeenCalledWith('/api/plex/syncs/watch_state', {
+      method: 'POST',
+    })
   })
 })
 
