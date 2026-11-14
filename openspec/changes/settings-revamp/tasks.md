@@ -47,7 +47,7 @@ Web (Vitest), one red-green-refactor cycle each
 - [x] 2.30 `SettingsView.test.tsx` — `/settings` opens General; `/preferences` and `/ai` redirect.
 - [x] 2.31 `PreferencesView.test.tsx` — headed "General", "Saved" next to it (adapt existing tests).
 - [x] 2.32 Source dialog tests — "AI settings" links to `/settings/ai` (adapt existing tests).
-- [ ] 2.33 `PlexSettingsView.test.tsx` — not configured: the three variables, the guide link, no "Sync now".
+- [x] 2.33 `PlexSettingsView.test.tsx` — not configured: the three variables, the guide link, no "Sync now".
 - [ ] 2.34 `PlexSettingsView.test.tsx` — connected: "Connected", "Plex Media Server 1.43.5.11079", libraries, relative time.
 - [ ] 2.35 `PlexSettingsView.test.tsx` — unreachable: "Can't reach Plex", the error, last seen version.
 - [ ] 2.36 `PlexSettingsView.test.tsx` — no sync yet: status shows after the first sync.
