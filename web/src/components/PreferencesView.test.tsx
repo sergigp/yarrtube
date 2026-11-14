@@ -105,7 +105,7 @@ describe('PreferencesView', () => {
     expect(screen.getByRole('switch', { name: 'Quick watches' })).toBeChecked()
   })
 
-  it('disables the home category switch while categories are off', async () => {
+  it('disables More about while categories are off', async () => {
     mockApi({
       'GET /api/preferences': aPreferences({
         categories_enabled: false,
