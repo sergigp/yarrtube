@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { usePlexStatus, usePreferences } from '@/api/queries'
+import { aiStatus, plexStatus } from '@/lib/settingsStatus'
 
 const SECTIONS = [
   { path: 'general', label: 'General' },
@@ -12,6 +14,13 @@ const SECTIONS = [
  * wide viewports and a row of tabs above it on narrow ones.
  */
 export function SettingsView() {
+  const { data: preferences } = usePreferences()
+  const { data: plex } = usePlexStatus()
+  const statuses: Record<string, string | null> = {
+    general: null,
+    ai: aiStatus(preferences),
+    plex: plexStatus(plex),
+  }
   return (
     <div className="flex w-full flex-col gap-6 md:flex-row md:gap-10">
       <nav
@@ -33,6 +42,7 @@ export function SettingsView() {
             }
           >
             {label}
+            {statuses[path] && <span>{statuses[path]}</span>}
           </NavLink>
         ))}
       </nav>

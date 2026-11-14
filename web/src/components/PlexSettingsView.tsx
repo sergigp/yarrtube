@@ -1,4 +1,6 @@
-import { SettingsSection } from '@/components/SettingsSection'
+import { SettingsCard } from '@/components/SettingsCard'
+import { PageHeader } from '@/components/PageHeader'
+import { Segmented } from '@/components/Segmented'
 import { useState } from 'react'
 import type {
   PlexConnection,
@@ -9,7 +11,6 @@ import type {
   Preferences,
   PreferencesPatch,
 } from '@/api/types'
-import { Check } from 'lucide-react'
 import {
   usePlexStatus,
   usePreferences,
@@ -60,23 +61,13 @@ export function PlexSettingsView() {
 
   return (
     <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="font-heading text-xl font-semibold text-foreground">Plex</h1>
-        <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
-          {saved.shown && (
-            <>
-              <Check className="size-4" aria-hidden="true" />
-              Saved
-            </>
-          )}
-        </p>
-      </div>
+      <PageHeader title="Plex" saved={saved.shown} />
       {error && (
         <p className="text-sm text-destructive">Failed to load the Plex status: {error.message}</p>
       )}
       {status && !status.configured && <NotConfigured />}
       {status?.configured && (
-        <SettingsSection title="Connection">
+        <SettingsCard title="Connection">
           {status.connection ? (
             <ConnectionStatus connection={status.connection} />
           ) : (
@@ -84,24 +75,24 @@ export function PlexSettingsView() {
               The connection shows here after the first Plex sync.
             </p>
           )}
-        </SettingsSection>
+        </SettingsCard>
       )}
       {status?.configured && (
-        <SettingsSection title="Syncs">
+        <SettingsCard title="Syncs">
           {status.syncs.map((sync) => (
             <SyncRow key={sync.kind} sync={sync} />
           ))}
-        </SettingsSection>
+        </SettingsCard>
       )}
       {status?.configured && preferences && (
-        <SettingsSection title="Category playlists">
+        <SettingsCard title="Category playlists">
           {saveError && (
             <p role="alert" className="text-sm text-destructive">
               Failed to save: {saveError}
             </p>
           )}
           <PlaylistOptions preferences={preferences} onSave={(patch) => void save(patch)} />
-        </SettingsSection>
+        </SettingsCard>
       )}
     </div>
   )
@@ -215,14 +206,14 @@ function PlaylistOptions({
         With categories on, each category becomes a smart playlist in Plex with all its episodes.
         These options apply to every category playlist.
       </p>
-      <Choice
+      <Segmented
         name="Watched episodes"
         choices={WATCHED_CHOICES}
         value={preferences.plex_playlist_watched}
         disabled={disabled}
         onChange={(value) => onSave({ plex_playlist_watched: value })}
       />
-      <Choice
+      <Segmented
         name="Order"
         choices={ORDER_CHOICES}
         value={preferences.plex_playlist_order}
@@ -232,41 +223,3 @@ function PlaylistOptions({
     </div>
   )
 }
-
-function Choice<T extends string>({
-  name,
-  choices,
-  value,
-  disabled,
-  onChange,
-}: {
-  name: string
-  choices: { value: T; label: string }[]
-  value: T
-  disabled: boolean
-  onChange: (value: T) => void
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="font-medium text-foreground" aria-hidden="true">
-        {name}
-      </span>
-      <div role="radiogroup" aria-label={name} className="flex flex-wrap gap-x-6 gap-y-2">
-        {choices.map((choice) => (
-          <label key={choice.value} className="flex items-center gap-2">
-            <input
-              type="radio"
-              name={name}
-              value={choice.value}
-              checked={value === choice.value}
-              disabled={disabled}
-              onChange={() => onChange(choice.value)}
-            />
-            {choice.label}
-          </label>
-        ))}
-      </div>
-    </div>
-  )
-}
-

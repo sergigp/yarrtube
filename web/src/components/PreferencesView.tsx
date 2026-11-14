@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Check } from 'lucide-react'
 import { usePreferences, useSavePreferences } from '@/api/queries'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { PreferenceHelp } from '@/components/PreferenceHelp'
+import { PageHeader } from '@/components/PageHeader'
+import { SettingsCard } from '@/components/SettingsCard'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { errorMessage } from '@/lib/errorMessage'
@@ -99,17 +100,7 @@ export function PreferencesView() {
   return (
     <TooltipProvider>
       <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="font-heading text-xl font-semibold text-foreground">General</h1>
-          <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
-            {saved.shown && (
-              <>
-                <Check className="size-4" aria-hidden="true" />
-                Saved
-              </>
-            )}
-          </p>
-        </div>
+        <PageHeader title="General" saved={saved.shown} />
         {error && (
           <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
         )}
@@ -123,13 +114,15 @@ export function PreferencesView() {
         )}
         {preferences &&
           GROUPS.map((group) => (
-            <fieldset key={group.title} className="flex flex-col gap-4">
-              <legend className="mb-4 font-heading text-lg font-semibold text-foreground">
-                {group.title}
-              </legend>
-              {group.description && (
-                <p className="-mt-2 text-sm text-muted-foreground">{group.description}</p>
-              )}
+            <SettingsCard
+              key={group.title}
+              title={group.title}
+              description={
+                group.description && (
+                  <p className="-mt-2 text-sm text-muted-foreground">{group.description}</p>
+                )
+              }
+            >
               {group.switches.map(({ key, label, help, needsCategories }) => (
                 <div key={key} className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-1.5">
@@ -144,7 +137,7 @@ export function PreferencesView() {
                   />
                 </div>
               ))}
-            </fieldset>
+            </SettingsCard>
           ))}
       </div>
     </TooltipProvider>

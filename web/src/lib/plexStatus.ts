@@ -30,3 +30,8 @@ export function relativeTime(at: string, now: Date = new Date()): string {
     unit,
   )
 }
+
+/** A sync's last and next run, or its failure and retry, on one line. */
+export function syncStatusLine(_sync: PlexSync, _now: Date = new Date()): string {
+  return ''
+}

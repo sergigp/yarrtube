@@ -1,4 +1,7 @@
-import { SettingsSection } from '@/components/SettingsSection'
+import { SettingsCard } from '@/components/SettingsCard'
+import { SaveBar } from '@/components/SaveBar'
+import { PromptDisclosure } from '@/components/PromptDisclosure'
+import { changedSettingNames } from '@/lib/aiChanges'
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import {
@@ -186,7 +189,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
   return (
     <>
-      <SettingsSection title="Provider">
+      <SettingsCard title="Provider">
         <SwitchRow
           id="ai-enabled"
           label="Enable AI"
@@ -239,8 +242,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
             <ConnectionMessage connection={connection} />
           </div>
         )}
-      </SettingsSection>
-      <SettingsSection title="Summaries">
+      </SettingsCard>
+      <SettingsCard title="Summaries">
         <SwitchRow
           id="summaries-enabled"
           label="Enabled"
@@ -305,6 +308,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     />
                   </>
                 )}
+                <PromptDisclosure isDefault={saved.summaries_prompt_is_default}>
                 <PromptField
                   id="summaries-prompt"
                   help={<PromptHelp />}
@@ -320,13 +324,14 @@ function AiSettings({ saved }: { saved: Preferences }) {
                   onChange={(value) => set('summaries_prompt', value)}
                   onReset={() => void resetPrompt()}
                 />
+                </PromptDisclosure>
               </>
             )}
           </>
         )}
-      </SettingsSection>
+      </SettingsCard>
       {saved.categories_enabled && (
-        <SettingsSection title="Categorization">
+        <SettingsCard title="Categorization">
           <SwitchRow
             id="categorization-enabled"
             label="Enabled"
@@ -414,6 +419,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
                       />
                     </>
                   )}
+                  <PromptDisclosure isDefault={saved.categorization_prompt_is_default}>
                   <PromptField
                     id="categorization-prompt"
                     name="Categorization prompt"
@@ -429,12 +435,20 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     onChange={(value) => set('categorization_prompt', value)}
                     onReset={() => void resetCategorizationPrompt()}
                   />
+                  </PromptDisclosure>
                 </>
               )}
             </>
           )}
-        </SettingsSection>
+        </SettingsCard>
       )}
+      <SaveBar
+        changes={changedSettingNames(patch)}
+        error={saveError}
+        saving={saving}
+        onDiscard={() => setForm(formFrom(saved))}
+        onSave={save}
+      />
       <div className="flex items-center justify-end gap-4">
         {saveError && (
           <p role="alert" className="mr-auto text-sm text-destructive">
