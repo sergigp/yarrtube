@@ -178,7 +178,14 @@ impl Preferences {
                     .anthropic_categorization_effort
                     .unwrap_or(self.anthropic.categorization_effort),
             },
-            plex_playlists: self.plex_playlists,
+            plex_playlists: PlexPlaylistSettings {
+                watched: change
+                    .plex_playlist_watched
+                    .unwrap_or(self.plex_playlists.watched),
+                order: change
+                    .plex_playlist_order
+                    .unwrap_or(self.plex_playlists.order),
+            },
         }
         .ensure_ai_has_url()
     }

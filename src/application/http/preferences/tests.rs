@@ -3,8 +3,8 @@ use crate::application::http::test_support::categorization_resetter;
 use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryName, CategoryPrompt};
 use crate::domain::llm_server::Effort;
 use crate::domain::preferences::{
-    AiProvider, AnthropicSettings, CategorizationSettings, Preferences, ResolvedPreferences,
-    SummarySettings,
+    AiProvider, AnthropicSettings, CategorizationSettings, PlaylistOrder, PlaylistWatched,
+    PlexPlaylistSettings, Preferences, ResolvedPreferences, SummarySettings,
 };
 use crate::domain::video::{StepState, Video, VideoId, YoutubeVideoId};
 use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
@@ -1658,6 +1658,37 @@ async fn it_should_read_the_plex_playlist_preferences_as_their_defaults() {
             plex_playlist_watched: "keep".to_string(),
             plex_playlist_order: "newest_first".to_string(),
             ..all_on_response()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_save_a_plex_playlist_preference() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let preferences_updater = preferences_updater(&db, repository.clone());
+    let request = UpdatePreferencesRequest {
+        plex_playlist_watched: Some("drop".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            plex_playlist_watched: "drop".to_string(),
+            ..all_on_response()
+        })
+    );
+    assert_eq!(
+        repository.find().unwrap(),
+        Some(Preferences {
+            plex_playlists: PlexPlaylistSettings {
+                watched: PlaylistWatched::Drop,
+                ..PlexPlaylistSettings::default()
+            },
+            ..Preferences::default()
         })
     );
 }
