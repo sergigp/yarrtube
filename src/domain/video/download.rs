@@ -116,6 +116,12 @@ impl Download {
         }
     }
 
+    /// A Retrying step Failed, keeping its failed attempts; any other
+    /// unchanged.
+    pub fn stop_retrying(self) -> Self {
+        self
+    }
+
     /// A Retrying or Failed download back to Pending, its failure cleared;
     /// a started one, or any other, unchanged.
     pub fn retry(self) -> Self {

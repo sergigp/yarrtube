@@ -26,6 +26,8 @@ pub trait TaskRepository: Send + Sync {
     /// Every task that has not yet completed (`pending` or `running`),
     /// regardless of scheduled run time.
     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>>;
+    /// The pending tasks among `ids`; running or unknown ids are skipped.
+    fn list_pending_by_ids(&self, ids: &[i64]) -> anyhow::Result<Vec<ScheduledTask>>;
     /// The pending task with this type and payload, if any.
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>>;
     /// The pending or running task of `task_type` for `video_id`, if any.
@@ -165,6 +167,10 @@ impl TaskRepository for SqliteTaskRepository {
 
     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
         self.list_where("status IN ('pending', 'running')")
+    }
+
+    fn list_pending_by_ids(&self, _ids: &[i64]) -> anyhow::Result<Vec<ScheduledTask>> {
+        Ok(vec![])
     }
 
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>> {

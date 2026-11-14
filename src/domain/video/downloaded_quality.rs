@@ -85,6 +85,12 @@ impl DownloadedQuality {
         self.record_outcome(outcome, published_at, now)
     }
 
+    /// A Retrying step Failed, keeping its failed attempts; any other
+    /// unchanged.
+    pub fn stop_retrying(self) -> Self {
+        self
+    }
+
     /// A Retrying or Failed quality back to Pending, never checked; any
     /// other unchanged.
     pub fn retry(self) -> Self {

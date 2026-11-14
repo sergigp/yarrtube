@@ -174,3 +174,65 @@ export function byCategory(a: Task, b: Task): number {
   }
   return new Date(a.run_at).getTime() - new Date(b.run_at).getTime()
 }
+
+export type TaskFilter = 'all' | 'downloads' | 'syncs' | 'ai' | 'upkeep'
+export type TaskSectionId = 'running' | 'attention' | 'nextHour' | 'later'
+
+export interface BatchSource {
+  taskId: number
+  name: string
+  kind: 'channel' | 'playlist'
+  sourceId: string
+}
+
+export type TaskEntry =
+  | { kind: 'task'; task: Task }
+  | { kind: 'batch'; tasks: Task[]; sources: BatchSource[]; runAt: string }
+
+export interface TaskSection {
+  id: TaskSectionId
+  entries: TaskEntry[]
+}
+
+export interface FilterChip {
+  filter: TaskFilter
+  count: number
+}
+
+export interface TaskListModel {
+  chips: FilterChip[]
+  sections: TaskSection[]
+}
+
+/** Whether the task works on one video. */
+export function isPerVideoTask(_task: Task): boolean {
+  return false
+}
+
+/** Whether the task offers a Run now (or Sync now) action. */
+export function offersRunNow(_task: Task): boolean {
+  return false
+}
+
+/** Which section of the list the task belongs in at `now`. */
+export function sectionOf(_task: Task, _now: Date): TaskSectionId {
+  return 'later'
+}
+
+/** The tasks in run-time order, reconciles due close together grouped into batches. */
+export function batchReconciles(tasks: Task[]): TaskEntry[] {
+  return tasks.map((task) => ({ kind: 'task', task }))
+}
+
+/** The chips and sections the Tasks view shows. */
+export function buildTaskList(
+  _tasks: Task[],
+  _options: { filter: TaskFilter; query: string; aiEnabled: boolean; now: Date },
+): TaskListModel {
+  return { chips: [], sections: [] }
+}
+
+/** One sentence saying what is happening now. */
+export function statusLine(_tasks: Task[], _now: Date): string {
+  return ''
+}

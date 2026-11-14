@@ -275,6 +275,7 @@ export function aTask(overrides: Partial<Task> = {}): Task {
     retries: 0,
     run_at: '2026-01-01T00:00:00Z',
     created_at: '2026-01-01T00:00:00Z',
+    started_at: null,
     last_error: null,
     payload: {},
     ...overrides,

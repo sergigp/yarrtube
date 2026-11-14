@@ -65,7 +65,8 @@ pub use downloaded_video::DownloadedVideo;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
 pub use errors::{
-    ListVideosError, ReadSubtitlesError, RetryVideoError, StaleVideo, UpdateWatchStateError,
+    ListVideosError, ReadSubtitlesError, RetryVideoError, StaleVideo, StopRetryingVideoError,
+    UpdateWatchStateError,
 };
 pub use events::{VideoDownloaded, VideoSubtitlesFetched, VideoSummaryGenerated};
 pub use fetched_thumbnail::FetchedThumbnail;

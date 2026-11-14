@@ -1024,6 +1024,7 @@ fn pending_task(task_type: &str, payload: &[(&str, &str)]) -> TaskResponse {
         retries: 0,
         run_at: fixed_timestamp(),
         created_at: fixed_timestamp(),
+        started_at: None,
         last_error: None,
         payload: payload
             .iter()

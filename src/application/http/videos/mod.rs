@@ -9,12 +9,13 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     SubtitleReader, SubtitleReaderApi, VideoCategoryChoiceSearcher, VideoCategoryChoiceSearcherApi,
-    VideoCategoryEditor, VideoCategoryEditorApi, VideoRetrier, VideoRetrierApi, VideoSearcher,
-    VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    VideoCategoryEditor, VideoCategoryEditorApi, VideoRetrier, VideoRetrierApi, VideoRetryStopper,
+    VideoRetryStopperApi, VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
     HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, RetryVideoError,
-    UpdateWatchStateError, VideoDuration, VideoId, VideoSearchText, WebVtt,
+    StopRetryingVideoError, UpdateWatchStateError, VideoDuration, VideoId, VideoSearchText, WebVtt,
 };
 use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
@@ -214,6 +215,22 @@ pub async fn retry_video(
         .map_err(|error| match error {
             e @ RetryVideoError::VideoNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
             e @ RetryVideoError::Repository(_) => ApiError::internal(e),
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn stop_retrying_video(
+    State(video_retry_stopper): State<VideoRetryStopper>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = VideoId::new(id)?;
+
+    run_blocking(move || video_retry_stopper.stop_retrying(&id))
+        .await?
+        .map_err(|error| match error {
+            e @ StopRetryingVideoError::VideoNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+            e @ StopRetryingVideoError::Repository(_) => ApiError::internal(e),
         })?;
 
     Ok(StatusCode::NO_CONTENT)

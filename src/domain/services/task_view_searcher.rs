@@ -69,6 +69,7 @@ impl TaskViewSearcher {
             retries: task.retries,
             run_at: task.run_at,
             created_at: task.created_at,
+            started_at: None,
             last_error: task.last_error,
             payload,
         })

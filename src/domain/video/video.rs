@@ -13,6 +13,7 @@ use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_status::VideoStatus;
+use super::video_sync_step::VideoSyncStep;
 use super::watch_progress::WatchProgress;
 use super::watch_state::WatchState;
 use super::youtube_video_id::YoutubeVideoId;
@@ -130,6 +131,17 @@ impl Video {
             updated_at: now,
             ..self
         }
+    }
+
+    /// Every Retrying step but the categorization Failed, keeping its
+    /// failed attempts — see the `video-retries` capability.
+    pub fn stop_retrying(self, _now: DateTime<Utc>) -> Self {
+        self
+    }
+
+    /// The steps, but the categorization, that are Retrying.
+    pub fn retrying_steps(&self) -> Vec<VideoSyncStep> {
+        vec![]
     }
 
     /// Every Retrying or Failed step back to Pending with no failed
