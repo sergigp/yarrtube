@@ -53,7 +53,7 @@ Web (Vitest), one red-green-refactor cycle each
 - [x] 2.36 `PlexSettingsView.test.tsx` — no sync yet: status shows after the first sync.
 - [x] 2.37 `PlexSettingsView.test.tsx` — sync rows: last run, its error, next run.
 - [x] 2.38 `PlexSettingsView.test.tsx` — "Sync now" POSTs and shows "Syncing…" disabled until a newer run.
-- [ ] 2.39 `PlexSettingsView.test.tsx` — "Sync now" request fails: error shown, button enabled again.
+- [x] 2.39 `PlexSettingsView.test.tsx` — "Sync now" request fails: error shown, button enabled again.
 - [ ] 2.40 `PlexSettingsView.test.tsx` — playlist options: defaults selected; "Drop out" PATCHes only `plex_playlist_watched` and shows "Saved".
 - [ ] 2.41 `PlexSettingsView.test.tsx` — playlist option save fails: error shown, previous choice selected.
 - [ ] 2.42 `PlexSettingsView.test.tsx` — categories off: options disabled with the note.

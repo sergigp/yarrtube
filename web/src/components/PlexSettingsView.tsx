@@ -3,6 +3,7 @@ import type { PlexConnection, PlexSync, PlexSyncKind } from '@/api/types'
 import { usePlexStatus, useRequestPlexSync } from '@/api/queries'
 import { isSyncing, plexVersionLabel, relativeTime } from '@/lib/plexStatus'
 import { Button } from '@/components/ui/button'
+import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 
@@ -91,11 +92,18 @@ function SyncRow({ sync }: { sync: PlexSync }) {
   const label = SYNC_LABELS[sync.kind]
   const requestSync = useRequestPlexSync()
   const [requestedAt, setRequestedAt] = useState<Date | null>(null)
+  const [requestError, setRequestError] = useState<string | null>(null)
   const syncing = isSyncing(sync, requestedAt)
 
   async function syncNow() {
+    setRequestError(null)
     setRequestedAt(new Date())
-    await requestSync(sync.kind)
+    try {
+      await requestSync(sync.kind)
+    } catch (e) {
+      setRequestedAt(null)
+      setRequestError(errorMessage(e))
+    }
   }
 
   return (
@@ -114,6 +122,11 @@ function SyncRow({ sync }: { sync: PlexSync }) {
         </p>
         {sync.next_run_at && (
           <p className="text-muted-foreground">Next run {relativeTime(sync.next_run_at)}</p>
+        )}
+        {requestError && (
+          <p role="alert" className="text-destructive">
+            Couldn&apos;t start the sync: {requestError}
+          </p>
         )}
       </div>
       <Button variant="outline" size="sm" disabled={syncing} onClick={() => void syncNow()}>

@@ -162,6 +162,24 @@ describe('PlexSettingsView', () => {
       method: 'POST',
     })
   })
+
+  it('shows why a sync could not be requested and lets the user try again', async () => {
+    mockApi({
+      'GET /api/plex': aPlexStatus({ syncs: [aPlexSync({ kind: 'labels' })] }),
+      'POST /api/plex/syncs/labels': { status: 500, error: 'database is locked' },
+      'GET /api/preferences': aPreferences(),
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup()
+    const labels = await screen.findByRole('group', { name: 'Labels & playlists' })
+
+    await user.click(within(labels).getByRole('button', { name: 'Sync now' }))
+
+    expect(await within(labels).findByRole('alert')).toHaveTextContent(
+      "Couldn't start the sync: database is locked",
+    )
+    expect(within(labels).getByRole('button', { name: 'Sync now' })).toBeEnabled()
+  })
 })
 
 /** The text of each line (paragraph) in `element`. */
