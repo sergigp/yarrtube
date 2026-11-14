@@ -22,7 +22,6 @@ interface PreferenceGroup {
   title: string
   /** The card's element id, for links to it. */
   id?: string
-  description?: string
   /** `needsCategories` switches are disabled while categories are off. */
   switches: {
     key: PreferenceKey
@@ -49,8 +48,6 @@ const GROUPS: PreferenceGroup[] = [
   {
     title: 'Home sections',
     id: 'home-sections',
-    description:
-      'Shown top to bottom in this order.',
     switches: [
       {
         key: 'home_show_continue_watching',
@@ -126,7 +123,6 @@ export function PreferencesView() {
             key={group.title}
             id={group.id}
             title={group.title}
-            description={group.description}
           >
             <div className="flex flex-col divide-y divide-border">
             {group.switches.map(({ key, label, help, needsCategories, extra }) => (

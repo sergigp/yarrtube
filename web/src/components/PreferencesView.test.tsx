@@ -40,11 +40,7 @@ describe('PreferencesView', () => {
     expect(screen.getByRole('switch', { name: 'Latest videos' })).toHaveAccessibleDescription(
       "Your newest downloads that aren't in a section above.",
     )
-    expect(
-      within(home).getByText(
-        'Shown top to bottom in this order.',
-      ),
-    ).toBeInTheDocument()
+    expect(home).not.toHaveTextContent('Shown top to bottom')
     expect(screen.getByText('Changes save as you make them.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^About / })).not.toBeInTheDocument()
   })

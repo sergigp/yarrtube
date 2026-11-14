@@ -53,8 +53,6 @@ Each preference switch SHALL show its description as text under its label, not i
 - "Quick watches": "Unwatched videos under 15 minutes."
 - "Latest videos": "Your newest downloads that aren't in a section above."
 
-The "Home sections" card SHALL say "Shown top to bottom in this order."
-
 #### Scenario: Explaining a preference
 - **WHEN** a user opens the General section
 - **THEN** "Unwatched videos under 15 minutes." shows under "Quick watches" without any interaction
