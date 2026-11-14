@@ -183,8 +183,8 @@ function NotConfigured() {
               key={variable.name}
               className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2.5"
             >
-              <span className="min-w-0 break-all">
-                <code className="font-mono text-[13px]">{variable.name}</code>
+              <span className="min-w-0">
+                <code className="font-mono text-[13px] break-all">{variable.name}</code>
                 <span className="text-xs text-muted-foreground"> · {variable.description}</span>
               </span>
               <CopyButton text={variable.name} />
