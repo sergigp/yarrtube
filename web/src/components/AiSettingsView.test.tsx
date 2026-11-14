@@ -45,6 +45,19 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
   })
 
+  it('shows no save bar until a field changes', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await screen.findByRole('switch', { name: 'AI features' })
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: 'Ollama URL' }), 'http://mac.local:11434')
+
+    expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument()
+  })
+
   it('describes each provider option', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: true }) })
     renderWithProviders(<AiSettingsView />)
@@ -82,7 +95,7 @@ describe('AiSettingsView', () => {
 
     expect(screen.queryByRole('textbox', { name: 'Ollama URL' })).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('claude-haiku-5-5')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(patchBodies(fetchMock)).toEqual([{ ai_provider: 'anthropic' }])
   })
@@ -128,7 +141,7 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: /thinking/i })).not.toBeInTheDocument()
     await user.selectOptions(screen.getByRole('combobox', { name: 'Effort' }), 'high')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'high' }])
   })
@@ -246,7 +259,7 @@ describe('AiSettingsView', () => {
     const model = screen.getByRole('textbox', { name: 'Categorization model' })
     await user.clear(model)
     await user.type(model, 'gemma3:4b')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(patchBodies(fetchMock)).toEqual([{ categorization_enabled: true, categorization_model: 'gemma3:4b' }])
@@ -268,7 +281,7 @@ describe('AiSettingsView', () => {
     const contextLength = screen.getByRole('spinbutton', { name: 'Categorization context length' })
     await user.clear(contextLength)
     await user.type(contextLength, '8192')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ categorization_context_length: 8192 }])
@@ -346,7 +359,7 @@ describe('AiSettingsView', () => {
       await screen.findByRole('button', { name: 'Advanced categorization settings' }),
     )
     await user.click(screen.getByRole('switch', { name: 'Auto context length' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ categorization_context_length: null }])
@@ -462,17 +475,20 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    const save = await screen.findByRole('button', { name: 'Save' })
-    expect(save).toBeDisabled()
-    await user.type(screen.getByRole('textbox', { name: 'Ollama URL' }), 'http://mac.local:11434')
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Ollama URL' }),
+      'http://mac.local:11434',
+    )
     await user.click(screen.getByRole('switch', { name: 'AI features' }))
-    await user.click(save)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(patchBodies(fetchMock)).toEqual([
       { ai_enabled: true, ollama_url: 'http://mac.local:11434' },
     ])
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled())
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument(),
+    )
   })
 
   it('refetches video lists after saving', async () => {
@@ -494,7 +510,7 @@ describe('AiSettingsView', () => {
     })
 
     await user.click(await screen.findByRole('switch', { name: 'AI features' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(videoListRequests).toBe(2)
@@ -509,7 +525,7 @@ describe('AiSettingsView', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('switch', { name: 'AI features' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Ollama URL must be set to enable AI',
@@ -531,7 +547,7 @@ describe('AiSettingsView', () => {
     const user = userEvent.setup()
 
     await user.clear(await screen.findByRole('spinbutton', { name: 'Temperature' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Context length and temperature must be numbers',
@@ -551,7 +567,7 @@ describe('AiSettingsView', () => {
       await screen.findByRole('button', { name: 'Advanced categorization settings' }),
     )
     await user.clear(screen.getByRole('spinbutton', { name: 'Categorization temperature' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Context length and temperature must be numbers',
@@ -664,7 +680,7 @@ describe('AiSettingsView', () => {
     const url = screen.getByRole('textbox', { name: 'Ollama URL' })
     await user.clear(url)
     await user.type(url, 'http://nas:11434')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
       expect(optionTexts(screen.getByRole('combobox', { name: 'Model' }))).toEqual([
@@ -719,7 +735,7 @@ describe('AiSettingsView', () => {
 
     expect(screen.queryByRole('switch', { name: 'Thinking' })).not.toBeInTheDocument()
     expect(screen.getByText("gemma3:4b doesn't support thinking")).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ summaries_model: 'gemma3:4b' }])
   })
@@ -748,7 +764,7 @@ describe('AiSettingsView', () => {
       screen.queryByRole('switch', { name: 'Categorization thinking' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText("gemma3:4b doesn't support thinking")).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ categorization_model: 'gemma3:4b' }])
   })

@@ -23,7 +23,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 - [x] 2.9 `it counts unsaved changes in singular and plural`
 - [x] 2.10 `it shows the AI features switch beside the title`
 - [x] 2.11 `it describes each provider option`: option cards
-- [ ] 2.12 `it shows no save bar until a field changes`
+- [x] 2.12 `it shows no save bar until a field changes`
 - [ ] 2.13 `it lists the unsaved changes in the save bar`
 - [ ] 2.14 `it saves only the changed fields and shows Saved by the title`
 - [ ] 2.15 `it discards changes without a request`

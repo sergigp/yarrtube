@@ -460,16 +460,6 @@ function AiSettings({ saved }: { saved: Preferences }) {
         onDiscard={() => setForm(formFrom(saved))}
         onSave={save}
       />
-      <div className="flex items-center justify-end gap-4">
-        {saveError && (
-          <p role="alert" className="mr-auto text-sm text-destructive">
-            {saveError}
-          </p>
-        )}
-        <Button disabled={saving || Object.keys(patch).length === 0} onClick={save}>
-          Save
-        </Button>
-      </div>
     </>
   )
 }
