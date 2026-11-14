@@ -15,11 +15,28 @@ import {
 } from '@/test/helpers'
 
 describe('AiSettingsView', () => {
+  it('shows the AI features switch beside the title', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+
+    const toggle = await screen.findByRole('switch', { name: 'AI features' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI')
+    expect(
+      screen.getByText(
+        'Summaries and automatic categorization, run on a local Ollama server or on Anthropic.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('group', { name: 'Provider' })).queryByRole('switch'),
+    ).not.toBeInTheDocument()
+    expect(toggle).not.toBeChecked()
+  })
+
   it('shows the defaults, with the model disabled and the advanced settings hidden', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)
 
-    expect(await screen.findByRole('switch', { name: 'Enable AI' })).not.toBeChecked()
+    expect(await screen.findByRole('switch', { name: 'AI features' })).not.toBeChecked()
     expect(screen.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
     expect(screen.getByRole('switch', { name: 'Summaries enabled' })).not.toBeChecked()
     expect(screen.getByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
@@ -34,7 +51,6 @@ describe('AiSettingsView', () => {
 
     const section = within(await screen.findByRole('group', { name: 'Provider' }))
     expect(section.queryByRole('radiogroup', { name: 'Provider' })).not.toBeInTheDocument()
-    expect(section.getByRole('switch', { name: 'Enable AI' })).toBeInTheDocument()
     expect(section.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
     expect(section.getByRole('button', { name: 'Test connection' })).toBeDisabled()
   })
@@ -378,7 +394,7 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
     await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
     await openAdvanced()
 
@@ -437,7 +453,7 @@ describe('AiSettingsView', () => {
     const save = await screen.findByRole('button', { name: 'Save' })
     expect(save).toBeDisabled()
     await user.type(screen.getByRole('textbox', { name: 'Ollama URL' }), 'http://mac.local:11434')
-    await user.click(screen.getByRole('switch', { name: 'Enable AI' }))
+    await user.click(screen.getByRole('switch', { name: 'AI features' }))
     await user.click(save)
 
     expect(await screen.findByText('Saved')).toBeInTheDocument()
@@ -465,7 +481,7 @@ describe('AiSettingsView', () => {
       queryFn: () => fetchChannelVideos('handle'),
     })
 
-    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Saved')).toBeInTheDocument()
@@ -480,13 +496,13 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Ollama URL must be set to enable AI',
     )
-    expect(screen.getByRole('switch', { name: 'Enable AI' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'AI features' })).toBeChecked()
   })
 
   it('refuses to save a number field that holds no number', async () => {

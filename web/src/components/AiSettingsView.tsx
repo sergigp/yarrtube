@@ -1,9 +1,10 @@
 import { SettingsCard } from '@/components/SettingsCard'
 import { SaveBar } from '@/components/SaveBar'
+import { PageHeader } from '@/components/PageHeader'
 import { PromptDisclosure } from '@/components/PromptDisclosure'
 import { changedSettingNames } from '@/lib/aiChanges'
 import { useState, type ReactNode } from 'react'
-import { Check, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import {
   useAnthropic,
   useCheckAnthropic,
@@ -45,8 +46,8 @@ export function AiSettingsView() {
 
   return (
     <TooltipProvider>
-      <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
-        <h1 className="font-heading text-xl font-semibold text-foreground">AI</h1>
+      <div className={cn(VIEW_WIDTH, 'flex flex-col gap-6')}>
+        {!preferences && <PageHeader title="AI" description={AI_DESCRIPTION} saved={false} />}
         {error && (
           <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
         )}
@@ -58,6 +59,9 @@ export function AiSettingsView() {
     </TooltipProvider>
   )
 }
+
+const AI_DESCRIPTION =
+  'Summaries and automatic categorization, run on a local Ollama server or on Anthropic.'
 
 /** The form, filled once from the saved preferences. */
 function AiSettings({ saved }: { saved: Preferences }) {
@@ -189,13 +193,20 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
   return (
     <>
+      <PageHeader
+        title="AI"
+        description={AI_DESCRIPTION}
+        saved={savedFlash.shown}
+        action={
+          <Switch
+            aria-label="AI features"
+            className="mt-1.5"
+            checked={form.ai_enabled}
+            onCheckedChange={(value) => set('ai_enabled', value)}
+          />
+        }
+      />
       <SettingsCard title="Provider">
-        <SwitchRow
-          id="ai-enabled"
-          label="Enable AI"
-          checked={form.ai_enabled}
-          onChange={(value) => set('ai_enabled', value)}
-        />
         {keyRemoved && (
           <p className="text-sm text-destructive">
             Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set
@@ -455,14 +466,6 @@ function AiSettings({ saved }: { saved: Preferences }) {
             {saveError}
           </p>
         )}
-        <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
-          {savedFlash.shown && (
-            <>
-              <Check className="size-4" aria-hidden="true" />
-              Saved
-            </>
-          )}
-        </p>
         <Button disabled={saving || Object.keys(patch).length === 0} onClick={save}>
           Save
         </Button>
