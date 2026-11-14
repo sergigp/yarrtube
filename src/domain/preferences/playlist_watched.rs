@@ -26,3 +26,37 @@ impl PlaylistWatched {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_parse_keep() {
+        assert_eq!(PlaylistWatched::new("keep"), Ok(PlaylistWatched::Keep));
+    }
+
+    #[test]
+    fn it_should_parse_drop() {
+        assert_eq!(PlaylistWatched::new("drop"), Ok(PlaylistWatched::Drop));
+    }
+
+    #[test]
+    fn it_should_reject_any_other_value() {
+        assert_eq!(
+            PlaylistWatched::new("Drop"),
+            Err(ValidationError(
+                "Watched episodes in playlists must be \"keep\" or \"drop\" (got \"Drop\")"
+                    .to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_round_trip_through_its_string() {
+        assert_eq!(
+            PlaylistWatched::new(PlaylistWatched::Drop.as_str()),
+            Ok(PlaylistWatched::Drop)
+        );
+    }
+}

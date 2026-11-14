@@ -1693,6 +1693,23 @@ async fn it_should_save_a_plex_playlist_preference() {
     );
 }
 
+#[tokio::test]
+async fn it_should_reject_an_invalid_plex_playlist_order() {
+    let request = UpdatePreferencesRequest {
+        plex_playlist_order: Some("random".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(any_preferences_updater(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Playlist order must be \"newest_first\" or \"oldest_first\" (got \"random\")"
+        ))
+    );
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await
