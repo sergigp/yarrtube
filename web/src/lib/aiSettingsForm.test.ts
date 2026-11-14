@@ -99,6 +99,17 @@ describe('changedFields', () => {
     ).toEqual({})
   })
 
+  it('sees a URL saved without its trailing slash as unchanged', () => {
+    const saved = aPreferences({ ollama_url: 'http://192.168.1.10:11434' })
+
+    expect(
+      changedFields(saved, { ...formFrom(saved), ollama_url: 'http://192.168.1.10:11434/' }),
+    ).toEqual({})
+    expect(changedFields(saved, { ...formFrom(saved), ollama_url: 'http://nas:11434//' })).toEqual({
+      ollama_url: 'http://nas:11434',
+    })
+  })
+
   it('unsets a cleared URL', () => {
     const saved = aPreferences({ ollama_url: 'http://mac.local:11434' })
 
