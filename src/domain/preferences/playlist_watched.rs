@@ -9,11 +9,20 @@ pub enum PlaylistWatched {
 }
 
 impl PlaylistWatched {
-    pub fn new(_value: &str) -> Result<Self, ValidationError> {
-        Ok(Self::Keep)
+    pub fn new(value: &str) -> Result<Self, ValidationError> {
+        match value {
+            "keep" => Ok(Self::Keep),
+            "drop" => Ok(Self::Drop),
+            _ => Err(ValidationError(format!(
+                "Watched episodes in playlists must be \"keep\" or \"drop\" (got \"{value}\")"
+            ))),
+        }
     }
 
     pub fn as_str(&self) -> &'static str {
-        "keep"
+        match self {
+            Self::Keep => "keep",
+            Self::Drop => "drop",
+        }
     }
 }

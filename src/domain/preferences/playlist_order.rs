@@ -9,11 +9,20 @@ pub enum PlaylistOrder {
 }
 
 impl PlaylistOrder {
-    pub fn new(_value: &str) -> Result<Self, ValidationError> {
-        Ok(Self::NewestFirst)
+    pub fn new(value: &str) -> Result<Self, ValidationError> {
+        match value {
+            "newest_first" => Ok(Self::NewestFirst),
+            "oldest_first" => Ok(Self::OldestFirst),
+            _ => Err(ValidationError(format!(
+                "Playlist order must be \"newest_first\" or \"oldest_first\" (got \"{value}\")"
+            ))),
+        }
     }
 
     pub fn as_str(&self) -> &'static str {
-        "newest_first"
+        match self {
+            Self::NewestFirst => "newest_first",
+            Self::OldestFirst => "oldest_first",
+        }
     }
 }

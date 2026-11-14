@@ -6,7 +6,9 @@ use crate::domain::playlist::PlaylistPath;
 use crate::domain::plex::PlexLabels;
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
 use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
-use crate::domain::preferences::PlexPlaylistSettings;
+use crate::domain::preferences::{
+    PlaylistOrder, PlaylistWatched, PlexPlaylistSettings, Preferences,
+};
 use crate::domain::services::plex_label_syncer::BATCH_SIZE;
 use crate::domain::services::{PlexEpisodeFinder, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -36,7 +38,9 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Sqlit
 use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::{
     PlexSyncRunRepository, SqlitePlexSyncRunRepository,
 };
-use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::{
+    PreferencesRepository, SqlitePreferencesRepository,
+};
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
@@ -1112,6 +1116,43 @@ fn it_should_record_the_error_when_a_label_sync_cant_reach_plex() {
     );
 }
 
+#[test]
+fn it_should_create_playlists_that_drop_watched_episodes_when_the_preference_says_drop() {
+    let db = TestDatabase::new();
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+    seed_category(&db, "chess", "Chess", &[&video]);
+    let drop_watched = PlexPlaylistSettings {
+        watched: PlaylistWatched::Drop,
+        ..PlexPlaylistSettings::default()
+    };
+    seed_playlist_preferences(&db, drop_watched);
+    let task = SyncPlexLabelsTask::new(syncer(
+        &db,
+        plex.clone(),
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex.playlists(),
+        vec![FakePlaylist {
+            rating_key: "pl1".to_string(),
+            title: "Chess".to_string(),
+            filter: Some(("19".to_string(), "Chess".to_string())),
+            options: Some(drop_watched),
+        }]
+    );
+}
+
 fn syncer(
     db: &TestDatabase,
     plex: Arc<FakePlexLibraryRepository>,
@@ -1143,6 +1184,15 @@ fn syncer(
         Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
         Arc::new(FixedClock(now())),
     )
+}
+
+fn seed_playlist_preferences(db: &TestDatabase, plex_playlists: PlexPlaylistSettings) {
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            plex_playlists,
+            ..Preferences::default()
+        })
+        .unwrap();
 }
 
 fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {

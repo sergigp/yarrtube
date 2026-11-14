@@ -64,7 +64,6 @@ pub struct PlexLabelSyncer {
     video_repository: Arc<dyn VideoRepository>,
     plex_episode_finder: PlexEpisodeFinder,
     task_repository: Arc<dyn TaskRepository>,
-    #[allow(dead_code)]
     preferences_repository: Arc<dyn PreferencesRepository>,
     plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     clock: Arc<dyn Clock>,
@@ -291,7 +290,7 @@ impl PlexLabelSyncer {
     }
 
     fn create_playlist(&self, desired: DesiredPlaylist, server_id: &str) -> anyhow::Result<()> {
-        let options = PlexPlaylistSettings::default();
+        let options = self.playlist_options()?;
         let playlist = self.plex_library_repository.create_smart_playlist(
             server_id,
             &desired.section_id,
@@ -306,6 +305,15 @@ impl PlexLabelSyncer {
             title: playlist.title,
             options: Some(options),
         })
+    }
+
+    /// How the user wants category playlists to list their episodes.
+    fn playlist_options(&self) -> anyhow::Result<PlexPlaylistSettings> {
+        Ok(self
+            .preferences_repository
+            .find()?
+            .unwrap_or_default()
+            .plex_playlists)
     }
 
     /// Right away while a backlog of dirty videos remains, else after

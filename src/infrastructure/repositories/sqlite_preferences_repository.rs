@@ -1,8 +1,8 @@
 use crate::domain::llm_server::{Effort, OllamaUrl};
 use crate::domain::preferences::{
     AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
-    CategorizationSettings, ContextLength, Preferences, SummaryModel, SummaryPrompt,
-    SummarySettings, Temperature, Theme,
+    CategorizationSettings, ContextLength, PlaylistOrder, PlaylistWatched, PlexPlaylistSettings,
+    Preferences, SummaryModel, SummaryPrompt, SummarySettings, Temperature, Theme,
 };
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -93,6 +93,8 @@ struct StoredPreferences {
     anthropic_summaries_effort: Option<String>,
     anthropic_categorization_model: Option<String>,
     anthropic_categorization_effort: Option<String>,
+    plex_playlist_watched: Option<String>,
+    plex_playlist_order: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -150,6 +152,8 @@ impl From<&Preferences> for StoredPreferences {
                     .as_str()
                     .to_string(),
             ),
+            plex_playlist_watched: Some(preferences.plex_playlists.watched.as_str().to_string()),
+            plex_playlist_order: Some(preferences.plex_playlists.order.as_str().to_string()),
         }
     }
 }
@@ -250,7 +254,16 @@ impl From<StoredPreferences> for Preferences {
                     .and_then(|effort| Effort::new(&effort).ok())
                     .unwrap_or(defaults.anthropic.categorization_effort),
             },
-            plex_playlists: defaults.plex_playlists,
+            plex_playlists: PlexPlaylistSettings {
+                watched: stored
+                    .plex_playlist_watched
+                    .and_then(|watched| PlaylistWatched::new(&watched).ok())
+                    .unwrap_or(defaults.plex_playlists.watched),
+                order: stored
+                    .plex_playlist_order
+                    .and_then(|order| PlaylistOrder::new(&order).ok())
+                    .unwrap_or(defaults.plex_playlists.order),
+            },
         }
     }
 }
