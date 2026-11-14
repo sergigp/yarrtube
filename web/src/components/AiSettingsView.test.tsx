@@ -177,7 +177,6 @@ describe('AiSettingsView', () => {
         { name: 'Low' },
       ),
     ).toBeChecked()
-    expect(screen.getAllByText('Higher is slower and uses more tokens.')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: /advanced/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: /thinking/i })).not.toBeInTheDocument()

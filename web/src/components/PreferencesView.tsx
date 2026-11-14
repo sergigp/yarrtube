@@ -41,7 +41,7 @@ const GROUPS: PreferenceGroup[] = [
       {
         key: 'categories_enabled',
         label: 'Categories',
-        help: 'Group channels and playlists by topic and browse by category. Turning this off hides categories but keeps them and their videos.',
+        help: 'Group channels and playlists by topic and browse by category.',
         extra: <AlsoUsedBy />,
       },
     ],
@@ -50,7 +50,7 @@ const GROUPS: PreferenceGroup[] = [
     title: 'Home sections',
     id: 'home-sections',
     description:
-      'Shown top to bottom in this order. A video appears in one section only, so turning a section off can move its videos to the next one.',
+      'Shown top to bottom in this order.',
     switches: [
       {
         key: 'home_show_continue_watching',

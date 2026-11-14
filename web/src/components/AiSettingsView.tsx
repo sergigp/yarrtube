@@ -655,7 +655,6 @@ function EffortField({
         Effort
       </span>
       <Segmented name={name} choices={EFFORTS} value={value} disabled={disabled} onChange={onChange} />
-      <p className="text-sm text-muted-foreground">Higher is slower and uses more tokens.</p>
     </div>
   )
 }

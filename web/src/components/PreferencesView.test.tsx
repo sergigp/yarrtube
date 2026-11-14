@@ -26,7 +26,7 @@ describe('PreferencesView', () => {
       ['Latest videos', false],
     ])
     expect(screen.getByRole('switch', { name: 'Categories' })).toHaveAccessibleDescription(
-      'Group channels and playlists by topic and browse by category. Turning this off hides categories but keeps them and their videos.',
+      'Group channels and playlists by topic and browse by category.',
     )
     expect(screen.getByRole('switch', { name: 'Continue watching' })).toHaveAccessibleDescription(
       "Videos you started in the last 7 days and haven't finished.",
@@ -42,7 +42,7 @@ describe('PreferencesView', () => {
     )
     expect(
       within(home).getByText(
-        'Shown top to bottom in this order. A video appears in one section only, so turning a section off can move its videos to the next one.',
+        'Shown top to bottom in this order.',
       ),
     ).toBeInTheDocument()
     expect(screen.getByText('Changes save as you make them.')).toBeInTheDocument()

@@ -28,7 +28,7 @@ The application SHALL have a Settings page with the sections "General", "AI" and
 - **THEN** the nav shows "Off" under "AI" and "Not set up" under "Plex"
 
 ### Requirement: Preferences View
-The Settings page's "General" section, at `/settings/general`, SHALL show its preferences as switches, each in a card with a heading. The "Categories" card SHALL hold a "Categories" switch. Under it SHALL be the description "Group channels and playlists by topic and browse by category. Turning this off hides categories but keeps them and their videos." and an "Also used by" row of links: "AI categorization" to `/settings/ai`, "Plex category playlists" to `/settings/plex` and "Home: More about" to the "Home sections" card. The "Home sections" card SHALL hold "Continue watching", "More about…", "Quick watches" and "Latest videos", in that order. Toggling a switch SHALL save the preferences at once and update the whole application.
+The Settings page's "General" section, at `/settings/general`, SHALL show its preferences as switches, each in a card with a heading. The "Categories" card SHALL hold a "Categories" switch. Under it SHALL be the description "Group channels and playlists by topic and browse by category." and an "Also used by" row of links: "AI categorization" to `/settings/ai`, "Plex category playlists" to `/settings/plex` and "Home: More about" to the "Home sections" card. The "Home sections" card SHALL hold "Continue watching", "More about…", "Quick watches" and "Latest videos", in that order. Toggling a switch SHALL save the preferences at once and update the whole application.
 
 #### Scenario: Current values shown
 - **WHEN** a user opens the General section and only `home_show_latest` is off
@@ -53,7 +53,7 @@ Each preference switch SHALL show its description as text under its label, not i
 - "Quick watches": "Unwatched videos under 15 minutes."
 - "Latest videos": "Your newest downloads that aren't in a section above."
 
-The "Home sections" card SHALL say "Shown top to bottom in this order. A video appears in one section only, so turning a section off can move its videos to the next one."
+The "Home sections" card SHALL say "Shown top to bottom in this order."
 
 #### Scenario: Explaining a preference
 - **WHEN** a user opens the General section

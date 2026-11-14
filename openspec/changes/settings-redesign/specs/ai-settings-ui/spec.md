@@ -171,7 +171,7 @@ Changing the choice SHALL be saved from the save bar as `ai_provider`. While `an
 - **THEN** the card says `Anthropic needs an API key. Set YARRTUBE_ANTHROPIC_API_KEY and restart yarrtube.` and offers "Ollama"
 
 ### Requirement: Effort Field
-While Anthropic is selected, the "Summaries" and "Categorization" cards SHALL each show "Effort" directly, as a segmented choice of "Low", "Medium" and "High" (accessible names "Summaries effort" and "Categorization effort"). It SHALL be filled with the card's saved effort and saved from the save bar as `anthropic_summaries_effort` or `anthropic_categorization_effort`. Under it the card SHALL say "Higher is slower and uses more tokens."
+While Anthropic is selected, the "Summaries" and "Categorization" cards SHALL each show "Effort" directly, as a segmented choice of "Low", "Medium" and "High" (accessible names "Summaries effort" and "Categorization effort"). It SHALL be filled with the card's saved effort and saved from the save bar as `anthropic_summaries_effort` or `anthropic_categorization_effort`.
 
 #### Scenario: Changing effort
 - **WHEN** Anthropic is selected and a user chooses "Low" in "Summaries effort" and activates "Save changes"
