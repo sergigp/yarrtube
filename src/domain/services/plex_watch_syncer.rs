@@ -1,4 +1,5 @@
-use crate::domain::plex::PlexEpisode;
+use crate::domain::plex::{PlexEpisode, PlexIdentity};
+use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
 use crate::domain::plex_watch::{EpisodeWatch, MergeOutcome, WatchSide, merge};
 use crate::domain::services::{
     PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary, VideoWatchStateUpdater,
@@ -32,7 +33,6 @@ pub struct PlexWatchSyncer {
     video_repository: Arc<dyn VideoRepository>,
     video_watch_state_updater: VideoWatchStateUpdater,
     task_repository: Arc<dyn TaskRepository>,
-    #[allow(dead_code)]
     plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     clock: Arc<dyn Clock>,
 }
@@ -86,7 +86,7 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let (library, viewer_id) = match self.read_plex() {
+        let (library, identity) = match self.read_plex() {
             Ok(plex) => plex,
             Err(e) => {
                 warn!(error = %e, "failed to reach Plex, retrying the watch sync later");
@@ -97,18 +97,28 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
         let videos = self.video_repository.list_downloaded()?;
         self.forget_undownloaded(&rows, &videos)?;
         let matched = self.match_episodes(videos, &library)?;
-        let merged = self.pull_then_merge(matched, &rows, &viewer_id)?;
-        let backlog = self.settle_all(merged, &rows, &viewer_id)?;
-        self.request_next_sync(backlog)
+        let merged = self.pull_then_merge(matched, &rows, &identity.viewer_id)?;
+        let backlog = self.settle_all(merged, &rows, &identity.viewer_id)?;
+        self.request_next_sync(backlog)?;
+        self.record(PlexSyncOutcome::reached(&identity, &library.sections))
     }
 }
 
 impl PlexWatchSyncer {
-    /// The library and whose watch state it holds.
-    fn read_plex(&self) -> anyhow::Result<(PlexLibrary, String)> {
+    /// The library and who the server and its viewer are.
+    fn read_plex(&self) -> anyhow::Result<(PlexLibrary, PlexIdentity)> {
         let library = self.plex_episode_finder.read_library()?;
-        let viewer_id = self.plex_library_repository.identity()?.viewer_id;
-        Ok((library, viewer_id))
+        let identity = self.plex_library_repository.identity()?;
+        Ok((library, identity))
+    }
+
+    /// Records how this sync ended.
+    fn record(&self, outcome: PlexSyncOutcome) -> anyhow::Result<()> {
+        self.plex_sync_run_repository.save(&PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: self.clock.now(),
+            outcome,
+        })
     }
 
     /// Every stored row, by video id.
