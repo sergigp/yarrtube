@@ -32,6 +32,7 @@ export function relativeTime(at: string, now: Date = new Date()): string {
 }
 
 /** A sync's last and next run, or its failure and retry, on one line. */
-export function syncStatusLine(_sync: PlexSync, _now: Date = new Date()): string {
-  return ''
+export function syncStatusLine(sync: PlexSync, now: Date = new Date()): string {
+  const last = sync.last_run_at ? `Last run ${relativeTime(sync.last_run_at, now)}` : 'Not run yet'
+  return sync.next_run_at ? `${last} · Next ${relativeTime(sync.next_run_at, now)}` : last
 }

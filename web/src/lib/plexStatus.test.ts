@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aPlexSync } from '@/test/helpers'
-import { isSyncing, plexVersionLabel, relativeTime } from './plexStatus'
+import { isSyncing, plexVersionLabel, relativeTime, syncStatusLine } from './plexStatus'
 
 describe('plexVersionLabel', () => {
   it('drops the build suffix', () => {
@@ -56,5 +56,21 @@ describe('relativeTime', () => {
 
   it('names days', () => {
     expect(relativeTime(from(2 * 86_400_000), now)).toBe('in 2 days')
+  })
+})
+
+describe('syncStatusLine', () => {
+  const at = new Date('2026-11-14T10:03:00Z')
+
+  it('puts last and next run on one line', () => {
+    expect(
+      syncStatusLine(
+        aPlexSync({ last_run_at: '2026-11-14T10:00:00Z', next_run_at: '2026-11-14T10:05:00Z' }),
+        at,
+      ),
+    ).toBe('Last run 3 minutes ago · Next in 2 minutes')
+    expect(syncStatusLine(aPlexSync({ last_run_at: null, next_run_at: null }), at)).toBe(
+      'Not run yet',
+    )
   })
 })
