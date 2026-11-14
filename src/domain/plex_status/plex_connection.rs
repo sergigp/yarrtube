@@ -18,17 +18,29 @@ impl PlexConnection {
     /// the latest run that reached Plex; `None` before any run.
     pub fn from_runs(runs: &[PlexSyncRun]) -> Option<Self> {
         let latest = runs.iter().max_by_key(|run| run.finished_at)?;
-        let (error, version, libraries) = match &latest.outcome {
-            PlexSyncOutcome::Reached { version, libraries } => {
-                (None, Some(version.clone()), libraries.clone())
-            }
-            PlexSyncOutcome::Failed { error } => (Some(error.clone()), None, Vec::new()),
-        };
+        let (version, libraries) = Self::last_seen(runs);
         Some(Self {
             checked_at: latest.finished_at,
-            error,
+            error: match &latest.outcome {
+                PlexSyncOutcome::Failed { error } => Some(error.clone()),
+                PlexSyncOutcome::Reached { .. } => None,
+            },
             version,
             libraries,
         })
+    }
+
+    /// The version and libraries of the latest run that reached Plex.
+    fn last_seen(runs: &[PlexSyncRun]) -> (Option<String>, Vec<String>) {
+        runs.iter()
+            .filter_map(|run| match &run.outcome {
+                PlexSyncOutcome::Reached { version, libraries } => {
+                    Some((run.finished_at, version, libraries))
+                }
+                PlexSyncOutcome::Failed { .. } => None,
+            })
+            .max_by_key(|(finished_at, _, _)| *finished_at)
+            .map(|(_, version, libraries)| (Some(version.clone()), libraries.clone()))
+            .unwrap_or_default()
     }
 }

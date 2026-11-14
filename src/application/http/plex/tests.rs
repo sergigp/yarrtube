@@ -115,6 +115,59 @@ async fn it_should_report_the_connection_from_the_latest_run() {
     );
 }
 
+#[tokio::test]
+async fn it_should_keep_the_version_and_libraries_last_seen_when_the_latest_run_failed() {
+    let db = TestDatabase::new();
+    let plex_sync_run_repository = Arc::new(SqlitePlexSyncRunRepository::new(db.database()));
+    let ten_minutes_ago = now() - Duration::minutes(10);
+    let five_minutes_ago = now() - Duration::minutes(5);
+    plex_sync_run_repository
+        .save(&PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: ten_minutes_ago,
+            outcome: reached(),
+        })
+        .unwrap();
+    plex_sync_run_repository
+        .save(&PlexSyncRun {
+            kind: PlexSyncKind::Labels,
+            finished_at: five_minutes_ago,
+            outcome: PlexSyncOutcome::Failed {
+                error: "timed out".to_string(),
+            },
+        })
+        .unwrap();
+    let plex_status_searcher =
+        PlexStatusSearcher::new(true, plex_sync_run_repository, task_repository(&db));
+
+    let response = status(plex_status_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(PlexStatusResponse {
+            configured: true,
+            connection: Some(PlexConnectionResponse {
+                checked_at: five_minutes_ago,
+                reachable: false,
+                error: Some("timed out".to_string()),
+                version: Some("1.43.5.11079-b3b13e506".to_string()),
+                libraries: vec!["Subscriptions".to_string(), "Sergi's Playlists".to_string()],
+            }),
+            syncs: vec![
+                PlexSyncResponse {
+                    last_run_at: Some(ten_minutes_ago),
+                    ..never_run_sync("watch_state")
+                },
+                PlexSyncResponse {
+                    last_run_at: Some(five_minutes_ago),
+                    last_error: Some("timed out".to_string()),
+                    ..never_run_sync("labels")
+                },
+            ],
+        })
+    );
+}
+
 fn now() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
 }
