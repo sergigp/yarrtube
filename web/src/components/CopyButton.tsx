@@ -15,7 +15,7 @@ export function CopyButton({ text }: { text: string }) {
   }, [copied])
 
   async function copy() {
-    await navigator.clipboard.writeText(text)
+    await copyToClipboard(text)
     setCopied(true)
   }
 
@@ -30,4 +30,26 @@ export function CopyButton({ text }: { text: string }) {
       {copied ? 'Copied' : 'Copy'}
     </Button>
   )
+}
+
+/**
+ * Copies `text`: with the Clipboard API where the browser offers it (HTTPS or
+ * localhost), else through a hidden text field, since yarrtube is often
+ * served over plain HTTP on a home network.
+ */
+async function copyToClipboard(text: string): Promise<void> {
+  // `navigator.clipboard` is undefined outside secure contexts.
+  if (navigator.clipboard) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  const field = document.createElement('textarea')
+  field.value = text
+  field.setAttribute('readonly', '')
+  field.style.position = 'fixed'
+  field.style.opacity = '0'
+  document.body.appendChild(field)
+  field.select()
+  document.execCommand('copy')
+  field.remove()
 }
