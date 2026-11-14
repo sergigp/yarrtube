@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   batchReconciles,
+  buildTaskList,
   byCategory,
   describeTask,
   matchesTask,
@@ -379,6 +380,88 @@ describe('batchReconciles', () => {
       { kind: 'task', task: errored },
       { kind: 'task', task: running },
       { kind: 'task', task: pending },
+    ])
+  })
+})
+
+describe('buildTaskList', () => {
+  const now = new Date('2026-11-14T20:00:00Z')
+  const soon = '2026-11-14T20:10:00Z'
+  const later = '2026-11-14T23:00:00Z'
+  const tasks = [
+    aTask({ id: 1, task_type: 'download_video', status: 'running', payload: { video_title: 'Intro' } }),
+    aTask({ id: 2, task_type: 'fetch_thumbnail', run_at: soon, payload: { video_title: 'Intro' } }),
+    aTask({ id: 3, task_type: 'reconcile_channel', run_at: later, payload: { channel_id: '@a', channel_name: 'Jobava fans' } }),
+    aTask({ id: 4, task_type: 'reconcile_playlist', run_at: later, payload: { playlist_id: 'PL1', playlist_name: 'Openings' } }),
+    aTask({ id: 5, task_type: 'summarize_video', run_at: soon, payload: { video_title: 'Intro' } }),
+    aTask({ id: 6, task_type: 'update_ytdlp', run_at: later }),
+  ]
+  const options = { filter: 'all' as const, query: '', aiEnabled: true, now }
+
+  it('counts every chip, the families adding up to All', () => {
+    expect(buildTaskList(tasks, options).chips).toEqual([
+      { filter: 'all', count: 6 },
+      { filter: 'downloads', count: 2 },
+      { filter: 'syncs', count: 2 },
+      { filter: 'ai', count: 1 },
+      { filter: 'upkeep', count: 1 },
+    ])
+  })
+
+  it('hides empty chips, the AI chip included while AI is off', () => {
+    const chips = buildTaskList(tasks.slice(0, 2).concat(tasks[4]), { ...options, aiEnabled: false }).chips
+
+    expect(chips).toEqual([
+      { filter: 'all', count: 3 },
+      { filter: 'downloads', count: 2 },
+      { filter: 'upkeep', count: 1 },
+    ])
+  })
+
+  it('lists sections in order, batching reconciles and dropping empty sections', () => {
+    expect(buildTaskList(tasks, options).sections).toEqual([
+      { id: 'running', entries: [{ kind: 'task', task: tasks[0] }] },
+      {
+        id: 'nextHour',
+        entries: [
+          { kind: 'task', task: tasks[1] },
+          { kind: 'task', task: tasks[4] },
+        ],
+      },
+      {
+        id: 'later',
+        entries: [
+          {
+            kind: 'batch',
+            tasks: [tasks[2], tasks[3]],
+            runAt: later,
+            sources: [
+              { taskId: 3, name: 'Jobava fans', kind: 'channel', sourceId: '@a' },
+              { taskId: 4, name: 'Openings', kind: 'playlist', sourceId: 'PL1' },
+            ],
+          },
+          { kind: 'task', task: tasks[5] },
+        ],
+      },
+    ])
+  })
+
+  it('lists only the selected chip, keeping every chip', () => {
+    const list = buildTaskList(tasks, { ...options, filter: 'downloads' })
+
+    expect([list.chips.length, list.sections.map((section) => section.id)]).toEqual([
+      5,
+      ['running', 'nextHour'],
+    ])
+  })
+
+  it('filters by description and by a batch source name, ignoring case', () => {
+    const byDescription = buildTaskList(tasks, { ...options, query: 'YT-DLP' }).sections
+    const bySource = buildTaskList(tasks, { ...options, query: 'jobava' }).sections
+
+    expect([byDescription, bySource]).toEqual([
+      [{ id: 'later', entries: [{ kind: 'task', task: tasks[5] }] }],
+      [{ id: 'later', entries: [{ kind: 'task', task: tasks[2] }] }],
     ])
   })
 })

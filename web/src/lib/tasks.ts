@@ -301,12 +301,36 @@ function byRunAt(a: Task, b: Task): number {
   return runAtMs(a) - runAtMs(b)
 }
 
-/** The chips and sections the Tasks view shows. */
+const FAMILIES: readonly TaskFamily[] = ['downloads', 'syncs', 'ai', 'upkeep']
+const SECTIONS: readonly TaskSectionId[] = ['running', 'attention', 'nextHour', 'later']
+
+/**
+ * The chips and sections the Tasks view shows: a chip per family with tasks,
+ * and the selected chip's tasks matching `query` in sections, batched.
+ */
 export function buildTaskList(
-  _tasks: Task[],
-  _options: { filter: TaskFilter; query: string; aiEnabled: boolean; now: Date },
+  tasks: Task[],
+  options: { filter: TaskFilter; query: string; aiEnabled: boolean; now: Date },
 ): TaskListModel {
-  return { chips: [], sections: [] }
+  const { filter, query, aiEnabled, now } = options
+  const listed = tasks.filter(
+    (task) =>
+      (filter === 'all' || taskFamily(task, aiEnabled) === filter) && matchesTask(task, query.trim()),
+  )
+  const sections = SECTIONS.map((id) => ({
+    id,
+    entries: batchReconciles(listed.filter((task) => sectionOf(task, now) === id)),
+  })).filter((section) => section.entries.length > 0)
+  return { chips: filterChips(tasks, aiEnabled), sections }
+}
+
+/** All, then each family with tasks, with their counts. */
+function filterChips(tasks: Task[], aiEnabled: boolean): FilterChip[] {
+  const families = FAMILIES.map((family) => ({
+    filter: family,
+    count: tasks.filter((task) => taskFamily(task, aiEnabled) === family).length,
+  })).filter((chip) => chip.count > 0)
+  return [{ filter: 'all', count: tasks.length }, ...families]
 }
 
 /** One sentence saying what is happening now. */
