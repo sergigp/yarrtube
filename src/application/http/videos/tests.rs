@@ -7150,6 +7150,53 @@ async fn it_should_answer_404_when_stopping_retrying_an_unknown_video() {
 }
 
 #[tokio::test]
+async fn it_should_make_a_stopped_download_pending_again_when_the_video_is_retried() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository =
+        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let an_hour_ago = fixed_timestamp() - Duration::hours(1);
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_errored("HTTP Error 403", an_hour_ago)
+    .stop_retrying(an_hour_ago);
+    video_repository.insert(&video).unwrap();
+
+    let response = retry_video(
+        State(video_retrier(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                state: StepState::pending(),
+                failure: None,
+                ..video.download.clone()
+            },
+            ..video.clone()
+        })
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: video.id.as_str().to_string()
+            }
+        )]
+    );
+}
+
+#[tokio::test]
 async fn it_should_rerun_a_videos_ai_categorization() {
     let db = TestDatabase::new();
     SqliteChannelRepository::new(db.database())

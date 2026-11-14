@@ -21,7 +21,7 @@
 - [x] 2.13 `it_should_leave_a_retrying_categorization_when_retrying_is_stopped`
 - [x] 2.14 `it_should_change_nothing_when_no_step_is_retrying`: 204 and no change
 - [x] 2.15 `it_should_answer_404_when_stopping_retrying_an_unknown_video`
-- [ ] 2.16 `it_should_make_a_stopped_download_pending_again_when_the_video_is_retried`: the existing retry undoes a stop
+- [x] 2.16 `it_should_make_a_stopped_download_pending_again_when_the_video_is_retried`: the existing retry undoes a stop
 - [ ] 2.17 Web `taskFamily`: downloads, syncs, AI on and off, Plex & upkeep, unknown type (`lib/tasks.test.ts`)
 - [ ] 2.18 Web `describeTask`: base form when pending, "-ing" when running, every task type, placeholders for missing names; no "pending" or "queued" wording
 - [ ] 2.19 Web `sectionOf`: running, attention (pending with `last_error`), next hour (including already due), later
