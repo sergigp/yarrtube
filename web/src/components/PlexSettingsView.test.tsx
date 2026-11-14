@@ -112,7 +112,7 @@ describe('PlexSettingsView', () => {
     expect(lines(server)).toEqual(['Not checked yet. Server details appear after the first sync.'])
   })
 
-  it('shows when each sync last ran, how it ended and when it runs next', async () => {
+  it('shows Retry now on a failed sync', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date('2026-11-14T10:03:00Z'))
     mockApi({
@@ -125,9 +125,9 @@ describe('PlexSettingsView', () => {
           }),
           aPlexSync({
             kind: 'labels',
-            last_run_at: '2026-11-14T09:58:00Z',
+            last_run_at: '2026-11-14T09:59:00Z',
             last_error: 'timed out',
-            next_run_at: '2026-11-14T10:13:00Z',
+            next_run_at: '2026-11-14T10:14:00Z',
           }),
         ],
       }),
@@ -136,14 +136,22 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const watchState = await screen.findByRole('group', { name: 'Watch state' })
-    const labels = screen.getByRole('group', { name: 'Labels & playlists' })
-    expect(lines(watchState)).toEqual(['Last run 3 minutes ago', 'Next run in 2 minutes'])
-    expect(lines(labels)).toEqual([
-      'Last run 5 minutes ago: timed out',
-      'Next run in 10 minutes',
+    const sync = await screen.findByRole('group', { name: 'Sync' })
+    expect(
+      within(sync).getByText('Runs on its own. Use Sync now after changing something in Plex.'),
+    ).toBeInTheDocument()
+    const watched = within(sync).getByRole('group', { name: 'Watched status' })
+    const labels = within(sync).getByRole('group', { name: 'Categories to Plex' })
+    expect(lines(watched)).toEqual([
+      "Both ways: watch a video here or in Plex and it's marked watched in both.",
+      'Last run 3 minutes ago · Next in 2 minutes',
     ])
-    expect(within(watchState).getByRole('button', { name: 'Sync now' })).toBeEnabled()
+    expect(lines(labels)).toEqual([
+      'Category labels and playlists in Plex follow your categories.',
+      'Failed 4 minutes ago: timed out. Retries in 11 minutes.',
+    ])
+    expect(within(watched).getByRole('button', { name: 'Sync now' })).toBeEnabled()
+    expect(within(labels).getByRole('button', { name: 'Retry now' })).toBeEnabled()
   })
 
   it('runs a sync now and shows it syncing until a newer run finishes', async () => {
@@ -159,7 +167,7 @@ describe('PlexSettingsView', () => {
     })
     renderWithProviders(<PlexSettingsView />)
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    const watchState = await screen.findByRole('group', { name: 'Watch state' })
+    const watchState = await screen.findByRole('group', { name: 'Watched status' })
 
     await user.click(within(watchState).getByRole('button', { name: 'Sync now' }))
 
@@ -183,7 +191,7 @@ describe('PlexSettingsView', () => {
     })
     renderWithProviders(<PlexSettingsView />)
     const user = userEvent.setup()
-    const labels = await screen.findByRole('group', { name: 'Labels & playlists' })
+    const labels = await screen.findByRole('group', { name: 'Categories to Plex' })
 
     await user.click(within(labels).getByRole('button', { name: 'Sync now' }))
 

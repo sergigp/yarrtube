@@ -18,15 +18,21 @@ import {
   useSavePreferences,
 } from '@/api/queries'
 import { useSavedFlash } from '@/hooks/useSavedFlash'
-import { isSyncing, plexVersionLabel, relativeTime } from '@/lib/plexStatus'
+import { isSyncing, plexVersionLabel, relativeTime, syncStatusLine } from '@/lib/plexStatus'
 import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 
-const SYNC_LABELS: Record<PlexSyncKind, string> = {
-  watch_state: 'Watch state',
-  labels: 'Labels & playlists',
+const SYNCS: Record<PlexSyncKind, { label: string; description: string }> = {
+  watch_state: {
+    label: 'Watched status',
+    description: "Both ways: watch a video here or in Plex and it's marked watched in both.",
+  },
+  labels: {
+    label: 'Categories to Plex',
+    description: 'Category labels and playlists in Plex follow your categories.',
+  },
 }
 
 const WATCHED_CHOICES: { value: PlexPlaylistWatched; label: string }[] = [
@@ -99,10 +105,15 @@ export function PlexSettingsView() {
         </SettingsCard>
       )}
       {status?.configured && (
-        <SettingsCard title="Syncs">
-          {status.syncs.map((sync) => (
-            <SyncRow key={sync.kind} sync={sync} />
-          ))}
+        <SettingsCard
+          title="Sync"
+          description={<p>Runs on its own. Use Sync now after changing something in Plex.</p>}
+        >
+          <div className="flex flex-col divide-y divide-border">
+            {status.syncs.map((sync) => (
+              <SyncRow key={sync.kind} sync={sync} />
+            ))}
+          </div>
         </SettingsCard>
       )}
       {status?.configured && preferences && (
@@ -197,7 +208,7 @@ function ConnectionStatus({ connection }: { connection: PlexConnection }) {
 }
 
 function SyncRow({ sync }: { sync: PlexSync }) {
-  const label = SYNC_LABELS[sync.kind]
+  const { label, description } = SYNCS[sync.kind]
   const requestSync = useRequestPlexSync()
   const [requestedAt, setRequestedAt] = useState<Date | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
@@ -218,19 +229,16 @@ function SyncRow({ sync }: { sync: PlexSync }) {
     <div
       role="group"
       aria-label={label}
-      className="flex items-center justify-between gap-4 text-sm"
+      className="flex items-center justify-between gap-4 py-3.5 text-sm first:pt-0 last:pb-0"
     >
-      <div className="flex flex-col gap-1">
-        <span className="font-medium text-foreground" aria-hidden="true">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[15px] font-medium text-foreground" aria-hidden="true">
           {label}
         </span>
+        <p className="text-muted-foreground">{description}</p>
         <p className={sync.last_error ? 'text-destructive' : 'text-muted-foreground'}>
-          {sync.last_run_at ? `Last run ${relativeTime(sync.last_run_at)}` : 'Not run yet'}
-          {sync.last_error && `: ${sync.last_error}`}
+          {syncStatusLine(sync)}
         </p>
-        {sync.next_run_at && (
-          <p className="text-muted-foreground">Next run {relativeTime(sync.next_run_at)}</p>
-        )}
         {requestError && (
           <p role="alert" className="text-destructive">
             Couldn&apos;t start the sync: {requestError}
@@ -238,7 +246,7 @@ function SyncRow({ sync }: { sync: PlexSync }) {
         )}
       </div>
       <Button variant="outline" size="sm" disabled={syncing} onClick={() => void syncNow()}>
-        {syncing ? 'Syncing…' : 'Sync now'}
+        {syncing ? 'Syncing…' : sync.last_error ? 'Retry now' : 'Sync now'}
       </Button>
     </div>
   )
