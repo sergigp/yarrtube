@@ -12,7 +12,7 @@
 - [x] 2.4 `it_should_include_started_at_for_a_running_task`: `started_at` is the claim time (`updated_at`) while the task runs
 - [x] 2.5 `it_should_have_null_started_at_for_a_pending_task`
 - [x] 2.6 `it_should_bring_a_pending_task_forward_when_run_now`: `POST /api/tasks/run-now` answers 204 and the task is due now
-- [ ] 2.7 `it_should_bring_every_listed_task_forward`: all listed pending tasks become due now
+- [x] 2.7 `it_should_bring_every_listed_task_forward`: all listed pending tasks become due now
 - [ ] 2.8 `it_should_ignore_running_and_unknown_ids_when_run_now`: 204, and running and unknown ids are left alone
 - [ ] 2.9 `it_should_keep_retries_and_last_error_when_run_now`: only the run time changes
 - [ ] 2.10 `it_should_reject_run_now_without_ids`: an empty or missing `ids` answers 400

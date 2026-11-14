@@ -1202,6 +1202,40 @@ async fn it_should_bring_a_pending_task_forward_when_run_now() {
     );
 }
 
+#[tokio::test]
+async fn it_should_bring_every_listed_task_forward() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let later = fixed_timestamp() + chrono::Duration::hours(1);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let reconciles = ["PL1", "PL2", "PL3"].map(|playlist_id| Task::ReconcilePlaylist {
+        playlist_id: playlist_id.to_string(),
+    });
+    reconciles
+        .iter()
+        .for_each(|task| task_repository.schedule(task, later).unwrap());
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1, 2, 3])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        reconciles
+            .into_iter()
+            .zip(1..)
+            .map(|(task, id)| ScheduledTask {
+                run_at: now,
+                updated_at: now,
+                ..scheduled_task(id, task)
+            })
+            .collect::<Vec<_>>()
+    );
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
