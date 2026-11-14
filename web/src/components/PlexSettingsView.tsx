@@ -20,7 +20,13 @@ export function PlexSettingsView() {
       {status && !status.configured && <NotConfigured />}
       {status?.configured && (
         <Section title="Connection">
-          {status.connection && <ConnectionStatus connection={status.connection} />}
+          {status.connection ? (
+            <ConnectionStatus connection={status.connection} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              The connection shows here after the first Plex sync.
+            </p>
+          )}
         </Section>
       )}
     </div>

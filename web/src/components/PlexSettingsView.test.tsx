@@ -84,6 +84,18 @@ describe('PlexSettingsView', () => {
       'Checked 1 minute ago',
     ])
   })
+
+  it('says the status shows after the first sync', async () => {
+    mockApi({
+      'GET /api/plex': aPlexStatus({ connection: null }),
+      'GET /api/preferences': aPreferences(),
+    })
+
+    renderWithProviders(<PlexSettingsView />)
+
+    const connection = await screen.findByRole('group', { name: 'Connection' })
+    expect(lines(connection)).toEqual(['The connection shows here after the first Plex sync.'])
+  })
 })
 
 /** The text of each line (paragraph) in `element`. */
