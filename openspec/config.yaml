@@ -57,11 +57,21 @@ rules:
       - Only when a status or lifecycle changes: a `stateDiagram-v2` of it after
         the change.
       - Only when the SQLite schema changes: an `erDiagram` of the touched tables.
-      In the class and state diagrams, mark what the change adds, changes or
-      removes with these classes, and leave untouched elements plain:
+      Give every diagram a title saying what it shows, as Mermaid frontmatter
+      (`---` / `title: …` / `---` before the diagram type), and start the
+      section with one line: "Colours: green = new, yellow = changed,
+      red = removed, plain = unchanged."
+      In the class, state and ER diagrams, mark what the change adds, changes or
+      removes with these classes, and leave untouched elements plain
+      (ER: `class <table> new`; a removed method or call gets its own red
+      node linked to what replaces it):
       classDef new fill:#d4f5d4,stroke:#2e7d32
       classDef changed fill:#fff1c2,stroke:#b58900
       classDef removed fill:#f8d4d4,stroke:#c62828,stroke-dasharray:4
+      In sequence diagrams, group the participants in `box` blocks by the
+      same status, in this order and colour: `box rgb(212,245,212) New`,
+      `box rgb(255,241,194) Changed`, `box rgb(248,212,212) Removed`,
+      `box Unchanged`; omit empty boxes.
       At most ~15 nodes per diagram; split it rather than grow it.
       ## Types & Signatures
       Code blocks defining the new/changed types and method signatures only —
@@ -92,7 +102,9 @@ rules:
       classDef new fill:#d4f5d4,stroke:#2e7d32
       classDef changed fill:#fff1c2,stroke:#b58900
       classDef removed fill:#f8d4d4,stroke:#c62828,stroke-dasharray:4
-      Leave untouched callers plain. At most ~15 nodes.
+      Leave untouched callers plain. At most ~15 nodes. Give it a title as
+      Mermaid frontmatter saying what it shows and the colour legend
+      (green new, yellow changed, red removed, plain unchanged callers).
   tasks:
     - |
       Structure tasks.md as a vertical slice built outside-in. Do NOT group tasks by

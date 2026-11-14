@@ -168,6 +168,23 @@ in sync between the web UI and Plex, both ways. Nothing else to set up.
 - **Several copies**: a video tracked by both a channel and a playlist is
   two episodes in Plex; watching either one marks both.
 
+## Status and syncs
+
+**Settings → Plex** in the web UI shows how the integration is doing,
+without asking Plex anything when you open it:
+
+- **Connection**: whether the latest sync reached Plex (or its error), the
+  Plex Media Server version, the libraries holding yarrtube's folders, and
+  when that was.
+- **Syncs**: when the watch state sync and the labels & playlists sync last
+  ran, how they ended and when they run next. **Sync now** runs one right
+  away.
+- **Category playlists**: the playlist options, see
+  [Categories](CATEGORIES.md#in-plex).
+
+Without the three `YARRTUBE_PLEX_*` variables it says how to set Plex up
+instead.
+
 ## Troubleshooting
 
 - **A YouTube playlist's show has no poster**: expected, only channels have one (their

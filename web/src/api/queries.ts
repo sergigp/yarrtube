@@ -10,6 +10,8 @@ import {
 } from '@tanstack/react-query'
 import {
   fetchAnnouncements,
+  fetchPlexStatus,
+  requestPlexSync,
   fetchChannels,
   fetchChannelVideos,
   fetchHomeVideos,
@@ -50,6 +52,8 @@ import type {
   VideoSearchResults,
   PlaylistListItem,
   PlaylistPreview,
+  PlexStatus,
+  PlexSyncKind,
   Preferences,
   PreferencesPatch,
   Task,
@@ -68,6 +72,8 @@ import {
 // own actions; views showing live download progress poll quickly.
 const LIBRARY_INTERVAL_MS = 60_000
 const LIVE_INTERVAL_MS = 3_000
+// The Plex syncs run every few minutes; this catches a requested one finishing.
+const PLEX_STATUS_INTERVAL_MS = 5_000
 // Slower than the live views: each list reads every video and queued task.
 const BUSY_SOURCES_INTERVAL_MS = 5_000
 
@@ -91,6 +97,7 @@ export const queryKeys = {
   announcements: ['announcements'] as const,
   version: ['version'] as const,
   preferences: ['preferences'] as const,
+  plexStatus: ['plex'] as const,
   ollama: (url: string) => ['ollama', url] as const,
   anthropic: ['anthropic'] as const,
   // Outside the `['playlists']` and `['channels']` prefixes so refetching the
@@ -250,6 +257,27 @@ export function usePreferences(): UseQueryResult<Preferences, Error> {
     queryKey: queryKeys.preferences,
     queryFn: fetchPreferences,
   })
+}
+
+/** The Plex integration's status, refreshed while it is shown. */
+export function usePlexStatus(): UseQueryResult<PlexStatus, Error> {
+  return useQuery({
+    queryKey: queryKeys.plexStatus,
+    queryFn: fetchPlexStatus,
+    refetchInterval: PLEX_STATUS_INTERVAL_MS,
+  })
+}
+
+/** Returns a function that makes a Plex sync due now. */
+export function useRequestPlexSync(): (kind: PlexSyncKind) => Promise<void> {
+  const queryClient = useQueryClient()
+  return useCallback(
+    async (kind: PlexSyncKind) => {
+      await requestPlexSync(kind)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.plexStatus })
+    },
+    [queryClient],
+  )
 }
 
 /**

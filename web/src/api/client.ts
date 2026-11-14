@@ -16,6 +16,8 @@ import type {
   PlaylistPreview,
   AnthropicServer,
   OllamaServer,
+  PlexStatus,
+  PlexSyncKind,
   Preferences,
   PreferencesPatch,
   RecordProgressResponse,
@@ -88,6 +90,15 @@ export function fetchVersion(): Promise<AppVersion> {
 
 export function fetchPreferences(): Promise<Preferences> {
   return request('/preferences')
+}
+
+export function fetchPlexStatus(): Promise<PlexStatus> {
+  return request('/plex')
+}
+
+/** Makes the `kind` Plex sync due now. */
+export async function requestPlexSync(kind: PlexSyncKind): Promise<void> {
+  await send(`/plex/syncs/${kind}`, { method: 'POST', label: `Plex ${kind} sync` })
 }
 
 /** Changes only the preferences in `patch`; resolves with every preference. */

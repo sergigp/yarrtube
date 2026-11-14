@@ -16,6 +16,7 @@ pub mod sqlite_episode_labels_repository;
 pub mod sqlite_episode_watch_repository;
 pub mod sqlite_playlist_repository;
 pub mod sqlite_playlist_video_repository;
+pub mod sqlite_plex_sync_run_repository;
 pub mod sqlite_preferences_repository;
 pub mod sqlite_task_repository;
 pub mod sqlite_video_categories_repository;

@@ -58,6 +58,10 @@ pub struct UpdatePreferencesRequest {
     pub anthropic_categorization_model: Option<String>,
     #[serde(default)]
     pub anthropic_categorization_effort: Option<String>,
+    #[serde(default)]
+    pub plex_playlist_watched: Option<String>,
+    #[serde(default)]
+    pub plex_playlist_order: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -92,6 +96,8 @@ pub struct PreferencesResponse {
     pub anthropic_summaries_effort: String,
     pub anthropic_categorization_model: String,
     pub anthropic_categorization_effort: String,
+    pub plex_playlist_watched: String,
+    pub plex_playlist_order: String,
 }
 
 impl From<ResolvedPreferences> for PreferencesResponse {
@@ -130,6 +136,8 @@ impl From<ResolvedPreferences> for PreferencesResponse {
             anthropic_summaries_effort: anthropic.summaries_effort.as_str().to_string(),
             anthropic_categorization_model: anthropic.categorization_model.as_str().to_string(),
             anthropic_categorization_effort: anthropic.categorization_effort.as_str().to_string(),
+            plex_playlist_watched: preferences.plex_playlists.watched.as_str().to_string(),
+            plex_playlist_order: preferences.plex_playlists.order.as_str().to_string(),
         }
     }
 }

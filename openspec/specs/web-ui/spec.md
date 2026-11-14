@@ -218,19 +218,23 @@ The sidebar's Channels section SHALL offer an "Add channel" control and its Play
 - **THEN** the sidebar closes and the matching add dialog is shown
 
 ### Requirement: Header Settings Menu
-The header SHALL offer, at its trailing edge, a settings control shown as a gear icon with the accessible name "Settings". Activating it SHALL open a menu with, in order, "Tasks", which navigates to the tasks view, "Preferences", which navigates to the preferences view, "AI", which navigates to the AI page, and "Report a bug", which opens `https://github.com/sergigp/yarrtube/issues/new` in a new browser tab. The header SHALL NOT show any other control for adding channels or playlists or for reaching the tasks view.
+The header SHALL offer, at its trailing edge, a settings control shown as a gear icon with the accessible name "Settings". Activating it SHALL open a menu with, in order, "Tasks", which navigates to the tasks view, "Settings", which navigates to the Settings page at `/settings/general`, and "Report a bug", which opens `https://github.com/sergigp/yarrtube/issues/new` in a new browser tab. The header SHALL NOT show any other control for adding channels or playlists or for reaching the tasks view.
 
 #### Scenario: Reaching the tasks view
 - **WHEN** a user activates the header's settings control and chooses "Tasks"
 - **THEN** the application navigates to the tasks view
 
 #### Scenario: Reaching the preferences view
-- **WHEN** a user activates the header's settings control and chooses "Preferences"
-- **THEN** the application navigates to the preferences view
+- **WHEN** a user activates the header's settings control and chooses "Settings"
+- **THEN** the application navigates to `/settings/general`, the Settings page's General section
 
 #### Scenario: Reaching the AI page
-- **WHEN** a user activates the header's settings control and chooses "AI"
-- **THEN** the application navigates to the AI page
+- **WHEN** a user chooses "Settings" in the header's settings menu and then "AI" in the section nav
+- **THEN** the application shows the AI section at `/settings/ai`
+
+#### Scenario: No separate preferences or AI entries
+- **WHEN** a user opens the header's settings menu
+- **THEN** it lists "Tasks", "Settings" and "Report a bug" only
 
 #### Scenario: Reporting a bug
 - **WHEN** a user activates the header's settings control and chooses "Report a bug"
@@ -2148,10 +2152,10 @@ Each category section on the home view SHALL be headed "More about <category nam
 - **THEN** no "More about" section is shown
 
 ### Requirement: Preferences View
-The application SHALL have a "Preferences" view at `/preferences` showing a labelled switch per preference: "Enable categories" in a "Categories" group, and "Show continue watching", "Show categories", "Show quick watches" and "Show latest videos" in a "Home" group. Toggling a switch SHALL save the preferences at once and update the whole application.
+The Settings page's "General" section, at `/settings/general`, SHALL show a labelled switch per preference: "Enable categories" in a "Categories" group, and "Show continue watching", "Show categories", "Show quick watches" and "Show latest videos" in a "Home" group. Toggling a switch SHALL save the preferences at once and update the whole application.
 
 #### Scenario: Current values shown
-- **WHEN** a user opens the preferences view and only `home_show_latest` is off
+- **WHEN** a user opens the General section and only `home_show_latest` is off
 - **THEN** every switch is on except "Show latest videos"
 
 #### Scenario: Toggling saves
@@ -2174,11 +2178,11 @@ Each preference switch SHALL have a help control shown as a "?" icon with the ac
 - **THEN** its tooltip shows
 
 ### Requirement: Preferences Save Confirmation
-After a preference is saved, the preferences view SHALL show "Saved" next to its title for about 2 seconds. A failed save SHALL NOT show it.
+After a preference is saved, the General section SHALL show "Saved" next to its title, "General", for about 2 seconds. A failed save SHALL NOT show it.
 
 #### Scenario: Saved
 - **WHEN** a user turns off "Show quick watches" and the save succeeds
-- **THEN** "Saved" shows next to "Preferences" and is gone about 2 seconds later
+- **THEN** "Saved" shows next to "General" and is gone about 2 seconds later
 
 #### Scenario: Not saved
 - **WHEN** a user toggles a switch and the save fails
@@ -2462,7 +2466,7 @@ The add and edit dialogs for channels and playlists SHALL show a "Summarize vide
 - **THEN** the application sends `summaries_enabled` `true` alone, closes the dialog, and does not trigger a sync
 
 ### Requirement: Summarize Videos Needs AI Summaries
-"Summarize videos" SHALL be enabled only while the preferences have both AI and summaries on. Otherwise, including while preferences load or fail to load, it SHALL be disabled unless the source already has summaries on, in which case it SHALL stay enabled so they can be turned off; its hint SHALL read "Turn on AI summaries in AI settings." with "AI settings" a link to `/ai` that closes the dialog.
+"Summarize videos" SHALL be enabled only while the preferences have both AI and summaries on. Otherwise, including while preferences load or fail to load, it SHALL be disabled unless the source already has summaries on, in which case it SHALL stay enabled so they can be turned off; its hint SHALL read "Turn on AI summaries in AI settings." with "AI settings" a link to `/settings/ai` that closes the dialog.
 
 #### Scenario: AI off
 - **WHEN** AI is off and a user opens the add channel dialog
@@ -2478,7 +2482,7 @@ The add and edit dialogs for channels and playlists SHALL show a "Summarize vide
 
 #### Scenario: Following the link
 - **WHEN** AI is off and a user activates "AI settings" in the hint
-- **THEN** the dialog closes and the AI page at `/ai` opens
+- **THEN** the dialog closes and the AI section at `/settings/ai` opens
 
 ### Requirement: Video Detail AI Summary
 The video detail pane SHALL show the video's summary, when the listing reports one, in full between the meta line and the storage location, under the label "AI summary", at every viewport size. Line breaks in the summary SHALL be kept. When the listing reports none, the pane SHALL show neither the text nor the label.
@@ -2529,7 +2533,7 @@ The add and edit dialogs for channels and playlists SHALL show, while categories
 - **THEN** "Categorize videos" is not shown and "Summarize videos" still is
 
 ### Requirement: Categorize Videos Needs AI Categorization
-"Categorize videos" SHALL be enabled only while the preferences have AI, categories and categorization all on. Otherwise, including while preferences load or fail to load, it SHALL be disabled unless the source already has categorization on, in which case it SHALL stay enabled so it can be turned off; its hint SHALL read "Turn on AI categorization in AI settings." with "AI settings" a link to `/ai` that closes the dialog.
+"Categorize videos" SHALL be enabled only while the preferences have AI, categories and categorization all on. Otherwise, including while preferences load or fail to load, it SHALL be disabled unless the source already has categorization on, in which case it SHALL stay enabled so it can be turned off; its hint SHALL read "Turn on AI categorization in AI settings." with "AI settings" a link to `/settings/ai` that closes the dialog.
 
 #### Scenario: AI off
 - **WHEN** AI is off and a user opens the add channel dialog
@@ -2541,7 +2545,7 @@ The add and edit dialogs for channels and playlists SHALL show, while categories
 
 #### Scenario: Following the link
 - **WHEN** AI is off and a user activates "AI settings" in the "Categorize videos" hint
-- **THEN** the dialog closes and the AI page at `/ai` opens
+- **THEN** the dialog closes and the AI section at `/settings/ai` opens
 
 ### Requirement: Edit A Video's Categories
 While categories are on, every video's actions menu SHALL offer "Edit categories…", opening a dialog titled with the video's title that shows every category as a chip in its color, filled when the video belongs to it. A chip from the video's channel or playlist SHALL be locked, with the hint "From <source name>". A chip the AI decided SHALL carry an "AI" mark. Clicking any other chip SHALL set that category by hand to the opposite state and show the result; a failure SHALL show the error and leave the chip as it was.
@@ -2628,3 +2632,29 @@ The video detail pane SHALL show a "Retry now" button when any step of the selec
 #### Scenario: Retry fails
 - **WHEN** a user activates "Retry now" and the request fails
 - **THEN** the application tells the user and the video is shown as before
+
+### Requirement: Settings Page
+The application SHALL have a Settings page with the sections "General", "AI" and "Plex", in that order, at `/settings/general`, `/settings/ai` and `/settings/plex`. A section nav SHALL list them, marking the open one: a column beside the section on wide viewports, a row of tabs above it on mobile-width ones. `/settings` SHALL open "General".
+
+#### Scenario: Switching sections
+- **WHEN** a user on `/settings/general` activates "Plex" in the section nav
+- **THEN** the URL becomes `/settings/plex`, the Plex section shows and "Plex" is marked as open
+
+#### Scenario: Bare settings route
+- **WHEN** a user opens `/settings`
+- **THEN** the URL becomes `/settings/general` and the General section shows
+
+#### Scenario: Back button
+- **WHEN** a user goes from `/settings/general` to `/settings/ai` and presses back
+- **THEN** the General section shows again
+
+#### Scenario: Mobile width
+- **WHEN** a user opens `/settings/ai` on a mobile-width viewport
+- **THEN** the sections show as tabs above the AI section, with no horizontal page scroll
+
+### Requirement: Old Settings Routes Redirect
+`/preferences` SHALL redirect to `/settings/general` and `/ai` to `/settings/ai`, replacing the history entry.
+
+#### Scenario: Old bookmark
+- **WHEN** a user opens `/ai`
+- **THEN** the URL becomes `/settings/ai` and the AI section shows

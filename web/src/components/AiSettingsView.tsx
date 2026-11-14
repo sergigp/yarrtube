@@ -1,3 +1,4 @@
+import { SettingsSection } from '@/components/SettingsSection'
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import {
@@ -185,7 +186,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
 
   return (
     <>
-      <Section title="Provider">
+      <SettingsSection title="Provider">
         <SwitchRow
           id="ai-enabled"
           label="Enable AI"
@@ -238,8 +239,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
             <ConnectionMessage connection={connection} />
           </div>
         )}
-      </Section>
-      <Section title="Summaries">
+      </SettingsSection>
+      <SettingsSection title="Summaries">
         <SwitchRow
           id="summaries-enabled"
           label="Enabled"
@@ -323,9 +324,9 @@ function AiSettings({ saved }: { saved: Preferences }) {
             )}
           </>
         )}
-      </Section>
+      </SettingsSection>
       {saved.categories_enabled && (
-        <Section title="Categorization">
+        <SettingsSection title="Categorization">
           <SwitchRow
             id="categorization-enabled"
             label="Enabled"
@@ -432,7 +433,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
               )}
             </>
           )}
-        </Section>
+        </SettingsSection>
       )}
       <div className="flex items-center justify-end gap-4">
         {saveError && (
@@ -738,15 +739,6 @@ function ConnectionMessage({ connection }: { connection: ConnectionCheck }) {
     <p className={cn('text-sm', connection.failed ? 'text-destructive' : 'text-muted-foreground')}>
       {connection.message}
     </p>
-  )
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <fieldset className="flex flex-col gap-4">
-      <legend className="mb-4 font-heading text-lg font-semibold text-foreground">{title}</legend>
-      {children}
-    </fieldset>
   )
 }
 

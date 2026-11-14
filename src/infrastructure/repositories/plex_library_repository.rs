@@ -1,4 +1,7 @@
-use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState};
+use crate::domain::plex::{
+    PlexEpisode, PlexIdentity, PlexLabels, PlexPlaylist, PlexSection, PlexWatchState,
+};
+use crate::domain::preferences::{PlaylistOrder, PlaylistWatched, PlexPlaylistSettings};
 use crate::domain::video::PlaybackPosition;
 use chrono::DateTime;
 #[cfg(test)]
@@ -33,8 +36,9 @@ pub trait PlexLibraryRepository: Send + Sync {
     /// Asks Plex to scan only `path` (a server-side folder) in the section,
     /// so a new video is imported without waiting for a library scan.
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()>;
-    /// The server's machine identifier (`GET /identity`).
-    fn server_id(&self) -> anyhow::Result<String>;
+    /// The server's machine identifier and version, and whose watch state
+    /// the token reads and writes (`GET /identity`).
+    fn identity(&self) -> anyhow::Result<PlexIdentity>;
     /// Every episode in the section, one per media file
     /// (`GET /library/sections/{id}/all?type=4`, paged).
     fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>>;
@@ -51,21 +55,17 @@ pub trait PlexLibraryRepository: Send + Sync {
     /// The token user's video playlists (`GET /playlists?playlistType=video`).
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>>;
     /// Creates a smart playlist of the section's episodes labelled `label`,
-    /// watched or not, newest air date first, then highest episode number
-    /// first.
+    /// listed as `options` say (see `smart_playlist_uri`).
     fn create_smart_playlist(
         &self,
         server_id: &str,
         section_id: &str,
         label: &str,
         title: &str,
+        options: &PlexPlaylistSettings,
     ) -> anyhow::Result<PlexPlaylist>;
     /// `DELETE /playlists/{rating_key}`.
     fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()>;
-    /// Whose watch state the watch calls read and write: the server's
-    /// machine identifier and a fingerprint of the token,
-    /// `"<machineIdentifier>/<fingerprint>"`.
-    fn viewer_id(&self) -> anyhow::Result<String>;
     /// Marks the episode watched for the token user (`GET /:/scrobble`),
     /// clearing its resume position.
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()>;
@@ -121,6 +121,8 @@ struct IdentityResponse {
 struct IdentityContainer {
     #[serde(rename = "machineIdentifier")]
     machine_identifier: String,
+    #[serde(default)]
+    version: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -237,9 +239,18 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         self.send(&endpoint, request).map(drop)
     }
 
-    fn server_id(&self) -> anyhow::Result<String> {
+    fn identity(&self) -> anyhow::Result<PlexIdentity> {
         let response: IdentityResponse = self.get_json("/identity", &[])?;
-        Ok(response.media_container.machine_identifier)
+        let container = response.media_container;
+        Ok(PlexIdentity {
+            viewer_id: format!(
+                "{}/{}",
+                container.machine_identifier,
+                token_fingerprint(&self.config.token)
+            ),
+            server_id: container.machine_identifier,
+            version: container.version,
+        })
     }
 
     fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
@@ -291,8 +302,9 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         section_id: &str,
         label: &str,
         title: &str,
+        options: &PlexPlaylistSettings,
     ) -> anyhow::Result<PlexPlaylist> {
-        let uri = smart_playlist_uri(server_id, section_id, label);
+        let uri = smart_playlist_uri(server_id, section_id, label, options);
         let request = self.client()?.post(self.url("/playlists")).query(&[
             ("type", "video"),
             ("title", title),
@@ -313,14 +325,6 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         let endpoint = format!("/playlists/{rating_key}");
         let request = self.client()?.delete(self.url(&endpoint));
         self.send(&endpoint, request).map(drop)
-    }
-
-    fn viewer_id(&self) -> anyhow::Result<String> {
-        Ok(format!(
-            "{}/{}",
-            self.server_id()?,
-            token_fingerprint(&self.config.token)
-        ))
     }
 
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
@@ -467,14 +471,29 @@ fn label_edit_query(
 }
 
 /// The library URI a smart playlist filters: the section's episodes
-/// labelled `label`, watched or not, newest air date first, then highest
-/// episode number first (a channel's same-day episodes newest first). A
-/// space in it is `%20`, as python-plexapi sends it, not the form
+/// labelled `label`, only unwatched ones when `options` drop watched
+/// episodes, by air date then episode number, both descending newest first
+/// (a channel's same-day episodes newest first) or both ascending oldest
+/// first. A space in it is `%20`, as python-plexapi sends it, not the form
 /// encoding's `+`.
-fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> String {
+fn smart_playlist_uri(
+    server_id: &str,
+    section_id: &str,
+    label: &str,
+    options: &PlexPlaylistSettings,
+) -> String {
+    let unwatched = match options.watched {
+        PlaylistWatched::Keep => "",
+        PlaylistWatched::Drop => "&episode.unwatched=1",
+    };
+    let direction = match options.order {
+        PlaylistOrder::NewestFirst => "desc",
+        PlaylistOrder::OldestFirst => "asc",
+    };
     format!(
         "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all\
-         ?type=4&episode.label={}&sort=originallyAvailableAt%3Adesc%2Cindex%3Adesc",
+         ?type=4&episode.label={}{unwatched}\
+         &sort=originallyAvailableAt%3A{direction}%2Cindex%3A{direction}",
         plex_escaped(label)
     )
 }
@@ -531,6 +550,8 @@ pub struct FakePlexLibraryRepository {
     unreachable: bool,
     /// Rating keys whose label writes Plex rejects.
     rejected: Vec<String>,
+    /// Whether Plex rejects every smart playlist it's asked to create.
+    playlists_rejected: bool,
     /// The server's time, stamped as the last viewed time of every watch
     /// write, like Plex does (it cannot backdate one).
     now: Option<DateTime<Utc>>,
@@ -557,12 +578,15 @@ pub struct FakePlaylist {
     pub rating_key: String,
     pub title: String,
     pub filter: Option<(String, String)>,
+    /// How a playlist the fake created lists its episodes.
+    pub options: Option<PlexPlaylistSettings>,
 }
 
 #[cfg(test)]
 impl FakePlexLibraryRepository {
     pub const SERVER_ID: &str = "fake-server";
     pub const VIEWER_ID: &str = "fake-server/viewer";
+    pub const VERSION: &str = "1.43.5.11079-b3b13e506";
 
     /// The same fake with `location` added to `section_id`'s folders.
     pub fn with_location(self, section_id: &str, location: &str) -> Self {
@@ -626,6 +650,7 @@ impl FakePlexLibraryRepository {
             rating_key: rating_key.to_string(),
             title: title.to_string(),
             filter: None,
+            options: None,
         });
         self
     }
@@ -634,6 +659,14 @@ impl FakePlexLibraryRepository {
     pub fn rejecting(self, rating_key: &str) -> Self {
         Self {
             rejected: [self.rejected.clone(), vec![rating_key.to_string()]].concat(),
+            ..self
+        }
+    }
+
+    /// The same fake rejecting every smart playlist it's asked to create.
+    pub fn rejecting_playlists(self) -> Self {
+        Self {
+            playlists_rejected: true,
             ..self
         }
     }
@@ -732,9 +765,13 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         Ok(())
     }
 
-    fn server_id(&self) -> anyhow::Result<String> {
+    fn identity(&self) -> anyhow::Result<PlexIdentity> {
         self.ensure_reachable()?;
-        Ok(Self::SERVER_ID.to_string())
+        Ok(PlexIdentity {
+            server_id: Self::SERVER_ID.to_string(),
+            version: Self::VERSION.to_string(),
+            viewer_id: Self::VIEWER_ID.to_string(),
+        })
     }
 
     fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
@@ -797,15 +834,21 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
         section_id: &str,
         label: &str,
         title: &str,
+        options: &PlexPlaylistSettings,
     ) -> anyhow::Result<PlexPlaylist> {
         self.ensure_reachable()?;
         anyhow::ensure!(server_id == Self::SERVER_ID, "unknown server {server_id}");
+        anyhow::ensure!(
+            !self.playlists_rejected,
+            "Plex rejected the playlist {title}"
+        );
         self.record(format!("create_playlist:{section_id}:{label}:{title}"));
         let mut playlists = self.playlists.lock().unwrap();
         let playlist = FakePlaylist {
             rating_key: format!("pl{}", playlists.len() + 1),
             title: title.to_string(),
             filter: Some((section_id.to_string(), label.to_string())),
+            options: Some(*options),
         };
         playlists.push(playlist.clone());
         Ok(PlexPlaylist {
@@ -822,11 +865,6 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             .unwrap()
             .retain(|playlist| playlist.rating_key != rating_key);
         Ok(())
-    }
-
-    fn viewer_id(&self) -> anyhow::Result<String> {
-        self.ensure_reachable()?;
-        Ok(Self::VIEWER_ID.to_string())
     }
 
     fn mark_watched(&self, rating_key: &str) -> anyhow::Result<()> {
@@ -998,7 +1036,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_read_the_server_id() {
+    fn it_should_read_the_server_identity_with_its_version() {
         let mut server = mockito::Server::new();
         let _mock = server
             .mock("GET", "/identity")
@@ -1006,16 +1044,20 @@ mod tests {
             .with_status(200)
             .with_body(
                 r#"{"MediaContainer": {"size": 0, "claimed": true,
-                    "machineIdentifier": "abc123", "version": "1.43.4"}}"#,
+                    "machineIdentifier": "abc123", "version": "1.43.5.11079-b3b13e506"}}"#,
             )
             .create();
         let repository = repository(&server);
 
-        let server_id = repository.server_id();
+        let identity = repository.identity();
 
         assert_eq!(
-            server_id.map_err(|e| e.to_string()),
-            Ok("abc123".to_string())
+            identity.map_err(|e| e.to_string()),
+            Ok(PlexIdentity {
+                server_id: "abc123".to_string(),
+                version: "1.43.5.11079-b3b13e506".to_string(),
+                viewer_id: "abc123/5a1df1cf03604e11".to_string(),
+            })
         );
     }
 
@@ -1293,6 +1335,7 @@ mod tests {
             "19",
             "Sci & Tech",
             "Sci & Tech · Subscriptions",
+            &PlexPlaylistSettings::default(),
         );
 
         assert_eq!(
@@ -1300,6 +1343,48 @@ mod tests {
             Ok(PlexPlaylist {
                 rating_key: "503".to_string(),
                 title: "Sci & Tech · Subscriptions".to_string(),
+            })
+        );
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_create_a_smart_playlist_of_unwatched_episodes_oldest_first() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("POST", "/playlists")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "uri".into(),
+                "server://abc123/com.plexapp.plugins.library/library/sections/19/all\
+                 ?type=4&episode.label=Chess&episode.unwatched=1\
+                 &sort=originallyAvailableAt%3Aasc%2Cindex%3Aasc"
+                    .into(),
+            ))
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "Metadata": [
+                    {"ratingKey": "504", "title": "Chess", "smart": true}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let playlist = repository.create_smart_playlist(
+            "abc123",
+            "19",
+            "Chess",
+            "Chess",
+            &PlexPlaylistSettings {
+                watched: PlaylistWatched::Drop,
+                order: PlaylistOrder::OldestFirst,
+            },
+        );
+
+        assert_eq!(
+            playlist.map_err(|e| e.to_string()),
+            Ok(PlexPlaylist {
+                rating_key: "504".to_string(),
+                title: "Chess".to_string(),
             })
         );
         mock.assert();
@@ -1335,8 +1420,14 @@ mod tests {
         });
 
         let viewers = (
-            repository(&server).viewer_id().map_err(|e| e.to_string()),
-            other_token.viewer_id().map_err(|e| e.to_string()),
+            repository(&server)
+                .identity()
+                .map(|identity| identity.viewer_id)
+                .map_err(|e| e.to_string()),
+            other_token
+                .identity()
+                .map(|identity| identity.viewer_id)
+                .map_err(|e| e.to_string()),
         );
 
         assert_eq!(

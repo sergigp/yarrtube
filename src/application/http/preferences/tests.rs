@@ -3,17 +3,31 @@ use crate::application::http::test_support::categorization_resetter;
 use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryName, CategoryPrompt};
 use crate::domain::llm_server::Effort;
 use crate::domain::preferences::{
-    AiProvider, AnthropicSettings, CategorizationSettings, Preferences, ResolvedPreferences,
-    SummarySettings,
+    AiProvider, AnthropicSettings, CategorizationSettings, PlaylistOrder, PlaylistWatched,
+    PlexPlaylistSettings, Preferences, ResolvedPreferences, SummarySettings,
 };
+use crate::domain::services::{PlexEpisodeFinder, PlexLabelSyncer, VideoOwnerFinder};
+use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{StepState, Video, VideoId, YoutubeVideoId};
 use crate::domain::video_category::{Verdict, VerdictAuthor, VideoCategoryVerdict};
+use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
+use crate::infrastructure::repositories::sqlite_category_playlist_repository::SqliteCategoryPlaylistRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::{
     CategoryRepository, SqliteCategoryRepository,
 };
+use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
+use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_episode_labels_repository::SqliteEpisodeLabelsRepository;
+use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::SqlitePlexSyncRunRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::{
     PreferencesRepository, SqlitePreferencesRepository,
 };
+use crate::infrastructure::repositories::sqlite_task_repository::{
+    SqliteTaskRepository, TaskRepository,
+};
+use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::{
     SqliteVideoCategoryVerdictRepository, VideoCategoryVerdictRepository,
 };
@@ -343,6 +357,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_model_changes()
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             false,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -412,6 +427,7 @@ async fn it_should_reset_failed_verdicts_when_the_categorization_generation_sett
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             false,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -491,6 +507,7 @@ async fn it_should_keep_failed_verdicts_when_the_same_settings_are_saved() {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             false,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -518,6 +535,7 @@ async fn it_should_keep_failed_verdicts_when_the_shipped_categorization_prompt_i
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         false,
+        None,
     );
     let request = UpdatePreferencesRequest {
         categorization_prompt: Some(Some(CategorizationPrompt::shipped().as_str().to_string())),
@@ -1335,6 +1353,7 @@ async fn it_should_save_the_anthropic_provider_and_settings() {
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         true,
+        None,
     );
     let request = UpdatePreferencesRequest {
         ai_provider: Some("anthropic".to_string()),
@@ -1443,6 +1462,7 @@ async fn it_should_enable_ai_on_anthropic_without_an_ollama_url() {
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         true,
+        None,
     );
     let request = UpdatePreferencesRequest {
         ai_enabled: Some(true),
@@ -1522,6 +1542,7 @@ async fn it_should_reset_failed_summaries_when_the_provider_changes() {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             true,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -1587,6 +1608,7 @@ async fn it_should_reset_failed_verdicts_when_the_anthropic_categorization_effor
             Arc::new(SqliteCategoryRepository::new(db.database())),
             categorization_resetter(db.database()),
             true,
+            None,
         );
 
         update(preferences_updater, request).await.unwrap();
@@ -1633,6 +1655,199 @@ async fn it_should_reject_enabling_ai_on_anthropic_without_a_key() {
     assert_eq!(repository.find().unwrap(), Some(stored));
 }
 
+#[tokio::test]
+async fn it_should_read_the_plex_playlist_preferences_as_their_defaults() {
+    let db = TestDatabase::new();
+    let preferences_searcher = PreferencesSearcher::new(
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
+    );
+
+    let response = get(preferences_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            plex_playlist_watched: "keep".to_string(),
+            plex_playlist_order: "newest_first".to_string(),
+            ..all_on_response()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_save_a_plex_playlist_preference() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let preferences_updater = preferences_updater(&db, repository.clone());
+    let request = UpdatePreferencesRequest {
+        plex_playlist_watched: Some("drop".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            plex_playlist_watched: "drop".to_string(),
+            ..all_on_response()
+        })
+    );
+    assert_eq!(
+        repository.find().unwrap(),
+        Some(Preferences {
+            plex_playlists: PlexPlaylistSettings {
+                watched: PlaylistWatched::Drop,
+                ..PlexPlaylistSettings::default()
+            },
+            ..Preferences::default()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_reject_an_invalid_plex_playlist_order() {
+    let request = UpdatePreferencesRequest {
+        plex_playlist_order: Some("random".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(any_preferences_updater(), request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::bad_request(
+            "Playlist order must be \"newest_first\" or \"oldest_first\" (got \"random\")"
+        ))
+    );
+}
+
+#[tokio::test]
+async fn it_should_request_a_label_sync_now_when_a_playlist_preference_changes() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::SyncPlexLabels,
+            fixed_timestamp() + Duration::minutes(12),
+        )
+        .unwrap();
+    let preferences_updater = PreferencesUpdater::new(
+        repository,
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(CategoryLock::default()),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        categorization_resetter(db.database()),
+        false,
+        Some(label_syncer(&db, task_repository.clone())),
+    );
+    let request = UpdatePreferencesRequest {
+        plex_playlist_watched: Some("drop".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    update(preferences_updater, request).await.unwrap();
+
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_label_sync(fixed_timestamp())]
+    );
+}
+
+#[tokio::test]
+async fn it_should_not_request_a_label_sync_when_a_playlist_preference_is_saved_unchanged() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::SyncPlexLabels,
+            fixed_timestamp() + Duration::minutes(12),
+        )
+        .unwrap();
+    let preferences_updater = PreferencesUpdater::new(
+        repository,
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(CategoryLock::default()),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        categorization_resetter(db.database()),
+        false,
+        Some(label_syncer(&db, task_repository.clone())),
+    );
+    let request = UpdatePreferencesRequest {
+        plex_playlist_order: Some("newest_first".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    update(preferences_updater, request).await.unwrap();
+
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_label_sync(
+            fixed_timestamp() + Duration::minutes(12)
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_save_a_playlist_preference_without_plex_configured() {
+    let db = TestDatabase::new();
+    let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let preferences_updater = PreferencesUpdater::new(
+        repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(CategoryLock::default()),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        categorization_resetter(db.database()),
+        false,
+        None,
+    );
+    let request = UpdatePreferencesRequest {
+        plex_playlist_order: Some("oldest_first".to_string()),
+        ..UpdatePreferencesRequest::default()
+    };
+
+    let response = update(preferences_updater, request).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            plex_playlist_order: "oldest_first".to_string(),
+            ..all_on_response()
+        })
+    );
+    assert_eq!(
+        repository.find().unwrap(),
+        Some(Preferences {
+            plex_playlists: PlexPlaylistSettings {
+                order: PlaylistOrder::OldestFirst,
+                ..PlexPlaylistSettings::default()
+            },
+            ..Preferences::default()
+        })
+    );
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await
@@ -1662,6 +1877,7 @@ fn any_preferences_updater() -> PreferencesUpdater {
         Arc::new(SqliteCategoryRepository::new(database())),
         categorization_resetter(database()),
         false,
+        None,
     )
 }
 
@@ -1678,7 +1894,49 @@ fn preferences_updater(
         Arc::new(SqliteCategoryRepository::new(db.database())),
         categorization_resetter(db.database()),
         false,
+        None,
     )
+}
+
+fn label_syncer(db: &TestDatabase, task_repository: Arc<SqliteTaskRepository>) -> PlexLabelSyncer {
+    let plex = Arc::new(FakePlexLibraryRepository::default());
+    PlexLabelSyncer::new(
+        plex.clone(),
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        PlexEpisodeFinder::new(
+            plex,
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            "/videos",
+            "/plex/videos",
+        ),
+        task_repository,
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+    )
+}
+
+fn pending_label_sync(run_at: DateTime<Utc>) -> ScheduledTask {
+    ScheduledTask {
+        id: 1,
+        task: Task::SyncPlexLabels,
+        status: TaskStatus::Pending,
+        retries: 0,
+        run_at,
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        last_error: None,
+    }
 }
 
 fn fixed_timestamp() -> DateTime<Utc> {

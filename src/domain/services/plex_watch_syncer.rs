@@ -1,4 +1,5 @@
-use crate::domain::plex::PlexEpisode;
+use crate::domain::plex::{PlexEpisode, PlexIdentity};
+use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
 use crate::domain::plex_watch::{EpisodeWatch, MergeOutcome, WatchSide, merge};
 use crate::domain::services::{
     PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary, VideoWatchStateUpdater,
@@ -8,6 +9,7 @@ use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, WatchProgress, YoutubeVideoId};
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_episode_watch_repository::EpisodeWatchRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::PlexSyncRunRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -31,10 +33,12 @@ pub struct PlexWatchSyncer {
     video_repository: Arc<dyn VideoRepository>,
     video_watch_state_updater: VideoWatchStateUpdater,
     task_repository: Arc<dyn TaskRepository>,
+    plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     clock: Arc<dyn Clock>,
 }
 
 impl PlexWatchSyncer {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         plex_library_repository: Arc<dyn PlexLibraryRepository>,
         plex_episode_finder: PlexEpisodeFinder,
@@ -42,6 +46,7 @@ impl PlexWatchSyncer {
         video_repository: Arc<dyn VideoRepository>,
         video_watch_state_updater: VideoWatchStateUpdater,
         task_repository: Arc<dyn TaskRepository>,
+        plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -51,6 +56,7 @@ impl PlexWatchSyncer {
             video_repository,
             video_watch_state_updater,
             task_repository,
+            plex_sync_run_repository,
             clock,
         }
     }
@@ -81,29 +87,62 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let (library, viewer_id) = match self.read_plex() {
+        let (library, identity) = match self.read_plex() {
             Ok(plex) => plex,
-            Err(e) => {
-                warn!(error = %e, "failed to reach Plex, retrying the watch sync later");
-                return self.request_sync(self.clock.now() + SYNC_INTERVAL);
-            }
+            Err(e) => return self.retry_later(e),
         };
-        let rows = self.agreed_rows()?;
-        let videos = self.video_repository.list_downloaded()?;
-        self.forget_undownloaded(&rows, &videos)?;
-        let matched = self.match_episodes(videos, &library)?;
-        let merged = self.pull_then_merge(matched, &rows, &viewer_id)?;
-        let backlog = self.settle_all(merged, &rows, &viewer_id)?;
-        self.request_next_sync(backlog)
+        match self.sync_reached(&library, &identity.viewer_id) {
+            Ok(()) => self.record(PlexSyncOutcome::reached(&identity, &library.sections)),
+            Err(e) => self.record_failure(e),
+        }
     }
 }
 
 impl PlexWatchSyncer {
-    /// The library and whose watch state it holds.
-    fn read_plex(&self) -> anyhow::Result<(PlexLibrary, String)> {
+    /// The library and who the server and its viewer are.
+    fn read_plex(&self) -> anyhow::Result<(PlexLibrary, PlexIdentity)> {
         let library = self.plex_episode_finder.read_library()?;
-        let viewer_id = self.plex_library_repository.viewer_id()?;
-        Ok((library, viewer_id))
+        let identity = self.plex_library_repository.identity()?;
+        Ok((library, identity))
+    }
+
+    /// Plex couldn't be reached: the next sync runs after `SYNC_INTERVAL`
+    /// and this one is recorded as failed with `error`.
+    fn retry_later(&self, error: anyhow::Error) -> anyhow::Result<()> {
+        warn!(error = %error, "failed to reach Plex, retrying the watch sync later");
+        self.request_sync(self.clock.now() + SYNC_INTERVAL)?;
+        self.record(PlexSyncOutcome::Failed {
+            error: error.to_string(),
+        })
+    }
+
+    /// The sync's work once Plex is reached: pull, push, next sync.
+    fn sync_reached(&self, library: &PlexLibrary, viewer_id: &str) -> anyhow::Result<()> {
+        let rows = self.agreed_rows()?;
+        let videos = self.video_repository.list_downloaded()?;
+        self.forget_undownloaded(&rows, &videos)?;
+        let matched = self.match_episodes(videos, library)?;
+        let merged = self.pull_then_merge(matched, &rows, viewer_id)?;
+        let backlog = self.settle_all(merged, &rows, viewer_id)?;
+        self.request_next_sync(backlog)
+    }
+
+    /// Records the sync as failed with `error`, then fails with it so the
+    /// task is retried.
+    fn record_failure(&self, error: anyhow::Error) -> anyhow::Result<()> {
+        self.record(PlexSyncOutcome::Failed {
+            error: error.to_string(),
+        })?;
+        Err(error)
+    }
+
+    /// Records how this sync ended.
+    fn record(&self, outcome: PlexSyncOutcome) -> anyhow::Result<()> {
+        self.plex_sync_run_repository.save(&PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: self.clock.now(),
+            outcome,
+        })
     }
 
     /// Every stored row, by video id.

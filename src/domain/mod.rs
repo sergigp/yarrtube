@@ -9,6 +9,7 @@ pub mod playlist;
 pub mod playlist_video;
 pub mod plex;
 pub mod plex_label;
+pub mod plex_status;
 pub mod plex_watch;
 pub mod preferences;
 pub mod services;

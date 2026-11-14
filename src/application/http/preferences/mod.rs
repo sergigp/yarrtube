@@ -4,8 +4,9 @@ use super::blocking::run_blocking;
 use super::error::ApiError;
 use crate::domain::llm_server::{Effort, OllamaUrl};
 use crate::domain::preferences::{
-    AiProvider, CategorizationModel, CategorizationPrompt, ContextLength, PreferencesChange,
-    SummaryModel, SummaryPrompt, Temperature, Theme, UpdatePreferencesError,
+    AiProvider, CategorizationModel, CategorizationPrompt, ContextLength, PlaylistOrder,
+    PlaylistWatched, PreferencesChange, SummaryModel, SummaryPrompt, Temperature, Theme,
+    UpdatePreferencesError,
 };
 use crate::domain::services::{
     PreferencesSearcher, PreferencesSearcherApi, PreferencesUpdater, PreferencesUpdaterApi,
@@ -100,6 +101,16 @@ fn preferences_change(request: UpdatePreferencesRequest) -> Result<PreferencesCh
             .anthropic_categorization_effort
             .as_deref()
             .map(Effort::new)
+            .transpose()?,
+        plex_playlist_watched: request
+            .plex_playlist_watched
+            .as_deref()
+            .map(PlaylistWatched::new)
+            .transpose()?,
+        plex_playlist_order: request
+            .plex_playlist_order
+            .as_deref()
+            .map(PlaylistOrder::new)
             .transpose()?,
     })
 }

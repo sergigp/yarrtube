@@ -1,6 +1,6 @@
 use super::{
-    AiProvider, CategorizationModel, CategorizationPrompt, ContextLength, SummaryModel,
-    SummaryPrompt, Temperature, Theme,
+    AiProvider, CategorizationModel, CategorizationPrompt, ContextLength, PlaylistOrder,
+    PlaylistWatched, SummaryModel, SummaryPrompt, Temperature, Theme,
 };
 use crate::domain::llm_server::{Effort, OllamaUrl};
 
@@ -36,4 +36,6 @@ pub struct PreferencesChange {
     pub anthropic_summaries_effort: Option<Effort>,
     pub anthropic_categorization_model: Option<CategorizationModel>,
     pub anthropic_categorization_effort: Option<Effort>,
+    pub plex_playlist_watched: Option<PlaylistWatched>,
+    pub plex_playlist_order: Option<PlaylistOrder>,
 }

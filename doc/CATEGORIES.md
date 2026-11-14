@@ -98,9 +98,20 @@ Good to know:
 
 Each category becomes a **smart playlist** in Plex: all its episodes,
 newest first, across all its channels and playlists, like its page in the
-web UI. Watched episodes stay in it, shown as watched. A channel's episodes
-from the same day are newest first; episodes of different shows on the
-same day are in Plex's own order.
+web UI. A channel's episodes from the same day are newest first; episodes
+of different shows on the same day are in Plex's own order.
+
+Two options in **Settings → Plex** change every category playlist:
+
+- **Watched episodes**: _Stay in the playlist_ (the default) or _Drop out_.
+  Plex Web and the Mac app don't show a watched badge on playlist items,
+  so a playlist that keeps them can't tell you which ones you've seen;
+  dropping them turns each playlist into a queue of what's left.
+- **Order**: _Newest first_ (the default) or _Oldest first_, for working
+  through a backlog.
+
+A change applies within a minute: yarrtube replaces the playlists, under
+the same titles.
 
 It needs the Plex integration working: a TV Shows library and the scan
 trigger, steps 1 and 2 of the [Plex guide](PLEX.md). Nothing else to set up.

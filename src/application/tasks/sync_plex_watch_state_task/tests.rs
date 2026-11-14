@@ -4,6 +4,7 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::plex::PlexWatchState;
+use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
 use crate::domain::plex_watch::EpisodeWatch;
 use crate::domain::services::plex_watch_syncer::BATCH_SIZE;
 use crate::domain::services::{
@@ -28,6 +29,9 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::{
 };
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
     PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::{
+    PlexSyncRunRepository, SqlitePlexSyncRunRepository,
 };
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
@@ -1057,6 +1061,63 @@ fn it_should_push_instead_of_unwatching_after_a_token_switch() {
     );
 }
 
+#[test]
+fn it_should_record_the_plex_version_and_libraries_when_a_watch_sync_reaches_plex() {
+    let db = TestDatabase::new();
+    let plex_sync_run_repository = SqlitePlexSyncRunRepository::new(db.database());
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_section_title("19", "Subscriptions"),
+        ),
+        Arc::new(SqliteEpisodeWatchRepository::new(db.database())),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex_sync_run_repository.list().unwrap(),
+        vec![PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: now(),
+            outcome: PlexSyncOutcome::Reached {
+                version: FakePlexLibraryRepository::VERSION.to_string(),
+                libraries: vec!["Subscriptions".to_string()],
+            },
+        }]
+    );
+}
+
+#[test]
+fn it_should_record_the_error_when_a_watch_sync_cant_reach_plex() {
+    let db = TestDatabase::new();
+    let plex_sync_run_repository = SqlitePlexSyncRunRepository::new(db.database());
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        Arc::new(FakePlexLibraryRepository::failing()),
+        Arc::new(SqliteEpisodeWatchRepository::new(db.database())),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex_sync_run_repository.list().unwrap(),
+        vec![PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: now(),
+            outcome: PlexSyncOutcome::Failed {
+                error: "Plex is unreachable".to_string(),
+            },
+        }]
+    );
+}
+
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
 fn syncer(
@@ -1100,6 +1161,7 @@ fn syncer(
             ),
         ),
         task_repository,
+        Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
         clock,
     )
 }

@@ -1,6 +1,8 @@
 use crate::domain::category::{CategoryId, CategoryName};
-use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection};
+use crate::domain::plex::{PlexEpisode, PlexIdentity, PlexLabels, PlexSection};
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
+use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
+use crate::domain::preferences::PlexPlaylistSettings;
 use crate::domain::services::{PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary};
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId};
@@ -9,6 +11,8 @@ use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRep
 use crate::infrastructure::repositories::sqlite_category_playlist_repository::CategoryPlaylistRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_episode_labels_repository::EpisodeLabelsRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::PlexSyncRunRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -36,15 +40,18 @@ struct DesiredPlaylist {
     section_id: String,
     label: String,
     title: String,
+    options: PlexPlaylistSettings,
 }
 
 impl DesiredPlaylist {
     /// Whether `playlist` is this one: for this section and label, under
-    /// this title. One with another title is replaced.
+    /// this title, listing its episodes as these options say. One with
+    /// another title or options, or options unknown, is replaced.
     fn is(&self, playlist: &CategoryPlaylist) -> bool {
         playlist.section_id == self.section_id
             && playlist.label.to_lowercase() == self.label.to_lowercase()
             && playlist.title == self.title
+            && playlist.options == Some(self.options)
     }
 }
 
@@ -60,6 +67,8 @@ pub struct PlexLabelSyncer {
     video_repository: Arc<dyn VideoRepository>,
     plex_episode_finder: PlexEpisodeFinder,
     task_repository: Arc<dyn TaskRepository>,
+    preferences_repository: Arc<dyn PreferencesRepository>,
+    plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     clock: Arc<dyn Clock>,
 }
 
@@ -74,6 +83,8 @@ impl PlexLabelSyncer {
         video_repository: Arc<dyn VideoRepository>,
         plex_episode_finder: PlexEpisodeFinder,
         task_repository: Arc<dyn TaskRepository>,
+        preferences_repository: Arc<dyn PreferencesRepository>,
+        plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -85,6 +96,8 @@ impl PlexLabelSyncer {
             video_repository,
             plex_episode_finder,
             task_repository,
+            preferences_repository,
+            plex_sync_run_repository,
             clock,
         }
     }
@@ -133,22 +146,62 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let library = match self.plex_episode_finder.read_library() {
-            Ok(library) => library,
-            Err(e) => {
-                warn!(error = %e, "failed to reach Plex, retrying the label sync later");
-                return self.request_sync(self.clock.now() + SYNC_INTERVAL);
-            }
+        let (library, identity) = match self.read_plex() {
+            Ok(plex) => plex,
+            Err(e) => return self.retry_later(e),
         };
-        self.mark_reimported(&library.episodes)?;
-        self.track_categorized_videos()?;
-        let backlog = self.label_dirty_videos(&library)?;
-        self.reconcile_playlists(&library.sections)?;
-        self.request_next_sync(backlog)
+        match self.sync_reached(&library, &identity) {
+            Ok(()) => self.record(PlexSyncOutcome::reached(&identity, &library.sections)),
+            Err(e) => self.record_failure(e),
+        }
     }
 }
 
 impl PlexLabelSyncer {
+    /// The library and who the server is.
+    fn read_plex(&self) -> anyhow::Result<(PlexLibrary, PlexIdentity)> {
+        let library = self.plex_episode_finder.read_library()?;
+        let identity = self.plex_library_repository.identity()?;
+        Ok((library, identity))
+    }
+
+    /// Plex couldn't be reached: everything stays dirty, the next sync runs
+    /// after `SYNC_INTERVAL` and this one is recorded as failed with `error`.
+    fn retry_later(&self, error: anyhow::Error) -> anyhow::Result<()> {
+        warn!(error = %error, "failed to reach Plex, retrying the label sync later");
+        self.request_sync(self.clock.now() + SYNC_INTERVAL)?;
+        self.record(PlexSyncOutcome::Failed {
+            error: error.to_string(),
+        })
+    }
+
+    /// The sync's work once Plex is reached: labels, playlists, next sync.
+    fn sync_reached(&self, library: &PlexLibrary, identity: &PlexIdentity) -> anyhow::Result<()> {
+        self.mark_reimported(&library.episodes)?;
+        self.track_categorized_videos()?;
+        let backlog = self.label_dirty_videos(library)?;
+        self.reconcile_playlists(&library.sections, &identity.server_id)?;
+        self.request_next_sync(backlog)
+    }
+
+    /// Records the sync as failed with `error`, then fails with it so the
+    /// task is retried.
+    fn record_failure(&self, error: anyhow::Error) -> anyhow::Result<()> {
+        self.record(PlexSyncOutcome::Failed {
+            error: error.to_string(),
+        })?;
+        Err(error)
+    }
+
+    /// Records how this sync ended.
+    fn record(&self, outcome: PlexSyncOutcome) -> anyhow::Result<()> {
+        self.plex_sync_run_repository.save(&PlexSyncRun {
+            kind: PlexSyncKind::Labels,
+            finished_at: self.clock.now(),
+            outcome,
+        })
+    }
+
     /// Labels a batch of dirty videos, least recently checked first;
     /// returns whether more may be labellable right away: the batch was full
     /// and at least one of its rows was synced or deleted, so a batch of
@@ -178,8 +231,8 @@ impl PlexLabelSyncer {
 
     /// Keeps one smart playlist per label and section holding labelled
     /// episodes.
-    fn reconcile_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<()> {
-        let desired = self.desired_playlists(sections)?;
+    fn reconcile_playlists(&self, sections: &[PlexSection], server_id: &str) -> anyhow::Result<()> {
+        let desired = self.desired_playlists(sections, self.playlist_options()?)?;
         let (live, gone) = self.stored_playlists()?;
         gone.iter()
             .try_for_each(|playlist| self.category_playlist_repository.delete(playlist))?;
@@ -189,7 +242,7 @@ impl PlexLabelSyncer {
         desired
             .into_iter()
             .filter(|desired| !live.iter().any(|playlist| desired.is(playlist)))
-            .try_for_each(|desired| self.create_playlist(desired))
+            .try_for_each(|desired| self.create_playlist(desired, server_id))
     }
 
     /// The playlists yarrtube created: those still in Plex, then those
@@ -213,7 +266,11 @@ impl PlexLabelSyncer {
     /// spans sections, the section's title. A label no category carries any
     /// more (renamed or deleted, its episode not relabelled yet) counts for
     /// none, and one differing from its category only in case counts as it.
-    fn desired_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<Vec<DesiredPlaylist>> {
+    fn desired_playlists(
+        &self,
+        sections: &[PlexSection],
+        options: PlexPlaylistSettings,
+    ) -> anyhow::Result<Vec<DesiredPlaylist>> {
         let names: HashMap<String, String> = self
             .category_repository
             .list()?
@@ -245,6 +302,7 @@ impl PlexLabelSyncer {
                 section_id: section_id.clone(),
                 label: label.clone(),
                 title: playlist_title(label, section_id, &labelled, sections),
+                options,
             })
             .collect())
     }
@@ -255,20 +313,30 @@ impl PlexLabelSyncer {
         self.category_playlist_repository.delete(playlist)
     }
 
-    fn create_playlist(&self, desired: DesiredPlaylist) -> anyhow::Result<()> {
-        let server_id = self.plex_library_repository.server_id()?;
+    fn create_playlist(&self, desired: DesiredPlaylist, server_id: &str) -> anyhow::Result<()> {
         let playlist = self.plex_library_repository.create_smart_playlist(
-            &server_id,
+            server_id,
             &desired.section_id,
             &desired.label,
             &desired.title,
+            &desired.options,
         )?;
         self.category_playlist_repository.save(&CategoryPlaylist {
             section_id: desired.section_id,
             label: desired.label,
             rating_key: playlist.rating_key,
             title: playlist.title,
+            options: Some(desired.options),
         })
+    }
+
+    /// How the user wants category playlists to list their episodes.
+    fn playlist_options(&self) -> anyhow::Result<PlexPlaylistSettings> {
+        Ok(self
+            .preferences_repository
+            .find()?
+            .unwrap_or_default()
+            .plex_playlists)
     }
 
     /// Right away while a backlog of dirty videos remains, else after

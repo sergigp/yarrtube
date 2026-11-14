@@ -9,12 +9,12 @@ use crate::domain::services::{
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, LlmServerSearcher,
     MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
     PlaylistVideoReconciler, PlaylistViewSearcher, PlexEpisodeFinder, PlexFolderScanner,
-    PlexLabelSyncer, PlexLabelSyncerApi, PlexWatchSyncer, PlexWatchSyncerApi, PreferencesSearcher,
-    PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover, SubtitleFetcher,
-    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategorizer, VideoCategoryAssigner,
-    VideoCategoryChoiceSearcher, VideoCategoryEditor, VideoDownloader, VideoFileDeleter,
-    VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoRetrier, VideoSearcher,
-    VideoSummarizer, VideoWatchStateUpdater,
+    PlexLabelSyncer, PlexLabelSyncerApi, PlexStatusSearcher, PlexSyncRequester, PlexWatchSyncer,
+    PlexWatchSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
+    ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
+    VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
+    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
+    VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -156,6 +156,7 @@ pub fn run() -> ExitCode {
         task_executor,
         plex,
         plex_label_syncer,
+        plex_watch_syncer,
         shutdown_rx,
     ));
     // Don't wait on blocking work such as a download in progress: a task
@@ -529,8 +530,22 @@ fn prepare_task_queue(
     Ok(())
 }
 
-fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
+fn api_services(
+    infrastructure: &InfrastructureContainer,
+    plex_label_syncer: Option<PlexLabelSyncer>,
+    plex_watch_syncer: Option<PlexWatchSyncer>,
+) -> ApiServices {
     ApiServices {
+        plex_status_searcher: PlexStatusSearcher::new(
+            plex_label_syncer.is_some(),
+            infrastructure.plex_sync_run_repository.clone(),
+            infrastructure.task_repository.clone(),
+        ),
+        plex_sync_requester: PlexSyncRequester::new(
+            plex_watch_syncer,
+            plex_label_syncer.clone(),
+            infrastructure.clock.clone(),
+        ),
         playlist_creator: PlaylistCreator::new(
             infrastructure.playlist_repository.clone(),
             infrastructure.youtube_playlist_repository.clone(),
@@ -651,6 +666,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.category_repository.clone(),
             categorization_resetter(infrastructure),
             infrastructure.anthropic_available,
+            plex_label_syncer,
         ),
         llm_server_searcher: LlmServerSearcher::new(
             infrastructure.llm_server_repository.clone(),
@@ -787,6 +803,8 @@ fn plex_label_syncer(
         infrastructure.video_repository.clone(),
         plex_episode_finder(infrastructure, plex),
         infrastructure.task_repository.clone(),
+        infrastructure.preferences_repository.clone(),
+        infrastructure.plex_sync_run_repository.clone(),
         infrastructure.clock.clone(),
     )
 }
@@ -814,6 +832,7 @@ fn plex_watch_syncer(
         infrastructure.video_repository.clone(),
         video_watch_state_updater(infrastructure),
         infrastructure.task_repository.clone(),
+        infrastructure.plex_sync_run_repository.clone(),
         infrastructure.clock.clone(),
     )
 }
@@ -1181,8 +1200,14 @@ async fn run_async(
     task_executor: Arc<TaskExecutor>,
     plex: Option<PlexIntegration>,
     plex_label_syncer: Option<PlexLabelSyncer>,
+    plex_watch_syncer: Option<PlexWatchSyncer>,
     shutdown: oneshot::Receiver<()>,
 ) -> ExitCode {
+    let api_services = api_services(
+        &infrastructure,
+        plex_label_syncer.clone(),
+        plex_watch_syncer,
+    );
     tokio::spawn(heartbeat_loop(Arc::new(daemon_health_searcher(
         &infrastructure,
     ))));
@@ -1193,7 +1218,7 @@ async fn run_async(
     tokio::spawn(task_executor.run(poll_interval));
 
     tokio::select! {
-        result = serve_http(port(), api_services(&infrastructure)) => {
+        result = serve_http(port(), api_services) => {
             if let Err(e) = result {
                 error!(error = %e, "HTTP server failed");
                 return ExitCode::FAILURE;

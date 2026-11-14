@@ -1,8 +1,8 @@
 use crate::domain::llm_server::{Effort, OllamaUrl};
 use crate::domain::preferences::{
     AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
-    CategorizationSettings, ContextLength, Preferences, SummaryModel, SummaryPrompt,
-    SummarySettings, Temperature, Theme,
+    CategorizationSettings, ContextLength, PlaylistOrder, PlaylistWatched, PlexPlaylistSettings,
+    Preferences, SummaryModel, SummaryPrompt, SummarySettings, Temperature, Theme,
 };
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -93,6 +93,8 @@ struct StoredPreferences {
     anthropic_summaries_effort: Option<String>,
     anthropic_categorization_model: Option<String>,
     anthropic_categorization_effort: Option<String>,
+    plex_playlist_watched: Option<String>,
+    plex_playlist_order: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -150,6 +152,8 @@ impl From<&Preferences> for StoredPreferences {
                     .as_str()
                     .to_string(),
             ),
+            plex_playlist_watched: Some(preferences.plex_playlists.watched.as_str().to_string()),
+            plex_playlist_order: Some(preferences.plex_playlists.order.as_str().to_string()),
         }
     }
 }
@@ -249,6 +253,16 @@ impl From<StoredPreferences> for Preferences {
                     .anthropic_categorization_effort
                     .and_then(|effort| Effort::new(&effort).ok())
                     .unwrap_or(defaults.anthropic.categorization_effort),
+            },
+            plex_playlists: PlexPlaylistSettings {
+                watched: stored
+                    .plex_playlist_watched
+                    .and_then(|watched| PlaylistWatched::new(&watched).ok())
+                    .unwrap_or(defaults.plex_playlists.watched),
+                order: stored
+                    .plex_playlist_order
+                    .and_then(|order| PlaylistOrder::new(&order).ok())
+                    .unwrap_or(defaults.plex_playlists.order),
             },
         }
     }
@@ -477,6 +491,43 @@ mod tests {
             repository.find().map_err(|e| e.to_string()),
             Ok(Some(Preferences {
                 home_show_quick_watches: false,
+                theme: Theme::Dark,
+                ..Preferences::default()
+            }))
+        );
+    }
+
+    #[test]
+    fn it_should_round_trip_the_plex_playlist_preferences() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            plex_playlists: PlexPlaylistSettings {
+                watched: PlaylistWatched::Drop,
+                order: PlaylistOrder::OldestFirst,
+            },
+            ..Preferences::default()
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_missing_plex_playlist_keys_as_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"theme\": \"dark\"}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences {
                 theme: Theme::Dark,
                 ..Preferences::default()
             }))

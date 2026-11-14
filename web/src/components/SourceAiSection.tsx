@@ -107,7 +107,7 @@ function AiCheckbox({
           ) : (
             <>
               Turn on {feature} in{' '}
-              <Link to="/ai" className="underline hover:text-foreground" onClick={onNavigateAway}>
+              <Link to="/settings/ai" className="underline hover:text-foreground" onClick={onNavigateAway}>
                 AI settings
               </Link>
               .

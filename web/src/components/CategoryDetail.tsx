@@ -92,8 +92,8 @@ export function CategoryDetail() {
     return (
       <p className="text-sm text-muted-foreground">
         Categories are turned off.{' '}
-        <Link to="/preferences" className="underline hover:text-foreground">
-          Preferences
+        <Link to="/settings/general" className="underline hover:text-foreground">
+          Settings
         </Link>
       </p>
     )

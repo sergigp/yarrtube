@@ -9,11 +9,15 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
   const prompt = page.getByRole('textbox', { name: 'Prompt', exact: true })
   const save = page.getByRole('button', { name: 'Save' })
 
-  await test.step('the settings menu opens the AI page', async () => {
+  await test.step('the settings page opens the AI section', async () => {
     await page.goto('/')
     await page.getByRole('banner').getByRole('button', { name: 'Settings' }).click()
-    await page.getByRole('menuitem', { name: 'AI', exact: true }).click()
-    await expect(page).toHaveURL(/\/ai$/)
+    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click()
+    await page
+      .getByRole('navigation', { name: 'Settings sections' })
+      .getByRole('link', { name: 'AI', exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/settings\/ai$/)
     await expect(enableAi).not.toBeChecked()
     await expect(prompt).toHaveCount(0)
   })
@@ -102,7 +106,7 @@ test.describe(() => {
   test.use({ expectedApiErrors: [{ method: 'PATCH', path: '/api/preferences', status: 400 }] })
 
   test('AI settings: a broken prompt is refused with the reason', async ({ page, daemon }) => {
-    await page.goto('/ai')
+    await page.goto('/settings/ai')
     await page.getByRole('textbox', { name: 'Ollama URL' }).fill(daemon.ollamaUrl)
     await page.getByRole('switch', { name: 'Enable AI' }).click()
     await page.getByRole('switch', { name: 'Summaries enabled' }).click()
@@ -121,7 +125,7 @@ test('AI settings: test the Anthropic connection and save it as the provider', a
   const anthropic = page.getByRole('radio', { name: 'Anthropic' })
   const model = page.getByRole('combobox', { name: 'Model', exact: true })
 
-  await page.goto('/ai')
+  await page.goto('/settings/ai')
   await anthropic.check()
   await expect(page.getByRole('textbox', { name: 'Ollama URL' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Test connection' }).click()

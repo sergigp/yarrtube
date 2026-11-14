@@ -1,7 +1,9 @@
 use crate::domain::preferences::{
     Preferences, PreferencesChange, ResolvedPreferences, UpdatePreferencesError,
 };
-use crate::domain::services::{CategorizationResetter, CategorizationResetterApi};
+use crate::domain::services::{
+    CategorizationResetter, CategorizationResetterApi, PlexLabelSyncer, PlexLabelSyncerApi,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -21,6 +23,7 @@ pub struct PreferencesUpdater {
     category_lock: Arc<CategoryLock>,
     category_repository: Arc<dyn CategoryRepository>,
     anthropic_available: bool,
+    plex_label_syncer: Option<PlexLabelSyncer>,
 }
 
 impl PreferencesUpdater {
@@ -34,6 +37,7 @@ impl PreferencesUpdater {
         category_repository: Arc<dyn CategoryRepository>,
         categorization_resetter: CategorizationResetter,
         anthropic_available: bool,
+        plex_label_syncer: Option<PlexLabelSyncer>,
     ) -> Self {
         Self {
             repository,
@@ -44,6 +48,7 @@ impl PreferencesUpdater {
             category_lock,
             category_repository,
             anthropic_available,
+            plex_label_syncer,
         }
     }
 }
@@ -82,6 +87,9 @@ impl PreferencesUpdaterApi for PreferencesUpdater {
         if stored.changes_categorization(&updated) {
             self.reset_failed_categorizations()?;
         }
+        if stored.changes_plex_playlists(&updated) {
+            self.request_label_sync()?;
+        }
         self.resolve(updated)
     }
 }
@@ -102,6 +110,16 @@ impl PreferencesUpdater {
             &categories,
             self.anthropic_available,
         ))
+    }
+
+    /// Category playlists are replaced by a label sync that runs now, when
+    /// Plex is configured.
+    fn request_label_sync(&self) -> Result<(), UpdatePreferencesError> {
+        self.plex_label_syncer
+            .as_ref()
+            .map(|syncer| syncer.request_sync(self.clock.now()))
+            .unwrap_or(Ok(()))
+            .map_err(UpdatePreferencesError::Repository)
     }
 
     fn stored(&self) -> Result<Preferences, UpdatePreferencesError> {

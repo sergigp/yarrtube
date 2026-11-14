@@ -64,7 +64,7 @@ describe('CategoryDetail', () => {
     })
 
     expect(await screen.findByText('Categories are turned off.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/general')
     expect(screen.queryByRole('heading', { name: 'Chess' })).not.toBeInTheDocument()
   })
 

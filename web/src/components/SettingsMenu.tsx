@@ -23,10 +23,7 @@ export function SettingsMenu() {
           <Link to="/tasks">Tasks</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link to="/preferences">Preferences</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/ai">AI</Link>
+          <Link to="/settings/general">Settings</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <a href={NEW_ISSUE_URL} target="_blank" rel="noreferrer">

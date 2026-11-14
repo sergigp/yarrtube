@@ -1,6 +1,6 @@
 use super::{
-    AiProvider, AnthropicSettings, CategorizationSettings, PreferencesChange, SummarySettings,
-    Theme,
+    AiProvider, AnthropicSettings, CategorizationSettings, PlexPlaylistSettings, PreferencesChange,
+    SummarySettings, Theme,
 };
 use crate::domain::llm_server::{LlmConnection, OllamaUrl};
 use crate::domain::shared::ValidationError;
@@ -20,6 +20,7 @@ pub struct Preferences {
     pub summaries: SummarySettings,
     pub categorization: CategorizationSettings,
     pub anthropic: AnthropicSettings,
+    pub plex_playlists: PlexPlaylistSettings,
 }
 
 impl Default for Preferences {
@@ -38,6 +39,7 @@ impl Default for Preferences {
             summaries: SummarySettings::default(),
             categorization: CategorizationSettings::default(),
             anthropic: AnthropicSettings::default(),
+            plex_playlists: PlexPlaylistSettings::default(),
         }
     }
 }
@@ -96,6 +98,11 @@ impl Preferences {
             || calls(&self.categorization) != calls(&other.categorization)
             || self.anthropic.categorization_model != other.anthropic.categorization_model
             || self.anthropic.categorization_effort != other.anthropic.categorization_effort
+    }
+
+    /// Whether `other` lists category playlists in Plex differently.
+    pub fn changes_plex_playlists(&self, other: &Self) -> bool {
+        self.plex_playlists != other.plex_playlists
     }
 
     /// These preferences with `change` applied, as long as the result is
@@ -170,6 +177,14 @@ impl Preferences {
                 categorization_effort: change
                     .anthropic_categorization_effort
                     .unwrap_or(self.anthropic.categorization_effort),
+            },
+            plex_playlists: PlexPlaylistSettings {
+                watched: change
+                    .plex_playlist_watched
+                    .unwrap_or(self.plex_playlists.watched),
+                order: change
+                    .plex_playlist_order
+                    .unwrap_or(self.plex_playlists.order),
             },
         }
         .ensure_ai_has_url()

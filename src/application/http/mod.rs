@@ -5,6 +5,7 @@ pub mod directories;
 pub mod error;
 pub mod llm;
 pub mod playlists;
+pub mod plex;
 pub mod preferences;
 pub mod tasks;
 #[cfg(test)]
@@ -17,9 +18,10 @@ use crate::domain::services::{
     CategoryCreator, CategoryDeleter, CategoryUpdater, CategoryViewSearcher, ChannelCreator,
     ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, LlmServerSearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
-    PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher, PreferencesSearcher,
-    PreferencesUpdater, ShowMover, SubtitleReader, TaskViewSearcher, VideoCategoryChoiceSearcher,
-    VideoCategoryEditor, VideoRetrier, VideoSearcher, VideoWatchStateUpdater,
+    PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher, PlexStatusSearcher,
+    PlexSyncRequester, PreferencesSearcher, PreferencesUpdater, ShowMover, SubtitleReader,
+    TaskViewSearcher, VideoCategoryChoiceSearcher, VideoCategoryEditor, VideoRetrier,
+    VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
@@ -70,6 +72,8 @@ pub struct ApiServices {
     pub video_category_choice_searcher: VideoCategoryChoiceSearcher,
     pub video_category_editor: VideoCategoryEditor,
     pub video_retrier: VideoRetrier,
+    pub plex_status_searcher: PlexStatusSearcher,
+    pub plex_sync_requester: PlexSyncRequester,
 }
 
 pub fn api_router(api_services: ApiServices) -> Router {
@@ -123,6 +127,8 @@ pub fn api_router(api_services: ApiServices) -> Router {
             axum::routing::delete(videos::delete_video_ai_verdicts),
         )
         .route("/tasks", get(tasks::list_tasks))
+        .route("/plex", get(plex::get_plex_status))
+        .route("/plex/syncs/{kind}", post(plex::request_plex_sync))
         .route("/version", get(version::get_version))
         .route("/llm/ollama", get(llm::get_ollama))
         .route("/llm/anthropic", get(llm::get_anthropic))

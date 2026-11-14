@@ -1,0 +1,46 @@
+use super::{PlexSyncOutcome, PlexSyncRun};
+use chrono::{DateTime, Utc};
+
+/// The Plex server as the latest sync of any kind saw it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlexConnection {
+    pub checked_at: DateTime<Utc>,
+    /// Why the latest sync couldn't reach Plex; `None` when it did.
+    pub error: Option<String>,
+    /// From the latest run that reached Plex.
+    pub version: Option<String>,
+    /// From the latest run that reached Plex.
+    pub libraries: Vec<String>,
+}
+
+impl PlexConnection {
+    /// From the latest run of any kind, with the version and libraries of
+    /// the latest run that reached Plex; `None` before any run.
+    pub fn from_runs(runs: &[PlexSyncRun]) -> Option<Self> {
+        let latest = runs.iter().max_by_key(|run| run.finished_at)?;
+        let (version, libraries) = Self::last_seen(runs);
+        Some(Self {
+            checked_at: latest.finished_at,
+            error: match &latest.outcome {
+                PlexSyncOutcome::Failed { error } => Some(error.clone()),
+                PlexSyncOutcome::Reached { .. } => None,
+            },
+            version,
+            libraries,
+        })
+    }
+
+    /// The version and libraries of the latest run that reached Plex.
+    fn last_seen(runs: &[PlexSyncRun]) -> (Option<String>, Vec<String>) {
+        runs.iter()
+            .filter_map(|run| match &run.outcome {
+                PlexSyncOutcome::Reached { version, libraries } => {
+                    Some((run.finished_at, version, libraries))
+                }
+                PlexSyncOutcome::Failed { .. } => None,
+            })
+            .max_by_key(|(finished_at, _, _)| *finished_at)
+            .map(|(_, version, libraries)| (Some(version.clone()), libraries.clone()))
+            .unwrap_or_default()
+    }
+}
