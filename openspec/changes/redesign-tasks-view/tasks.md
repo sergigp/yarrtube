@@ -28,7 +28,7 @@
 - [x] 2.20 Web `batchReconciles`: a chain within 10 min is one batch, a gap over 10 min splits it, a lone reconcile stays a task, errored or running reconciles are never batched
 - [x] 2.21 Web `buildTaskList`: chip counts add up to All, empty chips hidden, AI chip only while AI is enabled, filter and query (description and a batch's source names), empty sections dropped
 - [ ] 2.22 Web `statusLine`: idle with the next task due, next task already due ("starting soon"), "Downloading N video(s)", "Running N tasks", "N more tasks are scheduled"
-- [ ] 2.23 Web `formatRunTime` / `formatStartedAgo` (`lib/taskTimes.test.ts`): today, tomorrow, already due → "Starting soon", "started 12 s ago"
+- [x] 2.23 Web `formatRunTime` / `formatStartedAgo` (`lib/taskTimes.test.ts`): today, tomorrow, already due → "Starting soon", "started 12 s ago"
 - [ ] 2.24 Web `explainTaskError` (`lib/taskErrors.test.ts`): 403, private, age-gated, members-only, unavailable, unknown → first line without "ERROR:"
 - [ ] 2.25 Web `TasksView` opens on All with the status line and sections for a prod-like fixture, and shows no status badges (rewrite `TasksView.test.tsx`; delete the tab tests)
 - [ ] 2.26 Web: selecting a chip filters the list; a chip with no tasks is hidden; chips are marked pressed when selected
