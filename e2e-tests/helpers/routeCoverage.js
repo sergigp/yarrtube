@@ -64,6 +64,9 @@ function toTemplate(pathname) {
   if (id === undefined || resource === 'llm' || ['preview', 'home', 'search'].includes(id)) {
     return pathname
   }
+  if (resource === 'plex') {
+    return id === 'syncs' && rest.length > 0 ? ['', api, resource, id, '{kind}'].join('/') : pathname
+  }
   const param = resource === 'channels' ? '{handle}' : '{id}'
   const [nested, , ...nestedRest] = rest
   const nestedParam = { categories: '{category_id}' }[nested]

@@ -20,6 +20,10 @@ test('Plex settings: show how the syncs are doing and run one now', async ({ pag
 
   await watchState.getByRole('button', { name: 'Sync now' }).click()
 
-  await expect(watchState.getByRole('button', { name: 'Sync now' })).toBeEnabled()
+  // The page refreshes the status every 5 s, so the finished run can take
+  // that long to show.
+  await expect(watchState.getByRole('button', { name: 'Sync now' })).toBeEnabled({
+    timeout: 15_000,
+  })
   await expect(watchState).toContainText('Last run')
 })
