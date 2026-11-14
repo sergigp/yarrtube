@@ -32,7 +32,7 @@ Plex status endpoints (`http/plex`)
 - [x] 2.19 `it_should_respond_409_when_plex_isnt_configured`
 
 Preferences (`http/preferences`)
-- [ ] 2.20 `it_should_read_the_plex_playlist_preferences_as_their_defaults`
+- [x] 2.20 `it_should_read_the_plex_playlist_preferences_as_their_defaults`
 - [ ] 2.21 `it_should_save_a_plex_playlist_preference`
 - [ ] 2.22 `it_should_reject_an_invalid_plex_playlist_order`
 - [ ] 2.23 `it_should_request_a_label_sync_now_when_a_playlist_preference_changes`

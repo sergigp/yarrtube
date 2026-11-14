@@ -1641,6 +1641,27 @@ async fn it_should_reject_enabling_ai_on_anthropic_without_a_key() {
     assert_eq!(repository.find().unwrap(), Some(stored));
 }
 
+#[tokio::test]
+async fn it_should_read_the_plex_playlist_preferences_as_their_defaults() {
+    let db = TestDatabase::new();
+    let preferences_searcher = PreferencesSearcher::new(
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        false,
+    );
+
+    let response = get(preferences_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(PreferencesResponse {
+            plex_playlist_watched: "keep".to_string(),
+            plex_playlist_order: "newest_first".to_string(),
+            ..all_on_response()
+        })
+    );
+}
+
 async fn get(preferences_searcher: PreferencesSearcher) -> Result<PreferencesResponse, ApiError> {
     get_preferences(State(preferences_searcher))
         .await
