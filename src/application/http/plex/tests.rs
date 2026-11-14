@@ -168,6 +168,38 @@ async fn it_should_keep_the_version_and_libraries_last_seen_when_the_latest_run_
     );
 }
 
+#[tokio::test]
+async fn it_should_report_a_running_sync() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    task_repository
+        .schedule(&Task::SyncPlexLabels, now())
+        .unwrap();
+    task_repository.claim(1, now()).unwrap();
+    let plex_status_searcher = PlexStatusSearcher::new(
+        true,
+        Arc::new(SqlitePlexSyncRunRepository::new(db.database())),
+        task_repository,
+    );
+
+    let response = status(plex_status_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(PlexStatusResponse {
+            configured: true,
+            connection: None,
+            syncs: vec![
+                never_run_sync("watch_state"),
+                PlexSyncResponse {
+                    running: true,
+                    ..never_run_sync("labels")
+                },
+            ],
+        })
+    );
+}
+
 fn now() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
 }

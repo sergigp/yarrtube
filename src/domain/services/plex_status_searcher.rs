@@ -1,6 +1,7 @@
 use crate::domain::plex_status::{
     PlexConnection, PlexStatus, PlexSyncKind, PlexSyncRun, PlexSyncStatus,
 };
+use crate::domain::task::ScheduledTask;
 use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::PlexSyncRunRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use std::sync::Arc;
@@ -44,12 +45,13 @@ impl PlexStatusSearcherApi for PlexStatusSearcher {
             });
         }
         let runs = self.plex_sync_run_repository.list()?;
+        let running = self.task_repository.list_running()?;
         Ok(PlexStatus {
             configured: true,
             connection: PlexConnection::from_runs(&runs),
             syncs: PlexSyncKind::ALL
                 .iter()
-                .map(|kind| self.sync_status(*kind, &runs))
+                .map(|kind| self.sync_status(*kind, &runs, &running))
                 .collect::<anyhow::Result<_>>()?,
         })
     }
@@ -61,6 +63,7 @@ impl PlexStatusSearcher {
         &self,
         kind: PlexSyncKind,
         runs: &[PlexSyncRun],
+        running: &[ScheduledTask],
     ) -> anyhow::Result<PlexSyncStatus> {
         Ok(PlexSyncStatus {
             kind,
@@ -69,7 +72,7 @@ impl PlexStatusSearcher {
                 .task_repository
                 .find_pending(&kind.task())?
                 .map(|pending| pending.run_at),
-            running: false,
+            running: running.iter().any(|task| task.task == kind.task()),
         })
     }
 }
