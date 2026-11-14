@@ -1,4 +1,7 @@
+import type { ReactNode } from 'react'
+import type { PlexConnection } from '@/api/types'
 import { usePlexStatus } from '@/api/queries'
+import { plexVersionLabel, relativeTime } from '@/lib/plexStatus'
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 
@@ -15,6 +18,11 @@ export function PlexSettingsView() {
         <p className="text-sm text-destructive">Failed to load the Plex status: {error.message}</p>
       )}
       {status && !status.configured && <NotConfigured />}
+      {status?.configured && (
+        <Section title="Connection">
+          {status.connection && <ConnectionStatus connection={status.connection} />}
+        </Section>
+      )}
     </div>
   )
 }
@@ -40,5 +48,27 @@ function NotConfigured() {
         for every step.
       </p>
     </div>
+  )
+}
+
+function ConnectionStatus({ connection }: { connection: PlexConnection }) {
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <p className="font-medium text-foreground">Connected</p>
+      {connection.version && (
+        <p className="text-muted-foreground">Plex Media Server {plexVersionLabel(connection.version)}</p>
+      )}
+      <p className="text-muted-foreground">Libraries: {connection.libraries.join(', ')}</p>
+      <p className="text-muted-foreground">Checked {relativeTime(connection.checked_at)}</p>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <fieldset className="flex flex-col gap-4">
+      <legend className="mb-4 font-heading text-lg font-semibold text-foreground">{title}</legend>
+      {children}
+    </fieldset>
   )
 }
