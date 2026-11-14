@@ -6,6 +6,8 @@ export function plexVersionLabel(version: string): string {
 }
 
 /** Whether `sync` is running, or was requested at `requestedAt` and hasn't finished since. */
-export function isSyncing(_sync: PlexSync, _requestedAt: Date | null): boolean {
-  return false
+export function isSyncing(sync: PlexSync, requestedAt: Date | null): boolean {
+  if (sync.running) return true
+  if (requestedAt === null) return false
+  return sync.last_run_at === null || new Date(sync.last_run_at) < requestedAt
 }

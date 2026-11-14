@@ -41,7 +41,7 @@ Preferences (`http/preferences`)
 
 Web (Vitest), one red-green-refactor cycle each
 - [x] 2.26 `lib/plexStatus.test.ts` — `plexVersionLabel` drops the build suffix.
-- [ ] 2.27 `lib/plexStatus.test.ts` — `isSyncing`: running; requested and not finished since; idle.
+- [x] 2.27 `lib/plexStatus.test.ts` — `isSyncing`: running; requested and not finished since; idle.
 - [ ] 2.28 `SettingsMenu.test.tsx` — the menu lists Tasks, Settings, Report a bug; "Settings" goes to `/settings/general`.
 - [ ] 2.29 `SettingsView.test.tsx` — the section nav switches route and marks the open section.
 - [ ] 2.30 `SettingsView.test.tsx` — `/settings` opens General; `/preferences` and `/ai` redirect.
