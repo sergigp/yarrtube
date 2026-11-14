@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
+import { retryVideo, stopRetryingVideo } from '@/api/client'
 import type { Task } from '@/api/types'
 import { describeTask } from '@/lib/tasks'
 import { explainTaskError } from '@/lib/taskErrors'
 import { formatRunTime } from '@/lib/taskTimes'
 import { Button } from '../ui/button'
+import { useTaskAction } from './useTaskAction'
 
 interface AttentionCardProps {
   task: Task
@@ -28,6 +30,7 @@ export function AttentionCard({ task, now }: AttentionCardProps) {
         </span>
       </span>
       <span className="flex flex-wrap items-center gap-2 sm:pl-6">
+        {task.payload.video_id && <VideoActions videoId={task.payload.video_id} />}
         <Button
           variant="ghost"
           size="sm"
@@ -53,4 +56,33 @@ function nextTry(task: Task, now: Date): string {
   return relative === 'Starting soon'
     ? 'Yarrtube tries again soon.'
     : `Yarrtube tries again at ${clock}, ${relative}.`
+}
+
+/** Retry now and Stop retrying the card's video, both disabled while either asks. */
+function VideoActions({ videoId }: { videoId: string }) {
+  const retry = useTaskAction(() => retryVideo(videoId))
+  const stop = useTaskAction(() => stopRetryingVideo(videoId))
+  const working = retry.working || stop.working
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="min-h-11 sm:min-h-7"
+        disabled={working}
+        onClick={retry.run}
+      >
+        Retry now
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="min-h-11 sm:min-h-7"
+        disabled={working}
+        onClick={stop.run}
+      >
+        Stop retrying
+      </Button>
+    </>
+  )
 }

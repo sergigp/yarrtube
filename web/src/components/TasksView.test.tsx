@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
-import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
+import {
+  aTask,
+  heldUntilReleased,
+  mockApi,
+  pendingForever,
+  renderWithProviders,
+} from '@/test/helpers'
 
 const NOW = new Date('2026-11-14T20:03:00Z')
 
@@ -238,5 +244,48 @@ describe('TasksView', () => {
 
     await user.click(within(card).getByRole('button', { name: 'Hide error' }))
     expect(within(card).queryByText(raw)).not.toBeInTheDocument()
+  })
+
+  it('retries the video now, disabling the card while it asks, then refreshes the list', async () => {
+    const user = userEvent.setup()
+    const retry = heldUntilReleased()
+    const fetchMock = mockApi({
+      'GET /api/tasks': aProdLikeQueue(),
+      'POST /api/videos/rec1/retry': retry.route,
+    })
+    renderWithProviders(<TasksView />)
+    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
+
+    await user.click(within(card).getByRole('button', { name: 'Retry now' }))
+
+    await waitFor(() => expect(retry.route).toHaveBeenCalledOnce())
+    expect(within(card).getByRole('button', { name: 'Retry now' })).toBeDisabled()
+    expect(within(card).getByRole('button', { name: 'Stop retrying' })).toBeDisabled()
+    retry.release()
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url]) => url === '/api/tasks')).toHaveLength(2),
+    )
+    expect(within(card).getByRole('button', { name: 'Retry now' })).toBeEnabled()
+  })
+
+  it('stops retrying the video, and the card is gone after the refresh', async () => {
+    const user = userEvent.setup()
+    let stopped = false
+    mockApi({
+      'GET /api/tasks': () => (stopped ? aProdLikeQueue().slice(1) : aProdLikeQueue()),
+      'POST /api/videos/rec1/stop-retrying': () => {
+        stopped = true
+        return null
+      },
+    })
+    renderWithProviders(<TasksView />)
+    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
+
+    await user.click(within(card).getByRole('button', { name: 'Stop retrying' }))
+
+    await waitFor(() =>
+      expect(screen.queryByText('Download My Apps from Starter Story Build')).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument()
   })
 })
