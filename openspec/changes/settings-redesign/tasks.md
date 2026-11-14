@@ -25,7 +25,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 - [x] 2.11 `it describes each provider option`: option cards
 - [x] 2.12 `it shows no save bar until a field changes`
 - [x] 2.13 `it lists the unsaved changes in the save bar`
-- [ ] 2.14 `it saves only the changed fields and shows Saved by the title`
+- [x] 2.14 `it saves only the changed fields and shows Saved by the title`
 - [ ] 2.15 `it discards changes without a request`
 - [ ] 2.16 `it shows a rejected save's error in the save bar`
 - [ ] 2.17 `it shows Anthropic effort as a segmented choice outside Advanced`

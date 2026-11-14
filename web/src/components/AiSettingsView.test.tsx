@@ -481,7 +481,7 @@ describe('AiSettingsView', () => {
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toBeDisabled()
   })
 
-  it('saves only the changed fields', async () => {
+  it('saves only the changed fields and shows Saved by the title', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences(),
       'PATCH /api/preferences': aPreferences({
@@ -500,7 +500,10 @@ describe('AiSettingsView', () => {
     await user.click(screen.getByRole('switch', { name: 'AI features' }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
+    expect(screen.getByRole('heading', { level: 1 }).parentElement).toContainElement(
+      screen.getByRole('status'),
+    )
     expect(patchBodies(fetchMock)).toEqual([
       { ai_enabled: true, ollama_url: 'http://mac.local:11434' },
     ])
