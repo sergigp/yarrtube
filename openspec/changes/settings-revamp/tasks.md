@@ -84,6 +84,6 @@ Web (Vitest), one red-green-refactor cycle each
 
 ## 5. Verification
 
-- [ ] 5.1 `scripts/run-tests.sh --lint --web --rust`.
+- [x] 5.1 `scripts/run-tests.sh --lint --web --rust`.
 - [ ] 5.2 Manual (agent): `scripts/run-local.sh --port <free port> --fresh-videos` without Plex vars; with the Playwright MCP browser: gear menu shows Tasks / Settings / Report a bug; `/settings` lands on General; nav switches sections and URL; `/preferences` and `/ai` redirect; on a phone-width viewport the nav is tabs with no horizontal scroll; Plex section shows the not-configured help; General toggles still save. Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 5.3 Manual (human): against the real Plex, Settings → Plex shows "Connected", the version and the yarrtube libraries; "Sync now" on each row shows "Syncing…" then a new last run; choosing "Drop out" replaces the category playlists within a minute and a watched episode leaves them; "Oldest first" reverses them; the first label sync after the upgrade replaces playlists made by older versions.

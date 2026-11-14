@@ -34,10 +34,10 @@ function renderShell({
 }
 
 describe('AppShell', () => {
-  it('shows the preferences view at /preferences', async () => {
+  it('shows the general settings at /preferences', async () => {
     renderShell({ route: '/preferences' })
 
-    expect(await screen.findByRole('heading', { name: 'Preferences' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'General' })).toBeInTheDocument()
   })
 
   it('draws the saved theme once preferences load', async () => {
