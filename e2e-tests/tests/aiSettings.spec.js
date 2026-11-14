@@ -3,11 +3,14 @@ import { MODELS } from '../anthropic-stub.js'
 import { OLLAMA_VERSION } from '../ollama-stub.js'
 
 test('AI settings: point at Ollama, pick a model and save, then reset the prompt', async ({ page, daemon }) => {
-  const enableAi = page.getByRole('switch', { name: 'Enable AI' })
+  const enableAi = page.getByRole('switch', { name: 'AI features' })
   const model = page.getByRole('combobox', { name: 'Model', exact: true })
   const temperature = page.getByRole('spinbutton', { name: 'Temperature', exact: true })
   const prompt = page.getByRole('textbox', { name: 'Prompt', exact: true })
-  const save = page.getByRole('button', { name: 'Save' })
+  const save = page.getByRole('button', { name: 'Save changes' })
+  const saved = page.getByRole('status').getByText('Saved', { exact: true })
+  const summaries = page.getByRole('group', { name: 'Summaries', exact: true })
+  const promptToggle = summaries.getByRole('button', { name: /^Prompt/ })
 
   await test.step('the settings page opens the AI section', async () => {
     await page.goto('/')
@@ -31,20 +34,24 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
 
   await test.step('turning AI and summaries on with a model that can’t think is saved', async () => {
     await enableAi.click()
-    await page.getByRole('switch', { name: 'Summaries enabled' }).click()
+    await page.getByRole('switch', { name: 'Summaries', exact: true }).click()
     await page.getByRole('button', { name: 'Advanced', exact: true }).click()
-    await expect(page.getByText('Using the default prompt')).toBeVisible()
+    await expect(promptToggle).toHaveText('Prompt · default')
     await model.selectOption('gemma3:4b')
     await expect(page.getByText("gemma3:4b doesn't support thinking")).toBeVisible()
     await temperature.fill('0.5')
+    await expect(page.getByRole('region', { name: 'Unsaved changes' })).toContainText(
+      '5 unsaved changes',
+    )
     await save.click()
-    await expect(page.getByText('Saved')).toBeVisible()
-    await expect(save).toBeDisabled()
+    await expect(saved).toBeVisible()
+    await expect(save).toHaveCount(0)
 
     await page.reload()
     await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    await promptToggle.click()
     await expect(enableAi).toBeChecked()
-    await expect(page.getByRole('switch', { name: 'Summaries enabled' })).toBeChecked()
+    await expect(page.getByRole('switch', { name: 'Summaries', exact: true })).toBeChecked()
     await expect(model).toHaveValue('gemma3:4b')
     await expect(temperature).toHaveValue('0.5')
   })
@@ -53,22 +60,23 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     const shipped = await prompt.inputValue()
     await prompt.fill(shipped.replace('## user', '- Be brief.\n\n## user'))
     await save.click()
-    await expect(page.getByText('Saved')).toBeVisible()
+    await expect(saved).toBeVisible()
 
     await page.reload()
     await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    await promptToggle.click()
     await expect(prompt).toHaveValue(/- Be brief\./)
-    await expect(page.getByText('Using the default prompt')).toHaveCount(0)
+    await expect(promptToggle).toHaveText('Prompt · edited')
 
     await page.getByRole('button', { name: 'Reset to default' }).click()
-    await expect(page.getByText('Using the default prompt')).toBeVisible()
+    await expect(promptToggle).toHaveText('Prompt · default')
     await expect(prompt).toHaveValue(shipped)
   })
 
   await test.step('categorization has its own generation settings', async () => {
     const contextLength = page.getByRole('spinbutton', { name: 'Categorization context length' })
     const summaryTemperature = await temperature.inputValue()
-    await page.getByRole('switch', { name: 'Categorization enabled' }).click()
+    await page.getByRole('switch', { name: 'Categorization', exact: true }).click()
     await page.getByRole('button', { name: 'Advanced categorization settings' }).click()
     const auto = page.getByRole('switch', { name: 'Auto context length' })
     const reopen = async () => {
@@ -85,7 +93,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
     await auto.click()
     await contextLength.fill('8192')
     await save.click()
-    await expect(page.getByText('Saved')).toBeVisible()
+    await expect(saved).toBeVisible()
 
     await reopen()
     await expect(auto).not.toBeChecked()
@@ -94,7 +102,7 @@ test('AI settings: point at Ollama, pick a model and save, then reset the prompt
 
     await auto.click()
     await save.click()
-    await expect(page.getByText('Saved')).toBeVisible()
+    await expect(saved).toBeVisible()
     await reopen()
     await expect(auto).toBeChecked()
     await expect(contextLength).toHaveValue('4096')
@@ -108,13 +116,16 @@ test.describe(() => {
   test('AI settings: a broken prompt is refused with the reason', async ({ page, daemon }) => {
     await page.goto('/settings/ai')
     await page.getByRole('textbox', { name: 'Ollama URL' }).fill(daemon.ollamaUrl)
-    await page.getByRole('switch', { name: 'Enable AI' }).click()
-    await page.getByRole('switch', { name: 'Summaries enabled' }).click()
-    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    await page.getByRole('switch', { name: 'AI features' }).click()
+    await page.getByRole('switch', { name: 'Summaries', exact: true }).click()
+    await page
+      .getByRole('group', { name: 'Summaries', exact: true })
+      .getByRole('button', { name: /^Prompt/ })
+      .click()
     const prompt = page.getByRole('textbox', { name: 'Prompt', exact: true })
     const shipped = await prompt.inputValue()
     await prompt.fill(shipped.replace('## map user', '## map usr'))
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save changes' }).click()
 
     await expect(page.getByRole('alert')).toHaveText('Prompt has an unknown section "map usr"')
     await expect(prompt).toHaveValue(/## map usr/)
@@ -131,8 +142,8 @@ test('AI settings: test the Anthropic connection and save it as the provider', a
   await page.getByRole('button', { name: 'Test connection' }).click()
   await expect(page.getByText(`Connected to Anthropic, ${MODELS.length} models`)).toBeVisible()
   await expect(model.locator('option')).toHaveText(MODELS.map((listed) => listed.id))
-  await page.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByText('Saved')).toBeVisible()
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByRole('status').getByText('Saved', { exact: true })).toBeVisible()
 
   await page.reload()
   await expect(anthropic).toBeChecked()

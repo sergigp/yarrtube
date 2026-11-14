@@ -11,20 +11,58 @@ describe('PreferencesView', () => {
     vi.useRealTimers()
   })
 
-  it('shows a switch per preference with its current value', async () => {
+  it('shows the renamed switches with their descriptions', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ home_show_latest: false }) })
 
     renderWithProviders(<PreferencesView />)
 
     const categories = await screen.findByRole('group', { name: 'Categories' })
-    const home = screen.getByRole('group', { name: 'Home' })
-    expect(switchStates(categories)).toEqual([['Enable categories', true]])
+    const home = screen.getByRole('group', { name: 'Home sections' })
+    expect(switchStates(categories)).toEqual([['Categories', true]])
     expect(switchStates(home)).toEqual([
-      ['Show continue watching', true],
-      ['Show categories', true],
-      ['Show quick watches', true],
-      ['Show latest videos', false],
+      ['Continue watching', true],
+      ['More about…', true],
+      ['Quick watches', true],
+      ['Latest videos', false],
     ])
+    expect(screen.getByRole('switch', { name: 'Categories' })).toHaveAccessibleDescription(
+      'Group channels and playlists by topic and browse by category.',
+    )
+    expect(screen.getByRole('switch', { name: 'Continue watching' })).toHaveAccessibleDescription(
+      "Videos you started in the last 7 days and haven't finished.",
+    )
+    expect(screen.getByRole('switch', { name: 'More about…' })).toHaveAccessibleDescription(
+      'One section for each of up to 3 categories with unwatched videos.',
+    )
+    expect(screen.getByRole('switch', { name: 'Quick watches' })).toHaveAccessibleDescription(
+      'Unwatched videos under 15 minutes.',
+    )
+    expect(screen.getByRole('switch', { name: 'Latest videos' })).toHaveAccessibleDescription(
+      "Your newest downloads that aren't in a section above.",
+    )
+    expect(home).not.toHaveTextContent('Shown top to bottom')
+    expect(screen.getByText('Changes save as you make them.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^About / })).not.toBeInTheDocument()
+  })
+
+  it('links categories to where they are also used', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+
+    renderWithProviders(<PreferencesView />)
+
+    const categories = await screen.findByRole('group', { name: 'Categories' })
+    expect(within(categories).getByText('Also used by')).toBeInTheDocument()
+    expect(within(categories).getByRole('link', { name: 'AI categorization' })).toHaveAttribute(
+      'href',
+      '/settings/ai',
+    )
+    expect(
+      within(categories).getByRole('link', { name: 'Plex category playlists' }),
+    ).toHaveAttribute('href', '/settings/plex')
+    expect(within(categories).getByRole('link', { name: 'Home: More about' })).toHaveAttribute(
+      'href',
+      '#home-sections',
+    )
   })
 
   it('saves only the toggled preference', async () => {
@@ -35,10 +73,10 @@ describe('PreferencesView', () => {
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+    await user.click(await screen.findByRole('switch', { name: 'Quick watches' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('switch', { name: 'Show quick watches' })).not.toBeChecked(),
+      expect(screen.getByRole('switch', { name: 'Quick watches' })).not.toBeChecked(),
     )
     expect(
       fetchMock.mock.calls
@@ -47,7 +85,7 @@ describe('PreferencesView', () => {
     ).toEqual([['/api/preferences', { home_show_quick_watches: false }]])
   })
 
-  it('reports a failed save and keeps the saved value', async () => {
+  it("shows Couldn't save when a toggle fails", async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
       'PATCH /api/preferences': { status: 500, error: 'disk full' },
@@ -55,15 +93,15 @@ describe('PreferencesView', () => {
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+    await user.click(await screen.findByRole('switch', { name: 'Quick watches' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Failed to save preferences: disk full',
+      "Couldn't save: disk full. Try again.",
     )
-    expect(screen.getByRole('switch', { name: 'Show quick watches' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Quick watches' })).toBeChecked()
   })
 
-  it('disables the home category switch while categories are off', async () => {
+  it('disables More about while categories are off', async () => {
     mockApi({
       'GET /api/preferences': aPreferences({
         categories_enabled: false,
@@ -73,47 +111,10 @@ describe('PreferencesView', () => {
 
     renderWithProviders(<PreferencesView />)
 
-    const showCategories = await screen.findByRole('switch', { name: 'Show categories' })
+    const showCategories = await screen.findByRole('switch', { name: 'More about…' })
     expect(showCategories).toBeDisabled()
     expect(showCategories).not.toBeChecked()
-    expect(screen.getByRole('switch', { name: 'Show latest videos' })).toBeEnabled()
-  })
-
-  it('explains a preference on hover', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences() })
-    renderWithProviders(<PreferencesView />)
-
-    await userEvent
-      .setup()
-      .hover(await screen.findByRole('button', { name: 'About Enable categories' }))
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Use categories across Yarrtube: the sidebar section, category pages, the Categories field when adding or editing a channel or playlist, and category sections on home. Turning it off only hides them: your categories and their videos are kept.',
-    )
-  })
-
-  it('explains a preference on click, as a tap would', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences() })
-    renderWithProviders(<PreferencesView />)
-    const user = userEvent.setup({ skipHover: true })
-
-    await user.click(await screen.findByRole('button', { name: 'About Show quick watches' }))
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Unwatched videos shorter than 15 minutes.',
-    )
-  })
-
-  it('says how home sections share their videos', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences() })
-
-    renderWithProviders(<PreferencesView />)
-
-    expect(
-      within(await screen.findByRole('group', { name: 'Home' })).getByText(
-        'Sections show in this order, and a video shows in one section only: turning a section off can move its videos to a section below.',
-      ),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Latest videos' })).toBeEnabled()
   })
 
   it('is headed General', async () => {
@@ -133,7 +134,7 @@ describe('PreferencesView', () => {
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
-    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+    await user.click(await screen.findByRole('switch', { name: 'Quick watches' }))
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
     await act(() => vi.advanceTimersByTimeAsync(2000))
@@ -148,7 +149,7 @@ describe('PreferencesView', () => {
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+    await user.click(await screen.findByRole('switch', { name: 'Quick watches' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('disk full')
     expect(screen.queryByText('Saved')).not.toBeInTheDocument()
@@ -166,17 +167,17 @@ describe('PreferencesView', () => {
     renderWithProviders(<PreferencesView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+    await user.click(await screen.findByRole('switch', { name: 'Quick watches' }))
     await waitFor(() => expect(firstSave.route).toHaveBeenCalled())
-    expect(screen.getByRole('switch', { name: 'Show latest videos' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: 'Latest videos' })).toBeDisabled()
     firstSave.release()
     await waitFor(() =>
-      expect(screen.getByRole('switch', { name: 'Show latest videos' })).toBeEnabled(),
+      expect(screen.getByRole('switch', { name: 'Latest videos' })).toBeEnabled(),
     )
-    await user.click(screen.getByRole('switch', { name: 'Show latest videos' }))
+    await user.click(screen.getByRole('switch', { name: 'Latest videos' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('switch', { name: 'Show latest videos' })).not.toBeChecked(),
+      expect(screen.getByRole('switch', { name: 'Latest videos' })).not.toBeChecked(),
     )
     expect(
       fetchMock.mock.calls
@@ -199,7 +200,7 @@ describe('PreferencesView', () => {
 
     await userEvent
       .setup()
-      .click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+      .click(await screen.findByRole('switch', { name: 'Quick watches' }))
 
     await waitFor(() => expect(homeRequests()).toHaveLength(2))
   })

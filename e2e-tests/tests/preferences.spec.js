@@ -14,7 +14,7 @@ function homeSection(page, title) {
 /** Flips one preference from the preferences view, then goes home through the logo. */
 async function toggleThenGoHome(page, name) {
   await page.goto('/settings/general')
-  const toggle = page.getByRole('switch', { name })
+  const toggle = page.getByRole('switch', { name, exact: true })
   const before = await toggle.getAttribute('aria-checked')
   await toggle.click()
   await expect(toggle).not.toHaveAttribute('aria-checked', before)
@@ -24,7 +24,7 @@ async function toggleThenGoHome(page, name) {
 test('preferences: turning categories off hides them everywhere, and back on shows them again', async ({ page }) => {
   await page.goto('/')
   const header = page.getByRole('banner')
-  const enableCategories = page.getByRole('switch', { name: 'Enable categories' })
+  const enableCategories = page.getByRole('switch', { name: 'Categories', exact: true })
 
   await test.step('the settings menu opens the general settings', async () => {
     await header.getByRole('button', { name: 'Settings' }).click()
@@ -40,7 +40,7 @@ test('preferences: turning categories off hides them everywhere, and back on sho
   await test.step('categories off: no sidebar section, no dialog field, and it sticks', async () => {
     await enableCategories.click()
     await expect(enableCategories).not.toBeChecked()
-    await expect(page.getByRole('switch', { name: 'Show categories' })).toBeDisabled()
+    await expect(page.getByRole('switch', { name: 'More about…' })).toBeDisabled()
     await expect(sectionHeading(page, 'Categories')).toHaveCount(0)
 
     await openAddChannelDialog(page)
@@ -103,7 +103,7 @@ test('preferences: each home switch takes its section off home, and its videos m
   })
 
   await test.step('categories off: no category section, its videos are quick watches', async () => {
-    await toggleThenGoHome(page, 'Enable categories')
+    await toggleThenGoHome(page, 'Categories')
     for (const title of channelTitles) {
       await expect(quickWatches.getByText(title, { exact: true })).toBeVisible()
     }
@@ -112,7 +112,7 @@ test('preferences: each home switch takes its section off home, and its videos m
   })
 
   await test.step('categories back on: the category section returns', async () => {
-    await toggleThenGoHome(page, 'Enable categories')
+    await toggleThenGoHome(page, 'Categories')
     for (const title of channelTitles) {
       await expect(moreAboutSnails.getByText(title, { exact: true })).toBeVisible()
     }
@@ -120,7 +120,7 @@ test('preferences: each home switch takes its section off home, and its videos m
   })
 
   await test.step('home categories off: the category section goes again', async () => {
-    await toggleThenGoHome(page, 'Show categories')
+    await toggleThenGoHome(page, 'More about…')
     for (const title of channelTitles) {
       await expect(quickWatches.getByText(title, { exact: true })).toBeVisible()
     }
@@ -129,14 +129,14 @@ test('preferences: each home switch takes its section off home, and its videos m
   })
 
   await test.step('continue watching off: the started video is a quick watch', async () => {
-    await toggleThenGoHome(page, 'Show continue watching')
+    await toggleThenGoHome(page, 'Continue watching')
     await expect(quickWatches.getByText(started.title, { exact: true })).toBeVisible()
     await expect(main.getByRole('heading', { name: 'Continue watching' })).toHaveCount(0)
     await expectOnceOnHome(everyTitle)
   })
 
   await test.step('quick watches off: every video is under latest videos', async () => {
-    await toggleThenGoHome(page, 'Show quick watches')
+    await toggleThenGoHome(page, 'Quick watches')
     for (const title of everyTitle) {
       await expect(latest.getByText(title, { exact: true })).toBeVisible()
     }
@@ -145,7 +145,7 @@ test('preferences: each home switch takes its section off home, and its videos m
   })
 
   await test.step('latest videos off: nothing left to show', async () => {
-    await toggleThenGoHome(page, 'Show latest videos')
+    await toggleThenGoHome(page, 'Latest videos')
     await expect(main.getByText('Nothing to show here.')).toBeVisible()
     await expect(main.getByRole('link', { name: 'Settings' })).toHaveAttribute(
       'href',
@@ -158,7 +158,7 @@ test('preferences: each home switch takes its section off home, and its videos m
   })
 
   await test.step('latest videos back on: the videos are back', async () => {
-    await toggleThenGoHome(page, 'Show latest videos')
+    await toggleThenGoHome(page, 'Latest videos')
     for (const title of everyTitle) {
       await expect(latest.getByText(title, { exact: true })).toBeVisible()
     }
