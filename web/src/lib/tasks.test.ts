@@ -6,6 +6,7 @@ import {
   describeTask,
   matchesTask,
   sectionOf,
+  statusLine,
   syncTarget,
   tabCounts,
   tasksForTab,
@@ -463,5 +464,54 @@ describe('buildTaskList', () => {
       [{ id: 'later', entries: [{ kind: 'task', task: tasks[5] }] }],
       [{ id: 'later', entries: [{ kind: 'task', task: tasks[2] }] }],
     ])
+  })
+})
+
+describe('statusLine', () => {
+  const now = new Date('2026-11-14T20:03:00Z')
+  const pending = (count: number) =>
+    Array.from({ length: count }, () => aTask({ task_type: 'update_ytdlp', run_at: '2026-11-14T23:00:00Z' }))
+
+  it('names the next task and when it is due while nothing runs', () => {
+    const tasks = [
+      aTask({ task_type: 'update_ytdlp', run_at: '2026-11-14T22:00:00Z' }),
+      aTask({ task_type: 'sync_plex_watch_state', run_at: '2026-11-14T20:05:00Z' }),
+    ]
+
+    expect(statusLine(tasks, now)).toBe('Nothing running. Next up in 2 min: Sync watch state with Plex.')
+  })
+
+  it('says the next task is starting soon once it is due', () => {
+    const tasks = [aTask({ task_type: 'update_ytdlp', run_at: '2026-11-14T20:00:00Z' })]
+
+    expect(statusLine(tasks, now)).toBe('Nothing running. Starting soon: Update yt-dlp.')
+  })
+
+  it('counts running downloads as videos', () => {
+    const tasks = [aTask({ task_type: 'download_video', status: 'running' }), ...pending(71)]
+
+    expect(statusLine(tasks, now)).toBe('Downloading 1 video. 71 more tasks are scheduled.')
+  })
+
+  it('counts running tasks of several kinds as tasks', () => {
+    const tasks = [
+      aTask({ task_type: 'download_video', status: 'running' }),
+      aTask({ task_type: 'reconcile_channel', status: 'running' }),
+      ...pending(10),
+    ]
+
+    expect(statusLine(tasks, now)).toBe('Running 2 tasks. 10 more tasks are scheduled.')
+  })
+
+  it('agrees in number for one scheduled task, and says nothing of none', () => {
+    const downloads = [
+      aTask({ task_type: 'download_video', status: 'running' }),
+      aTask({ task_type: 'download_video', status: 'running' }),
+    ]
+
+    expect([
+      statusLine([aTask({ task_type: 'update_ytdlp', status: 'running' }), ...pending(1)], now),
+      statusLine(downloads, now),
+    ]).toEqual(['Running 1 task. 1 more task is scheduled.', 'Downloading 2 videos.'])
   })
 })

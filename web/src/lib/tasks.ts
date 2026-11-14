@@ -1,4 +1,5 @@
 import type { Task } from '@/api/types'
+import { formatRunTime } from './taskTimes'
 
 /** The video a task targets and its playlist or channel, with placeholders for unresolved names. */
 function videoAndSource(payload: Task['payload'], joiner: 'in' | 'from'): string {
@@ -333,7 +334,39 @@ function filterChips(tasks: Task[], aiEnabled: boolean): FilterChip[] {
   return [{ filter: 'all', count: tasks.length }, ...families]
 }
 
-/** One sentence saying what is happening now. */
-export function statusLine(_tasks: Task[], _now: Date): string {
-  return ''
+/**
+ * One sentence saying what is happening now: what runs and how much more is
+ * scheduled, or, while nothing runs, the next task due and when.
+ */
+export function statusLine(tasks: Task[], now: Date): string {
+  const running = tasks.filter((task) => task.status === 'running')
+  const pending = tasks.filter((task) => task.status !== 'running')
+  if (running.length === 0) {
+    return idleLine(pending, now)
+  }
+  return [runningLine(running), scheduledLine(pending.length)].filter(Boolean).join(' ')
+}
+
+function idleLine(pending: Task[], now: Date): string {
+  const next = [...pending].sort(byRunAt)[0]
+  if (!next) {
+    return 'Nothing running.'
+  }
+  const { relative } = formatRunTime(next.run_at, now)
+  const when = relative === 'Starting soon' ? 'Starting soon' : `Next up ${relative}`
+  return `Nothing running. ${when}: ${describeTask(next)}.`
+}
+
+function runningLine(running: Task[]): string {
+  const count = running.length
+  return running.every((task) => task.task_type === 'download_video')
+    ? `Downloading ${count} ${count === 1 ? 'video' : 'videos'}.`
+    : `Running ${count} ${count === 1 ? 'task' : 'tasks'}.`
+}
+
+function scheduledLine(count: number): string {
+  if (count === 0) {
+    return ''
+  }
+  return count === 1 ? '1 more task is scheduled.' : `${count} more tasks are scheduled.`
 }
