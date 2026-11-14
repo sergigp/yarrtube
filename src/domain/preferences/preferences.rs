@@ -101,8 +101,8 @@ impl Preferences {
     }
 
     /// Whether `other` lists category playlists in Plex differently.
-    pub fn changes_plex_playlists(&self, _other: &Self) -> bool {
-        false
+    pub fn changes_plex_playlists(&self, other: &Self) -> bool {
+        self.plex_playlists != other.plex_playlists
     }
 
     /// These preferences with `change` applied, as long as the result is
