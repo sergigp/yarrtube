@@ -218,9 +218,17 @@ export function offersRunNow(_task: Task): boolean {
   return false
 }
 
+const HOUR_MS = 60 * 60 * 1000
+
 /** Which section of the list the task belongs in at `now`. */
-export function sectionOf(_task: Task, _now: Date): TaskSectionId {
-  return 'later'
+export function sectionOf(task: Task, now: Date): TaskSectionId {
+  if (task.status === 'running') {
+    return 'running'
+  }
+  if (task.last_error) {
+    return 'attention'
+  }
+  return new Date(task.run_at).getTime() - now.getTime() <= HOUR_MS ? 'nextHour' : 'later'
 }
 
 /** The tasks in run-time order, reconciles due close together grouped into batches. */

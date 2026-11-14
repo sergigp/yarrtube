@@ -24,7 +24,7 @@
 - [x] 2.16 `it_should_make_a_stopped_download_pending_again_when_the_video_is_retried`: the existing retry undoes a stop
 - [x] 2.17 Web `taskFamily`: downloads, syncs, AI on and off, Plex & upkeep, unknown type (`lib/tasks.test.ts`)
 - [x] 2.18 Web `describeTask`: base form when pending, "-ing" when running, every task type, placeholders for missing names; no "pending" or "queued" wording
-- [ ] 2.19 Web `sectionOf`: running, attention (pending with `last_error`), next hour (including already due), later
+- [x] 2.19 Web `sectionOf`: running, attention (pending with `last_error`), next hour (including already due), later
 - [ ] 2.20 Web `batchReconciles`: a chain within 10 min is one batch, a gap over 10 min splits it, a lone reconcile stays a task, errored or running reconciles are never batched
 - [ ] 2.21 Web `buildTaskList`: chip counts add up to All, empty chips hidden, AI chip only while AI is enabled, filter and query (description and a batch's source names), empty sections dropped
 - [ ] 2.22 Web `statusLine`: idle with the next task due, next task already due ("starting soon"), "Downloading N video(s)", "Running N tasks", "N more tasks are scheduled"

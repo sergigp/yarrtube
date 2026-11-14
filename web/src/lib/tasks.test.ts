@@ -3,6 +3,7 @@ import {
   byCategory,
   describeTask,
   matchesTask,
+  sectionOf,
   syncTarget,
   tabCounts,
   tasksForTab,
@@ -282,5 +283,33 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(matchesTask(task, 'rustaceans')).toBe(true)
     expect(matchesTask(task, 'CHECK')).toBe(true)
     expect(matchesTask(task, 'nope')).toBe(false)
+  })
+})
+
+describe('sectionOf', () => {
+  const now = new Date('2026-11-14T20:03:00Z')
+
+  it('puts a running task under running, even with a last error', () => {
+    expect(sectionOf(aTask({ status: 'running', last_error: 'boom' }), now)).toBe('running')
+  })
+
+  it('puts a pending task with a last error under attention', () => {
+    expect(
+      sectionOf(aTask({ run_at: '2026-11-14T23:00:00Z', last_error: 'boom' }), now),
+    ).toBe('attention')
+  })
+
+  it('puts a pending task due within the hour, or already due, under next hour', () => {
+    const runAts = ['2026-11-14T21:03:00Z', '2026-11-14T20:20:00Z', '2026-11-14T19:00:00Z']
+
+    expect(runAts.map((run_at) => sectionOf(aTask({ run_at }), now))).toEqual([
+      'nextHour',
+      'nextHour',
+      'nextHour',
+    ])
+  })
+
+  it('puts a pending task due in over an hour under later', () => {
+    expect(sectionOf(aTask({ run_at: '2026-11-14T21:04:00Z' }), now)).toBe('later')
   })
 })
