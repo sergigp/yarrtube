@@ -54,7 +54,11 @@ function NotConfigured() {
 function ConnectionStatus({ connection }: { connection: PlexConnection }) {
   return (
     <div className="flex flex-col gap-1 text-sm">
-      <p className="font-medium text-foreground">Connected</p>
+      {connection.reachable ? (
+        <p className="font-medium text-foreground">Connected</p>
+      ) : (
+        <p className="font-medium text-destructive">Can&apos;t reach Plex: {connection.error}</p>
+      )}
       {connection.version && (
         <p className="text-muted-foreground">Plex Media Server {plexVersionLabel(connection.version)}</p>
       )}

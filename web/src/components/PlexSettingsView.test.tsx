@@ -57,6 +57,33 @@ describe('PlexSettingsView', () => {
       'Checked 2 minutes ago',
     ])
   })
+
+  it('says Plex cannot be reached, with the error and what was seen last', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-11-14T10:05:00Z'))
+    mockApi({
+      'GET /api/plex': aPlexStatus({
+        connection: aPlexConnection({
+          checked_at: '2026-11-14T10:04:00Z',
+          reachable: false,
+          error: 'connection refused',
+          version: '1.43.5.11079-b3b13e506',
+          libraries: ['Subscriptions'],
+        }),
+      }),
+      'GET /api/preferences': aPreferences(),
+    })
+
+    renderWithProviders(<PlexSettingsView />)
+
+    const connection = await screen.findByRole('group', { name: 'Connection' })
+    expect(lines(connection)).toEqual([
+      "Can't reach Plex: connection refused",
+      'Plex Media Server 1.43.5.11079',
+      'Libraries: Subscriptions',
+      'Checked 1 minute ago',
+    ])
+  })
 })
 
 /** The text of each line (paragraph) in `element`. */
