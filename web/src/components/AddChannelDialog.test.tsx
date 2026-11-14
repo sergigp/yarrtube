@@ -271,7 +271,7 @@ describe('AddChannelDialog', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
-      '/ai',
+      /^\/settings\/ai$/,
     )
   })
 
