@@ -14,7 +14,7 @@
 - [x] 2.6 `it_should_bring_a_pending_task_forward_when_run_now`: `POST /api/tasks/run-now` answers 204 and the task is due now
 - [x] 2.7 `it_should_bring_every_listed_task_forward`: all listed pending tasks become due now
 - [x] 2.8 `it_should_ignore_running_and_unknown_ids_when_run_now`: 204, and running and unknown ids are left alone
-- [ ] 2.9 `it_should_keep_retries_and_last_error_when_run_now`: only the run time changes
+- [x] 2.9 `it_should_keep_retries_and_last_error_when_run_now`: only the run time changes
 - [ ] 2.10 `it_should_reject_run_now_without_ids`: an empty or missing `ids` answers 400
 - [ ] 2.11 `it_should_fail_a_retrying_download_when_retrying_is_stopped`: `POST /api/videos/{id}/stop-retrying` makes the download Failed, keeps its failed attempts, and removes its pending task
 - [ ] 2.12 `it_should_leave_pending_steps_and_their_tasks_when_retrying_is_stopped`

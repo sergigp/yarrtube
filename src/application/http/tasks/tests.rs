@@ -1260,6 +1260,38 @@ async fn it_should_ignore_running_and_unknown_ids_when_run_now() {
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![running]);
 }
 
+#[tokio::test]
+async fn it_should_keep_retries_and_last_error_when_run_now() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let later = fixed_timestamp() + chrono::Duration::hours(1);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository.schedule(&Task::UpdateYtdlp, later).unwrap();
+    let failed = ScheduledTask {
+        retries: 2,
+        run_at: later,
+        last_error: Some("boom".to_string()),
+        ..scheduled_task(1, Task::UpdateYtdlp)
+    };
+    task_repository.update(&failed).unwrap();
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![ScheduledTask {
+            run_at: now,
+            updated_at: now,
+            ..failed
+        }]
+    );
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
