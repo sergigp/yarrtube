@@ -837,17 +837,19 @@ describe('AiSettingsView', () => {
     )
   })
 
-  it('says the default prompt is in use', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
+  it('marks the prompt default or edited', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
     await openPrompt('Summaries')
+    const toggle = within(screen.getByRole('group', { name: 'Summaries' })).getByRole('button', {
+      name: /^Prompt/,
+    })
 
-    expect(
-      within(screen.getByRole('group', { name: 'Summaries' })).getByRole('button', {
-        name: /^Prompt/,
-      }),
-    ).toHaveTextContent('Prompt · default')
+    expect(toggle).toHaveTextContent('Prompt · default')
     expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument()
+    await userEvent.setup().type(screen.getByRole('textbox', { name: 'Prompt' }), ' more')
+
+    expect(toggle).toHaveTextContent('Prompt · edited')
   })
 
   it('resets a saved prompt to the default', async () => {
