@@ -350,4 +350,24 @@ describe('TasksView', () => {
     expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
+
+  it('keeps chip names on a phone in a sideways-scrolling row, with 44 px controls and stacked rows', async () => {
+    mockApi({ 'GET /api/tasks': aProdLikeQueue() })
+    renderWithProviders(<TasksView />)
+
+    const chips = await screen.findAllByRole('button', { name: /^(All|Downloads|Syncs|Plex & upkeep)/ })
+    const card = screen.getByText('Download My Apps from Starter Story Build').closest('li')!
+    const plex = screen.getByText('Sync watch state with Plex').closest('li')!
+    const controls = [
+      ...chips,
+      within(card).getByRole('button', { name: 'Retry now' }),
+      within(card).getByRole('button', { name: 'Stop retrying' }),
+      within(plex).getByRole('button', { name: 'Run now' }),
+    ]
+
+    expect(chips.map((chip) => chip.querySelector('.sr-only'))).toEqual(chips.map(() => null))
+    expect(chips[0].parentElement).toHaveClass('overflow-x-auto')
+    expect(controls.filter((control) => !control.classList.contains('min-h-11'))).toEqual([])
+    expect(plex).toHaveClass('flex-col', 'sm:flex-row')
+  })
 })

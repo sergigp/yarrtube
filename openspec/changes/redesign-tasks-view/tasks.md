@@ -39,7 +39,7 @@
 - [x] 2.31 Web: a failed run-now, retry or stop shows the failure and the action can be used again
 - [x] 2.32 Web: search is always shown, filters within the selected chip, keeps its text when the chip changes, and says nothing matches when nothing does
 - [x] 2.33 Web: an empty listing shows "All quiet. Nothing is scheduled." with no chips
-- [ ] 2.34 Web: the phone layout keeps chip names in a sideways-scrolling row and stacks each row's time above its description; the controls use the 44 px size classes (asserted on classes in jsdom, and checked for real in 4.3)
+- [x] 2.34 Web: the phone layout keeps chip names in a sideways-scrolling row and stacks each row's time above its description; the controls use the 44 px size classes (asserted on classes in jsdom, and checked for real in 4.3)
 
 ## 3. Infrastructure adapters (TDD)
 
