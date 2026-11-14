@@ -108,10 +108,10 @@ describe('TasksView', () => {
 
     const items = await screen.findAllByRole('listitem')
     expect(items).toHaveLength(1)
-    expect(items[0]).toHaveTextContent('Syncing channel Chan')
+    expect(items[0]).toHaveTextContent('Checking Chan for new videos')
     expect(items[0]).toHaveTextContent('running')
     expect(items[0]).toHaveTextContent('2 retries')
-    expect(screen.queryByText('Downloading Intro in Chan')).not.toBeInTheDocument()
+    expect(screen.queryByText('Download Intro from Chan')).not.toBeInTheDocument()
   })
 
   it('shows Active, Downloads, Syncs and Other tabs with counts, and no Cleanup or All tab', async () => {
@@ -137,7 +137,7 @@ describe('TasksView', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('tab', { name: /^AI/ }))
-    expect(screen.getByText('Summarizing Intro in Chan')).toBeInTheDocument()
+    expect(screen.getByText('Summarize Intro in Chan')).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: /^Other/ }))
     expect(screen.getByText('No tasks here')).toBeInTheDocument()
@@ -168,7 +168,7 @@ describe('TasksView', () => {
     )
 
     expect(screen.queryByRole('tab', { name: /^AI/ })).not.toBeInTheDocument()
-    expect(screen.getByText('Summarizing Intro in Chan')).toBeInTheDocument()
+    expect(screen.getByText('Summarize Intro in Chan')).toBeInTheDocument()
   })
 
   it('shows no AI tab when preferences fail to load', async () => {
@@ -185,7 +185,7 @@ describe('TasksView', () => {
     )
 
     expect(screen.queryByRole('tab', { name: /^AI/ })).not.toBeInTheDocument()
-    expect(screen.getByText('Summarizing Intro in Chan')).toBeInTheDocument()
+    expect(screen.getByText('Summarize Intro in Chan')).toBeInTheDocument()
   })
 
   it('shows a live indicator on the Active tab only while a task is running', async () => {
@@ -222,7 +222,7 @@ describe('TasksView', () => {
     renderWithProviders(<TasksView />)
 
     await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    await user.click(screen.getByRole('button', { name: 'Run now: Syncing playlist Mix' }))
+    await user.click(screen.getByRole('button', { name: 'Run now: Check Mix for new videos' }))
 
     expect(reconcile).toHaveBeenCalledOnce()
     await waitFor(() => expect(tasks).toHaveBeenCalledTimes(2))
@@ -246,7 +246,7 @@ describe('TasksView', () => {
     renderWithProviders(<TasksView />)
 
     await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    await user.click(screen.getByRole('button', { name: 'Run now: Syncing channel Chan' }))
+    await user.click(screen.getByRole('button', { name: 'Run now: Check Chan for new videos' }))
 
     expect(reconcile).toHaveBeenCalledOnce()
   })
@@ -268,7 +268,7 @@ describe('TasksView', () => {
     renderWithProviders(<TasksView />)
 
     await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    const runNow = screen.getByRole('button', { name: 'Run now: Syncing playlist Mix' })
+    const runNow = screen.getByRole('button', { name: 'Run now: Check Mix for new videos' })
     await user.click(runNow)
 
     expect(runNow).toBeDisabled()
@@ -292,10 +292,10 @@ describe('TasksView', () => {
     renderWithProviders(<TasksView />)
 
     await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    const runNow = screen.getByRole('button', { name: 'Run now: Syncing playlist Mix' })
+    const runNow = screen.getByRole('button', { name: 'Run now: Check Mix for new videos' })
     await user.click(runNow)
 
-    const row = screen.getByText('Syncing playlist Mix').closest('li')!
+    const row = screen.getByText('Check Mix for new videos').closest('li')!
     expect(await within(row).findByText('Sync failed: youtube down')).toBeInTheDocument()
     expect(runNow).toBeEnabled()
 
@@ -325,7 +325,7 @@ describe('TasksView', () => {
 
     renderWithProviders(<TasksView />)
 
-    expect(await screen.findByText('Syncing channel Chan')).toBeInTheDocument()
+    expect(await screen.findByText('Checking Chan for new videos')).toBeInTheDocument()
     for (const tab of [/Active/, /Syncs/, /Downloads/, /Other/]) {
       await user.click(screen.getByRole('tab', { name: tab }))
       expect(screen.queryByRole('button', { name: /Run now/ })).not.toBeInTheDocument()
@@ -340,10 +340,10 @@ describe('TasksView', () => {
 
     await user.click(await screen.findByRole('tab', { name: /Downloads/ }))
 
-    expect(screen.getByText('Downloading Intro in Chan')).toBeInTheDocument()
-    expect(screen.getByText('Fetching thumbnail of Intro in Chan')).toBeInTheDocument()
-    expect(screen.queryByText('Syncing channel Chan')).not.toBeInTheDocument()
-    expect(screen.queryByText('Removing file a.mp4')).not.toBeInTheDocument()
+    expect(screen.getByText('Downloading Intro from Chan')).toBeInTheDocument()
+    expect(screen.getByText('Fetch the thumbnail of Intro in Chan')).toBeInTheDocument()
+    expect(screen.queryByText('Check Chan for new videos')).not.toBeInTheDocument()
+    expect(screen.queryByText('Remove the file a.mp4')).not.toBeInTheDocument()
   })
 
   it('tells the user nothing is running on an empty Active tab while other tabs still list tasks', async () => {
@@ -367,7 +367,7 @@ describe('TasksView', () => {
 
     await user.click(screen.getByRole('tab', { name: /Syncs/ }))
 
-    expect(screen.getByText('Syncing channel Chan')).toBeInTheDocument()
+    expect(screen.getByText('Check Chan for new videos')).toBeInTheDocument()
     expect(screen.queryByText('Nothing running right now')).not.toBeInTheDocument()
   })
 
@@ -410,7 +410,7 @@ describe('TasksView', () => {
 
     await user.type(search, 'zeta')
     expect(screen.getAllByRole('listitem')).toHaveLength(1)
-    expect(screen.getByText('Downloading Zeta in an unknown playlist or channel')).toBeInTheDocument()
+    expect(screen.getByText('Downloading Zeta from an unknown playlist or channel')).toBeInTheDocument()
 
     await user.clear(search)
     await user.type(search, 'nomatch')
@@ -459,12 +459,12 @@ describe('TasksView', () => {
     renderWithProviders(<TasksView />)
 
     const failing = (
-      await screen.findByText('Downloading Flaky in an unknown playlist or channel')
+      await screen.findByText('Downloading Flaky from an unknown playlist or channel')
     ).closest('li')!
     expect(within(failing).getByText('network timeout')).toBeInTheDocument()
 
     const healthy = screen
-      .getByText('Downloading Healthy in an unknown playlist or channel')
+      .getByText('Downloading Healthy from an unknown playlist or channel')
       .closest('li')!
     expect(within(healthy).queryByText('network timeout')).not.toBeInTheDocument()
   })

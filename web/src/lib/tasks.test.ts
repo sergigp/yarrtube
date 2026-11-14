@@ -70,157 +70,51 @@ describe('taskFamily', () => {
 })
 
 describe('describeTask', () => {
-  it('describes syncing tasks by their target name', () => {
-    expect(
-      describeTask(aTask({ task_type: 'reconcile_playlist', payload: { playlist_name: 'Mix' } })),
-    ).toBe('Syncing playlist Mix')
-    expect(
-      describeTask(aTask({ task_type: 'reconcile_channel', payload: { channel_name: 'Chan' } })),
-    ).toBe('Syncing channel Chan')
+  const video = { video_title: 'Intro', channel_name: 'Chan' }
+  const cases: [type: string, payload: Record<string, string>, pending: string, running: string][] = [
+    ['reconcile_channel', { channel_name: '3Blue1Brown' }, 'Check 3Blue1Brown for new videos', 'Checking 3Blue1Brown for new videos'],
+    ['reconcile_playlist', { playlist_name: 'Mix' }, 'Check Mix for new videos', 'Checking Mix for new videos'],
+    ['download_video', video, 'Download Intro from Chan', 'Downloading Intro from Chan'],
+    ['fetch_thumbnail', video, 'Fetch the thumbnail of Intro in Chan', 'Fetching the thumbnail of Intro in Chan'],
+    ['fetch_subtitles', video, 'Fetch the subtitles of Intro in Chan', 'Fetching the subtitles of Intro in Chan'],
+    ['fetch_chapters', video, 'Fetch the chapters of Intro in Chan', 'Fetching the chapters of Intro in Chan'],
+    ['upgrade_quality', video, 'Check the quality of Intro in Chan', 'Checking the quality of Intro in Chan'],
+    ['summarize_video', video, 'Summarize Intro in Chan', 'Summarizing Intro in Chan'],
+    ['categorize_video', video, 'Categorize Intro in Chan', 'Categorizing Intro in Chan'],
+    ['sync_video', video, 'Sync Intro in Chan', 'Syncing Intro in Chan'],
+    ['sync_plex_watch_state', {}, 'Sync watch state with Plex', 'Syncing watch state with Plex'],
+    ['sync_plex_labels', {}, 'Update category labels in Plex', 'Updating category labels in Plex'],
+    ['update_ytdlp', {}, 'Update yt-dlp', 'Updating yt-dlp'],
+    ['delete_video_file', { filename: 'a.mp4' }, 'Remove the file a.mp4', 'Removing the file a.mp4'],
+    ['delete_playlist_files', { path: 'playlists/x' }, 'Delete the files at playlists/x', 'Deleting the files at playlists/x'],
+    ['delete_channel_files', { path: 'creators/x' }, 'Delete the files at creators/x', 'Deleting the files at creators/x'],
+    ['mystery_task', {}, 'Mystery task', 'Mystery task'],
+  ]
+
+  it.each(cases)('describes a pending %s as what it will do', (type, payload, pending) => {
+    expect(describeTask(aTask({ task_type: type, payload }))).toBe(pending)
   })
 
-  it('falls back to generic names when the payload is missing details', () => {
-    expect(describeTask(aTask({ task_type: 'reconcile_playlist', payload: {} }))).toBe(
-      'Syncing playlist an unknown playlist',
-    )
-    expect(describeTask(aTask({ task_type: 'download_video', payload: {} }))).toBe(
-      'Downloading a video in an unknown playlist or channel',
-    )
+  it.each(cases)('describes a running %s as what it is doing', (type, payload, _pending, running) => {
+    expect(describeTask(aTask({ task_type: type, payload, status: 'running' }))).toBe(running)
   })
 
-  it('describes a download with its video and container', () => {
-    expect(
-      describeTask(
-        aTask({
-          task_type: 'download_video',
-          payload: { video_title: 'Intro', channel_name: 'Chan' },
-        }),
-      ),
-    ).toBe('Downloading Intro in Chan')
+  it('uses placeholders for names it could not resolve', () => {
+    const types = ['reconcile_channel', 'reconcile_playlist', 'download_video', 'fetch_subtitles', 'delete_video_file']
+
+    expect(types.map((type) => describeTask(aTask({ task_type: type, payload: {} })))).toEqual([
+      'Check an unknown channel for new videos',
+      'Check an unknown playlist for new videos',
+      'Download a video from an unknown playlist or channel',
+      'Fetch the subtitles of a video in an unknown playlist or channel',
+      'Remove a video file',
+    ])
   })
 
-  it('describes a video sync with its video and container', () => {
-    expect(
-      describeTask(
-        aTask({
-          task_type: 'sync_video',
-          payload: { video_title: 'Intro', playlist_name: 'Mix' },
-        }),
-      ),
-    ).toBe('Syncing Intro in Mix')
-  })
+  it('never says pending or queued', () => {
+    const descriptions = cases.map(([type, payload]) => describeTask(aTask({ task_type: type, payload })))
 
-  it('describes a thumbnail fetch with its video and container', () => {
-    expect(
-      describeTask(
-        aTask({
-          task_type: 'fetch_thumbnail',
-          payload: { video_title: 'Intro', playlist_name: 'Mix' },
-        }),
-      ),
-    ).toBe('Fetching thumbnail of Intro in Mix')
-    expect(describeTask(aTask({ task_type: 'fetch_thumbnail', payload: {} }))).toBe(
-      'Fetching thumbnail of a video in an unknown playlist or channel',
-    )
-  })
-
-  it('describes subtitle fetches, falling back to placeholders for missing names', () => {
-    expect(
-      describeTask(
-        aTask({
-          task_type: 'fetch_subtitles',
-          payload: { video_title: 'Intro', channel_name: 'Chan' },
-        }),
-      ),
-    ).toBe('Fetching subtitles of Intro in Chan')
-    expect(describeTask(aTask({ task_type: 'fetch_subtitles', payload: {} }))).toBe(
-      'Fetching subtitles of a video in an unknown playlist or channel',
-    )
-  })
-
-  it('describes chapter fetches as downloads, falling back to placeholders for missing names', () => {
-    expect(
-      describeTask(
-        aTask({
-          task_type: 'fetch_chapters',
-          payload: { video_title: 'Intro', channel_name: 'Chan' },
-        }),
-      ),
-    ).toBe('Fetching chapters of Intro in Chan')
-    expect(describeTask(aTask({ task_type: 'fetch_chapters', payload: {} }))).toBe(
-      'Fetching chapters of a video in an unknown playlist or channel',
-    )
-    expect(taskFamily(aTask({ task_type: 'fetch_chapters' }), false)).toBe('downloads')
-    expect(taskKind(aTask({ task_type: 'fetch_chapters' }))).toBe('download')
-  })
-
-  it('describes a summarize task', () => {
-    expect(
-      describeTask(
-        aTask({
-          task_type: 'summarize_video',
-          payload: { video_title: 'Intro', channel_name: 'Chan' },
-        }),
-      ),
-    ).toBe('Summarizing Intro in Chan')
-    expect(describeTask(aTask({ task_type: 'summarize_video', payload: {} }))).toBe(
-      'Summarizing a video in an unknown playlist or channel',
-    )
-  })
-
-  it('describes a quality check under downloads', () => {
-    expect(
-      describeTask(
-        aTask({
-          task_type: 'upgrade_quality',
-          payload: { video_title: 'Intro', playlist_name: 'Kids' },
-        }),
-      ),
-    ).toBe('Checking the quality of Intro in Kids')
-    expect(describeTask(aTask({ task_type: 'upgrade_quality', payload: {} }))).toBe(
-      'Checking the quality of a video in an unknown playlist or channel',
-    )
-    expect(taskFamily(aTask({ task_type: 'upgrade_quality' }), false)).toBe('downloads')
-    expect(taskKind(aTask({ task_type: 'upgrade_quality' }))).toBe('download')
-  })
-
-  it('describes file removals', () => {
-    expect(
-      describeTask(aTask({ task_type: 'delete_video_file', payload: { filename: 'a.mp4' } })),
-    ).toBe('Removing file a.mp4')
-    expect(describeTask(aTask({ task_type: 'delete_video_file', payload: {} }))).toBe(
-      'Removing a video file',
-    )
-  })
-
-  it('describes a yt-dlp self-update in plain language', () => {
-    expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
-  })
-
-  it('describes a Plex label sync in plain language', () => {
-    expect(describeTask(aTask({ task_type: 'sync_plex_labels', payload: {} }))).toBe(
-      'Syncing Plex category labels',
-    )
-  })
-
-  it('describes a Plex watch sync in plain language', () => {
-    expect(describeTask(aTask({ task_type: 'sync_plex_watch_state', payload: {} }))).toBe(
-      'Syncing Plex watch state',
-    )
-  })
-
-  it('humanizes an unknown type instead of showing the raw snake_case string', () => {
-    const description = describeTask(aTask({ task_type: 'mystery_task', payload: {} }))
-    expect(description).not.toContain('_')
-    expect(description).toBe('Mystery task')
-  })
-
-  it('describes path deletions and yt-dlp updates for other task types', () => {
-    expect(describeTask(aTask({ task_type: 'delete_files', payload: { path: 'playlists/x' } }))).toBe(
-      'Deleting files at playlists/x',
-    )
-    expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
-    expect(describeTask(aTask({ task_type: 'mystery_task', payload: {} }))).toBe('Mystery task')
+    expect(descriptions.filter((text) => /pending|queued/i.test(text))).toEqual([])
   })
 })
 
@@ -269,7 +163,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     })
 
     expect([describeTask(task), taskFamily(task, true), taskKind(task)]).toEqual([
-      'Categorizing Intro in Chan',
+      'Categorize Intro in Chan',
       'ai',
       'ai',
     ])
@@ -386,7 +280,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     const task = aTask({ task_type: 'reconcile_channel', payload: { channel_name: 'Rustaceans' } })
 
     expect(matchesTask(task, 'rustaceans')).toBe(true)
-    expect(matchesTask(task, 'SYNCING')).toBe(true)
+    expect(matchesTask(task, 'CHECK')).toBe(true)
     expect(matchesTask(task, 'nope')).toBe(false)
   })
 })

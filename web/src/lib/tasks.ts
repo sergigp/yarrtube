@@ -1,53 +1,57 @@
 import type { Task } from '@/api/types'
 
 /** The video a task targets and its playlist or channel, with placeholders for unresolved names. */
-function videoInContainer(payload: NonNullable<Task['payload']>): string {
+function videoAndSource(payload: Task['payload'], joiner: 'in' | 'from'): string {
   const video = payload.video_title ?? 'a video'
-  const container =
-    payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
-  return `${video} in ${container}`
+  const source = payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
+  return `${video} ${joiner} ${source}`
 }
 
-/** A short human sentence for what a queued task will do. */
-export function describeTask(task: Task): string {
+/** What a task does, as a verb in its base form and its "-ing" form, then the rest. */
+function taskAction(task: Task): [base: string, ing: string, rest: string] | null {
   const payload = task.payload ?? {}
-
   switch (task.task_type) {
     case 'reconcile_playlist':
-      return `Syncing playlist ${payload.playlist_name ?? 'an unknown playlist'}`
+      return ['Check', 'Checking', `${payload.playlist_name ?? 'an unknown playlist'} for new videos`]
     case 'reconcile_channel':
-      return `Syncing channel ${payload.channel_name ?? 'an unknown channel'}`
+      return ['Check', 'Checking', `${payload.channel_name ?? 'an unknown channel'} for new videos`]
     case 'download_video':
-      return `Downloading ${videoInContainer(payload)}`
+      return ['Download', 'Downloading', videoAndSource(payload, 'from')]
     case 'fetch_thumbnail':
-      return `Fetching thumbnail of ${videoInContainer(payload)}`
+      return ['Fetch', 'Fetching', `the thumbnail of ${videoAndSource(payload, 'in')}`]
     case 'fetch_subtitles':
-      return `Fetching subtitles of ${videoInContainer(payload)}`
+      return ['Fetch', 'Fetching', `the subtitles of ${videoAndSource(payload, 'in')}`]
     case 'fetch_chapters':
-      return `Fetching chapters of ${videoInContainer(payload)}`
-    case 'summarize_video':
-      return `Summarizing ${videoInContainer(payload)}`
-    case 'categorize_video':
-      return `Categorizing ${videoInContainer(payload)}`
+      return ['Fetch', 'Fetching', `the chapters of ${videoAndSource(payload, 'in')}`]
     case 'upgrade_quality':
-      return `Checking the quality of ${videoInContainer(payload)}`
+      return ['Check', 'Checking', `the quality of ${videoAndSource(payload, 'in')}`]
+    case 'summarize_video':
+      return ['Summarize', 'Summarizing', videoAndSource(payload, 'in')]
+    case 'categorize_video':
+      return ['Categorize', 'Categorizing', videoAndSource(payload, 'in')]
     case 'sync_video':
-      return `Syncing ${videoInContainer(payload)}`
-    case 'sync_plex_labels':
-      return 'Syncing Plex category labels'
+      return ['Sync', 'Syncing', videoAndSource(payload, 'in')]
     case 'sync_plex_watch_state':
-      return 'Syncing Plex watch state'
+      return ['Sync', 'Syncing', 'watch state with Plex']
+    case 'sync_plex_labels':
+      return ['Update', 'Updating', 'category labels in Plex']
+    case 'update_ytdlp':
+      return ['Update', 'Updating', 'yt-dlp']
     case 'delete_video_file':
-      return payload.filename ? `Removing file ${payload.filename}` : 'Removing a video file'
+      return ['Remove', 'Removing', payload.filename ? `the file ${payload.filename}` : 'a video file']
     default:
-      if (payload.path) {
-        return `Deleting files at ${payload.path}`
-      }
-      if (task.task_type === 'update_ytdlp') {
-        return 'Updating yt-dlp'
-      }
-      return humanizeType(task.task_type)
+      return payload.path ? ['Delete', 'Deleting', `the files at ${payload.path}`] : null
   }
+}
+
+/** A short sentence for a task: what it will do while pending, what it is doing while running. */
+export function describeTask(task: Task): string {
+  const action = taskAction(task)
+  if (!action) {
+    return humanizeType(task.task_type)
+  }
+  const [base, ing, rest] = action
+  return `${task.status === 'running' ? ing : base} ${rest}`
 }
 
 /** Turns an unknown raw task type into a readable sentence, never snake_case. */
