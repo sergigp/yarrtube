@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use crate::domain::plex_status::PlexSyncKind;
+use crate::domain::plex_status::{PlexSyncKind, RequestPlexSyncError};
 use crate::domain::services::{
     PlexStatusSearcher, PlexStatusSearcherApi, PlexSyncRequester, PlexSyncRequesterApi,
 };
@@ -28,8 +28,15 @@ pub async fn request_plex_sync(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("No Plex sync {kind}")))?;
     run_blocking(move || plex_sync_requester.request(kind))
         .await?
-        .map_err(ApiError::internal)?;
+        .map_err(request_plex_sync_error)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+fn request_plex_sync_error(error: RequestPlexSyncError) -> ApiError {
+    match error {
+        e @ RequestPlexSyncError::NotConfigured => ApiError::new(StatusCode::CONFLICT, e),
+        e @ RequestPlexSyncError::Repository(_) => ApiError::internal(e),
+    }
 }
 
 #[cfg(test)]

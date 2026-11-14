@@ -29,7 +29,7 @@ Plex status endpoints (`http/plex`)
 - [x] 2.16 `it_should_schedule_a_sync_now_when_none_is_pending`
 - [x] 2.17 `it_should_leave_one_pending_sync_when_synced_now_twice`
 - [x] 2.18 `it_should_respond_404_for_an_unknown_sync`
-- [ ] 2.19 `it_should_respond_409_when_plex_isnt_configured`
+- [x] 2.19 `it_should_respond_409_when_plex_isnt_configured`
 
 Preferences (`http/preferences`)
 - [ ] 2.20 `it_should_read_the_plex_playlist_preferences_as_their_defaults`

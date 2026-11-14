@@ -40,7 +40,7 @@ impl PlexSyncRequesterApi for PlexSyncRequester {
             PlexSyncKind::WatchState => self.watch_syncer.as_ref().map(|s| s.request_sync(now)),
             PlexSyncKind::Labels => self.label_syncer.as_ref().map(|s| s.request_sync(now)),
         }
-        .unwrap_or(Ok(()))
+        .ok_or(RequestPlexSyncError::NotConfigured)?
         .map_err(RequestPlexSyncError::Repository)
     }
 }

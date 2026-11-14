@@ -298,6 +298,21 @@ async fn it_should_respond_404_for_an_unknown_sync() {
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
+#[tokio::test]
+async fn it_should_respond_409_when_plex_isnt_configured() {
+    let db = TestDatabase::new();
+    let task_repository = task_repository(&db);
+    let plex_sync_requester = PlexSyncRequester::new(None, None, Arc::new(FixedClock(now())));
+
+    let response = sync_now(plex_sync_requester, "watch_state").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(StatusCode::CONFLICT, "Plex isn't configured"))
+    );
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
 fn now() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
 }
