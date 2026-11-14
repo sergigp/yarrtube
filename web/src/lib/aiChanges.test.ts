@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changedSettingNames } from './aiChanges'
+import { changedSettingNames, unsavedChangesLabel } from './aiChanges'
 
 describe('aiChanges', () => {
   it('names changed settings once each, in page order', () => {
@@ -12,5 +12,10 @@ describe('aiChanges', () => {
         ai_enabled: true,
       }),
     ).toEqual(['AI features', 'Summaries model', 'Summaries temperature', 'Categorization prompt'])
+  })
+
+  it('counts unsaved changes in singular and plural', () => {
+    expect(unsavedChangesLabel(1)).toBe('1 unsaved change')
+    expect(unsavedChangesLabel(2)).toBe('2 unsaved changes')
   })
 })

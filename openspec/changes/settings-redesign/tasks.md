@@ -20,7 +20,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 - [x] 2.6 `it disables More about while categories are off`
 - [x] 2.7 `it shows Couldn't save when a toggle fails`
 - [x] 2.8 `it names changed settings once each, in page order`
-- [ ] 2.9 `it counts unsaved changes in singular and plural`
+- [x] 2.9 `it counts unsaved changes in singular and plural`
 - [ ] 2.10 `it shows the AI features switch beside the title`
 - [ ] 2.11 `it describes each provider option`: option cards
 - [ ] 2.12 `it shows no save bar until a field changes`

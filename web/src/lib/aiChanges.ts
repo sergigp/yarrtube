@@ -30,6 +30,6 @@ export function changedSettingNames(patch: PreferencesPatch): string[] {
 }
 
 /** "1 unsaved change" or "<n> unsaved changes". */
-export function unsavedChangesLabel(_count: number): string {
-  return ''
+export function unsavedChangesLabel(count: number): string {
+  return `${count} unsaved ${count === 1 ? 'change' : 'changes'}`
 }
