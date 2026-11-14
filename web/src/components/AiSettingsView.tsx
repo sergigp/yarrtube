@@ -417,9 +417,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
                           }
                         />
                         <p className="text-sm text-muted-foreground">
-                          Auto sizes it from your categories with an AI prompt, about 1,800 tokens
-                          each. Too small and videos are asked about one category at a time, which is
-                          slower.
+                          Auto: sized to fit your categories, about 1,800 tokens each. If it&apos;s
+                          too small, videos are checked one category at a time, which is slower.
                         </p>
                       </Field>
                       <SwitchRow
