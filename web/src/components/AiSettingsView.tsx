@@ -177,6 +177,11 @@ function AiSettings({ saved }: { saved: Preferences }) {
     void submit(patch)
   }
 
+  const discard = () => {
+    setForm(formFrom(saved))
+    setSaveError(null)
+  }
+
   const resetPrompt = async () => {
     const updated = await submit({ summaries_prompt: null })
     if (updated) {
@@ -457,7 +462,7 @@ function AiSettings({ saved }: { saved: Preferences }) {
         changes={changedSettingNames(patch)}
         error={saveError}
         saving={saving}
-        onDiscard={() => setForm(formFrom(saved))}
+        onDiscard={discard}
         onSave={save}
       />
     </>

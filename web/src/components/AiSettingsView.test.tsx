@@ -76,6 +76,27 @@ describe('AiSettingsView', () => {
     )
   })
 
+  it('discards changes without a request', async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PATCH /api/preferences': { status: 400, error: 'Ollama URL must be set to enable AI' },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await screen.findByRole('alert')
+    const callsBefore = fetchMock.mock.calls.length
+
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(screen.getByRole('switch', { name: 'AI features' })).not.toBeChecked()
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls).toHaveLength(callsBefore)
+    await user.click(screen.getByRole('switch', { name: 'AI features' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('describes each provider option', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: true }) })
     renderWithProviders(<AiSettingsView />)
