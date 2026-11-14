@@ -109,8 +109,8 @@ function NothingElseShown({
   return (
     <p className="text-sm text-muted-foreground">
       Nothing to show here.{' '}
-      <Link to="/preferences" className="underline hover:text-foreground">
-        Preferences
+      <Link to="/settings/general" className="underline hover:text-foreground">
+        Settings
       </Link>
     </p>
   )

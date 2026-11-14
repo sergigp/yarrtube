@@ -13,7 +13,7 @@ function homeSection(page, title) {
 
 /** Flips one preference from the preferences view, then goes home through the logo. */
 async function toggleThenGoHome(page, name) {
-  await page.goto('/preferences')
+  await page.goto('/settings/general')
   const toggle = page.getByRole('switch', { name })
   const before = await toggle.getAttribute('aria-checked')
   await toggle.click()
@@ -26,14 +26,14 @@ test('preferences: turning categories off hides them everywhere, and back on sho
   const header = page.getByRole('banner')
   const enableCategories = page.getByRole('switch', { name: 'Enable categories' })
 
-  await test.step('the settings menu opens the preferences view', async () => {
+  await test.step('the settings menu opens the general settings', async () => {
     await header.getByRole('button', { name: 'Settings' }).click()
     await expect(page.getByRole('menuitem', { name: 'Report a bug' })).toHaveAttribute(
       'href',
       'https://github.com/sergigp/yarrtube/issues/new',
     )
-    await page.getByRole('menuitem', { name: 'Preferences', exact: true }).click()
-    await expect(page).toHaveURL(/\/preferences$/)
+    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click()
+    await expect(page).toHaveURL(/\/settings\/general$/)
     await expect(enableCategories).toBeChecked()
   })
 
@@ -147,7 +147,10 @@ test('preferences: each home switch takes its section off home, and its videos m
   await test.step('latest videos off: nothing left to show', async () => {
     await toggleThenGoHome(page, 'Show latest videos')
     await expect(main.getByText('Nothing to show here.')).toBeVisible()
-    await expect(main.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
+    await expect(main.getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/settings/general',
+    )
     await expect(main.getByRole('heading', { name: 'Latest videos' })).toHaveCount(0)
     for (const title of everyTitle) {
       await expect(main.getByText(title, { exact: true })).toHaveCount(0)

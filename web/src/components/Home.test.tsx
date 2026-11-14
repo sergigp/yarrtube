@@ -479,7 +479,7 @@ describe('Home', () => {
     renderWithProviders(<Home />)
 
     expect(await screen.findByText(/Nothing to show here\./)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings/general')
     expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
     expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
   })
