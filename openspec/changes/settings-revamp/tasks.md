@@ -11,7 +11,7 @@ Watch sync (`sync_plex_watch_state_task`)
 - [x] 2.2 `it_should_record_the_error_when_a_watch_sync_cant_reach_plex` — a failed run is recorded with the error.
 
 Label sync (`sync_plex_labels_task`)
-- [ ] 2.3 `it_should_record_the_plex_version_and_libraries_when_a_label_sync_reaches_plex`
+- [x] 2.3 `it_should_record_the_plex_version_and_libraries_when_a_label_sync_reaches_plex`
 - [ ] 2.4 `it_should_record_the_error_when_a_label_sync_cant_reach_plex`
 - [ ] 2.5 `it_should_create_playlists_that_drop_watched_episodes_when_the_preference_says_drop` — the label syncer reads the playlist preferences.
 - [ ] 2.6 `it_should_create_playlists_oldest_first_when_the_preference_says_so`

@@ -1,6 +1,7 @@
 use crate::domain::category::{CategoryId, CategoryName};
-use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection};
+use crate::domain::plex::{PlexEpisode, PlexIdentity, PlexLabels, PlexSection};
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
+use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
 use crate::domain::preferences::PlexPlaylistSettings;
 use crate::domain::services::{PlexEpisodeFinder, PlexEpisodeFinderApi, PlexLibrary};
 use crate::domain::task::Task;
@@ -65,7 +66,6 @@ pub struct PlexLabelSyncer {
     task_repository: Arc<dyn TaskRepository>,
     #[allow(dead_code)]
     preferences_repository: Arc<dyn PreferencesRepository>,
-    #[allow(dead_code)]
     plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     clock: Arc<dyn Clock>,
 }
@@ -144,8 +144,8 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let library = match self.plex_episode_finder.read_library() {
-            Ok(library) => library,
+        let (library, identity) = match self.read_plex() {
+            Ok(plex) => plex,
             Err(e) => {
                 warn!(error = %e, "failed to reach Plex, retrying the label sync later");
                 return self.request_sync(self.clock.now() + SYNC_INTERVAL);
@@ -154,12 +154,29 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         self.mark_reimported(&library.episodes)?;
         self.track_categorized_videos()?;
         let backlog = self.label_dirty_videos(&library)?;
-        self.reconcile_playlists(&library.sections)?;
-        self.request_next_sync(backlog)
+        self.reconcile_playlists(&library.sections, &identity.server_id)?;
+        self.request_next_sync(backlog)?;
+        self.record(PlexSyncOutcome::reached(&identity, &library.sections))
     }
 }
 
 impl PlexLabelSyncer {
+    /// The library and who the server is.
+    fn read_plex(&self) -> anyhow::Result<(PlexLibrary, PlexIdentity)> {
+        let library = self.plex_episode_finder.read_library()?;
+        let identity = self.plex_library_repository.identity()?;
+        Ok((library, identity))
+    }
+
+    /// Records how this sync ended.
+    fn record(&self, outcome: PlexSyncOutcome) -> anyhow::Result<()> {
+        self.plex_sync_run_repository.save(&PlexSyncRun {
+            kind: PlexSyncKind::Labels,
+            finished_at: self.clock.now(),
+            outcome,
+        })
+    }
+
     /// Labels a batch of dirty videos, least recently checked first;
     /// returns whether more may be labellable right away: the batch was full
     /// and at least one of its rows was synced or deleted, so a batch of
@@ -189,7 +206,7 @@ impl PlexLabelSyncer {
 
     /// Keeps one smart playlist per label and section holding labelled
     /// episodes.
-    fn reconcile_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<()> {
+    fn reconcile_playlists(&self, sections: &[PlexSection], server_id: &str) -> anyhow::Result<()> {
         let desired = self.desired_playlists(sections)?;
         let (live, gone) = self.stored_playlists()?;
         gone.iter()
@@ -200,7 +217,7 @@ impl PlexLabelSyncer {
         desired
             .into_iter()
             .filter(|desired| !live.iter().any(|playlist| desired.is(playlist)))
-            .try_for_each(|desired| self.create_playlist(desired))
+            .try_for_each(|desired| self.create_playlist(desired, server_id))
     }
 
     /// The playlists yarrtube created: those still in Plex, then those
@@ -266,11 +283,10 @@ impl PlexLabelSyncer {
         self.category_playlist_repository.delete(playlist)
     }
 
-    fn create_playlist(&self, desired: DesiredPlaylist) -> anyhow::Result<()> {
-        let server_id = self.plex_library_repository.identity()?.server_id;
+    fn create_playlist(&self, desired: DesiredPlaylist, server_id: &str) -> anyhow::Result<()> {
         let options = PlexPlaylistSettings::default();
         let playlist = self.plex_library_repository.create_smart_playlist(
-            &server_id,
+            server_id,
             &desired.section_id,
             &desired.label,
             &desired.title,

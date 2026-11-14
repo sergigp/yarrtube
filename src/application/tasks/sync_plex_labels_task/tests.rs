@@ -5,6 +5,7 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::plex::PlexLabels;
 use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
+use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
 use crate::domain::preferences::PlexPlaylistSettings;
 use crate::domain::services::plex_label_syncer::BATCH_SIZE;
 use crate::domain::services::{PlexEpisodeFinder, VideoOwnerFinder};
@@ -32,7 +33,9 @@ use crate::infrastructure::repositories::sqlite_episode_labels_repository::{
 };
 use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::SqlitePlexSyncRunRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::{
+    PlexSyncRunRepository, SqlitePlexSyncRunRepository,
+};
 use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
@@ -1050,6 +1053,38 @@ fn it_should_retitle_a_playlist_once_its_category_spans_libraries() {
 
 /// The syncer over the test database, with Plex seeing `/videos` at
 /// `/plex/videos`.
+#[test]
+fn it_should_record_the_plex_version_and_libraries_when_a_label_sync_reaches_plex() {
+    let db = TestDatabase::new();
+    let plex_sync_run_repository = SqlitePlexSyncRunRepository::new(db.database());
+    let task = SyncPlexLabelsTask::new(syncer(
+        &db,
+        Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_section_title("19", "Subscriptions"),
+        ),
+        Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+        Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex_sync_run_repository.list().unwrap(),
+        vec![PlexSyncRun {
+            kind: PlexSyncKind::Labels,
+            finished_at: now(),
+            outcome: PlexSyncOutcome::Reached {
+                version: FakePlexLibraryRepository::VERSION.to_string(),
+                libraries: vec!["Subscriptions".to_string()],
+            },
+        }]
+    );
+}
+
 fn syncer(
     db: &TestDatabase,
     plex: Arc<FakePlexLibraryRepository>,
