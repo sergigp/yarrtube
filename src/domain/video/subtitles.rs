@@ -92,7 +92,10 @@ impl Subtitles {
     /// A Retrying step Failed, keeping its failed attempts; any other
     /// unchanged.
     pub fn stop_retrying(self) -> Self {
-        self
+        Self {
+            state: self.state.stop_retrying(),
+            ..self
+        }
     }
 
     /// Retrying or Failed subtitles back to Pending, never checked; any
