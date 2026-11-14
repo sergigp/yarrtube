@@ -96,8 +96,11 @@ Good to know:
 
 ## In Plex
 
-Each category becomes a **smart playlist** in Plex: its unwatched episodes,
-newest first, across all its channels and playlists.
+Each category becomes a **smart playlist** in Plex: all its episodes,
+newest first, across all its channels and playlists, like its page in the
+web UI. Watched episodes stay in it, shown as watched. A channel's episodes
+from the same day are newest first; episodes of different shows on the
+same day are in Plex's own order.
 
 It needs the Plex integration working: a TV Shows library and the scan
 trigger, steps 1 and 2 of the [Plex guide](PLEX.md). Nothing else to set up.
@@ -116,6 +119,9 @@ Good to know:
 - A playlist shows up within 15 minutes after Plex imports its first episode, and
   follows renames and deletes of its category. A playlist you delete in Plex
   comes back; delete the category instead.
+- Playlists created before watched episodes were included keep listing
+  only unwatched ones. Delete them in Plex once: they come back within 15
+  minutes listing every episode.
 - yarrtube builds the playlists from Plex labels named after your
   categories. It owns the labels of its episodes, so labels you add to them by
   hand are removed. If you restrict shared users by label, don't use a
