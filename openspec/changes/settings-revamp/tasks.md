@@ -79,8 +79,8 @@ Web (Vitest), one red-green-refactor cycle each
 
 ## 4. Docs
 
-- [ ] 4.1 `doc/CATEGORIES.md` (In Plex): the two playlist options in Settings → Plex; Plex Web and the Mac app show no watched badge in playlists.
-- [ ] 4.2 `doc/PLEX.md`: a "Status and syncs" note pointing at Settings → Plex; existing playlists are replaced once after upgrading.
+- [x] 4.1 `doc/CATEGORIES.md` (In Plex): the two playlist options in Settings → Plex; Plex Web and the Mac app show no watched badge in playlists.
+- [x] 4.2 `doc/PLEX.md`: a "Status and syncs" note pointing at Settings → Plex; existing playlists are replaced once after upgrading.
 
 ## 5. Verification
 
