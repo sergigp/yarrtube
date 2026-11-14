@@ -2,6 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
+use super::validation::{MISSING_TASK_IDS, required};
 use crate::domain::services::{
     TaskRunNowRequester, TaskRunNowRequesterApi, TaskViewSearcher, TaskViewSearcherApi,
 };
@@ -24,7 +25,7 @@ pub async fn run_tasks_now(
     State(task_run_now_requester): State<TaskRunNowRequester>,
     Json(request): Json<RunTasksNowRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let ids = request.ids.unwrap_or_default();
+    let ids = required(request.ids.filter(|ids| !ids.is_empty()), MISSING_TASK_IDS)?;
 
     run_blocking(move || task_run_now_requester.run_now(&ids))
         .await?

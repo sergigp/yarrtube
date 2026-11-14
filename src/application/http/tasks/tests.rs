@@ -1292,6 +1292,28 @@ async fn it_should_keep_retries_and_last_error_when_run_now() {
     );
 }
 
+#[tokio::test]
+async fn it_should_reject_run_now_without_ids() {
+    let empty = run_now(any_task_run_now_requester(), run_now_request(&[])).await;
+    let missing = run_now(
+        any_task_run_now_requester(),
+        RunTasksNowRequest { ids: None },
+    )
+    .await;
+
+    assert_eq!(
+        (empty, missing),
+        (
+            Err(ApiError::bad_request(
+                "At least one task id must be given (missing)"
+            )),
+            Err(ApiError::bad_request(
+                "At least one task id must be given (missing)"
+            )),
+        )
+    );
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
@@ -1398,4 +1420,20 @@ fn scheduled_task(id: i64, task: Task) -> ScheduledTask {
         updated_at: fixed_timestamp(),
         last_error: None,
     }
+}
+
+fn any_task_run_now_requester() -> TaskRunNowRequester {
+    TaskRunNowRequester::new(
+        Arc::new(SqliteTaskRepository::new(
+            unused_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+    )
+}
+
+fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+    crate::infrastructure::shared::sqlite_connection::Database::single(
+        rusqlite::Connection::open_in_memory().unwrap(),
+    )
 }
