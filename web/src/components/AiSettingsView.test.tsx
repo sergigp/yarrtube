@@ -45,6 +45,18 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
   })
 
+  it('describes each provider option', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: true }) })
+    renderWithProviders(<AiSettingsView />)
+
+    expect(await screen.findByRole('radio', { name: 'Ollama' })).toHaveAccessibleDescription(
+      'Runs on your own hardware. Free, private, slower on small machines.',
+    )
+    expect(screen.getByRole('radio', { name: 'Anthropic' })).toHaveAccessibleDescription(
+      'Claude models in the cloud. Fast and accurate, billed per token to your API key.',
+    )
+  })
+
   it('hides the provider choice without an Anthropic key', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: false }) })
     renderWithProviders(<AiSettingsView />)

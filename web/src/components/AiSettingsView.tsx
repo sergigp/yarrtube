@@ -474,37 +474,73 @@ function AiSettings({ saved }: { saved: Preferences }) {
   )
 }
 
-/** The provider every AI feature runs on. */
+/** The provider every AI feature runs on, as one option card each. */
 function ProviderChoice({
   providers,
   value,
   onChange,
 }: {
-  providers: { value: AiProvider; label: string }[]
+  providers: Provider[]
   value: AiProvider
   onChange: (value: AiProvider) => void
 }) {
   return (
-    <div role="radiogroup" aria-label="Provider" className="flex gap-6">
-      {providers.map((provider) => (
-        <label key={provider.value} className="flex items-center gap-2 text-sm">
-          <input
-            type="radio"
-            name="ai-provider"
-            value={provider.value}
-            checked={value === provider.value}
-            onChange={() => onChange(provider.value)}
-          />
-          {provider.label}
-        </label>
-      ))}
+    <div role="radiogroup" aria-label="Provider" className="flex flex-wrap gap-3">
+      {providers.map((provider) => {
+        const selected = value === provider.value
+        return (
+          <label
+            key={provider.value}
+            className={cn(
+              'flex min-w-56 flex-1 cursor-pointer items-start gap-3 rounded-lg border p-4 text-sm',
+              selected ? 'border-primary bg-accent ring-1 ring-primary' : 'border-border',
+            )}
+          >
+            <input
+              type="radio"
+              name="ai-provider"
+              value={provider.value}
+              checked={selected}
+              aria-labelledby={`provider-${provider.value}-label`}
+              aria-describedby={`provider-${provider.value}-description`}
+              onChange={() => onChange(provider.value)}
+              className="mt-0.5 accent-primary"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span id={`provider-${provider.value}-label`} className="font-medium text-foreground">
+                {provider.label}
+              </span>
+              <span
+                id={`provider-${provider.value}-description`}
+                className="text-muted-foreground"
+              >
+                {provider.description}
+              </span>
+            </span>
+          </label>
+        )
+      })}
     </div>
   )
 }
 
-const PROVIDERS: { value: AiProvider; label: string }[] = [
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'anthropic', label: 'Anthropic' },
+interface Provider {
+  value: AiProvider
+  label: string
+  description: string
+}
+
+const PROVIDERS: Provider[] = [
+  {
+    value: 'ollama',
+    label: 'Ollama',
+    description: 'Runs on your own hardware. Free, private, slower on small machines.',
+  },
+  {
+    value: 'anthropic',
+    label: 'Anthropic',
+    description: 'Claude models in the cloud. Fast and accurate, billed per token to your API key.',
+  },
 ]
 
 const OLLAMA_ONLY = PROVIDERS.filter((provider) => provider.value === 'ollama')
