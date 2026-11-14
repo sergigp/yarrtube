@@ -119,35 +119,31 @@ export function PreferencesView() {
       )}
       {preferences &&
         GROUPS.map((group) => (
-          <SettingsCard
-            key={group.title}
-            id={group.id}
-            title={group.title}
-          >
+          <SettingsCard key={group.title} id={group.id} title={group.title}>
             <div className="flex flex-col divide-y divide-border">
-            {group.switches.map(({ key, label, help, needsCategories, extra }) => (
-              <div
-                key={key}
-                className="flex items-center justify-between gap-6 py-3.5 first:pt-0 last:pb-0"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <Label htmlFor={`preference-${key}`} className="text-[15px]">
-                    {label}
-                  </Label>
-                  <p id={`preference-${key}-help`} className="text-sm text-muted-foreground">
-                    {help}
-                  </p>
-                  {extra}
+              {group.switches.map(({ key, label, help, needsCategories, extra }) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-6 py-3.5 first:pt-0 last:pb-0"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <Label htmlFor={`preference-${key}`} className="text-[15px]">
+                      {label}
+                    </Label>
+                    <p id={`preference-${key}-help`} className="text-sm text-muted-foreground">
+                      {help}
+                    </p>
+                    {extra}
+                  </div>
+                  <Switch
+                    id={`preference-${key}`}
+                    aria-describedby={`preference-${key}-help`}
+                    checked={preferences[key]}
+                    disabled={saving || (needsCategories && !preferences.categories_enabled)}
+                    onCheckedChange={(value) => void toggle(key, value)}
+                  />
                 </div>
-                <Switch
-                  id={`preference-${key}`}
-                  aria-describedby={`preference-${key}-help`}
-                  checked={preferences[key]}
-                  disabled={saving || (needsCategories && !preferences.categories_enabled)}
-                  onCheckedChange={(value) => void toggle(key, value)}
-                />
-              </div>
-            ))}
+              ))}
             </div>
           </SettingsCard>
         ))}
