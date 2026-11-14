@@ -38,11 +38,12 @@ describe('AiSettingsView', () => {
 
     expect(await screen.findByRole('switch', { name: 'AI features' })).not.toBeChecked()
     expect(screen.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
-    expect(screen.getByRole('switch', { name: 'Summaries enabled' })).not.toBeChecked()
-    expect(screen.getByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: 'Summaries' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Summaries' })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Prompt/ })).not.toBeInTheDocument()
   })
 
   it('shows no save bar until a field changes', async () => {
@@ -158,7 +159,7 @@ describe('AiSettingsView', () => {
     )
   })
 
-  it("shows Effort and Prompt only under Anthropic's Advanced and saves only the changed effort", async () => {
+  it('shows Anthropic effort as a segmented choice outside Advanced', async () => {
     const saved = onAnthropic()
     const fetchMock = mockApi({
       'GET /api/preferences': saved,
@@ -168,20 +169,21 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Advanced' }))
-    await user.click(screen.getByRole('button', { name: 'Advanced categorization settings' }))
-
-    expect(screen.getByRole('combobox', { name: 'Effort' })).toHaveValue('low')
-    expect(screen.getByRole('combobox', { name: 'Categorization effort' })).toHaveValue('low')
-    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(saved.summaries_prompt)
-    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
-      saved.categorization_prompt,
-    )
+    const effort = await screen.findByRole('radiogroup', { name: 'Summaries effort' })
+    expect(within(effort).getByRole('radio', { name: 'Low' })).toBeChecked()
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Categorization effort' })).getByRole(
+        'radio',
+        { name: 'Low' },
+      ),
+    ).toBeChecked()
+    expect(screen.getAllByText('Higher is slower and uses more tokens.')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: /advanced/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: /thinking/i })).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Effort' }), 'high')
+    await user.click(within(effort).getByRole('radio', { name: 'High' }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
     expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'high' }])
   })
 
@@ -225,8 +227,8 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
 
     const section = within(await screen.findByRole('group', { name: 'Categorization' }))
-    expect(section.getByRole('switch', { name: 'Categorization enabled' })).not.toBeChecked()
-    expect(section.getByRole('switch', { name: 'Categorization enabled' })).toBeDisabled()
+    expect(section.getByRole('switch', { name: 'Categorization' })).not.toBeChecked()
+    expect(section.getByRole('switch', { name: 'Categorization' })).toBeDisabled()
     expect(section.getByText('Model')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Categorization model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('textbox', { name: 'Categorization model' })).toBeDisabled()
@@ -241,23 +243,21 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('group', { name: 'Categorization' })).not.toBeInTheDocument()
   })
 
-  it('shows the shipped categorization prompt under its Advanced', async () => {
+  it('shows the shipped categorization prompt under its Prompt', async () => {
     mockApi({
       'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
-    const user = userEvent.setup()
 
-    const advanced = await screen.findByRole('button', { name: 'Advanced categorization settings' })
-    expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    const card = within(await screen.findByRole('group', { name: 'Categorization' }))
+    expect(card.getByRole('button', { name: /^Prompt/ })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('textbox', { name: 'Categorization prompt' })).not.toBeInTheDocument()
 
-    await user.click(advanced)
+    await openPrompt('Categorization')
 
     expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
       aPreferences().categorization_prompt,
     )
-    expect(screen.getByText('Using the default prompt')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /reset/i })).not.toBeInTheDocument()
   })
 
@@ -275,9 +275,6 @@ describe('AiSettingsView', () => {
     expect(screen.getByRole('spinbutton', { name: 'Categorization context length' })).toHaveValue(4096)
     expect(screen.getByRole('spinbutton', { name: 'Categorization temperature' })).toHaveValue(0)
     expect(screen.getByRole('switch', { name: 'Categorization thinking' })).toBeChecked()
-    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
-      aPreferences().categorization_prompt,
-    )
   })
 
   it('saves only the changed categorization fields', async () => {
@@ -294,7 +291,7 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Categorization enabled' }))
+    await user.click(await screen.findByRole('switch', { name: 'Categorization' }))
     const model = screen.getByRole('textbox', { name: 'Categorization model' })
     await user.clear(model)
     await user.type(model, 'gemma3:4b')
@@ -426,15 +423,16 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(
-      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
-    )
+    await openPrompt('Categorization')
+    const card = within(screen.getByRole('group', { name: 'Categorization' }))
     const prompt = screen.getByRole('textbox', { name: 'Categorization prompt' })
     expect(prompt).toHaveValue('my prompt')
-    expect(screen.queryByText('Using the default prompt')).not.toBeInTheDocument()
+    expect(card.getByRole('button', { name: /^Prompt/ })).toHaveTextContent('Prompt · edited')
     await user.click(screen.getByRole('button', { name: 'Reset to default' }))
 
-    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(card.getByRole('button', { name: /^Prompt/ })).toHaveTextContent('Prompt · default'),
+    )
     expect(prompt).toHaveValue(shipped)
     expect(patchBodies(fetchMock)).toEqual([{ categorization_prompt: null }])
   })
@@ -447,7 +445,7 @@ describe('AiSettingsView', () => {
     const model = await screen.findByRole('textbox', { name: 'Model' })
     expect(model).toBeDisabled()
 
-    await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
+    await user.click(screen.getByRole('switch', { name: 'Summaries' }))
 
     expect(model).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Advanced' })).toBeInTheDocument()
@@ -459,13 +457,14 @@ describe('AiSettingsView', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('switch', { name: 'AI features' }))
-    await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
+    await user.click(screen.getByRole('switch', { name: 'Summaries' }))
     await openAdvanced()
 
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toHaveValue(12288)
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toHaveValue(0.3)
     expect(screen.getByRole('switch', { name: 'Thinking' })).toBeChecked()
+    await openPrompt('Summaries')
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(
       aPreferences().summaries_prompt,
     )
@@ -486,15 +485,16 @@ describe('AiSettingsView', () => {
 
     expect(advanced).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Prompt' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Prompt' })).not.toBeInTheDocument()
   })
 
   it('disables the summary settings while AI is off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()
+    await openPrompt('Summaries')
 
-    expect(await screen.findByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
+    expect(await screen.findByRole('switch', { name: 'Summaries' })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toBeDisabled()
@@ -840,9 +840,13 @@ describe('AiSettingsView', () => {
   it('says the default prompt is in use', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
-    await openAdvanced()
+    await openPrompt('Summaries')
 
-    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('group', { name: 'Summaries' })).getByRole('button', {
+        name: /^Prompt/,
+      }),
+    ).toHaveTextContent('Prompt · default')
     expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument()
   })
 
@@ -857,14 +861,17 @@ describe('AiSettingsView', () => {
       'PATCH /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
-    await openAdvanced()
+    await openPrompt('Summaries')
     const user = userEvent.setup()
 
     expect(await screen.findByRole('textbox', { name: 'Prompt' })).toHaveValue('my prompt')
-    expect(screen.queryByText('Using the default prompt')).not.toBeInTheDocument()
+    const toggle = within(screen.getByRole('group', { name: 'Summaries' })).getByRole('button', {
+      name: /^Prompt/,
+    })
+    expect(toggle).toHaveTextContent('Prompt · edited')
     await user.click(screen.getByRole('button', { name: 'Reset to default' }))
 
-    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    await waitFor(() => expect(toggle).toHaveTextContent('Prompt · default'))
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(
       aPreferences().summaries_prompt,
     )
@@ -874,7 +881,7 @@ describe('AiSettingsView', () => {
   it('explains each prompt section and its variables behind a "?" next to the prompt', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
-    await openAdvanced()
+    await openPrompt('Summaries')
     const user = userEvent.setup()
 
     expect(screen.queryByRole('region', { name: 'Prompt guide' })).not.toBeInTheDocument()
@@ -891,6 +898,17 @@ describe('AiSettingsView', () => {
     ])
   })
 })
+
+/** Opens the "Prompt" disclosure of the `card` ("Summaries" or "Categorization"). */
+async function openPrompt(card: 'Summaries' | 'Categorization') {
+  await userEvent
+    .setup()
+    .click(
+      within(await screen.findByRole('group', { name: card })).getByRole('button', {
+        name: /^Prompt/,
+      }),
+    )
+}
 
 /** Opens the "Advanced" summary settings, once the page has loaded. */
 async function openAdvanced() {

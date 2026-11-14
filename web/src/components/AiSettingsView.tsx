@@ -2,8 +2,10 @@ import { SettingsCard } from '@/components/SettingsCard'
 import { SaveBar } from '@/components/SaveBar'
 import { PageHeader } from '@/components/PageHeader'
 import { PromptDisclosure } from '@/components/PromptDisclosure'
+import { Segmented } from '@/components/Segmented'
 import { changedSettingNames } from '@/lib/aiChanges'
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import {
   useAnthropic,
@@ -259,15 +261,18 @@ function AiSettings({ saved }: { saved: Preferences }) {
           </div>
         )}
       </SettingsCard>
-      <SettingsCard title="Summaries">
-        <SwitchRow
-          id="summaries-enabled"
-          label="Enabled"
-          name="Summaries enabled"
-          checked={form.summaries_enabled}
-          disabled={aiOff}
-          onChange={(value) => set('summaries_enabled', value)}
-        />
+      <SettingsCard
+        title="Summaries"
+        description="Summarize videos from channels and playlists that have summaries on. The summary shows on the video's page."
+        action={
+          <Switch
+            aria-label="Summaries"
+            checked={form.summaries_enabled}
+            disabled={aiOff}
+            onCheckedChange={(value) => set('summaries_enabled', value)}
+          />
+        }
+      >
         <ModelField
           id="summaries-model"
           models={models}
@@ -278,17 +283,17 @@ function AiSettings({ saved }: { saved: Preferences }) {
         />
         {form.summaries_enabled && (
           <>
-            <AdvancedToggle open={advancedOpen} onToggle={setAdvancedOpen} />
-            {advancedOpen && (
+            {onAnthropic ? (
+              <EffortField
+                name="Summaries effort"
+                value={form.anthropic_summaries_effort}
+                disabled={aiOff}
+                onChange={(value) => set('anthropic_summaries_effort', value)}
+              />
+            ) : (
               <>
-                {onAnthropic ? (
-                  <EffortField
-                    id="summaries-effort"
-                    value={form.anthropic_summaries_effort}
-                    disabled={aiOff}
-                    onChange={(value) => set('anthropic_summaries_effort', value)}
-                  />
-                ) : (
+                <AdvancedToggle open={advancedOpen} onToggle={setAdvancedOpen} />
+                {advancedOpen && (
                   <>
                     <Field id="summaries-context-length" label="Context length">
                       <Input
@@ -324,38 +329,51 @@ function AiSettings({ saved }: { saved: Preferences }) {
                     />
                   </>
                 )}
-                <PromptDisclosure isDefault={saved.summaries_prompt_is_default}>
-                <PromptField
-                  id="summaries-prompt"
-                  help={<PromptHelp />}
-                  rows={20}
-                  value={form.summaries_prompt}
-                  disabled={aiOff}
-                  isDefault={
-                    saved.summaries_prompt_is_default &&
-                    form.summaries_prompt === saved.summaries_prompt
-                  }
-                  canReset={!saved.summaries_prompt_is_default}
-                  resetDisabled={saving || aiOff}
-                  onChange={(value) => set('summaries_prompt', value)}
-                  onReset={() => void resetPrompt()}
-                />
-                </PromptDisclosure>
               </>
             )}
+            <PromptDisclosure
+              isDefault={
+                saved.summaries_prompt_is_default &&
+                form.summaries_prompt === saved.summaries_prompt
+              }
+            >
+              <PromptField
+                id="summaries-prompt"
+                help={<PromptHelp />}
+                rows={20}
+                value={form.summaries_prompt}
+                disabled={aiOff}
+                canReset={!saved.summaries_prompt_is_default}
+                resetDisabled={saving || aiOff}
+                onChange={(value) => set('summaries_prompt', value)}
+                onReset={() => void resetPrompt()}
+              />
+            </PromptDisclosure>
           </>
         )}
       </SettingsCard>
       {saved.categories_enabled && (
-        <SettingsCard title="Categorization">
-          <SwitchRow
-            id="categorization-enabled"
-            label="Enabled"
-            name="Categorization enabled"
-            checked={form.categorization_enabled}
-            disabled={aiOff}
-            onChange={(value) => set('categorization_enabled', value)}
-          />
+        <SettingsCard
+          title="Categorization"
+          description={
+            <>
+              Suggest categories for new videos from channels and playlists that have
+              categorization on.{' '}
+              <Link to="/settings/general" className="text-primary underline-offset-4 hover:underline">
+                Uses your categories
+              </Link>
+              .
+            </>
+          }
+          action={
+            <Switch
+              aria-label="Categorization"
+              checked={form.categorization_enabled}
+              disabled={aiOff}
+              onCheckedChange={(value) => set('categorization_enabled', value)}
+            />
+          }
+        >
           <ModelField
             id="categorization-model"
             name="Categorization model"
@@ -367,22 +385,21 @@ function AiSettings({ saved }: { saved: Preferences }) {
           />
           {form.categorization_enabled && (
             <>
-              <AdvancedToggle
-                name="Advanced categorization settings"
-                open={categorizationAdvancedOpen}
-                onToggle={setCategorizationAdvancedOpen}
-              />
-              {categorizationAdvancedOpen && (
+              {onAnthropic ? (
+                <EffortField
+                  name="Categorization effort"
+                  value={form.anthropic_categorization_effort}
+                  disabled={aiOff}
+                  onChange={(value) => set('anthropic_categorization_effort', value)}
+                />
+              ) : (
                 <>
-                  {onAnthropic ? (
-                    <EffortField
-                      id="categorization-effort"
-                      name="Categorization effort"
-                      value={form.anthropic_categorization_effort}
-                      disabled={aiOff}
-                      onChange={(value) => set('anthropic_categorization_effort', value)}
-                    />
-                  ) : (
+                  <AdvancedToggle
+                    name="Advanced categorization settings"
+                    open={categorizationAdvancedOpen}
+                    onToggle={setCategorizationAdvancedOpen}
+                  />
+                  {categorizationAdvancedOpen && (
                     <>
                       <Field id="categorization-context-length" label="Context length">
                         <Input
@@ -395,7 +412,9 @@ function AiSettings({ saved }: { saved: Preferences }) {
                           value={categorizationContextLength}
                           readOnly={form.categorization_context_length_auto}
                           disabled={aiOff}
-                          onChange={(event) => set('categorization_context_length', event.target.value)}
+                          onChange={(event) =>
+                            set('categorization_context_length', event.target.value)
+                          }
                         />
                         <p className="text-sm text-muted-foreground">
                           Auto sizes it from your categories with an AI prompt, about 1,800 tokens
@@ -435,25 +454,26 @@ function AiSettings({ saved }: { saved: Preferences }) {
                       />
                     </>
                   )}
-                  <PromptDisclosure isDefault={saved.categorization_prompt_is_default}>
-                  <PromptField
-                    id="categorization-prompt"
-                    name="Categorization prompt"
-                    rows={8}
-                    value={form.categorization_prompt}
-                    disabled={aiOff}
-                    isDefault={
-                      saved.categorization_prompt_is_default &&
-                      form.categorization_prompt === saved.categorization_prompt
-                    }
-                    canReset={!saved.categorization_prompt_is_default}
-                    resetDisabled={saving || aiOff}
-                    onChange={(value) => set('categorization_prompt', value)}
-                    onReset={() => void resetCategorizationPrompt()}
-                  />
-                  </PromptDisclosure>
                 </>
               )}
+              <PromptDisclosure
+                isDefault={
+                  saved.categorization_prompt_is_default &&
+                  form.categorization_prompt === saved.categorization_prompt
+                }
+              >
+                <PromptField
+                  id="categorization-prompt"
+                  name="Categorization prompt"
+                  rows={8}
+                  value={form.categorization_prompt}
+                  disabled={aiOff}
+                  canReset={!saved.categorization_prompt_is_default}
+                  resetDisabled={saving || aiOff}
+                  onChange={(value) => set('categorization_prompt', value)}
+                  onReset={() => void resetCategorizationPrompt()}
+                />
+              </PromptDisclosure>
             </>
           )}
         </SettingsCard>
@@ -619,43 +639,33 @@ function AdvancedToggle({
 
 /** "Effort": how much an Anthropic model reasons before answering. */
 function EffortField({
-  id,
   name,
   value,
   disabled,
   onChange,
 }: {
-  id: string
-  /** The field's accessible name, when the label alone is ambiguous. */
-  name?: string
+  /** The choice's accessible name, e.g. "Summaries effort". */
+  name: string
   value: Effort
   disabled: boolean
   onChange: (value: Effort) => void
 }) {
   return (
-    <Field id={id} label="Effort" help={<PreferenceHelp label="Effort" help={EFFORT_HELP} />}>
-      <select
-        id={id}
-        aria-label={name}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value as Effort)}
-        className={SELECT_CLASS}
-      >
-        {EFFORTS.map((effort) => (
-          <option key={effort} value={effort}>
-            {effort}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium" aria-hidden="true">
+        Effort
+      </span>
+      <Segmented name={name} choices={EFFORTS} value={value} disabled={disabled} onChange={onChange} />
+      <p className="text-sm text-muted-foreground">Higher is slower and uses more tokens.</p>
+    </div>
   )
 }
 
-const EFFORTS: Effort[] = ['low', 'medium', 'high']
-
-const EFFORT_HELP =
-  'Higher effort makes the model reason more before answering: slower, and it costs more tokens.'
+const EFFORTS: { value: Effort; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+]
 
 /** The "Thinking" switch, or a note when `model` is known not to support it. */
 function ThinkingField({
@@ -700,7 +710,6 @@ function PromptField({
   rows,
   value,
   disabled,
-  isDefault,
   canReset,
   resetDisabled,
   onChange,
@@ -713,7 +722,6 @@ function PromptField({
   rows: number
   value: string
   disabled: boolean
-  isDefault: boolean
   canReset: boolean
   resetDisabled: boolean
   onChange: (value: string) => void
@@ -731,12 +739,7 @@ function PromptField({
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
       />
-      <div className="flex items-center justify-between gap-4">
-        {isDefault ? (
-          <p className="text-sm text-muted-foreground">Using the default prompt</p>
-        ) : (
-          <span />
-        )}
+      <div className="flex items-center justify-end gap-4">
         {canReset && (
           <Button
             variant="outline"
