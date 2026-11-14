@@ -17,7 +17,7 @@ Label sync (`sync_plex_labels_task`)
 - [x] 2.6 `it_should_create_playlists_oldest_first_when_the_preference_says_so`
 - [x] 2.7 `it_should_keep_a_playlist_whose_options_match_the_preferences`
 - [x] 2.8 `it_should_replace_a_playlist_whose_options_differ_from_the_preferences`
-- [ ] 2.9 `it_should_replace_a_playlist_whose_options_are_unknown`
+- [x] 2.9 `it_should_replace_a_playlist_whose_options_are_unknown`
 
 Plex status endpoints (`http/plex`)
 - [ ] 2.10 `it_should_report_plex_not_configured`
