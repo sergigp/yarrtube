@@ -1,64 +1,64 @@
-import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { screen } from '@testing-library/react'
 import { TasksView } from './TasksView'
-import { queryKeys } from '@/api/queries'
-import {
-  aPreferences,
-  aTask,
-  mockApi,
-  pendingForever,
-  renderWithProviders,
-} from '@/test/helpers'
+import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
 
-// A spread of tasks across every family, with one running task per the Active tab.
-function aMixOfTasks() {
+const NOW = new Date('2026-11-14T20:03:00Z')
+
+/** In `minutes` from `NOW`, as an ISO timestamp. */
+function inMinutes(minutes: number): string {
+  return new Date(NOW.getTime() + minutes * 60 * 1000).toISOString()
+}
+
+/** The clock time the browser shows for `iso`; its locale isn't pinned, only its time zone. */
+function clockAt(iso: string): string {
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
+
+/** Like prod: a failing download, a few tasks within the hour and a batch of syncs later. */
+function aProdLikeQueue() {
   return [
     aTask({
       id: 1,
       task_type: 'download_video',
-      status: 'running',
-      payload: { video_title: 'Intro', channel_name: 'Chan' },
+      run_at: inMinutes(5),
+      last_error: 'ERROR: unable to download video data: HTTP Error 403: Forbidden',
+      payload: { video_id: 'rec1', video_title: 'My Apps', channel_name: 'Starter Story Build' },
     }),
-    aTask({
-      id: 2,
-      task_type: 'fetch_thumbnail',
-      status: 'pending',
-      run_at: '2999-01-01T00:00:00Z',
-      payload: { video_title: 'Intro', channel_name: 'Chan' },
-    }),
-    aTask({
-      id: 3,
-      task_type: 'reconcile_channel',
-      status: 'pending',
-      run_at: '2999-01-01T00:00:00Z',
-      payload: { channel_name: 'Chan' },
-    }),
-    aTask({
-      id: 4,
-      task_type: 'delete_video_file',
-      status: 'pending',
-      run_at: '2999-01-01T00:00:00Z',
-      payload: { filename: 'a.mp4' },
-    }),
+    aTask({ id: 2, task_type: 'sync_plex_watch_state', run_at: inMinutes(2) }),
+    aTask({ id: 3, task_type: 'sync_plex_labels', run_at: inMinutes(30) }),
+    aTask({ id: 4, task_type: 'update_ytdlp', run_at: inMinutes(45) }),
     aTask({
       id: 5,
-      task_type: 'update_ytdlp',
-      status: 'pending',
-      run_at: '2999-01-01T00:00:00Z',
-      payload: {},
+      task_type: 'fetch_thumbnail',
+      run_at: inMinutes(50),
+      payload: { video_id: 'rec2', video_title: 'Intro', channel_name: 'Chan' },
+    }),
+    aTask({
+      id: 6,
+      task_type: 'reconcile_channel',
+      run_at: inMinutes(137),
+      payload: { channel_id: '@3b1b', channel_name: '3Blue1Brown' },
+    }),
+    aTask({
+      id: 7,
+      task_type: 'reconcile_playlist',
+      run_at: inMinutes(138),
+      payload: { playlist_id: 'PL1', playlist_name: 'chess' },
     }),
   ]
 }
 
-function aSummaryTask() {
-  return aTask({
-    task_type: 'summarize_video',
-    payload: { video_title: 'Intro', channel_name: 'Chan' },
-  })
-}
-
 describe('TasksView', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('shows a loading message until the tasks arrive', () => {
     mockApi({ 'GET /api/tasks': pendingForever() })
 
@@ -75,416 +75,23 @@ describe('TasksView', () => {
     expect(await screen.findByText('Failed to load tasks: db locked')).toBeInTheDocument()
   })
 
-  it('says so when there is nothing queued', async () => {
-    mockApi({ 'GET /api/tasks': [] })
+  it('opens on All with the status line and the sections, without status badges', async () => {
+    mockApi({ 'GET /api/tasks': aProdLikeQueue() })
 
     renderWithProviders(<TasksView />)
 
-    expect(await screen.findByText('No pending or in-progress tasks.')).toBeInTheDocument()
-  })
-
-  it('opens on the Active tab, listing only running tasks', async () => {
-    mockApi({
-      'GET /api/tasks': [
-        aTask({
-          id: 1,
-          task_type: 'reconcile_channel',
-          status: 'running',
-          retries: 2,
-          payload: { channel_name: 'Chan' },
-        }),
-        aTask({
-          id: 2,
-          task_type: 'download_video',
-          status: 'pending',
-          // Far in the future, so it categorizes as pending whenever this runs.
-          run_at: '2999-01-01T00:00:00Z',
-          payload: { video_title: 'Intro', channel_name: 'Chan' },
-        }),
-      ],
-    })
-
-    renderWithProviders(<TasksView />)
-
-    const items = await screen.findAllByRole('listitem')
-    expect(items).toHaveLength(1)
-    expect(items[0]).toHaveTextContent('Checking Chan for new videos')
-    expect(items[0]).toHaveTextContent('running')
-    expect(items[0]).toHaveTextContent('2 retries')
-    expect(screen.queryByText('Download Intro from Chan')).not.toBeInTheDocument()
-  })
-
-  it('shows Active, Downloads, Syncs and Other tabs with counts, and no Cleanup or All tab', async () => {
-    mockApi({ 'GET /api/tasks': aMixOfTasks() })
-
-    renderWithProviders(<TasksView />)
-
-    const tabs = await screen.findAllByRole('tab')
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'Active1',
-      'Downloads2',
-      'Syncs1',
-      'Other2',
+    expect(
+      await screen.findByText('Nothing running. Next up in 2 min: Sync watch state with Plex.'),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual([
+      'Tasks',
+      'Needs attention',
+      'Next hour',
+      'Later',
     ])
-  })
-
-  it('lists video summaries under AI while AI is on', async () => {
-    mockApi({
-      'GET /api/tasks': [aSummaryTask()],
-      'GET /api/preferences': aPreferences({ ai_enabled: true }),
-    })
-    renderWithProviders(<TasksView />)
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('tab', { name: /^AI/ }))
-    expect(screen.getByText('Summarize Intro in Chan')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('tab', { name: /^Other/ }))
-    expect(screen.getByText('No tasks here')).toBeInTheDocument()
-  })
-
-  it('shows an AI tab with no tasks while AI is on', async () => {
-    mockApi({
-      'GET /api/tasks': [aTask({ task_type: 'download_video' })],
-      'GET /api/preferences': aPreferences({ ai_enabled: true }),
-    })
-
-    renderWithProviders(<TasksView />)
-
-    expect(await screen.findByRole('tab', { name: /^AI/ })).toHaveTextContent('AI0')
-  })
-
-  it('shows no AI tab and lists summaries under Other while AI is off', async () => {
-    mockApi({
-      'GET /api/tasks': [aSummaryTask()],
-      'GET /api/preferences': aPreferences({ ai_enabled: false }),
-    })
-    const { queryClient } = renderWithProviders(<TasksView />)
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('tab', { name: /^Other/ }))
-    await waitFor(() =>
-      expect(queryClient.getQueryState(queryKeys.preferences)?.status).toBe('success'),
-    )
-
-    expect(screen.queryByRole('tab', { name: /^AI/ })).not.toBeInTheDocument()
-    expect(screen.getByText('Summarize Intro in Chan')).toBeInTheDocument()
-  })
-
-  it('shows no AI tab when preferences fail to load', async () => {
-    mockApi({
-      'GET /api/tasks': [aSummaryTask()],
-      'GET /api/preferences': { status: 500, error: 'boom' },
-    })
-    const { queryClient } = renderWithProviders(<TasksView />)
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('tab', { name: /^Other/ }))
-    await waitFor(() =>
-      expect(queryClient.getQueryState(queryKeys.preferences)?.status).toBe('error'),
-    )
-
-    expect(screen.queryByRole('tab', { name: /^AI/ })).not.toBeInTheDocument()
-    expect(screen.getByText('Summarize Intro in Chan')).toBeInTheDocument()
-  })
-
-  it('shows a live indicator on the Active tab only while a task is running', async () => {
-    mockApi({ 'GET /api/tasks': aMixOfTasks() })
-    const { unmount } = renderWithProviders(<TasksView />)
-
-    const activeTab = await screen.findByRole('tab', { name: /Active/ })
-    expect(within(activeTab).getByRole('img', { name: 'Tasks running' })).toBeInTheDocument()
-
-    unmount()
-
-    mockApi({
-      'GET /api/tasks': aMixOfTasks().map((task) => ({ ...task, status: 'pending' })),
-    })
-    renderWithProviders(<TasksView />)
-
-    const idleTab = await screen.findByRole('tab', { name: /Active/ })
-    expect(within(idleTab).queryByRole('img', { name: 'Tasks running' })).not.toBeInTheDocument()
-  })
-
-  it('runs a playlist sync now from the Syncs tab and refetches the tasks', async () => {
-    const user = userEvent.setup()
-    const tasks = vi.fn(() => [
-      aTask({
-        id: 1,
-        task_type: 'reconcile_playlist',
-        run_at: '2999-01-01T00:00:00Z',
-        payload: { playlist_id: 'PL1', playlist_name: 'Mix' },
-      }),
-    ])
-    const reconcile = vi.fn(() => null)
-    mockApi({ 'GET /api/tasks': tasks, 'POST /api/playlists/PL1/reconcile': reconcile })
-
-    renderWithProviders(<TasksView />)
-
-    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    await user.click(screen.getByRole('button', { name: 'Run now: Check Mix for new videos' }))
-
-    expect(reconcile).toHaveBeenCalledOnce()
-    await waitFor(() => expect(tasks).toHaveBeenCalledTimes(2))
-  })
-
-  it('runs a channel sync now from the Syncs tab', async () => {
-    const user = userEvent.setup()
-    const reconcile = vi.fn(() => null)
-    mockApi({
-      'GET /api/tasks': [
-        aTask({
-          id: 1,
-          task_type: 'reconcile_channel',
-          run_at: '2999-01-01T00:00:00Z',
-          payload: { channel_id: '@chan', channel_name: 'Chan' },
-        }),
-      ],
-      'POST /api/channels/%40chan/reconcile': reconcile,
-    })
-
-    renderWithProviders(<TasksView />)
-
-    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    await user.click(screen.getByRole('button', { name: 'Run now: Check Chan for new videos' }))
-
-    expect(reconcile).toHaveBeenCalledOnce()
-  })
-
-  it('disables Run now while the sync is in progress', async () => {
-    const user = userEvent.setup()
-    mockApi({
-      'GET /api/tasks': [
-        aTask({
-          id: 1,
-          task_type: 'reconcile_playlist',
-          run_at: '2999-01-01T00:00:00Z',
-          payload: { playlist_id: 'PL1', playlist_name: 'Mix' },
-        }),
-      ],
-      'POST /api/playlists/PL1/reconcile': pendingForever(),
-    })
-
-    renderWithProviders(<TasksView />)
-
-    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    const runNow = screen.getByRole('button', { name: 'Run now: Check Mix for new videos' })
-    await user.click(runNow)
-
-    expect(runNow).toBeDisabled()
-  })
-
-  it('shows the failure on the row and lets Run now be retried', async () => {
-    const user = userEvent.setup()
-    const reconcile = vi.fn(() => ({ status: 500, error: 'youtube down' }))
-    mockApi({
-      'GET /api/tasks': [
-        aTask({
-          id: 1,
-          task_type: 'reconcile_playlist',
-          run_at: '2999-01-01T00:00:00Z',
-          payload: { playlist_id: 'PL1', playlist_name: 'Mix' },
-        }),
-      ],
-      'POST /api/playlists/PL1/reconcile': reconcile,
-    })
-
-    renderWithProviders(<TasksView />)
-
-    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
-    const runNow = screen.getByRole('button', { name: 'Run now: Check Mix for new videos' })
-    await user.click(runNow)
-
-    const row = screen.getByText('Check Mix for new videos').closest('li')!
-    expect(await within(row).findByText('Sync failed: youtube down')).toBeInTheDocument()
-    expect(runNow).toBeEnabled()
-
-    await user.click(runNow)
-
-    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
-  })
-
-  it('offers no Run now on a running sync or outside the Syncs tab', async () => {
-    const user = userEvent.setup()
-    mockApi({
-      'GET /api/tasks': [
-        aTask({
-          id: 1,
-          task_type: 'reconcile_channel',
-          status: 'running',
-          payload: { channel_id: '@chan', channel_name: 'Chan' },
-        }),
-        aTask({
-          id: 2,
-          task_type: 'update_ytdlp',
-          run_at: '2999-01-01T00:00:00Z',
-        }),
-        aTask({ id: 3, task_type: 'download_video', run_at: '2999-01-01T00:00:00Z' }),
-      ],
-    })
-
-    renderWithProviders(<TasksView />)
-
-    expect(await screen.findByText('Checking Chan for new videos')).toBeInTheDocument()
-    for (const tab of [/Active/, /Syncs/, /Downloads/, /Other/]) {
-      await user.click(screen.getByRole('tab', { name: tab }))
-      expect(screen.queryByRole('button', { name: /Run now/ })).not.toBeInTheDocument()
-    }
-  })
-
-  it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
-    const user = userEvent.setup()
-    mockApi({ 'GET /api/tasks': aMixOfTasks() })
-
-    renderWithProviders(<TasksView />)
-
-    await user.click(await screen.findByRole('tab', { name: /Downloads/ }))
-
-    expect(screen.getByText('Downloading Intro from Chan')).toBeInTheDocument()
-    expect(screen.getByText('Fetch the thumbnail of Intro in Chan')).toBeInTheDocument()
-    expect(screen.queryByText('Check Chan for new videos')).not.toBeInTheDocument()
-    expect(screen.queryByText('Remove the file a.mp4')).not.toBeInTheDocument()
-  })
-
-  it('tells the user nothing is running on an empty Active tab while other tabs still list tasks', async () => {
-    const user = userEvent.setup()
-    mockApi({
-      'GET /api/tasks': [
-        aTask({
-          id: 1,
-          task_type: 'reconcile_channel',
-          status: 'pending',
-          run_at: '2999-01-01T00:00:00Z',
-          payload: { channel_name: 'Chan' },
-        }),
-      ],
-    })
-
-    renderWithProviders(<TasksView />)
-
-    expect(await screen.findByText('Nothing running right now')).toBeInTheDocument()
-    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('tab', { name: /Syncs/ }))
-
-    expect(screen.getByText('Check Chan for new videos')).toBeInTheDocument()
-    expect(screen.queryByText('Nothing running right now')).not.toBeInTheDocument()
-  })
-
-  it('hides the search field at 15 tasks and shows it above 15', async () => {
-    const fifteen = Array.from({ length: 15 }, (_, i) =>
-      aTask({ id: i + 1, task_type: 'download_video', status: 'running' }),
-    )
-    mockApi({ 'GET /api/tasks': fifteen })
-    const { unmount } = renderWithProviders(<TasksView />)
-
-    expect(await screen.findByRole('tab', { name: /Active/ })).toHaveTextContent('15')
-    expect(screen.queryByRole('searchbox', { name: 'Search tasks' })).not.toBeInTheDocument()
-
-    unmount()
-
-    const sixteen = Array.from({ length: 16 }, (_, i) =>
-      aTask({ id: i + 1, task_type: 'download_video', status: 'running' }),
-    )
-    mockApi({ 'GET /api/tasks': sixteen })
-    renderWithProviders(<TasksView />)
-
-    expect(await screen.findByRole('searchbox', { name: 'Search tasks' })).toBeInTheDocument()
-  })
-
-  it('filters the current tab by description and says when nothing matches', async () => {
-    const user = userEvent.setup()
-    const tasks = Array.from({ length: 16 }, (_, i) =>
-      aTask({
-        id: i + 1,
-        task_type: 'download_video',
-        status: 'running',
-        payload: { video_title: i === 0 ? 'Zeta' : 'Alpha' },
-      }),
-    )
-    mockApi({ 'GET /api/tasks': tasks })
-
-    renderWithProviders(<TasksView />)
-
-    const search = await screen.findByRole('searchbox', { name: 'Search tasks' })
-
-    await user.type(search, 'zeta')
-    expect(screen.getAllByRole('listitem')).toHaveLength(1)
-    expect(screen.getByText('Downloading Zeta from an unknown playlist or channel')).toBeInTheDocument()
-
-    await user.clear(search)
-    await user.type(search, 'nomatch')
-    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
-    expect(screen.getByText('Nothing matches')).toBeInTheDocument()
-  })
-
-  it('clears the search text when switching tabs', async () => {
-    const user = userEvent.setup()
-    const tasks = Array.from({ length: 16 }, (_, i) =>
-      aTask({ id: i + 1, task_type: 'download_video', status: 'running' }),
-    )
-    mockApi({ 'GET /api/tasks': tasks })
-
-    renderWithProviders(<TasksView />)
-
-    await user.type(await screen.findByRole('searchbox', { name: 'Search tasks' }), 'alpha')
-    expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('alpha')
-
-    await user.click(screen.getByRole('tab', { name: /Downloads/ }))
-
-    expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('')
-  })
-
-  it("shows a task's last error on its row, and none when there is no error", async () => {
-    mockApi({
-      'GET /api/tasks': [
-        aTask({
-          id: 1,
-          task_type: 'download_video',
-          status: 'running',
-          retries: 3,
-          last_error: 'network timeout',
-          payload: { video_title: 'Flaky' },
-        }),
-        aTask({
-          id: 2,
-          task_type: 'download_video',
-          status: 'running',
-          last_error: null,
-          payload: { video_title: 'Healthy' },
-        }),
-      ],
-    })
-
-    renderWithProviders(<TasksView />)
-
-    const failing = (
-      await screen.findByText('Downloading Flaky from an unknown playlist or channel')
-    ).closest('li')!
-    expect(within(failing).getByText('network timeout')).toBeInTheDocument()
-
-    const healthy = screen
-      .getByText('Downloading Healthy from an unknown playlist or channel')
-      .closest('li')!
-    expect(within(healthy).queryByText('network timeout')).not.toBeInTheDocument()
-  })
-
-  it('opens with a "Tasks" heading above the tab bar, left-aligned at a readable width', async () => {
-    mockApi({ 'GET /api/tasks': aMixOfTasks() })
-    renderWithProviders(<TasksView />)
-
-    const heading = await screen.findByRole('heading', { level: 2, name: 'Tasks' })
-    const view = heading.parentElement as HTMLElement
-    expect(view.firstElementChild).toBe(heading)
-    expect(await within(view).findByRole('tablist')).toBeInTheDocument()
-    expect(view).toHaveClass('max-w-3xl')
-    expect(view).not.toHaveClass('mx-auto')
-  })
-
-  it('shows the "Tasks" heading while loading too', () => {
-    mockApi({ 'GET /api/tasks': pendingForever() })
-    renderWithProviders(<TasksView />)
-
-    expect(screen.getByRole('heading', { level: 2, name: 'Tasks' })).toBeInTheDocument()
+    expect(screen.getByText('Sync watch state with Plex')).toBeInTheDocument()
+    expect(screen.getByText(clockAt(inMinutes(2)))).toBeInTheDocument()
+    expect(screen.getByText('in 2 min')).toBeInTheDocument()
+    expect(screen.queryByText(/^(pending|queued|running)$/)).not.toBeInTheDocument()
   })
 })

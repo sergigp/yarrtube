@@ -62,17 +62,6 @@ function humanizeType(type: string): string {
 }
 
 export type TaskFamily = 'downloads' | 'syncs' | 'ai' | 'upkeep'
-export type TaskTab = 'active' | TaskFamily
-
-/** The tabs shown, in order; "ai" only while `aiEnabled`. */
-export function taskTabs(aiEnabled: boolean): readonly TaskTab[] {
-  return aiEnabled
-    ? ['active', 'downloads', 'syncs', 'ai', 'upkeep']
-    : ['active', 'downloads', 'syncs', 'upkeep']
-}
-
-/** Above this many tasks in a tab, the search field is worth showing. */
-export const TASK_SEARCH_THRESHOLD = 15
 
 const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   download_video: 'downloads',
@@ -91,24 +80,6 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
 export function taskFamily(task: Task, aiEnabled: boolean): TaskFamily {
   const family = FAMILY_BY_TYPE[task.task_type] ?? 'upkeep'
   return family === 'ai' && !aiEnabled ? 'upkeep' : family
-}
-
-export function tasksForTab(tasks: Task[], tab: TaskTab, aiEnabled: boolean): Task[] {
-  const inTab =
-    tab === 'active'
-      ? tasks.filter((task) => task.status === 'running')
-      : tasks.filter((task) => taskFamily(task, aiEnabled) === tab)
-  return [...inTab].sort(byCategory)
-}
-
-export function tabCounts(tasks: Task[], aiEnabled: boolean): Record<TaskTab, number> {
-  return taskTabs(aiEnabled).reduce(
-    (counts, tab) => {
-      counts[tab] = tasksForTab(tasks, tab, aiEnabled).length
-      return counts
-    },
-    { ai: 0 } as Record<TaskTab, number>,
-  )
 }
 
 export type TaskKind = 'download' | 'sync' | 'delete' | 'ai' | 'maintenance'
@@ -134,50 +105,8 @@ export function taskKind(task: Task): TaskKind {
   return KIND_BY_TYPE[task.task_type] ?? 'maintenance'
 }
 
-export interface SyncTarget {
-  kind: 'playlist' | 'channel'
-  id: string
-}
-
-// Which payload field holds the id each syncable task type targets.
-const SYNC_ID_FIELD: Record<string, { kind: SyncTarget['kind']; field: string }> = {
-  reconcile_playlist: { kind: 'playlist', field: 'playlist_id' },
-  reconcile_channel: { kind: 'channel', field: 'channel_id' },
-}
-
-/** The playlist or channel a Run now on this task would sync, if it offers one. */
-export function syncTarget(task: Task): SyncTarget | null {
-  const target = SYNC_ID_FIELD[task.task_type]
-  const id = target && task.payload[target.field]
-  if (task.status === 'running' || !id) {
-    return null
-  }
-  return { kind: target.kind, id }
-}
-
 export function matchesTask(task: Task, text: string): boolean {
   return describeTask(task).toLowerCase().includes(text.toLowerCase())
-}
-
-export type TaskCategory = 'running' | 'queued' | 'pending' | string
-
-// Running tasks are worth noticing first, then tasks already due to run
-// ("queued"), then tasks still scheduled for later.
-const CATEGORY_ORDER: Record<string, number> = { running: 0, queued: 1, pending: 2 }
-
-export function taskCategory(task: Task): TaskCategory {
-  if (task.status !== 'pending') {
-    return task.status
-  }
-  return new Date(task.run_at).getTime() <= Date.now() ? 'queued' : 'pending'
-}
-
-export function byCategory(a: Task, b: Task): number {
-  const diff = (CATEGORY_ORDER[taskCategory(a)] ?? 3) - (CATEGORY_ORDER[taskCategory(b)] ?? 3)
-  if (diff !== 0) {
-    return diff
-  }
-  return new Date(a.run_at).getTime() - new Date(b.run_at).getTime()
 }
 
 export type TaskFilter = 'all' | TaskFamily

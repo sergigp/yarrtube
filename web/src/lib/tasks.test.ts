@@ -1,19 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   batchReconciles,
   buildTaskList,
-  byCategory,
   describeTask,
   matchesTask,
   sectionOf,
   statusLine,
-  syncTarget,
-  tabCounts,
-  tasksForTab,
-  taskCategory,
   taskFamily,
   taskKind,
-  taskTabs,
 } from './tasks'
 import { aTask } from '@/test/helpers'
 
@@ -122,43 +116,7 @@ describe('describeTask', () => {
   })
 })
 
-describe('taskCategory and byCategory', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-15T12:00:00Z'))
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('passes a non-pending status through as the category', () => {
-    expect(taskCategory(aTask({ status: 'running' }))).toBe('running')
-  })
-
-  it('splits pending tasks into queued (due) and pending (scheduled later)', () => {
-    expect(taskCategory(aTask({ status: 'pending', run_at: '2026-06-15T11:00:00Z' }))).toBe(
-      'queued',
-    )
-    expect(taskCategory(aTask({ status: 'pending', run_at: '2026-06-15T13:00:00Z' }))).toBe(
-      'pending',
-    )
-  })
-
-  it('orders running before queued before pending, then by run time', () => {
-    const pendingLater = aTask({ status: 'pending', run_at: '2026-06-15T15:00:00Z' })
-    const pendingSoon = aTask({ status: 'pending', run_at: '2026-06-15T13:00:00Z' })
-    const queued = aTask({ status: 'pending', run_at: '2026-06-15T11:00:00Z' })
-    const running = aTask({ status: 'running', run_at: '2026-06-15T10:00:00Z' })
-
-    const sorted = [pendingLater, queued, pendingSoon, running].sort(byCategory)
-
-    expect(sorted).toEqual([running, queued, pendingSoon, pendingLater])
-  })
-})
-
-describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
-
+describe('taskKind and matchesTask', () => {
 
   it('labels a categorize_video task and files it under AI', () => {
     const task = aTask({
@@ -173,82 +131,8 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     ])
   })
 
-
-  it('lists the ai tab between syncs and other only while AI is on', () => {
-    expect(taskTabs(true)).toEqual(['active', 'downloads', 'syncs', 'ai', 'upkeep'])
-    expect(taskTabs(false)).toEqual(['active', 'downloads', 'syncs', 'upkeep'])
-  })
-
-  it('counts every task once across tabs while AI is on', () => {
-    const tasks = [
-      aTask({ id: 1, task_type: 'summarize_video', status: 'running' }),
-      aTask({ id: 2, task_type: 'summarize_video' }),
-      aTask({ id: 3, task_type: 'download_video' }),
-      aTask({ id: 4, task_type: 'reconcile_channel' }),
-      aTask({ id: 5, task_type: 'update_ytdlp' }),
-    ]
-
-    expect(tabCounts(tasks, true)).toEqual({ active: 1, downloads: 1, syncs: 1, ai: 2, upkeep: 1 })
-  })
-
   it('gives video summaries the ai kind', () => {
     expect(taskKind(aTask({ task_type: 'summarize_video' }))).toBe('ai')
-  })
-
-
-
-
-  it("returns only running tasks of any type for the 'active' tab", () => {
-    const runningSync = aTask({ id: 1, task_type: 'reconcile_channel', status: 'running' })
-    const runningDownload = aTask({ id: 2, task_type: 'download_video', status: 'running' })
-    const pendingDownload = aTask({
-      id: 3,
-      task_type: 'download_video',
-      status: 'pending',
-      run_at: '2999-01-01T00:00:00Z',
-    })
-
-    const active = tasksForTab([pendingDownload, runningSync, runningDownload], 'active', false)
-
-    expect(active.map((task) => task.id).sort()).toEqual([1, 2])
-    expect(active.every((task) => task.status === 'running')).toBe(true)
-  })
-
-  it('lists only playlist and channel reconciles in the syncs tab', () => {
-    const tasks = [
-      aTask({ id: 1, task_type: 'reconcile_playlist' }),
-      aTask({ id: 2, task_type: 'reconcile_channel' }),
-      aTask({ id: 3, task_type: 'download_video' }),
-      aTask({ id: 4, task_type: 'update_ytdlp' }),
-    ]
-
-    expect(tasksForTab(tasks, 'syncs', false).map((task) => task.id)).toEqual([1, 2])
-  })
-
-  it('collects yt-dlp update, deletions and unknown types in the other tab', () => {
-    const tasks = [
-      aTask({ id: 1, task_type: 'update_ytdlp' }),
-      aTask({ id: 2, task_type: 'delete_video_file' }),
-      aTask({ id: 3, task_type: 'delete_playlist_files' }),
-      aTask({ id: 4, task_type: 'delete_channel_files' }),
-      aTask({ id: 5, task_type: 'mystery_task' }),
-      aTask({ id: 6, task_type: 'download_video' }),
-      aTask({ id: 7, task_type: 'reconcile_channel' }),
-    ]
-
-    expect(tasksForTab(tasks, 'upkeep', false).map((task) => task.id)).toEqual([1, 2, 3, 4, 5])
-  })
-
-  it('returns counts where downloads, syncs and other add up to every task', () => {
-    const tasks = [
-      aTask({ id: 1, task_type: 'download_video', status: 'running' }),
-      aTask({ id: 2, task_type: 'fetch_thumbnail', status: 'pending' }),
-      aTask({ id: 3, task_type: 'reconcile_channel', status: 'pending' }),
-      aTask({ id: 4, task_type: 'delete_video_file', status: 'pending' }),
-      aTask({ id: 5, task_type: 'update_ytdlp', status: 'running' }),
-    ]
-
-    expect(tabCounts(tasks, false)).toEqual({ active: 2, downloads: 2, syncs: 1, ai: 0, upkeep: 2 })
   })
 
   it('maps each task type to its icon kind', () => {
@@ -263,21 +147,6 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskKind(aTask({ task_type: 'delete_channel_files' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'update_ytdlp' }))).toBe('maintenance')
     expect(taskKind(aTask({ task_type: 'mystery_task' }))).toBe('maintenance')
-  })
-
-  it('returns a sync target for pending playlist and channel reconciles only', () => {
-    expect(
-      syncTarget(aTask({ task_type: 'reconcile_playlist', payload: { playlist_id: 'PL1' } })),
-    ).toEqual({ kind: 'playlist', id: 'PL1' })
-    expect(
-      syncTarget(aTask({ task_type: 'reconcile_channel', payload: { channel_id: '@chan' } })),
-    ).toEqual({ kind: 'channel', id: '@chan' })
-    expect(
-      syncTarget(
-        aTask({ task_type: 'reconcile_channel', status: 'running', payload: { channel_id: '@chan' } }),
-      ),
-    ).toBeNull()
-    expect(syncTarget(aTask({ task_type: 'reconcile_playlist', payload: {} }))).toBeNull()
   })
 
   it('matches on the description, ignoring case', () => {

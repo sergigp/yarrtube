@@ -1,94 +1,37 @@
-import { useState } from 'react'
-import {
-  Activity,
-  Download,
-  RotateCw,
-  Sparkles,
-  Trash2,
-  Wrench,
-  type LucideIcon,
-} from 'lucide-react'
-import { reconcileChannel, reconcilePlaylist } from '@/api/client'
-import { useAiEnabled, useInvalidateTasks, useTasks } from '@/api/queries'
-import { formatRelativeTime } from '@/lib/formatDateTime'
-import {
-  describeTask,
-  matchesTask,
-  tabCounts,
-  syncTarget,
-  tasksForTab,
-  taskCategory,
-  taskKind,
-  TASK_SEARCH_THRESHOLD,
-  taskTabs,
-  type SyncTarget,
-  type TaskKind,
-  type TaskTab,
-} from '@/lib/tasks'
-import { Beacon } from './Beacon'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { useAiEnabled, useTasks } from '@/api/queries'
+import type { Task } from '@/api/types'
+import { buildTaskList, statusLine, type TaskEntry, type TaskSectionId } from '@/lib/tasks'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
-import { cn } from '@/lib/utils'
+import { Beacon } from './Beacon'
+import { TaskBatchRow } from './tasks/TaskBatchRow'
+import { TaskRow } from './tasks/TaskRow'
 
-const CATEGORY_BADGE_VARIANT: Record<string, 'default' | 'outline' | 'secondary'> = {
-  running: 'default',
-  queued: 'outline',
-  pending: 'secondary',
-}
-
-const TAB_LABELS: Record<TaskTab, string> = {
-  active: 'Active',
-  downloads: 'Downloads',
-  syncs: 'Syncs',
-  ai: 'AI',
-  upkeep: 'Other',
-}
-
-const TAB_ICON: Record<TaskTab, LucideIcon> = {
-  active: Activity,
-  downloads: Download,
-  syncs: RotateCw,
-  ai: Sparkles,
-  upkeep: Wrench,
-}
-
-const KIND_ICON: Record<TaskKind, LucideIcon> = {
-  download: Download,
-  sync: RotateCw,
-  delete: Trash2,
-  ai: Sparkles,
-  maintenance: Wrench,
+const SECTION_TITLES: Record<TaskSectionId, string> = {
+  running: 'Running now',
+  attention: 'Needs attention',
+  nextHour: 'Next hour',
+  later: 'Later',
 }
 
 /**
- * The tasks view: a "Tasks" heading over the task tabs, at a readable width
- * and aligned to the left like the other views.
+ * The tasks view: a "Tasks" heading, a sentence saying what is happening now,
+ * and every task in sections, at a readable width and aligned to the left
+ * like the other views.
  */
 export function TasksView() {
   return (
     <div className={VIEW_WIDTH}>
-      <h2 className="mb-4 truncate font-heading text-lg font-semibold text-foreground md:mb-6 md:text-xl">
+      <h2 className="mb-1 truncate font-heading text-lg font-semibold text-foreground md:text-xl">
         Tasks
       </h2>
-      <TaskTabs />
+      <TaskList />
     </div>
   )
 }
 
-function TaskTabs() {
+function TaskList() {
   const { data: tasks, error } = useTasks()
   const aiEnabled = useAiEnabled()
-  const [tab, setTab] = useState<TaskTab>('active')
-  const [search, setSearch] = useState('')
 
   if (error) {
     return <p className="text-sm text-destructive">Failed to load tasks: {error.message}</p>
@@ -98,142 +41,49 @@ function TaskTabs() {
     return <p className="text-sm text-muted-foreground">Loading tasks…</p>
   }
 
-  if (tasks.length === 0) {
-    return <p className="text-sm text-muted-foreground">No pending or in-progress tasks.</p>
-  }
-
-  const counts = tabCounts(tasks, aiEnabled)
-  const tabTasks = tasksForTab(tasks, tab, aiEnabled)
-  const showSearch = tabTasks.length > TASK_SEARCH_THRESHOLD
-  const query = showSearch ? search.trim() : ''
-  const rows = query ? tabTasks.filter((task) => matchesTask(task, query)) : tabTasks
+  const now = new Date()
+  const { sections } = buildTaskList(tasks, { filter: 'all', query: '', aiEnabled, now })
 
   return (
-    <TooltipProvider>
-      <Tabs
-        className="w-full"
-        value={tab}
-        onValueChange={(value) => {
-          setTab(value as TaskTab)
-          setSearch('')
-        }}
-      >
-        <TabsList variant="line">
-          {taskTabs(aiEnabled).map((value) => {
-            const TabIcon = TAB_ICON[value]
-            return (
-              <TabsTrigger key={value} value={value}>
-                <TabIcon aria-hidden />
-                <span className="sr-only sm:not-sr-only">{TAB_LABELS[value]}</span>
-                <Badge variant={value === tab ? 'default' : 'secondary'} className="tabular-nums">
-                  {counts[value]}
-                </Badge>
-                {value === 'active' && counts.active > 0 && (
-                  <Beacon variant="live" label="Tasks running" />
-                )}
-              </TabsTrigger>
-            )
-          })}
-        </TabsList>
-        <TabsContent value={tab} className="flex flex-col gap-2">
-          {showSearch && (
-            <Input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search"
-              aria-label="Search tasks"
-            />
-          )}
-          {rows.length === 0 ? (
-            <p className="px-2 text-sm text-muted-foreground">
-              {query
-                ? 'Nothing matches'
-                : tab === 'active'
-                  ? 'Nothing running right now'
-                  : 'No tasks here'}
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {rows.map((task, index) => {
-                const category = taskCategory(task)
-                const Icon = KIND_ICON[taskKind(task)]
-                const target = tab === 'syncs' ? syncTarget(task) : null
-                return (
-                  <li
-                    key={task.id}
-                    className={cn(
-                      'flex items-center gap-3 px-2 py-3 animate-enter',
-                      category === 'running' && 'bg-accent',
-                    )}
-                    style={{ animationDelay: `${Math.min(index, 12) * 20}ms` }}
-                  >
-                    {category === 'running' && <Beacon variant="live" label="Running" />}
-                    <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm text-foreground">{describeTask(task)}</span>
-                      {task.last_error && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="truncate text-xs text-muted-foreground">
-                              {task.last_error}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>{task.last_error}</TooltipContent>
-                        </Tooltip>
-                      )}
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      <Badge variant={CATEGORY_BADGE_VARIANT[category] ?? 'secondary'}>
-                        {category}
-                      </Badge>
-                      {task.retries > 0 && <Badge variant="outline">{task.retries} retries</Badge>}
-                      {target && <RunNowButton target={target} name={describeTask(task)} />}
-                      <span className="w-16 text-right text-xs text-muted-foreground">
-                        {category === 'pending' ? formatRelativeTime(task.run_at) : ''}
-                      </span>
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </TabsContent>
-      </Tabs>
-    </TooltipProvider>
+    <div className="flex flex-col gap-6">
+      <StatusLine tasks={tasks} now={now} />
+      {sections.map((section) => (
+        <section key={section.id} aria-labelledby={`tasks-${section.id}`}>
+          <h3
+            id={`tasks-${section.id}`}
+            className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+          >
+            {SECTION_TITLES[section.id]}
+          </h3>
+          <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+            {section.entries.map((entry) => (
+              <Entry key={entryKey(entry)} entry={entry} now={now} />
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   )
 }
 
-function RunNowButton({ target, name }: { target: SyncTarget; name: string }) {
-  const invalidateTasks = useInvalidateTasks()
-  const [running, setRunning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function StatusLine({ tasks, now }: { tasks: Task[]; now: Date }) {
+  const running = tasks.some((task) => task.status === 'running')
   return (
-    <>
-      {error && <span className="text-xs text-destructive">Sync failed: {error}</span>}
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={running}
-        aria-label={`Run now: ${name}`}
-        onClick={async () => {
-          setRunning(true)
-          setError(null)
-          try {
-            await (target.kind === 'playlist'
-              ? reconcilePlaylist(target.id)
-              : reconcileChannel(target.id))
-            await invalidateTasks()
-          } catch (err) {
-            setError(err instanceof Error ? err.message : String(err))
-          } finally {
-            setRunning(false)
-          }
-        }}
-      >
-        <RotateCw className={running ? 'animate-spin' : undefined} />
-        <span className="hidden sm:inline">Run now</span>
-      </Button>
-    </>
+    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+      {running && <Beacon variant="live" label="Tasks running" />}
+      <span>{statusLine(tasks, now)}</span>
+    </p>
   )
+}
+
+function Entry({ entry, now }: { entry: TaskEntry; now: Date }) {
+  return entry.kind === 'batch' ? (
+    <TaskBatchRow tasks={entry.tasks} sources={entry.sources} runAt={entry.runAt} now={now} />
+  ) : (
+    <TaskRow task={entry.task} now={now} />
+  )
+}
+
+function entryKey(entry: TaskEntry): string {
+  return entry.kind === 'batch' ? `batch-${entry.tasks[0].id}` : `task-${entry.task.id}`
 }
