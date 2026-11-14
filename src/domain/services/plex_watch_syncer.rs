@@ -38,6 +38,7 @@ pub struct PlexWatchSyncer {
 }
 
 impl PlexWatchSyncer {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         plex_library_repository: Arc<dyn PlexLibraryRepository>,
         plex_episode_finder: PlexEpisodeFinder,
