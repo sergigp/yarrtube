@@ -208,6 +208,25 @@ describe('PlexSettingsView', () => {
       "Plex Web and the Mac app don't show watched badges in playlists, so dropping watched episodes is the way to tell what's left.",
     )
   })
+
+  it('shows why a playlist option was not saved and keeps the saved one', async () => {
+    mockApi({
+      'GET /api/plex': aPlexStatus(),
+      'GET /api/preferences': aPreferences(),
+      'PATCH /api/preferences': { status: 500, error: 'database is locked' },
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup()
+    const order = await screen.findByRole('radiogroup', { name: 'Order' })
+
+    await user.click(within(order).getByRole('radio', { name: 'Oldest first' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to save: database is locked',
+    )
+    expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
+    expect(screen.getByRole('status')).toHaveTextContent('')
+  })
 })
 
 /** The text of each line (paragraph) in `element`. */
