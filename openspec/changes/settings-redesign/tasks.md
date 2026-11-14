@@ -27,7 +27,7 @@ Web-only change: the TDD "full suite" for each cycle is `npm run test` in `web/`
 - [x] 2.13 `it lists the unsaved changes in the save bar`
 - [x] 2.14 `it saves only the changed fields and shows Saved by the title`
 - [x] 2.15 `it discards changes without a request`
-- [ ] 2.16 `it shows a rejected save's error in the save bar`
+- [x] 2.16 `it shows a rejected save's error in the save bar`
 - [ ] 2.17 `it shows Anthropic effort as a segmented choice outside Advanced`
 - [ ] 2.18 `it marks the prompt default or edited`: Prompt disclosure for both cards
 - [ ] 2.19 `it names the missing Anthropic key and the restart`

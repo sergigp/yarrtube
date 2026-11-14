@@ -558,7 +558,7 @@ describe('AiSettingsView', () => {
     expect(videoListRequests).toBe(2)
   })
 
-  it('shows why a save failed and keeps the edits', async () => {
+  it("shows a rejected save's error in the save bar", async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
       'PATCH /api/preferences': { status: 400, error: 'Ollama URL must be set to enable AI' },
@@ -569,9 +569,10 @@ describe('AiSettingsView', () => {
     await user.click(await screen.findByRole('switch', { name: 'AI features' }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Ollama URL must be set to enable AI',
-    )
+    await screen.findByRole('alert')
+    expect(
+      within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('alert'),
+    ).toHaveTextContent('Ollama URL must be set to enable AI')
     expect(screen.getByRole('switch', { name: 'AI features' })).toBeChecked()
   })
 
