@@ -1,12 +1,15 @@
 use super::*;
+use crate::domain::plex_status::{PlexSyncKind, PlexSyncOutcome, PlexSyncRun};
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::SqlitePlexSyncRunRepository;
+use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::{
+    PlexSyncRunRepository, SqlitePlexSyncRunRepository,
+};
 use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 use crate::infrastructure::shared::system_clock::FixedClock;
 use chrono::{DateTime, Duration, Utc};
-use dto::{PlexStatusResponse, PlexSyncResponse};
+use dto::{PlexConnectionResponse, PlexStatusResponse, PlexSyncResponse};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -73,8 +76,61 @@ async fn it_should_report_each_sync_with_its_next_run_before_any_run() {
     );
 }
 
+#[tokio::test]
+async fn it_should_report_the_connection_from_the_latest_run() {
+    let db = TestDatabase::new();
+    let plex_sync_run_repository = Arc::new(SqlitePlexSyncRunRepository::new(db.database()));
+    let two_minutes_ago = now() - Duration::minutes(2);
+    plex_sync_run_repository
+        .save(&PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: two_minutes_ago,
+            outcome: reached(),
+        })
+        .unwrap();
+    let plex_status_searcher =
+        PlexStatusSearcher::new(true, plex_sync_run_repository, task_repository(&db));
+
+    let response = status(plex_status_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(PlexStatusResponse {
+            configured: true,
+            connection: Some(PlexConnectionResponse {
+                checked_at: two_minutes_ago,
+                reachable: true,
+                error: None,
+                version: Some("1.43.5.11079-b3b13e506".to_string()),
+                libraries: vec!["Subscriptions".to_string(), "Sergi's Playlists".to_string()],
+            }),
+            syncs: vec![
+                PlexSyncResponse {
+                    last_run_at: Some(two_minutes_ago),
+                    ..never_run_sync("watch_state")
+                },
+                never_run_sync("labels"),
+            ],
+        })
+    );
+}
+
 fn now() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+}
+
+fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {
+    Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(now())),
+    ))
+}
+
+fn reached() -> PlexSyncOutcome {
+    PlexSyncOutcome::Reached {
+        version: "1.43.5.11079-b3b13e506".to_string(),
+        libraries: vec!["Subscriptions".to_string(), "Sergi's Playlists".to_string()],
+    }
 }
 
 fn never_run_sync(kind: &str) -> PlexSyncResponse {

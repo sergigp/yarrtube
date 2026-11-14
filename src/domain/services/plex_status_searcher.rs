@@ -1,4 +1,6 @@
-use crate::domain::plex_status::{PlexStatus, PlexSyncKind, PlexSyncStatus};
+use crate::domain::plex_status::{
+    PlexConnection, PlexStatus, PlexSyncKind, PlexSyncRun, PlexSyncStatus,
+};
 use crate::infrastructure::repositories::sqlite_plex_sync_run_repository::PlexSyncRunRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use std::sync::Arc;
@@ -8,7 +10,6 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct PlexStatusSearcher {
     configured: bool,
-    #[allow(dead_code)]
     plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
     task_repository: Arc<dyn TaskRepository>,
 }
@@ -42,12 +43,13 @@ impl PlexStatusSearcherApi for PlexStatusSearcher {
                 syncs: Vec::new(),
             });
         }
+        let runs = self.plex_sync_run_repository.list()?;
         Ok(PlexStatus {
             configured: true,
-            connection: None,
+            connection: PlexConnection::from_runs(&runs),
             syncs: PlexSyncKind::ALL
                 .iter()
-                .map(|kind| self.sync_status(*kind))
+                .map(|kind| self.sync_status(*kind, &runs))
                 .collect::<anyhow::Result<_>>()?,
         })
     }
@@ -55,10 +57,14 @@ impl PlexStatusSearcherApi for PlexStatusSearcher {
 
 impl PlexStatusSearcher {
     /// Where the `kind` sync stands.
-    fn sync_status(&self, kind: PlexSyncKind) -> anyhow::Result<PlexSyncStatus> {
+    fn sync_status(
+        &self,
+        kind: PlexSyncKind,
+        runs: &[PlexSyncRun],
+    ) -> anyhow::Result<PlexSyncStatus> {
         Ok(PlexSyncStatus {
             kind,
-            last_run: None,
+            last_run: runs.iter().find(|run| run.kind == kind).cloned(),
             next_run_at: self
                 .task_repository
                 .find_pending(&kind.task())?
