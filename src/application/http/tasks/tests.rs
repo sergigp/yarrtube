@@ -1009,7 +1009,7 @@ async fn it_should_include_path_in_delete_channel_files_tasks() {
 }
 
 #[tokio::test]
-async fn it_should_omit_details_for_update_ytdlp_tasks() {
+async fn it_should_not_include_video_id_for_a_ytdlp_update() {
     let db = TestDatabase::new();
     let task_repository = Arc::new(SqliteTaskRepository::new(
         db.database(),

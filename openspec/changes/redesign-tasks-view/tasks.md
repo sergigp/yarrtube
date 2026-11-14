@@ -8,7 +8,7 @@
 
 - [x] 2.1 `it_should_include_video_id_for_a_download_task`: the listing adds `payload.video_id` for per-video tasks
 - [x] 2.2 `it_should_include_video_id_when_the_video_no_longer_exists`: `video_id` comes from the stored payload, not from the resolved video
-- [ ] 2.3 `it_should_not_include_video_id_for_a_ytdlp_update`: tasks that don't work on a video have no `video_id`
+- [x] 2.3 `it_should_not_include_video_id_for_a_ytdlp_update`: tasks that don't work on a video have no `video_id`
 - [ ] 2.4 `it_should_include_started_at_for_a_running_task`: `started_at` is the claim time (`updated_at`) while the task runs
 - [ ] 2.5 `it_should_have_null_started_at_for_a_pending_task`
 - [ ] 2.6 `it_should_bring_a_pending_task_forward_when_run_now`: `POST /api/tasks/run-now` answers 204 and the task is due now
