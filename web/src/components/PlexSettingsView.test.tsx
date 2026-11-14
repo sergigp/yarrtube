@@ -46,6 +46,21 @@ describe('PlexSettingsView', () => {
     expect(screen.queryByRole('group', { name: 'Category playlists' })).not.toBeInTheDocument()
   })
 
+  it('copies a variable name', async () => {
+    mockApi({
+      'GET /api/plex': aPlexStatus({ configured: false, connection: null, syncs: [] }),
+      'GET /api/preferences': aPreferences(),
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup()
+
+    const copy = await screen.findByRole('button', { name: 'Copy YARRTUBE_PLEX_TOKEN' })
+    await user.click(copy)
+
+    expect(await navigator.clipboard.readText()).toBe('YARRTUBE_PLEX_TOKEN')
+    expect(copy).toHaveTextContent('Copied')
+  })
+
   it('shows the server badge, version, libraries and last checked', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date('2026-11-14T10:02:00Z'))
