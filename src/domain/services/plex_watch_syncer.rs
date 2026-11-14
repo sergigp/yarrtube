@@ -88,10 +88,7 @@ impl PlexWatchSyncerApi for PlexWatchSyncer {
     fn sync(&self) -> anyhow::Result<()> {
         let (library, identity) = match self.read_plex() {
             Ok(plex) => plex,
-            Err(e) => {
-                warn!(error = %e, "failed to reach Plex, retrying the watch sync later");
-                return self.request_sync(self.clock.now() + SYNC_INTERVAL);
-            }
+            Err(e) => return self.retry_later(e),
         };
         let rows = self.agreed_rows()?;
         let videos = self.video_repository.list_downloaded()?;
@@ -110,6 +107,16 @@ impl PlexWatchSyncer {
         let library = self.plex_episode_finder.read_library()?;
         let identity = self.plex_library_repository.identity()?;
         Ok((library, identity))
+    }
+
+    /// Plex couldn't be reached: the next sync runs after `SYNC_INTERVAL`
+    /// and this one is recorded as failed with `error`.
+    fn retry_later(&self, error: anyhow::Error) -> anyhow::Result<()> {
+        warn!(error = %error, "failed to reach Plex, retrying the watch sync later");
+        self.request_sync(self.clock.now() + SYNC_INTERVAL)?;
+        self.record(PlexSyncOutcome::Failed {
+            error: error.to_string(),
+        })
     }
 
     /// Records how this sync ended.

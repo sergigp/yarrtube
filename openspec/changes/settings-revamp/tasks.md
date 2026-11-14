@@ -8,7 +8,7 @@
 
 Watch sync (`sync_plex_watch_state_task`)
 - [x] 2.1 `it_should_record_the_plex_version_and_libraries_when_a_watch_sync_reaches_plex` — a reached run is recorded with version and libraries.
-- [ ] 2.2 `it_should_record_the_error_when_a_watch_sync_cant_reach_plex` — a failed run is recorded with the error.
+- [x] 2.2 `it_should_record_the_error_when_a_watch_sync_cant_reach_plex` — a failed run is recorded with the error.
 
 Label sync (`sync_plex_labels_task`)
 - [ ] 2.3 `it_should_record_the_plex_version_and_libraries_when_a_label_sync_reaches_plex`

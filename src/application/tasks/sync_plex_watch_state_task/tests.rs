@@ -1094,6 +1094,32 @@ fn it_should_record_the_plex_version_and_libraries_when_a_watch_sync_reaches_ple
     );
 }
 
+#[test]
+fn it_should_record_the_error_when_a_watch_sync_cant_reach_plex() {
+    let db = TestDatabase::new();
+    let plex_sync_run_repository = SqlitePlexSyncRunRepository::new(db.database());
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        Arc::new(FakePlexLibraryRepository::failing()),
+        Arc::new(SqliteEpisodeWatchRepository::new(db.database())),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        plex_sync_run_repository.list().unwrap(),
+        vec![PlexSyncRun {
+            kind: PlexSyncKind::WatchState,
+            finished_at: now(),
+            outcome: PlexSyncOutcome::Failed {
+                error: "Plex is unreachable".to_string(),
+            },
+        }]
+    );
+}
+
 fn syncer(
     db: &TestDatabase,
     plex: Arc<FakePlexLibraryRepository>,
