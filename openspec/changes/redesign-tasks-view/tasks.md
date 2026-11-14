@@ -19,7 +19,7 @@
 - [x] 2.11 `it_should_fail_a_retrying_download_when_retrying_is_stopped`: `POST /api/videos/{id}/stop-retrying` makes the download Failed, keeps its failed attempts, and removes its pending task
 - [x] 2.12 `it_should_leave_pending_steps_and_their_tasks_when_retrying_is_stopped`
 - [x] 2.13 `it_should_leave_a_retrying_categorization_when_retrying_is_stopped`
-- [ ] 2.14 `it_should_change_nothing_when_no_step_is_retrying`: 204 and no change
+- [x] 2.14 `it_should_change_nothing_when_no_step_is_retrying`: 204 and no change
 - [ ] 2.15 `it_should_answer_404_when_stopping_retrying_an_unknown_video`
 - [ ] 2.16 `it_should_make_a_stopped_download_pending_again_when_the_video_is_retried`: the existing retry undoes a stop
 - [ ] 2.17 Web `taskFamily`: downloads, syncs, AI on and off, Plex & upkeep, unknown type (`lib/tasks.test.ts`)

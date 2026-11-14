@@ -40,6 +40,9 @@ pub trait VideoRetryStopperApi: Send + Sync {
 impl VideoRetryStopperApi for VideoRetryStopper {
     fn stop_retrying(&self, video_id: &VideoId) -> Result<(), StopRetryingVideoError> {
         let steps = self.find_video(video_id)?.retrying_steps();
+        if steps.is_empty() {
+            return Ok(());
+        }
         let video = self.fail_retrying_steps(video_id)?;
         steps
             .iter()

@@ -7116,6 +7116,27 @@ async fn it_should_leave_a_retrying_categorization_when_retrying_is_stopped() {
 }
 
 #[tokio::test]
+async fn it_should_change_nothing_when_no_step_is_retrying() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp() - Duration::days(1),
+    );
+    video_repository.insert(&video).unwrap();
+
+    let response = stop_retrying_video(
+        State(video_retry_stopper(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
+#[tokio::test]
 async fn it_should_rerun_a_videos_ai_categorization() {
     let db = TestDatabase::new();
     SqliteChannelRepository::new(db.database())
