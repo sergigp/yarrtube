@@ -107,21 +107,6 @@ The system SHALL run a label sync at least every 15 minutes while the integratio
 - **WHEN** a sync takes as many pending videos as it handles and none of them can be labelled yet (not downloaded or not imported)
 - **THEN** the next sync runs 15 minutes later, not right after
 
-### Requirement: Smart Playlist Per Category And Library
-For each category with at least one labelled episode in a Plex library, the system SHALL keep one smart playlist in that library, owned by the token's Plex user, listing that library's unwatched episodes labelled with the category, newest air date first.
-
-#### Scenario: Category with episodes in one library
-- **WHEN** episodes labelled "Chess" exist only in the library "Subscriptions"
-- **THEN** one smart playlist titled "Chess" exists for "Subscriptions", listing its unwatched "Chess" episodes newest first
-
-#### Scenario: Watched episode leaves the playlist
-- **WHEN** an episode of the "Chess" playlist is watched in Plex
-- **THEN** Plex no longer lists it in the playlist, without any action by yarrtube
-
-#### Scenario: Category spanning libraries
-- **WHEN** episodes labelled "Chess" exist in the libraries "Subscriptions" and "Sergi's Playlists"
-- **THEN** one playlist exists for each, titled "Chess · Subscriptions" and "Chess · Sergi's Playlists"
-
 ### Requirement: Playlists Follow Their Categories
 The system SHALL replace a category's playlists after it is renamed, delete a playlist when its category has no labelled episode left in that library, and recreate a playlist deleted in Plex, all during the label sync after the change.
 
@@ -148,3 +133,22 @@ The system SHALL replace a category's playlists after it is renamed, delete a pl
 #### Scenario: Other playlists untouched
 - **WHEN** the Plex user has playlists yarrtube did not create
 - **THEN** no label sync changes or deletes them
+
+### Requirement: Smart Playlist Of Every Category Episode
+For each category with at least one labelled episode in a Plex library, the system SHALL keep one smart playlist in that library, owned by the token's Plex user, listing every episode of that library labelled with the category, watched or not, newest air date first and, within one air date, highest episode number first.
+
+#### Scenario: Category with episodes in one library
+- **WHEN** episodes labelled "Chess" exist only in the library "Subscriptions"
+- **THEN** one smart playlist titled "Chess" exists for "Subscriptions", listing all its "Chess" episodes newest first
+
+#### Scenario: Watched episode stays in the playlist
+- **WHEN** an episode of the "Chess" playlist is watched in Plex or in the web UI
+- **THEN** Plex still lists it in the playlist, shown as watched, without any action by yarrtube
+
+#### Scenario: Same-day episodes ordered by episode number
+- **WHEN** a channel in "Chess" has the episodes `S2026E031501` and `S2026E031502`, both aired on 15 March 2026
+- **THEN** the playlist lists `S2026E031502` before `S2026E031501`
+
+#### Scenario: Category spanning libraries
+- **WHEN** episodes labelled "Chess" exist in the libraries "Subscriptions" and "Sergi's Playlists"
+- **THEN** one playlist exists for each, titled "Chess · Subscriptions" and "Chess · Sergi's Playlists"
