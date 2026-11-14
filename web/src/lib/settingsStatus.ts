@@ -8,6 +8,9 @@ export function aiStatus(preferences: Preferences | undefined): string | null {
 }
 
 /** The Plex section's status in the Settings nav, or `null` while unknown. */
-export function plexStatus(_status: PlexStatus | undefined): string | null {
-  return null
+export function plexStatus(status: PlexStatus | undefined): string | null {
+  if (!status) return null
+  if (!status.configured) return 'Not set up'
+  if (!status.connection) return 'Not checked yet'
+  return status.connection.reachable ? 'Connected' : "Can't reach Plex"
 }
