@@ -246,7 +246,7 @@ describe('TasksView', () => {
     expect(within(card).queryByText(raw)).not.toBeInTheDocument()
   })
 
-  it('retries the video now, disabling the card while it asks, then refreshes the list', async () => {
+  it('retries the video now, disabling Retry now while it asks, then refreshes the list, offering no Stop retrying', async () => {
     const user = userEvent.setup()
     const retry = heldUntilReleased()
     const fetchMock = mockApi({
@@ -260,7 +260,7 @@ describe('TasksView', () => {
 
     await waitFor(() => expect(retry.route).toHaveBeenCalledOnce())
     expect(within(card).getByRole('button', { name: 'Retry now' })).toBeDisabled()
-    expect(within(card).getByRole('button', { name: 'Stop retrying' })).toBeDisabled()
+    expect(within(card).queryByRole('button', { name: 'Stop retrying' })).not.toBeInTheDocument()
     retry.release()
     await waitFor(() =>
       expect(fetchMock.mock.calls.filter(([url]) => url === '/api/tasks')).toHaveLength(2),
@@ -268,44 +268,19 @@ describe('TasksView', () => {
     expect(within(card).getByRole('button', { name: 'Retry now' })).toBeEnabled()
   })
 
-  it('stops retrying the video, and the card is gone after the refresh', async () => {
-    const user = userEvent.setup()
-    let stopped = false
-    mockApi({
-      'GET /api/tasks': () => (stopped ? aProdLikeQueue().slice(1) : aProdLikeQueue()),
-      'POST /api/videos/rec1/stop-retrying': () => {
-        stopped = true
-        return null
-      },
-    })
-    renderWithProviders(<TasksView />)
-    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
-
-    await user.click(within(card).getByRole('button', { name: 'Stop retrying' }))
-
-    await waitFor(() =>
-      expect(screen.queryByText('Download My Apps from Starter Story Build')).not.toBeInTheDocument(),
-    )
-    expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument()
-  })
-
-  it('says when retrying or stopping fails, keeping both usable', async () => {
+  it('says when retrying fails, keeping Retry now usable', async () => {
     const user = userEvent.setup()
     mockApi({
       'GET /api/tasks': aProdLikeQueue(),
       'POST /api/videos/rec1/retry': { status: 500, error: 'db locked' },
-      'POST /api/videos/rec1/stop-retrying': { status: 500, error: 'disk full' },
     })
     renderWithProviders(<TasksView />)
     const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
 
     await user.click(within(card).getByRole('button', { name: 'Retry now' }))
-    expect(await within(card).findByText('Retry failed: db locked')).toBeInTheDocument()
-    await user.click(within(card).getByRole('button', { name: 'Stop retrying' }))
 
-    expect(await within(card).findByText('Stopping failed: disk full')).toBeInTheDocument()
+    expect(await within(card).findByText('Retry failed: db locked')).toBeInTheDocument()
     expect(within(card).getByRole('button', { name: 'Retry now' })).toBeEnabled()
-    expect(within(card).getByRole('button', { name: 'Stop retrying' })).toBeEnabled()
   })
 
   it('says when running a task now fails, and lets it be tried again', async () => {
@@ -322,6 +297,76 @@ describe('TasksView', () => {
     await user.click(within(plex).getByRole('button', { name: 'Run now' }))
 
     await waitFor(() => expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toHaveLength(2))
+  })
+
+  it('runs a failing task that works on no video now from its card', async () => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi({
+      'GET /api/tasks': [
+        aTask({ id: 2, task_type: 'sync_plex_watch_state', run_at: inMinutes(2), last_error: 'Plex unreachable' }),
+      ],
+      'POST /api/tasks/run-now': null,
+    })
+    renderWithProviders(<TasksView />)
+    const attention = await screen.findByRole('region', { name: 'Needs attention' })
+
+    await user.click(within(attention).getByRole('button', { name: 'Run now' }))
+
+    await waitFor(() =>
+      expect(bodiesSentTo(fetchMock, 'POST /api/tasks/run-now')).toEqual([{ ids: [2] }]),
+    )
+  })
+
+  it('goes back to All when the selected chip has no tasks left, staying there when its tasks return', async () => {
+    const user = userEvent.setup()
+    const [download, plex] = aProdLikeQueue()
+    const queues = [[download, plex], [plex], [download, plex]]
+    mockApi({
+      'GET /api/tasks': () => queues.shift() ?? [download, plex],
+      'POST /api/videos/rec1/retry': null,
+      'POST /api/tasks/run-now': null,
+    })
+    renderWithProviders(<TasksView />)
+    await user.click(await screen.findByRole('button', { name: /^Downloads/ }))
+
+    await user.click(screen.getByRole('button', { name: 'Retry now' }))
+    expect(await screen.findByText('Sync watch state with Plex')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Run now' }))
+
+    expect(await screen.findByText('Download My Apps from Starter Story Build')).toBeInTheDocument()
+    expect([
+      screen.getByRole('button', { name: /^All/ }).getAttribute('aria-pressed'),
+      screen.queryByText('Sync watch state with Plex') !== null,
+    ]).toEqual(['true', true])
+  })
+
+  it('describes every task button by its task, so screen readers tell them apart', async () => {
+    const user = userEvent.setup()
+    const syncs = aBatchOfSyncs().map((task) => ({ ...task, id: task.id + 10 }))
+    mockApi({ 'GET /api/tasks': [...aProdLikeQueue().slice(0, 4), ...syncs] })
+    renderWithProviders(<TasksView />)
+    await user.click(await screen.findByRole('button', { name: 'Show sources' }))
+
+    /** The text each button named `name` is described by, in order. */
+    const describing = (name: string) =>
+      screen
+        .getAllByRole('button', { name })
+        .map((button) => document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent)
+    expect({
+      retry: describing('Retry now'),
+      error: describing('Show error'),
+      runNow: describing('Run now'),
+      syncAll: describing('Sync all now'),
+      sources: describing('Hide sources'),
+      syncNow: describing('Sync now'),
+    }).toEqual({
+      retry: ['Download My Apps from Starter Story Build'],
+      error: ['Download My Apps from Starter Story Build'],
+      runNow: ['Sync watch state with Plex', 'Update category labels in Plex', 'Update yt-dlp'],
+      syncAll: ['Check 5 channels and playlists for new videos'],
+      sources: ['Check 5 channels and playlists for new videos'],
+      syncNow: ['3Blue1Brown', 'Eric Rosen', 'chess', 'Jobava fans', 'Openings'],
+    })
   })
 
   it('searches within the selected chip, keeping the text when the chip changes', async () => {
@@ -361,7 +406,6 @@ describe('TasksView', () => {
     const controls = [
       ...chips,
       within(card).getByRole('button', { name: 'Retry now' }),
-      within(card).getByRole('button', { name: 'Stop retrying' }),
       within(plex).getByRole('button', { name: 'Run now' }),
     ]
 

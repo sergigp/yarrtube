@@ -1,5 +1,5 @@
 import type { Task } from '@/api/types'
-import { formatRunTime } from './taskTimes'
+import { formatRunTime, STARTING_SOON } from './taskTimes'
 
 /** The video a task targets and its playlist or channel, with placeholders for unresolved names. */
 function videoAndSource(payload: Task['payload'], joiner: 'in' | 'from'): string {
@@ -119,6 +119,19 @@ export interface BatchSource {
   sourceId: string
 }
 
+/** How many sources a collapsed batch names before "and N more". */
+export const NAMED_SOURCES = 3
+
+/** The first sources' names, then how many more: "A, B, C and 13 more". */
+export function namedSources(sources: BatchSource[]): string {
+  const names = sources.slice(0, NAMED_SOURCES).map((source) => source.name)
+  const more = sources.length - names.length
+  if (more > 0) {
+    return `${names.join(', ')} and ${more} more`
+  }
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join('')
+}
+
 export type TaskEntry =
   | { kind: 'task'; task: Task }
   | { kind: 'batch'; tasks: Task[]; sources: BatchSource[]; runAt: string }
@@ -135,6 +148,8 @@ export interface FilterChip {
 
 export interface TaskListModel {
   chips: FilterChip[]
+  /** The chip shown selected: the one asked for, or All once that chip is gone. */
+  filter: TaskFilter
   sections: TaskSection[]
 }
 
@@ -247,13 +262,16 @@ const SECTIONS: readonly TaskSectionId[] = ['running', 'attention', 'nextHour', 
 
 /**
  * The chips and sections the Tasks view shows: a chip per family with tasks,
- * and the selected chip's tasks matching `query` in sections, batched.
+ * and the selected chip's tasks matching `query` in sections, batched. A
+ * selected chip whose tasks are all gone falls back to All.
  */
 export function buildTaskList(
   tasks: Task[],
   options: { filter: TaskFilter; query: string; aiEnabled: boolean; now: Date },
 ): TaskListModel {
-  const { filter, query, aiEnabled, now } = options
+  const { query, aiEnabled, now } = options
+  const chips = filterChips(tasks, aiEnabled)
+  const filter = chips.some((chip) => chip.filter === options.filter) ? options.filter : 'all'
   const listed = tasks.filter(
     (task) =>
       (filter === 'all' || taskFamily(task, aiEnabled) === filter) && matchesTask(task, query.trim()),
@@ -262,7 +280,7 @@ export function buildTaskList(
     id,
     entries: batchReconciles(listed.filter((task) => sectionOf(task, now) === id)),
   })).filter((section) => section.entries.length > 0)
-  return { chips: filterChips(tasks, aiEnabled), sections }
+  return { chips, filter, sections }
 }
 
 /** All, then each family with tasks, with their counts. */
@@ -292,8 +310,8 @@ function idleLine(pending: Task[], now: Date): string {
   if (!next) {
     return 'Nothing running.'
   }
-  const { relative } = formatRunTime(next.run_at, now)
-  const when = relative === 'Starting soon' ? 'Starting soon' : `Next up ${relative}`
+  const { relative, due } = formatRunTime(next.run_at, now)
+  const when = due ? STARTING_SOON : `Next up ${relative}`
   return `Nothing running. ${when}: ${describeTask(next)}.`
 }
 

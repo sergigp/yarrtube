@@ -391,14 +391,6 @@ export async function retryVideo(videoId: string): Promise<void> {
   })
 }
 
-/** Stops retrying a video's failing steps: they become Failed. */
-export async function stopRetryingVideo(videoId: string): Promise<void> {
-  await send(`/videos/${encodeURIComponent(videoId)}/stop-retrying`, {
-    method: 'POST',
-    label: `stop retrying video ${videoId}`,
-  })
-}
-
 /** Brings the pending tasks among `ids` forward so they run now. */
 export async function runTasksNow(ids: number[]): Promise<void> {
   await send('/tasks/run-now', {

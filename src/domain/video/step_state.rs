@@ -62,18 +62,6 @@ impl StepState {
         }
     }
 
-    /// A Retrying step Failed, keeping its failed attempts; any other
-    /// unchanged.
-    pub fn stop_retrying(self) -> Self {
-        match self.status {
-            StepStatus::Retrying => Self {
-                status: StepStatus::Failed,
-                ..self
-            },
-            _ => self,
-        }
-    }
-
     /// Whether the step should be attempted at `now`: Pending, or Retrying
     /// with its next attempt due.
     pub fn is_due(&self, now: DateTime<Utc>) -> bool {

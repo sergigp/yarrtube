@@ -43,15 +43,11 @@ The suite SHALL verify that the Tasks view lists a download under **Running now*
 - **THEN** the image has loaded with non-zero natural dimensions
 
 ### Requirement: Errored Download Coverage
-The suite SHALL verify that a video whose download fails is shown as Retrying with the reason the downloader reported and its next attempt, that the Tasks view shows its download under **Needs attention** with the reason, and that "Retry now" runs it again at once, after which the next attempt is further away, and that "Stop retrying" on the Tasks view's card makes the download Failed.
+The suite SHALL verify that a video whose download fails is shown as Retrying with the reason the downloader reported and its next attempt, that the Tasks view shows its download under **Needs attention** with the reason, and that "Retry now" runs it again at once, after which the next attempt is further away.
 
 #### Scenario: Download fails
 - **WHEN** a user adds the fixture playlist holding a video whose download always fails
 - **THEN** the video is shown as Retrying with the failure reason and "next attempt in 10 minutes", the Tasks view shows its download under **Needs attention** with the reason, and after "Retry now" and another failure the video shows "next attempt in 1 hour"
-
-#### Scenario: Stop retrying from the Tasks view
-- **WHEN** a user activates "Stop retrying" on that download's card in the Tasks view
-- **THEN** the card is gone and the video is shown as Failed
 
 ### Requirement: Search Coverage
 The suite SHALL verify the sidebar's search, which only appears once there are more than 15 sources, and the Tasks view's search, including that the sidebar's search sits above the Categories section and filters categories too.

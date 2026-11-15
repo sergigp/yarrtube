@@ -34,8 +34,9 @@ Claude Design canvas https://claude.ai/artifact/36GX5JmSxQNgjTnyxpcirs.
   videos", "Download …", "Update yt-dlp"); only running work uses "-ing".
 - A failing per-video task gets a Needs-attention card: a plain-language
   error (common yt-dlp errors mapped to sentences), when the next try is,
-  **Retry now** (existing `POST /api/videos/{id}/retry`), **Stop retrying**
-  (new) and **Show error** revealing the raw text.
+  **Retry now** (existing `POST /api/videos/{id}/retry`) and **Show error**
+  revealing the raw text. There is no Stop retrying: a failing step already
+  gives up on its own after 10 retries.
 - **Run now** on any pending task that isn't a per-video step (reconciles,
   Plex syncs, yt-dlp update, file deletions), driven by a new endpoint that
   brings pending tasks forward to now. It replaces the Syncs-tab Run now that
@@ -45,8 +46,7 @@ Claude Design canvas https://claude.ai/artifact/36GX5JmSxQNgjTnyxpcirs.
   touch targets.
 - API: the task listing adds `video_id` for per-video tasks and `started_at`
   for running tasks.
-- API: new `POST /api/tasks/run-now` (`{ "ids": [...] }`) and new
-  `POST /api/videos/{id}/stop-retrying`.
+- API: new `POST /api/tasks/run-now` (`{ "ids": [...] }`).
 
 ## Capabilities
 
@@ -62,11 +62,9 @@ None.
 - `task-listing`: listed tasks carry the targeted video's id and, while
   running, when they started.
 - `task-scheduling`: pending tasks can be brought forward to run now.
-- `video-retries`: a client can stop retrying a video, making its Retrying
-  steps Failed at once.
 - `plex-watch-sync`: the watch sync's tasks-view wording and filter.
 - `e2e-tests`: tasks-view coverage moves from tabs to chips and sections,
-  and covers Stop retrying.
+  and the Needs attention card.
 
 ## Impact
 
@@ -75,9 +73,9 @@ None.
   error mapping), `web/src/api/{types,client,queries}.ts`, their tests, and
   the tasks e2e specs under `e2e-tests/`.
 - Rust: `domain/task/task_view.rs`, `domain/services/task_view_searcher.rs`,
-  a new task run-now service and a new video retry stopper service,
+  a new task run-now service,
   `TaskRepository` (bring pending tasks forward), `application/http/tasks`
-  and `application/http/videos` (new handlers + DTO fields), `serve.rs`
+  (new handler + DTO fields), `serve.rs`
   wiring.
 - No schema change: `started_at` comes from the `updated_at` column set
   when a task is claimed.
@@ -102,14 +100,13 @@ flowchart LR
 
   subgraph HTTP
     TasksHttp[http/tasks]:::changed
-    VideosHttp[http/videos]:::changed
+    VideosHttp[http/videos]
   end
 
   subgraph Domain
     TaskView[TaskView]:::changed
     TaskViewSearcher[TaskViewSearcher]:::changed
     TaskRunner[TaskRunNowRequester]:::new
-    RetryStopper[VideoRetryStopper]:::new
     VideoRetrier[VideoRetrier]
   end
 
@@ -127,10 +124,8 @@ flowchart LR
   TasksHttp --> TaskViewSearcher
   TasksHttp --> TaskRunner
   VideosHttp --> VideoRetrier
-  VideosHttp --> RetryStopper
   TaskViewSearcher --> TaskView
   TaskViewSearcher --> TaskRepo
   TaskRunner --> TaskRepo
-  RetryStopper --> TaskRepo
   Executor --> TaskRepo
 ```

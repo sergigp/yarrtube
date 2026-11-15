@@ -1,17 +1,15 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { avatarMediaUrl, runTasksNow } from '@/api/client'
 import { useChannels } from '@/api/queries'
 import type { Task } from '@/api/types'
-import type { BatchSource } from '@/lib/tasks'
-import { formatRunTime } from '@/lib/taskTimes'
+import { NAMED_SOURCES, namedSources, type BatchSource } from '@/lib/tasks'
 import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
 import { RunNowButton } from './RunNowButton'
+import { RunTime } from './RunTime'
 import { useTaskAction } from './useTaskAction'
-
-/** How many sources a collapsed batch names before "and N more". */
-const NAMED_SOURCES = 3
+import { TASK_BUTTON_SIZE } from './taskButton'
 
 interface TaskBatchRowProps {
   tasks: Task[]
@@ -23,21 +21,17 @@ interface TaskBatchRowProps {
 /** Syncs due close together, shown as one row that expands to list its sources. */
 export function TaskBatchRow({ tasks, sources, runAt, now }: TaskBatchRowProps) {
   const [expanded, setExpanded] = useState(false)
+  const descriptionId = useId()
   const syncAll = useTaskAction(() => runTasksNow(tasks.map((task) => task.id)))
-  const { clock, relative } = formatRunTime(runAt, now)
 
   return (
     <li className="flex flex-col gap-2 px-3 py-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-        <span className="flex shrink-0 items-baseline gap-1.5 text-xs text-muted-foreground tabular-nums sm:w-36">
-          <span className="font-medium text-foreground">{clock}</span>
-          <span aria-hidden>·</span>
-          <span>{relative}</span>
-        </span>
+        <RunTime runAt={runAt} now={now} />
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <SourceAvatars sources={sources.slice(0, NAMED_SOURCES)} />
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-sm text-foreground">
+            <span id={descriptionId} className="truncate text-sm text-foreground">
               Check {sources.length} channels and playlists for new videos
             </span>
             <span className="truncate text-xs text-muted-foreground">{namedSources(sources)}</span>
@@ -47,8 +41,9 @@ export function TaskBatchRow({ tasks, sources, runAt, now }: TaskBatchRowProps) 
           <Button
             variant="ghost"
             size="sm"
-            className="min-h-11 sm:min-h-7"
+            className={TASK_BUTTON_SIZE}
             aria-expanded={expanded}
+            aria-describedby={descriptionId}
             onClick={() => setExpanded(!expanded)}
           >
             {expanded ? 'Hide sources' : 'Show sources'}
@@ -57,8 +52,9 @@ export function TaskBatchRow({ tasks, sources, runAt, now }: TaskBatchRowProps) 
           <Button
             variant="outline"
             size="sm"
-            className="min-h-11 sm:min-h-7"
+            className={TASK_BUTTON_SIZE}
             disabled={syncAll.working}
+            aria-describedby={descriptionId}
             onClick={syncAll.run}
           >
             Sync all now
@@ -71,13 +67,7 @@ export function TaskBatchRow({ tasks, sources, runAt, now }: TaskBatchRowProps) 
       {expanded && (
         <ul className="flex flex-col divide-y divide-border rounded-md bg-muted/40 sm:ml-40">
           {sources.map((source) => (
-            <li key={source.taskId} className="flex items-center gap-3 px-3 py-2">
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">{source.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {source.kind === 'channel' ? 'Channel' : 'Playlist'}
-              </span>
-              <RunNowButton label="Sync now" action={() => runTasksNow([source.taskId])} />
-            </li>
+            <SourceRow key={source.taskId} source={source} />
           ))}
         </ul>
       )}
@@ -85,14 +75,24 @@ export function TaskBatchRow({ tasks, sources, runAt, now }: TaskBatchRowProps) 
   )
 }
 
-/** The first sources' names, then how many more: "A, B, C and 13 more". */
-function namedSources(sources: BatchSource[]): string {
-  const names = sources.slice(0, NAMED_SOURCES).map((source) => source.name)
-  const more = sources.length - names.length
-  if (more > 0) {
-    return `${names.join(', ')} and ${more} more`
-  }
-  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join('')
+/** One source of an expanded batch, with its own Sync now. */
+function SourceRow({ source }: { source: BatchSource }) {
+  const nameId = useId()
+  return (
+    <li className="flex items-center gap-3 px-3 py-2">
+      <span id={nameId} className="min-w-0 flex-1 truncate text-sm text-foreground">
+        {source.name}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {source.kind === 'channel' ? 'Channel' : 'Playlist'}
+      </span>
+      <RunNowButton
+        label="Sync now"
+        action={() => runTasksNow([source.taskId])}
+        describedBy={nameId}
+      />
+    </li>
+  )
 }
 
 /** Overlapping avatars of the sources: a channel's picture, or an initial. */

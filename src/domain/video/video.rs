@@ -13,7 +13,6 @@ use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_status::VideoStatus;
-use super::video_sync_step::VideoSyncStep;
 use super::watch_progress::WatchProgress;
 use super::watch_state::WatchState;
 use super::youtube_video_id::YoutubeVideoId;
@@ -131,30 +130,6 @@ impl Video {
             updated_at: now,
             ..self
         }
-    }
-
-    /// Every Retrying step but the categorization Failed, keeping its
-    /// failed attempts — see the `video-retries` capability.
-    pub fn stop_retrying(self, now: DateTime<Utc>) -> Self {
-        Self {
-            download: self.download.stop_retrying(),
-            thumbnail: self.thumbnail.stop_retrying(),
-            subtitles: self.subtitles.stop_retrying(),
-            chapters: self.chapters.stop_retrying(),
-            downloaded_quality: self.downloaded_quality.stop_retrying(),
-            summary: self.summary.stop_retrying(),
-            updated_at: now,
-            ..self
-        }
-    }
-
-    /// The steps, but the categorization, that are Retrying.
-    pub fn retrying_steps(&self) -> Vec<VideoSyncStep> {
-        VideoSyncStep::ALL
-            .into_iter()
-            .filter(|step| *step != VideoSyncStep::Categorize)
-            .filter(|step| self.step_state(*step).status == StepStatus::Retrying)
-            .collect()
     }
 
     /// Every Retrying or Failed step back to Pending with no failed
@@ -530,19 +505,6 @@ impl Video {
             .duration_seconds()
             .or(reported_duration.map(|duration| duration.seconds()))
             .filter(|duration| *duration > 0)
-    }
-
-    /// The state of `step`.
-    fn step_state(&self, step: VideoSyncStep) -> StepState {
-        match step {
-            VideoSyncStep::Download => self.download.state,
-            VideoSyncStep::FetchThumbnail => self.thumbnail.state,
-            VideoSyncStep::FetchSubtitles => self.subtitles.state,
-            VideoSyncStep::FetchChapters => self.chapters.state,
-            VideoSyncStep::UpgradeQuality => self.downloaded_quality.state,
-            VideoSyncStep::Summarize => self.summary,
-            VideoSyncStep::Categorize => self.categorization,
-        }
     }
 }
 

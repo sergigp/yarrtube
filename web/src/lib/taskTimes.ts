@@ -3,6 +3,8 @@ export interface RunTime {
   clock: string
   /** e.g. "in 17 min", or "Starting soon" once due. */
   relative: string
+  /** Whether the run time has come. */
+  due: boolean
 }
 
 /** The browser's locale and time zone unless given, which tests pin. */
@@ -11,6 +13,9 @@ export interface TimeFormat {
   timeZone?: string
 }
 
+/** The relative time of a task that is due. */
+export const STARTING_SOON = 'Starting soon'
+
 const MINUTE_MS = 60 * 1000
 const DAY_MS = 24 * 60 * MINUTE_MS
 
@@ -18,10 +23,20 @@ const DAY_MS = 24 * 60 * MINUTE_MS
 export function formatRunTime(runAt: string, now: Date, format: TimeFormat = {}): RunTime {
   const at = new Date(runAt)
   const remainingMs = at.getTime() - now.getTime()
+  const due = remainingMs <= 0
   return {
     clock: `${dayPrefix(at, now, format)}${clockTime(at, format)}`,
-    relative: remainingMs <= 0 ? 'Starting soon' : `in ${formatSpan(remainingMs)}`,
+    relative: due ? STARTING_SOON : `in ${formatSpan(remainingMs)}`,
+    due,
   }
+}
+
+/** When Yarrtube tries a failing task again: "soon" once due, else the time. */
+export function formatNextTry(runAt: string, now: Date, format: TimeFormat = {}): string {
+  const { clock, relative, due } = formatRunTime(runAt, now, format)
+  return due
+    ? 'Yarrtube tries again soon.'
+    : `Yarrtube tries again at ${clock}, ${relative}.`
 }
 
 /** How long ago a running task started, e.g. "started 12 s ago". */

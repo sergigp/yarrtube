@@ -4,6 +4,7 @@ import {
   buildTaskList,
   describeTask,
   matchesTask,
+  namedSources,
   sectionOf,
   statusLine,
   taskFamily,
@@ -325,6 +326,15 @@ describe('buildTaskList', () => {
     ])
   })
 
+  it('falls back to All once the selected chip has no tasks left', () => {
+    const list = buildTaskList(tasks.slice(2), { ...options, filter: 'downloads' })
+
+    expect([list.filter, list.sections.map((section) => section.id)]).toEqual([
+      'all',
+      ['nextHour', 'later'],
+    ])
+  })
+
   it('filters by description and by a batch source name, ignoring case', () => {
     const byDescription = buildTaskList(tasks, { ...options, query: 'YT-DLP' }).sections
     const bySource = buildTaskList(tasks, { ...options, query: 'jobava' }).sections
@@ -382,5 +392,26 @@ describe('statusLine', () => {
       statusLine([aTask({ task_type: 'update_ytdlp', status: 'running' }), ...pending(1)], now),
       statusLine(downloads, now),
     ]).toEqual(['Running 1 task. 1 more task is scheduled.', 'Downloading 2 videos.'])
+  })
+})
+
+describe('namedSources', () => {
+  const sources = (...names: string[]) =>
+    names.map((name, taskId) => ({ taskId, name, kind: 'channel' as const, sourceId: name }))
+
+  it('names one source alone', () => {
+    expect(namedSources(sources('A'))).toBe('A')
+  })
+
+  it('joins two with and', () => {
+    expect(namedSources(sources('A', 'B'))).toBe('A and B')
+  })
+
+  it('joins three with commas and and', () => {
+    expect(namedSources(sources('A', 'B', 'C'))).toBe('A, B and C')
+  })
+
+  it('counts the sources beyond the first three', () => {
+    expect(namedSources(sources('A', 'B', 'C', 'D', 'E'))).toBe('A, B, C and 2 more')
   })
 })

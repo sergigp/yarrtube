@@ -16,7 +16,6 @@
   `last_error`. That is expected, and it is why the UI retries the video
   (`POST /api/videos/{id}/retry`) rather than bringing the task forward. A
   step's task that runs before it is due does nothing.
-- `StepState::give_up(now)` already moves a step to Failed.
 - Design source: https://claude.ai/artifact/36GX5JmSxQNgjTnyxpcirs.
 
 ## Goals / Non-Goals
@@ -28,8 +27,13 @@
 - Generic task run-now on the backend, used for single tasks and batches.
 
 **Non-Goals:**
-- Stopping a categorization (its give-up writes per-category verdicts that
-  need the AI job's model, see `video_categorizer::give_up`).
+- Stopping a video's retries by hand. A Retrying step already becomes Failed
+  on its own after 10 retries, and **Retry now** covers the useful case
+  ("I fixed something, try now"). A Stop retrying action was built and then
+  dropped: the server could only stop steps that were actually Retrying (not
+  a categorization, whose give-up needs the AI job's model, nor a summary
+  waiting for the AI server, nor a video sync), so on those cards it
+  silently did nothing.
 - Progress bars: there is no progress data.
 - Changing the sidebar's on-demand reconcile, which stays as it is.
 - Listing finished or dead-lettered tasks.
@@ -50,8 +54,19 @@
   tasks also land there. That is fine: their reason is shown in plain words.
 - **Times use the browser's locale and time zone**
   (`Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })`).
-  Tests pin `TZ=UTC` and the locale `en-GB` through the formatter's options
-  argument, which defaults to `undefined` in the app.
+  Tests pin them through a `{ locale?, timeZone? }` options object, empty in
+  the app; Vitest also pins `TZ=UTC`.
+- **A selected chip falls back to All** once it has no tasks left (e.g. the
+  last download finished), so a drained family never leaves an empty,
+  "nothing matches" view. `buildTaskList` returns the chip it applied.
+- **Failing non-video tasks offer Run now on their card**, like any pending
+  non-video task (`offersRunNow`); per-video cards offer Retry now instead.
+- **Every task button is described by its row**: buttons keep short names
+  ("Run now", "Sync now", …) and point `aria-describedby` at the row's task
+  description, the batch description or the source name, so screen readers
+  tell identical buttons apart.
+- **No Stop retrying** (see Non-Goals): video cards offer Retry now and
+  Show error only.
 
 ## Risks / Trade-offs
 
@@ -86,9 +101,6 @@ classDiagram
   class TaskRunNowRequester {
     +run_now(ids) Result
   }
-  class VideoRetryStopper {
-    +stop_retrying(video_id) Result
-  }
   class TaskRepository {
     <<port>>
     +list_pending_by_ids(ids) Vec~ScheduledTask~
@@ -96,36 +108,20 @@ classDiagram
   class SqliteTaskRepository
   class ScheduledTask {
     +bring_forward(run_at, now) Self
-  }
-  class Video {
-    +stop_retrying(now) Self
-    +retrying_steps() Vec~VideoSyncStep~
-  }
-  class StepState {
-    +stop_retrying(now) Self
-  }
-  class VideoRepository {
-    <<port>>
+    +started_at() Option~DateTime~
   }
 
   TaskViewSearcher --> TaskRepository
   TaskViewSearcher ..> TaskView
   TaskRunNowRequester --> TaskRepository
   TaskRunNowRequester ..> ScheduledTask
-  VideoRetryStopper --> VideoRepository
-  VideoRetryStopper --> TaskRepository
-  VideoRetryStopper ..> Video
-  Video *-- StepState
   SqliteTaskRepository ..|> TaskRepository
 
   class TaskView:::changed
   class TaskViewSearcher:::changed
   class TaskRunNowRequester:::new
-  class VideoRetryStopper:::new
   class TaskRepository:::changed
   class SqliteTaskRepository:::changed
-  class Video:::changed
-  class StepState:::changed
 ```
 
 ```mermaid
@@ -142,18 +138,24 @@ classDiagram
     +statusLine(tasks, now) string
     +describeTask(task) string
     +taskFamily(task, aiEnabled) TaskFamily
+    +namedSources(sources) string
   }
   class lib_taskErrors {
     +explainTaskError(raw) string
   }
   class lib_taskTimes {
-    +formatRunTime(runAt, now) RunTime
+    +formatRunTime(runAt, now, format) RunTime
+    +formatNextTry(runAt, now, format) string
     +formatStartedAgo(startedAt, now) string
   }
   class TaskFilterChips
   class TaskRow
-  class TaskBatchRow
+  class TaskBatchRow {
+    useChannels() avatars
+  }
   class AttentionCard
+  class RunNowButton
+  class RunTime
   class useTaskAction
 
   TasksView --> lib_tasks
@@ -162,10 +164,16 @@ classDiagram
   TasksView --> TaskBatchRow
   TasksView --> AttentionCard
   AttentionCard --> lib_taskErrors
-  TaskRow --> lib_taskTimes
-  TaskRow --> useTaskAction
+  AttentionCard --> lib_taskTimes
+  AttentionCard --> RunNowButton
+  TaskRow --> RunTime
+  TaskRow --> RunNowButton
+  TaskBatchRow --> RunTime
+  TaskBatchRow --> RunNowButton
   TaskBatchRow --> useTaskAction
   AttentionCard --> useTaskAction
+  RunNowButton --> useTaskAction
+  RunTime --> lib_taskTimes
 
   class TasksView:::changed
   class lib_tasks:::changed
@@ -175,6 +183,8 @@ classDiagram
   class TaskRow:::new
   class TaskBatchRow:::new
   class AttentionCard:::new
+  class RunNowButton:::new
+  class RunTime:::new
   class useTaskAction:::new
 ```
 
@@ -212,39 +222,6 @@ sequenceDiagram
 
 ```mermaid
 ---
-title: Stop retrying a video
----
-sequenceDiagram
-  box rgb(212,245,212) New
-    participant H as http::videos::stop_retrying_video
-    participant S as VideoRetryStopper
-  end
-  box Unchanged
-    participant VR as VideoRepository
-    participant TR as TaskRepository
-  end
-  participant UI as Tasks view
-  UI->>H: POST /api/videos/{id}/stop-retrying
-  H->>S: stop_retrying(&video_id)
-  S->>VR: find(&video_id)
-  alt not found
-    S-->>H: Err(VideoNotFound)
-    H-->>UI: 404
-  else found
-    S->>S: steps = video.retrying_steps()
-    S->>VR: update(video.stop_retrying(now))
-    loop each step in steps
-      S->>TR: find_non_completed_for_video(step task type, &video_id)
-      opt pending
-        S->>TR: delete(id)
-      end
-    end
-    H-->>UI: 204
-  end
-```
-
-```mermaid
----
 title: List tasks (changed fields)
 ---
 sequenceDiagram
@@ -262,24 +239,6 @@ sequenceDiagram
   S->>S: to_view(task): payload += video_id, started_at = updated_at if running
   S-->>H: Vec<TaskView>
   H->>D: TaskResponse::from(view)
-```
-
-```mermaid
----
-title: Per-video step status after this change (categorization excluded from stop)
----
-stateDiagram-v2
-  classDef changed fill:#fff1c2,stroke:#b58900
-  [*] --> Pending
-  Pending --> Done: success
-  Pending --> Retrying: failed attempt
-  Pending --> Unavailable: not on YouTube
-  Retrying --> Retrying: failed attempt (1-10)
-  Retrying --> Done: success
-  Retrying --> Failed: 11th failed attempt
-  Retrying --> Failed: stop retrying (new)
-  Failed --> Pending: retry video
-  Retrying --> Pending: retry video
 ```
 
 ## Types & Signatures
@@ -308,7 +267,19 @@ pub struct TaskResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct RunTasksNowRequest {
-    pub ids: Vec<i64>,
+    #[serde(default)]
+    pub ids: Option<Vec<i64>>, // missing or empty → 400 MISSING_TASK_IDS
+}
+
+// src/application/http/validation.rs
+pub const MISSING_TASK_IDS: &str = "At least one task id must be given (missing)";
+```
+
+```rust
+// src/domain/task/scheduled_task.rs
+impl ScheduledTask {
+    /// When the running attempt started (`updated_at`), None unless running.
+    pub fn started_at(&self) -> Option<DateTime<Utc>>;
 }
 ```
 
@@ -336,68 +307,15 @@ pub trait TaskRunNowRequesterApi: Send + Sync {
 ```
 
 ```rust
-// src/domain/services/video_retry_stopper.rs
-#[derive(Clone)]
-pub struct VideoRetryStopper {
-    video_repository: Arc<dyn VideoRepository>,
-    video_updater: VideoUpdater,
-    task_repository: Arc<dyn TaskRepository>,
-    clock: Arc<dyn Clock>,
-}
-
-pub trait VideoRetryStopperApi: Send + Sync {
-    /// Retrying steps (but the categorization) to Failed, their pending tasks removed.
-    fn stop_retrying(&self, video_id: &VideoId) -> Result<(), StopRetryingVideoError>;
-}
-```
-
-```rust
-// src/domain/video/errors.rs
-#[derive(Debug, thiserror::Error)]
-pub enum StopRetryingVideoError {
-    #[error("video {0} not found")]
-    VideoNotFound(VideoId),
-    #[error(transparent)]
-    Repository(anyhow::Error),
-}
-```
-
-```rust
-// src/domain/video/step_state.rs
-impl StepState {
-    /// Failed when Retrying (keeps failed attempts), else unchanged.
-    pub fn stop_retrying(self, now: DateTime<Utc>) -> Self;
-}
-// src/domain/video/{download,thumbnail,subtitles,chapters,downloaded_quality}.rs
-// and the summary step: each gets `pub fn stop_retrying(self, now) -> Self`
-// delegating to its StepState.
-
-// src/domain/video/video.rs
-impl Video {
-    /// Every Retrying step but the categorization, now Failed.
-    pub fn stop_retrying(self, now: DateTime<Utc>) -> Self;
-    /// The steps (but the categorization) that are Retrying.
-    pub fn retrying_steps(&self) -> Vec<VideoSyncStep>;
-}
-```
-
-```rust
 // src/application/http/tasks/mod.rs
 pub async fn run_tasks_now(
     State(requester): State<TaskRunNowRequester>,
     Json(request): Json<RunTasksNowRequest>,
 ) -> Result<StatusCode, ApiError>;
 
-// src/application/http/videos/mod.rs
-pub async fn stop_retrying_video(
-    State(stopper): State<VideoRetryStopper>,
-    Path(id): Path<String>,
-) -> Result<StatusCode, ApiError>;
-
 // src/application/http/mod.rs
 //   .route("/tasks/run-now", post(tasks::run_tasks_now))
-//   .route("/videos/{id}/stop-retrying", post(videos::stop_retrying_video))
-//   ApiServices += task_run_now_requester, video_retry_stopper
+//   ApiServices += task_run_now_requester
 ```
 
 ```ts
@@ -410,7 +328,6 @@ export interface Task {
 
 // web/src/api/client.ts
 export function runTasksNow(ids: number[]): Promise<void>
-export function stopRetryingVideo(videoId: string): Promise<void>
 // retryVideo(videoId) already exists
 ```
 
@@ -426,7 +343,13 @@ export type TaskEntry =
   | { kind: 'batch'; tasks: Task[]; sources: BatchSource[]; runAt: string }
 export interface TaskSection { id: TaskSectionId; entries: TaskEntry[] }
 export interface FilterChip { filter: TaskFilter; count: number }
-export interface TaskListModel { chips: FilterChip[]; sections: TaskSection[] }
+export interface TaskListModel {
+  chips: FilterChip[]
+  filter: TaskFilter // the chip applied: the one asked for, or 'all' once it is gone
+  sections: TaskSection[]
+}
+export const NAMED_SOURCES = 3
+export function namedSources(sources: BatchSource[]): string // "A, B, C and 13 more"
 
 export function taskFamily(task: Task, aiEnabled: boolean): TaskFamily
 export function isPerVideoTask(task: Task): boolean
@@ -441,30 +364,46 @@ export function buildTaskList(
 export function statusLine(tasks: Task[], now: Date): string
 
 // web/src/lib/taskTimes.ts
-export interface RunTime { clock: string; relative: string } // relative = "Starting soon" when due
-export function formatRunTime(runAt: string, now: Date, locale?: string): RunTime
+export interface RunTime { clock: string; relative: string } // relative = STARTING_SOON when due
+export interface TimeFormat { locale?: string; timeZone?: string }
+export const STARTING_SOON = 'Starting soon'
+export function formatRunTime(runAt: string, now: Date, format?: TimeFormat): RunTime
+export function formatNextTry(runAt: string, now: Date, format?: TimeFormat): string // "Yarrtube tries again at …"
 export function formatStartedAgo(startedAt: string, now: Date): string
 
 // web/src/lib/taskErrors.ts
 export function explainTaskError(raw: string): string
 
 // web/src/components/tasks/useTaskAction.ts
+/** Runs `action`, tracking working/error, and invalidates the tasks query on success. */
 export function useTaskAction(action: () => Promise<void>): {
   run: () => Promise<void>; working: boolean; error: string | null
 }
+
+// web/src/components/tasks/RunNowButton.tsx
+/** describedBy: id of the row's description, set as aria-describedby. */
+export function RunNowButton(props: { label: string; action: () => Promise<void>; describedBy: string })
+
+// web/src/components/tasks/RunTime.tsx
+export function RunTime(props: { runAt: string; now: Date })
+
+// web/src/components/tasks/taskButton.ts
+export const TASK_BUTTON_SIZE = 'min-h-11 sm:min-h-7'
 ```
 
 ## Call Stack
 
 - **List**: `TasksView` → `useTasks()` (`GET /api/tasks`) + `useAiEnabled()`
-  + `useChannels()` (avatars) → `buildTaskList(tasks, {filter, query,
-  aiEnabled, now})` → `TaskFilterChips` / per section `TaskRow` |
-  `TaskBatchRow` | `AttentionCard`. Server: `list_tasks` →
+  → `buildTaskList(tasks, {filter, query, aiEnabled, now})` →
+  `TaskFilterChips` (selected = `list.filter`) / per section `TaskRow` |
+  `TaskBatchRow` (+ `useChannels()` for avatars) | `AttentionCard`. Server: `list_tasks` →
   `TaskViewSearcher::search_all_pending()` → `TaskRepository::list_non_completed()`
   → `to_view(task)` (adds `video_id`, `started_at`) → `TaskResponse::from`.
-- **Run now / Sync now / Sync all now**: button → `useTaskAction(() =>
-  runTasksNow(ids))` → `POST /api/tasks/run-now {ids}` →
-  `run_tasks_now(request)` (400 if `ids` empty) →
+- **Run now / Sync now / Sync all now**: row, card (non-video task) or batch
+  → `RunNowButton` / `useTaskAction(() => runTasksNow(ids))` →
+  `POST /api/tasks/run-now {ids}` → `run_tasks_now(request)` →
+  `required(ids.filter(non-empty), MISSING_TASK_IDS)` (400 if missing or
+  empty) →
   `TaskRunNowRequester::run_now(&ids)` →
   `TaskRepository::list_pending_by_ids(&ids)` → per task
   `TaskRepository::update(&task.bring_forward(now, now))` → 204 →
@@ -472,13 +411,6 @@ export function useTaskAction(action: () => Promise<void>): {
 - **Retry now**: card → `useTaskAction(() => retryVideo(payload.video_id))`
   → existing `POST /api/videos/{id}/retry` → `VideoRetrier::retry` →
   `invalidateTasks()`.
-- **Stop retrying**: card → `useTaskAction(() => stopRetryingVideo(video_id))`
-  → `POST /api/videos/{id}/stop-retrying` → `stop_retrying_video(id)` →
-  `VideoRetryStopper::stop_retrying(&id)` → `VideoRepository::find` (404 if
-  none) → `video.retrying_steps()` → `VideoUpdater::update(|v|
-  v.stop_retrying(now))` → per step
-  `TaskRepository::find_non_completed_for_video(step.task_for(&video).task_type(), &id)`
-  → `delete(id)` if pending → 204 → `invalidateTasks()`.
 
 ## Test Plan
 
@@ -501,14 +433,6 @@ export function useTaskAction(action: () => Promise<void>): {
    9. `it_should_keep_retries_and_last_error_when_run_now`
    10. `it_should_reject_run_now_without_ids`: 400 for `{"ids": []}` and
        for `{}`.
-   11. `it_should_fail_a_retrying_download_when_retrying_is_stopped`: 204,
-       the download is Failed with 1 failed attempt, and no download task is
-       pending.
-   12. `it_should_leave_pending_steps_and_their_tasks_when_retrying_is_stopped`
-   13. `it_should_leave_a_retrying_categorization_when_retrying_is_stopped`
-   14. `it_should_change_nothing_when_no_step_is_retrying`: 204.
-   15. `it_should_answer_404_when_stopping_retrying_an_unknown_video`
-   16. `it_should_make_a_stopped_download_pending_again_when_the_video_is_retried`
 2. Infrastructure tests: `SqliteTaskRepository` (real SQLite)
    1. `it_should_list_only_pending_tasks_among_the_given_ids`: pending,
       running and missing ids → only the pending one.
@@ -523,12 +447,13 @@ export function useTaskAction(action: () => Promise<void>): {
       10 min splits it, a lone reconcile stays a task, errored or running
       reconciles are not batched.
    5. `buildTaskList`: chip counts sum to All, empty chips hidden, filter,
-      query on description and on a batch's source names, empty sections
-      dropped.
+      falls back to All once the selected chip has no tasks left, query on
+      description and on a batch's source names, empty sections dropped.
+      `namedSources`: one, two, three, and "and N more".
    6. `statusLine`: idle with next due, next already due, downloads running,
       mixed running.
    7. `formatRunTime`: today, tomorrow, already due → "Starting soon";
-      `formatStartedAgo`.
+      `formatNextTry`: soon / at a time; `formatStartedAgo`.
    8. `explainTaskError`: 403, private, age-gated, members-only, unavailable,
       unknown → first line without "ERROR:".
 4. Web component tests (`web/src/components/TasksView.test.tsx`, `mockApi`)
@@ -540,9 +465,13 @@ export function useTaskAction(action: () => Promise<void>): {
       per-video task has no Run now.
    5. The attention card shows the plain reason; Show error / Hide error
       toggles the raw text.
-   6. Retry now posts to `/api/videos/{id}/retry` and refreshes; Stop
-      retrying posts to `/stop-retrying` and refreshes.
+   6. Retry now posts to `/api/videos/{id}/retry` and refreshes; a video
+      card offers no Stop retrying.
    7. A failed action shows an error and can be used again.
    8. Search filters within the chip, and "nothing matches" shows when
       nothing does.
    9. Empty listing → "All quiet. Nothing is scheduled."
+   10. A failing Plex sync's card offers Run now, which posts its id.
+   11. When the selected chip's last task goes, All is selected again.
+   12. Every task button is described by its task, batch or source
+       (`aria-describedby`).

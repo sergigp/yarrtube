@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { useInvalidateTasks } from '@/api/queries'
 import { errorMessage } from '@/lib/errorMessage'
 
@@ -15,7 +15,7 @@ export function useTaskAction(action: () => Promise<void>): {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const run = useCallback(async () => {
+  async function run() {
     setWorking(true)
     setError(null)
     try {
@@ -26,7 +26,7 @@ export function useTaskAction(action: () => Promise<void>): {
     } finally {
       setWorking(false)
     }
-  }, [action, invalidateTasks])
+  }
 
   return { run, working, error }
 }

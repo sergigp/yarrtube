@@ -7,7 +7,7 @@ import { waitForVideoStatus } from '../helpers/video.js'
 // with a transient reason, so the daemon schedules its next attempt.
 const FAILURE_REASON = 'Unable to download video data: HTTP Error 503: Service Unavailable'
 
-test('a failed download is shown retrying with its reason, Retry now runs it again, and Stop retrying fails it', async ({ page }) => {
+test('a failed download is shown retrying with its reason, and Retry now runs it again', async ({ page }) => {
   const playlist = await addPlaylist(page.request, BROKEN_PLAYLIST, { downloaded: false })
   const videosUrl = `/api/playlists/${encodeURIComponent(playlist.id)}/videos`
   const downloadStep = async () => (await (await page.request.get(videosUrl)).json())[0].steps.download
@@ -47,21 +47,5 @@ test('a failed download is shown retrying with its reason, Retry now runs it aga
         failure: expect.stringContaining(FAILURE_REASON),
       }),
     )
-  })
-
-  await test.step('Stop retrying on its Tasks view card makes the download Failed', async () => {
-    await page.goto('/tasks')
-    const card = page
-      .getByRole('region', { name: 'Needs attention' })
-      .locator('li', { hasText: new RegExp(`Download .+ from ${playlist.name}`) })
-    const stopped = page.waitForResponse(
-      (response) => response.request().method() === 'POST' && response.url().endsWith('/stop-retrying'),
-    )
-    await card.getByRole('button', { name: 'Stop retrying' }).click({ timeout: 15_000 })
-    expect((await stopped).status()).toBe(204)
-    await expect(card).toHaveCount(0)
-    expect((await downloadStep()).status).toBe('FAILED')
-    await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
-    await waitForVideoStatus(page, { status: 'FAILED' })
   })
 })

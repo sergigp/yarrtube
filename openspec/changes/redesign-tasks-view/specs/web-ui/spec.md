@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Tasks View Filters
-The tasks view SHALL list every task in one list and offer filter chips above it, in this order: **All**, **Downloads**, **Syncs**, **AI**, **Plex & upkeep**, each with a count of its tasks. **All** SHALL be selected when the view opens. Selecting a chip SHALL list only its tasks. A chip other than **All** with no tasks SHALL be hidden. Every task SHALL belong to exactly one chip other than **All**.
+The tasks view SHALL list every task in one list and offer filter chips above it, in this order: **All**, **Downloads**, **Syncs**, **AI**, **Plex & upkeep**, each with a count of its tasks. **All** SHALL be selected when the view opens. Selecting a chip SHALL list only its tasks. A chip other than **All** with no tasks SHALL be hidden; when the selected chip is hidden because its tasks are all gone, **All** SHALL be selected. Every task SHALL belong to exactly one chip other than **All**.
 
 #### Scenario: View opens on All
 - **WHEN** a user opens the tasks view while 72 tasks are pending and none is running
@@ -16,6 +16,10 @@ The tasks view SHALL list every task in one list and offer filter chips above it
 #### Scenario: Chip with no tasks
 - **WHEN** no task belongs to the **AI** family
 - **THEN** no **AI** chip is shown
+
+#### Scenario: Selected chip drains
+- **WHEN** a user has selected **Downloads** and the last download task finishes
+- **THEN** the **Downloads** chip is gone, **All** is selected and every remaining task is listed
 
 #### Scenario: Counts
 - **WHEN** tasks of several families are present
@@ -134,16 +138,12 @@ A task under **Needs attention** SHALL be shown as a card with its description, 
 - **WHEN** a user activates **Show error** on a card
 - **THEN** the full raw error text is shown, and the control reads **Hide error**
 
-### Requirement: Retry Or Stop Retrying From Tasks View
-A **Needs attention** card for a task that works on one video SHALL offer **Retry now**, which retries the video, and **Stop retrying**, which stops retrying the video. While either is in progress the card's actions SHALL be disabled; on success the list SHALL refresh; on failure the card SHALL say the action failed.
+### Requirement: Retry From Tasks View
+A **Needs attention** card for a task that works on one video SHALL offer **Retry now**, which retries the video. While it is in progress it SHALL be disabled; on success the list SHALL refresh; on failure the card SHALL say the retry failed. The card SHALL NOT offer a way to stop retrying: a failing step gives up on its own.
 
 #### Scenario: Retry now
 - **WHEN** a user activates **Retry now** on a failing download's card
 - **THEN** the application retries that video and refreshes the list
-
-#### Scenario: Stop retrying
-- **WHEN** a user activates **Stop retrying** on a failing download's card
-- **THEN** the application stops retrying that video, and after the refresh the card is gone
 
 #### Scenario: Action fails
 - **WHEN** the retry request fails
@@ -164,6 +164,10 @@ Every pending task that does not work on one video SHALL offer **Run now**; a ba
 - **WHEN** a user expands a batch and activates **Sync now** on "chess"
 - **THEN** the application asks to run only chess's reconciliation now
 
+#### Scenario: Failing non-video task
+- **WHEN** a pending Plex watch sync with a last error is shown under **Needs attention**
+- **THEN** its card offers **Run now**, which asks to run that task now
+
 #### Scenario: Per-video task
 - **WHEN** the view lists a pending thumbnail fetch
 - **THEN** its row offers no **Run now**
@@ -171,6 +175,13 @@ Every pending task that does not work on one video SHALL offer **Run now**; a ba
 #### Scenario: Run now fails
 - **WHEN** a run-now request fails
 - **THEN** the row says the action failed and its action can be activated again
+
+### Requirement: Tasks View Buttons Name Their Task
+Every action button in the tasks view (**Run now**, **Sync now**, **Sync all now**, **Show sources** / **Hide sources**, **Retry now**, **Show error** / **Hide error**) SHALL be described to assistive technology by the task, batch or source it acts on, so that buttons with the same name can be told apart.
+
+#### Scenario: Two Run now buttons
+- **WHEN** the view lists a pending Plex watch sync and a pending yt-dlp update, each with **Run now**
+- **THEN** a screen reader announces each **Run now** with its task's description, "Sync watch state with Plex" or "Update yt-dlp"
 
 ### Requirement: Tasks View On A Phone
 On a phone-width screen the tasks view SHALL keep each chip's visible name, letting the chip row scroll sideways rather than wrap or clip, SHALL stack each row's time above its description, and every control SHALL be at least 44 pixels tall.
@@ -181,7 +192,7 @@ On a phone-width screen the tasks view SHALL keep each chip's visible name, lett
 
 #### Scenario: Touch targets
 - **WHEN** the tasks view is shown 390 pixels wide
-- **THEN** **Retry now**, **Stop retrying**, **Run now**, **Sync now** and each chip are at least 44 pixels tall
+- **THEN** **Retry now**, **Run now**, **Sync now** and each chip are at least 44 pixels tall
 
 ### Requirement: Tasks View With No Tasks
 When no task is pending or running, the tasks view SHALL say "All quiet. Nothing is scheduled." instead of chips and sections.

@@ -14,8 +14,7 @@ use crate::domain::services::{
     ShowMover, SubtitleFetcher, SubtitleReader, TaskRunNowRequester, TaskViewSearcher,
     ThumbnailFetcher, VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher,
     VideoCategoryEditor, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
-    VideoRelocator, VideoRetrier, VideoRetryStopper, VideoSearcher, VideoSummarizer,
-    VideoWatchStateUpdater,
+    VideoRelocator, VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -682,11 +681,6 @@ fn api_services(
         video_retrier: VideoRetrier::new(
             infrastructure.video_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
-            infrastructure.task_repository.clone(),
-            infrastructure.clock.clone(),
-        ),
-        video_retry_stopper: VideoRetryStopper::new(
-            infrastructure.video_repository.clone(),
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
         ),

@@ -58,13 +58,17 @@ function TaskList() {
   }
 
   const now = new Date()
-  const { chips, sections } = buildTaskList(tasks, { filter, query, aiEnabled, now })
+  const { chips, filter: shown, sections } = buildTaskList(tasks, { filter, query, aiEnabled, now })
+  if (shown !== filter) {
+    // The selected chip's tasks are all gone: stay on All even when some come back.
+    setFilter(shown)
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <StatusLine tasks={tasks} now={now} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <TaskFilterChips chips={chips} selected={filter} onSelect={setFilter} />
+        <TaskFilterChips chips={chips} selected={shown} onSelect={setFilter} />
         <Input
           type="search"
           value={query}

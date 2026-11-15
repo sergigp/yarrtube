@@ -1,21 +1,27 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
-import { retryVideo, stopRetryingVideo } from '@/api/client'
+import { retryVideo, runTasksNow } from '@/api/client'
 import type { Task } from '@/api/types'
-import { describeTask } from '@/lib/tasks'
+import { describeTask, isPerVideoTask } from '@/lib/tasks'
 import { explainTaskError } from '@/lib/taskErrors'
-import { formatRunTime } from '@/lib/taskTimes'
+import { formatNextTry } from '@/lib/taskTimes'
 import { Button } from '../ui/button'
+import { RunNowButton } from './RunNowButton'
 import { useTaskAction } from './useTaskAction'
+import { TASK_BUTTON_SIZE } from './taskButton'
 
 interface AttentionCardProps {
   task: Task
   now: Date
 }
 
-/** A failing task: what it does, why it failed in plain words and when it runs again. */
+/**
+ * A failing task: what it does, why it failed in plain words and when it runs
+ * again. A video's task retries the video; any other runs now.
+ */
 export function AttentionCard({ task, now }: AttentionCardProps) {
   const [showError, setShowError] = useState(false)
+  const descriptionId = useId()
   const raw = task.last_error ?? ''
 
   return (
@@ -23,19 +29,32 @@ export function AttentionCard({ task, now }: AttentionCardProps) {
       <span className="flex items-start gap-2">
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" aria-hidden />
         <span className="flex min-w-0 flex-col gap-1">
-          <span className="text-sm font-medium text-foreground">{describeTask(task)}</span>
+          <span id={descriptionId} className="text-sm font-medium text-foreground">
+            {describeTask(task)}
+          </span>
           <span className="text-sm text-muted-foreground">
-            {explainTaskError(raw)}. {nextTry(task, now)}
+            {explainTaskError(raw)}. {formatNextTry(task.run_at, now)}
           </span>
         </span>
       </span>
       <span className="flex flex-wrap items-center gap-2 sm:pl-6">
-        {task.payload.video_id && <VideoActions videoId={task.payload.video_id} />}
+        {isPerVideoTask(task) ? (
+          task.payload.video_id && (
+            <RetryButton videoId={task.payload.video_id} describedBy={descriptionId} />
+          )
+        ) : (
+          <RunNowButton
+            label="Run now"
+            action={() => runTasksNow([task.id])}
+            describedBy={descriptionId}
+          />
+        )}
         <Button
           variant="ghost"
           size="sm"
-          className="min-h-11 sm:min-h-7"
+          className={TASK_BUTTON_SIZE}
           aria-expanded={showError}
+          aria-describedby={descriptionId}
           onClick={() => setShowError(!showError)}
         >
           {showError ? 'Hide error' : 'Show error'}
@@ -50,43 +69,22 @@ export function AttentionCard({ task, now }: AttentionCardProps) {
   )
 }
 
-/** When Yarrtube tries the task again. */
-function nextTry(task: Task, now: Date): string {
-  const { clock, relative } = formatRunTime(task.run_at, now)
-  return relative === 'Starting soon'
-    ? 'Yarrtube tries again soon.'
-    : `Yarrtube tries again at ${clock}, ${relative}.`
-}
-
-/** Retry now and Stop retrying the card's video, both disabled while either asks. */
-function VideoActions({ videoId }: { videoId: string }) {
+/** Retry now for the card's video, disabled while it asks. */
+function RetryButton({ videoId, describedBy }: { videoId: string; describedBy: string }) {
   const retry = useTaskAction(() => retryVideo(videoId))
-  const stop = useTaskAction(() => stopRetryingVideo(videoId))
-  const working = retry.working || stop.working
   return (
     <>
       <Button
         variant="outline"
         size="sm"
-        className="min-h-11 sm:min-h-7"
-        disabled={working}
+        className={TASK_BUTTON_SIZE}
+        disabled={retry.working}
+        aria-describedby={describedBy}
         onClick={retry.run}
       >
         Retry now
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="min-h-11 sm:min-h-7"
-        disabled={working}
-        onClick={stop.run}
-      >
-        Stop retrying
-      </Button>
       {retry.error && <span className="text-xs text-destructive">Retry failed: {retry.error}</span>}
-      {stop.error && (
-        <span className="text-xs text-destructive">Stopping failed: {stop.error}</span>
-      )}
     </>
   )
 }
