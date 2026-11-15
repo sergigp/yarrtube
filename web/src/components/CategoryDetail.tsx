@@ -168,7 +168,7 @@ export function CategoryDetail() {
           !playing &&
           next && <PlayLink to={videoPathIn(categoryPath(category.id), next.id)} label="Play newest unwatched" />
         }
-        unwatchedCount={category.unwatched_count}
+        unwatchedCount={unwatchedCount}
         extraActions={[
           {
             label: 'Edit category',

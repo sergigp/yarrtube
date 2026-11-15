@@ -227,7 +227,11 @@ describe('CategoryDetail', () => {
         aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 3 }),
       ]),
       'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru' })],
-      'GET /api/categories/chess/videos': [aHomeVideo({ id: 'v1' })],
+      'GET /api/categories/chess/videos': [
+        aHomeVideo({ id: 'v1' }),
+        aHomeVideo({ id: 'v2' }),
+        aHomeVideo({ id: 'v3' }),
+      ],
       'POST /api/categories/chess/watched': markWatched,
     })
 
@@ -556,6 +560,24 @@ describe('CategoryDetail', () => {
 
     expect(await screen.findByText(/^3 videos · 2 unwatched · /)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Unwatched/ })).toHaveTextContent('Unwatched2')
+  })
+
+  it('confirms marking every listed unwatched video', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 1 }),
+      ]),
+      'GET /api/categories/chess/videos': [aHomeVideo({ title: 'Opening' }), aHomeVideo()],
+    })
+    const user = userEvent.setup()
+    await screen.findByRole('link', { name: 'Opening' })
+
+    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Mark 2 videos in "Chess" watched?' }),
+    ).toBeInTheDocument()
   })
 
   it('shows the header from the categories list at once, with placeholders while the videos load', async () => {
