@@ -142,6 +142,9 @@ export function CategoryDetail() {
   const hasVideos = sources > 0 || (videos?.length ?? 0) > 0
   const next = videos ? newestUnwatched(videos) : null
   const sourceOptions = videos ? videoSources(videos) : []
+  // What the page lists, playlists whose count is hidden included, like its
+  // "Unwatched" chip; the category's own count leaves those out, for the sidebar.
+  const unwatchedCount = videos ? watchFilterCounts(videos).unwatched : category.unwatched_count
 
   return (
     <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
@@ -154,7 +157,7 @@ export function CategoryDetail() {
         summary={
           videos
             ? [
-                sourceSummary({ videoCount: videos.length, unwatchedCount: category.unwatched_count }),
+                sourceSummary({ videoCount: videos.length, unwatchedCount }),
                 sourcesSummary(sourceOptions),
               ]
                 .filter(Boolean)

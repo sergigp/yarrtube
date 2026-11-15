@@ -95,7 +95,7 @@ describe('CategoryDetail', () => {
       'GET /api/playlists': [aPlaylist({ id: 'PLend', name: 'Endgame course' })],
       'GET /api/categories/chess/videos': [
         aHomeVideo({ title: 'Newest' }),
-        aHomeVideo({ title: 'Older' }),
+        aHomeVideo({ title: 'Older', watched: true }),
       ],
     })
 
@@ -543,6 +543,19 @@ describe('CategoryDetail', () => {
     await waitFor(() => expect(videoLoads).toBe(2))
     expect(screen.queryByText(/Failed to load videos/)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Opening' })).toBeInTheDocument()
+  })
+
+  it('counts unwatched videos of hidden playlists in the header', async () => {
+    renderCategory({
+      // The API leaves out the playlist whose unwatched count is hidden.
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 1 }),
+      ]),
+      'GET /api/categories/chess/videos': [aHomeVideo(), aHomeVideo(), aHomeVideo({ watched: true })],
+    })
+
+    expect(await screen.findByText(/^3 videos · 2 unwatched · /)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Unwatched/ })).toHaveTextContent('Unwatched2')
   })
 
   it('shows the header from the categories list at once, with placeholders while the videos load', async () => {
