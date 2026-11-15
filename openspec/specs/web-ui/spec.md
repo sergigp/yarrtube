@@ -1150,27 +1150,31 @@ channel it belongs to, the same way it describes a video download task.
 - **THEN** the task is still described as a thumbnail fetch, using a generic placeholder in place of the missing names
 
 ### Requirement: Tasks View Search
-The tasks view SHALL show a search field above the currently selected tab's list when that tab lists more than 15 tasks, and SHALL NOT show it otherwise. While the field contains text, the current tab SHALL list only the tasks whose plain-language description contains that text, ignoring case, keeping the tab's usual order. When no task in the current tab matches, the view SHALL say that nothing matches. Clearing the field SHALL restore the tab's full list. The search text SHALL apply only to the current tab; switching tabs SHALL clear it.
+The tasks view SHALL always show a search field beside the filter chips. While the field contains text, the view SHALL list only the tasks of the selected chip whose plain-language description or source name contains that text, ignoring case, keeping the usual sections and order; a batch SHALL list only its matching sources. When nothing matches, the view SHALL say that nothing matches. Clearing the field SHALL restore the full list. Changing the chip SHALL keep the search text.
 
 #### Scenario: Search field hidden for a short tab
-- **WHEN** the selected tab lists 15 or fewer tasks
-- **THEN** no search field is shown for it
+- **WHEN** the selected chip lists 3 tasks
+- **THEN** a search field is still shown
 
 #### Scenario: Search field shown for a long tab
-- **WHEN** the selected tab lists more than 15 tasks
-- **THEN** a search field is shown above its list
+- **WHEN** the selected chip lists 68 tasks
+- **THEN** a search field is shown
 
 #### Scenario: Filtering by description
 - **WHEN** a user types text that appears in some tasks' descriptions
-- **THEN** the tab lists only the tasks whose description contains that text, ignoring case
+- **THEN** only the tasks whose description contains that text, ignoring case, are listed
+
+#### Scenario: Filtering a batch
+- **WHEN** a user types "jobava" while a batch of 16 reconciliations includes three sources whose names contain "Jobava"
+- **THEN** only those three sources are listed
 
 #### Scenario: Nothing matches
-- **WHEN** a user's search text matches no task in the current tab
+- **WHEN** a user's search text matches no task in the selected chip
 - **THEN** the view says that nothing matches
 
 #### Scenario: Clearing the search
 - **WHEN** a user clears the search field
-- **THEN** the tab returns to listing all of its tasks
+- **THEN** the view lists all of the selected chip's tasks again
 
 ### Requirement: Tasks View Describes Every Task Type
 The tasks view SHALL describe every task it lists in plain language and SHALL NEVER display a task's raw type identifier. Each task family SHALL be described in human terms, including playlist, channel, video, and Plex collection syncs, video downloads and thumbnail and subtitle fetches, file and container deletions, and the yt-dlp self-update. When a name the description would include could not be resolved, the description SHALL use a generic placeholder in its place rather than omitting the description.
@@ -1190,138 +1194,6 @@ The tasks view SHALL describe every task it lists in plain language and SHALL NE
 #### Scenario: Video sync is described in plain language
 - **WHEN** the tasks view lists a video sync task whose video and playlist or channel names were resolved
 - **THEN** it is described as syncing that video in that playlist or channel, and not by its raw type identifier
-
-### Requirement: Tasks View Shows Last Error
-When a task the tasks view lists has a recorded last error, the view SHALL show that error on the task's row, so a user can see why a task is being retried. A task with no recorded last error SHALL show none.
-
-#### Scenario: Retrying task shows its last error
-- **WHEN** the tasks view lists a task that has been retried and has a recorded last error
-- **THEN** the task's row shows that error text
-
-#### Scenario: Task without an error shows none
-- **WHEN** the tasks view lists a task with no recorded last error
-- **THEN** the task's row shows no error text
-
-### Requirement: Tasks View Tabs
-The tasks view SHALL group its tasks into tabs by task family, in this order: **Active**, **Downloads**, **Syncs**, **AI**, and **Other**. The **AI** tab SHALL show only while AI is enabled in the preferences, and SHALL NOT show while preferences are loading or failed to load. Each tab SHALL show, beside its name, a count of the tasks it currently contains. A task belongs to a tab as follows:
-
-- **Active**: every task whose status is `running`, regardless of its type.
-- **Downloads**: video download and thumbnail fetch tasks.
-- **Syncs**: playlist reconciliation, channel reconciliation and video sync tasks.
-- **AI**: video summary tasks, while the **AI** tab shows.
-- **Other**: every task that belongs to none of Downloads, Syncs or a shown AI tab, including Plex collection reconciliation, the yt-dlp self-update, deletion of a video file or of a playlist's or channel's files, and any task type the view does not otherwise recognise.
-
-Every task SHALL appear in exactly one of Downloads, Syncs, AI, or Other, and additionally in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later). Each task row SHALL show an icon that reflects the kind of work the task does (download, sync, deletion, AI, or maintenance), so rows of different kinds within **Other** remain distinguishable.
-
-#### Scenario: View opens on the Active tab
-- **WHEN** a user opens the tasks view
-- **THEN** the Active tab is selected and lists only the tasks whose status is `running`
-
-#### Scenario: Running task appears under Active regardless of type
-- **WHEN** a sync task is running
-- **THEN** it appears in the Active tab as well as in the Syncs tab
-
-#### Scenario: Downloads tab lists download and thumbnail tasks
-- **WHEN** the tasks include video downloads and thumbnail fetches
-- **THEN** the Downloads tab lists those tasks and no sync or other tasks
-
-#### Scenario: Syncs tab lists only playlist and channel reconciles
-- **WHEN** the tasks include playlist, channel, and Plex collection reconciliations and a video sync
-- **THEN** the Syncs tab lists the playlist and channel reconciliations and the video sync, and not the Plex collection reconciliation
-
-#### Scenario: Other tab collects everything else
-- **WHEN** the tasks include a Plex collection reconciliation, a yt-dlp self-update, a video-file deletion, a deleted container's file cleanup, and a task of an unrecognised type
-- **THEN** the Other tab lists all of them and no download or playlist/channel sync tasks
-
-#### Scenario: Counts match listed tasks
-- **WHEN** tasks of several families are present
-- **THEN** each tab's count matches the number of tasks it lists, and the counts of every tab but Active add up to the total number of tasks
-
-#### Scenario: No Cleanup or All tab
-- **WHEN** a user opens the tasks view
-- **THEN** no Cleanup tab and no All tab are offered
-
-#### Scenario: Active tab is empty
-- **WHEN** no task is running
-- **THEN** the Active tab shows a message that nothing is running rather than an empty area, and the other tabs still list their tasks
-
-#### Scenario: AI tab lists video summaries
-- **WHEN** AI is enabled and the tasks include video summaries
-- **THEN** the AI tab shows between Syncs and Other and lists them, and the Other tab doesn't
-
-#### Scenario: AI tab with no tasks
-- **WHEN** AI is enabled and no video summary is queued
-- **THEN** the AI tab shows with a count of 0
-
-#### Scenario: AI turned off with summaries still queued
-- **WHEN** AI is off and the tasks include video summaries
-- **THEN** no AI tab shows and the Other tab lists them
-
-#### Scenario: Preferences not loaded
-- **WHEN** preferences are loading or failed to load
-- **THEN** no AI tab shows and the Other tab lists any video summaries
-
-### Requirement: Tasks View Tab Bar Affordance
-The tasks view's tab bar SHALL make each tab look clickable and SHALL make the selected tab unmistakable. The tasks view SHALL be limited to a readable width and aligned to the left edge of the content area, like the other views, and the tab bar SHALL span exactly the width of the task list, its tabs sharing that width equally. The tab bar SHALL be drawn as a row of tabs over a horizontal rule, with the selected tab marked by an underline in the application's primary colour and its label in the full foreground colour and a heavier weight; unselected tabs SHALL show a muted label. Hovering an unselected tab SHALL visibly change its background and label colour. Each tab SHALL show an icon for its family, its name, and its count as a pill, with the selected tab's pill in the primary colour. On narrow screens each tab SHALL show only its icon and count, keeping its name as its accessible name, so that all tabs fit without horizontal scrolling. While at least one task is running, the **Active** tab SHALL show a live indicator beside its count. Each tab SHALL be at least 40 pixels tall and SHALL show a visible focus ring when focused from the keyboard. The tab bar SHALL look the same whatever the operating system's colour-scheme preference.
-
-#### Scenario: Selected tab is marked
-- **WHEN** a user views the tasks view with the Syncs tab selected
-- **THEN** the Syncs tab shows the primary-coloured underline, a full-colour heavier label, and a primary-coloured count pill, and no other tab does
-
-#### Scenario: Hovering an unselected tab
-- **WHEN** a user hovers an unselected tab with a pointer
-- **THEN** that tab's background and label colour change
-
-#### Scenario: Live indicator on Active
-- **WHEN** at least one task is running
-- **THEN** the Active tab shows a live indicator beside its count
-
-#### Scenario: No live indicator when idle
-- **WHEN** no task is running
-- **THEN** the Active tab shows no live indicator
-
-#### Scenario: Keyboard focus
-- **WHEN** a user moves keyboard focus onto a tab
-- **THEN** that tab shows a visible focus ring
-
-#### Scenario: Wide screen
-- **WHEN** the tasks view is shown on a wide desktop screen
-- **THEN** the view is left-aligned at a readable width, its left edge matching the other views' content, and the tab bar's rule and the task list share the same left and right edges
-
-#### Scenario: Narrow screen
-- **WHEN** the tasks view is shown on a phone-width screen
-- **THEN** every tab shows its icon and count without its visible name, all four tabs are visible without scrolling, and each tab is still announced by its name to assistive technology
-
-### Requirement: Run Sync Now From Tasks View
-Each playlist or channel reconciliation task listed in the **Syncs** tab SHALL offer a **Run now** action. Activating it SHALL trigger the on-demand reconcile of that task's playlist or channel — the same action the sidebar's sync offers — and SHALL leave the listed task itself and its scheduled run time unchanged. While the triggered reconcile is in progress, that row's action SHALL show that it is working and SHALL NOT accept another activation. When the reconcile completes, the tasks view SHALL refresh its list. When the reconcile fails, the view SHALL show the failure on that row without removing it. A reconciliation task whose status is `running` SHALL NOT offer Run now, since its sync is already underway. Tasks in other tabs SHALL NOT offer this action.
-
-#### Scenario: Running a playlist sync now
-- **WHEN** a user activates Run now on a playlist reconciliation task in the Syncs tab
-- **THEN** the application triggers a reconcile of that playlist, and the task remains listed with its scheduled run time unchanged
-
-#### Scenario: Running a channel sync now
-- **WHEN** a user activates Run now on a channel reconciliation task in the Syncs tab
-- **THEN** the application triggers a reconcile of that channel
-
-#### Scenario: Run now while in progress
-- **WHEN** a user has activated Run now on a row and the reconcile has not completed yet
-- **THEN** that row's action indicates it is working and cannot be activated again
-
-#### Scenario: Run now completes
-- **WHEN** a triggered reconcile completes successfully
-- **THEN** the tasks view refreshes its list of tasks
-
-#### Scenario: Run now fails
-- **WHEN** a triggered reconcile fails
-- **THEN** the view shows that the sync failed, and the row's action can be activated again
-
-#### Scenario: No Run now on a running sync
-- **WHEN** the Syncs tab lists a reconciliation task whose status is `running`
-- **THEN** that row offers no Run now action
-
-#### Scenario: No Run now outside Syncs
-- **WHEN** a user views the Downloads, Other, or Active tab
-- **THEN** no task row offers a Run now action
 
 ### Requirement: Edit Channel Dialog
 The edit channel dialog SHALL be titled "Edit <channel name> settings" and show the "Video quality" control, a "Video limit" field (whole numbers from 1 to 1000) and the "Check for new videos every" field, prefilled with the channel's current values. Saving SHALL send only the changed settings, close the dialog and refresh the library. When the video limit changed, saving SHALL also trigger a sync of the channel; a changed quality or interval alone SHALL NOT. Cancelling or saving with nothing changed SHALL send nothing.
@@ -1423,7 +1295,7 @@ The tasks view SHALL describe a subtitle fetch task in plain language, naming th
 
 #### Scenario: Subtitle fetch task with resolvable context
 - **WHEN** the tasks view lists a subtitle fetch task whose video title and playlist or channel name were resolved
-- **THEN** the task is described as fetching the subtitles of that video in that playlist or channel, under the downloads tab
+- **THEN** the task is described as fetching the subtitles of that video in that playlist or channel, under the **Downloads** chip
 
 #### Scenario: Subtitle fetch task whose video can no longer be found
 - **WHEN** the tasks view lists a subtitle fetch task whose video title could not be resolved
@@ -1434,7 +1306,7 @@ The tasks view SHALL describe a chapters fetch task in plain language, naming th
 
 #### Scenario: Chapters fetch task with resolvable context
 - **WHEN** the tasks view lists a chapters fetch task whose video title and playlist or channel name were resolved
-- **THEN** the task is described as fetching the chapters of that video in that playlist or channel, under the downloads tab
+- **THEN** the task is described as fetching the chapters of that video in that playlist or channel, under the **Downloads** chip
 
 #### Scenario: Chapters fetch task whose video can no longer be found
 - **WHEN** the tasks view lists a chapters fetch task whose video title could not be resolved
@@ -2429,14 +2301,14 @@ The tasks view SHALL open with a page heading "Tasks", in the same heading style
 
 #### Scenario: Opening the tasks view
 - **WHEN** a user opens the tasks view
-- **THEN** a "Tasks" heading is shown above the tab bar, aligned with the left edge of the content area
+- **THEN** a "Tasks" heading is shown above the status line and the filter chips, aligned with the left edge of the content area
 
 ### Requirement: Tasks View Describes Quality Checks
 The tasks view SHALL describe a quality check task in plain language, naming the video whose quality is being checked and the playlist or channel it belongs to, and SHALL list it with the download tasks, the same way it describes and lists a chapters fetch task.
 
 #### Scenario: Quality check task with resolvable context
 - **WHEN** the tasks view lists a quality check task whose video title and playlist or channel name were resolved
-- **THEN** the task is described as checking the quality of that video in that playlist or channel, under the downloads tab
+- **THEN** the task is described as checking the quality of that video in that playlist or channel, under the **Downloads** chip
 
 #### Scenario: Quality check task whose video can no longer be found
 - **WHEN** the tasks view lists a quality check task whose video title could not be resolved
@@ -2658,3 +2530,202 @@ The application SHALL have a Settings page with the sections "General", "AI" and
 #### Scenario: Old bookmark
 - **WHEN** a user opens `/ai`
 - **THEN** the URL becomes `/settings/ai` and the AI section shows
+
+### Requirement: Tasks View Filters
+The tasks view SHALL list every task in one list and offer filter chips above it, in this order: **All**, **Downloads**, **Syncs**, **AI**, **Plex & upkeep**, each with a count of its tasks. **All** SHALL be selected when the view opens. Selecting a chip SHALL list only its tasks. A chip other than **All** with no tasks SHALL be hidden; when the selected chip is hidden because its tasks are all gone, **All** SHALL be selected. Every task SHALL belong to exactly one chip other than **All**.
+
+#### Scenario: View opens on All
+- **WHEN** a user opens the tasks view while 72 tasks are pending and none is running
+- **THEN** the **All** chip is selected and all 72 tasks are listed
+
+#### Scenario: Filtering by a chip
+- **WHEN** a user selects the **Downloads** chip
+- **THEN** only download-family tasks are listed, and the chip is marked as selected and pressed for assistive technology
+
+#### Scenario: Chip with no tasks
+- **WHEN** no task belongs to the **AI** family
+- **THEN** no **AI** chip is shown
+
+#### Scenario: Selected chip drains
+- **WHEN** a user has selected **Downloads** and the last download task finishes
+- **THEN** the **Downloads** chip is gone, **All** is selected and every remaining task is listed
+
+#### Scenario: Counts
+- **WHEN** tasks of several families are present
+- **THEN** each chip's count matches the tasks it lists, and the counts of every chip but **All** add up to the **All** count
+
+### Requirement: Tasks View Task Families
+A task SHALL belong to one family. **Downloads**: video download, thumbnail, subtitle and chapters fetch, and quality check tasks. **Syncs**: playlist reconciliation, channel reconciliation and video sync tasks. **AI**: video summary and categorization tasks, only while AI is enabled in the loaded preferences. **Plex & upkeep**: every other task, including Plex syncs, the yt-dlp self-update, file deletions, AI tasks while AI is not enabled, and unrecognised task types.
+
+#### Scenario: Plex and maintenance tasks
+- **WHEN** the tasks include a Plex watch sync, a Plex label sync, a yt-dlp self-update and a task of an unrecognised type
+- **THEN** all four are listed under **Plex & upkeep**
+
+#### Scenario: AI tasks while AI is off
+- **WHEN** AI is off, or preferences are loading or failed to load, and a video summary is queued
+- **THEN** the summary is listed under **Plex & upkeep** and no **AI** chip is shown
+
+#### Scenario: AI tasks while AI is on
+- **WHEN** AI is enabled and a video categorization is queued
+- **THEN** it is listed under **AI**
+
+### Requirement: Tasks View Status Line
+Under its heading the tasks view SHALL show one sentence saying what is happening now: while tasks run, how many are running and how many more are scheduled; while none runs, "Nothing running." followed by the next task due and when.
+
+#### Scenario: Idle with tasks scheduled
+- **WHEN** no task is running and the earliest pending task, a Plex watch sync, is due in 2 minutes
+- **THEN** the status line reads "Nothing running. Next up in 2 min: Sync watch state with Plex."
+
+#### Scenario: A download is running
+- **WHEN** one video download is running and 71 other tasks are pending
+- **THEN** the status line reads "Downloading 1 video. 71 more tasks are scheduled." with a live indicator
+
+#### Scenario: Several kinds running
+- **WHEN** a download and a channel reconciliation are running and 10 other tasks are pending
+- **THEN** the status line reads "Running 2 tasks. 10 more tasks are scheduled." with a live indicator
+
+#### Scenario: Next task already due
+- **WHEN** no task is running and the earliest pending task is already due
+- **THEN** the status line names that task and says it is starting soon
+
+### Requirement: Tasks View Sections
+The tasks view SHALL group the listed tasks into sections, in this order, hiding an empty one: **Running now** (running tasks), **Needs attention** (pending tasks with a recorded last error), **Next hour** (other pending tasks due within 60 minutes, or already due), **Later** (the rest). Within a section tasks SHALL be ordered by run time. Rows SHALL show no status badge.
+
+#### Scenario: Prod snapshot
+- **WHEN** no task runs, a download with a last error is due in 5 minutes, 4 tasks are due within the hour and 52 later
+- **THEN** the view shows **Needs attention** with the download, **Next hour** with the 4, and **Later** with the 52, and no **Running now** section
+
+#### Scenario: Running task
+- **WHEN** a download is running
+- **THEN** it is listed under **Running now** and in no other section
+
+#### Scenario: No status badges
+- **WHEN** the view lists pending, due and running tasks
+- **THEN** no row shows a "pending", "queued" or "running" badge
+
+### Requirement: Tasks View Run Times
+Each scheduled row SHALL show its run time as a clock time in the browser's locale, prefixed with the day when not today, followed by the time left ("20:20 · in 17 min"). A pending task already due SHALL say "Starting soon". A running row SHALL say how long ago it started.
+
+#### Scenario: Due later today
+- **WHEN** a task is due at 20:20 and it is 20:03
+- **THEN** its row shows "20:20" and "in 17 min"
+
+#### Scenario: Due tomorrow
+- **WHEN** a task is due tomorrow at 09:10
+- **THEN** its row shows that it is due tomorrow at 09:10
+
+#### Scenario: Already due
+- **WHEN** a pending task's run time has passed
+- **THEN** its row says "Starting soon"
+
+#### Scenario: Running task
+- **WHEN** a task started running 12 seconds ago
+- **THEN** its row says it started 12 s ago
+
+### Requirement: Tasks View Sync Batches
+Pending playlist and channel reconciliations without a last error SHALL be shown as one batch row when, ordered by run time, each is due within 10 minutes of the previous one, and there are at least two. A batch SHALL name how many sources it checks, its first sources with their avatars, and expand to list each source with its kind.
+
+#### Scenario: Batch of 16
+- **WHEN** 16 playlist and channel reconciliations are due between 20:20 and 20:22
+- **THEN** one row reads "Check 16 channels and playlists for new videos", shows 20:20, names the first three sources and "13 more", and shows avatars
+
+#### Scenario: Expanding a batch
+- **WHEN** a user expands a batch
+- **THEN** it lists every source in it with its name and "Channel" or "Playlist", and collapsing it hides them again
+
+#### Scenario: Lone reconciliation
+- **WHEN** a channel reconciliation has no other reconciliation due within 10 minutes of it
+- **THEN** it is shown as its own row, "Check <channel name> for new videos"
+
+### Requirement: Tasks View Describes Scheduled And Running Work
+The tasks view SHALL describe a pending task as what it will do, in the base form ("Check 3Blue1Brown for new videos", "Download <video> from <channel>", "Sync watch state with Plex", "Update category labels in Plex", "Update yt-dlp"), and a running task as what it is doing, in the "-ing" form ("Downloading …"). It SHALL NOT show the words "pending" or "queued".
+
+#### Scenario: Scheduled reconciliation
+- **WHEN** a channel reconciliation for "3Blue1Brown" is pending
+- **THEN** it is described as "Check 3Blue1Brown for new videos"
+
+#### Scenario: Running reconciliation
+- **WHEN** that reconciliation is running
+- **THEN** it is described as "Checking 3Blue1Brown for new videos"
+
+#### Scenario: Scheduled yt-dlp update
+- **WHEN** a yt-dlp self-update is pending
+- **THEN** it is described as "Update yt-dlp"
+
+### Requirement: Tasks View Needs Attention
+A task under **Needs attention** SHALL be shown as a card with its description, a plain-language reason derived from its last error, and when it will be tried again ("tries again at 20:09, in 5 min"). A **Show error** control SHALL reveal the full raw error text; **Hide error** SHALL hide it.
+
+#### Scenario: YouTube refuses a download
+- **WHEN** a download's last error is "ERROR: unable to download video data: HTTP Error 403: Forbidden" and it is due again at 20:09
+- **THEN** its card says YouTube refused the request (403) and that Yarrtube tries again at 20:09, without showing the raw text
+
+#### Scenario: Unrecognised error
+- **WHEN** a task's last error matches no known pattern
+- **THEN** the card shows the error's first line without a leading "ERROR:" prefix
+
+#### Scenario: Showing the raw error
+- **WHEN** a user activates **Show error** on a card
+- **THEN** the full raw error text is shown, and the control reads **Hide error**
+
+### Requirement: Retry From Tasks View
+A **Needs attention** card for a task that works on one video SHALL offer **Retry now**, which retries the video. While it is in progress it SHALL be disabled; on success the list SHALL refresh; on failure the card SHALL say the retry failed. The card SHALL NOT offer a way to stop retrying: a failing step gives up on its own.
+
+#### Scenario: Retry now
+- **WHEN** a user activates **Retry now** on a failing download's card
+- **THEN** the application retries that video and refreshes the list
+
+#### Scenario: Action fails
+- **WHEN** the retry request fails
+- **THEN** the card says the retry failed and its actions can be used again
+
+### Requirement: Run Now From Tasks View
+Every pending task that does not work on one video SHALL offer **Run now**; a batch SHALL offer **Sync all now**, and each source in an expanded batch **Sync now**. Each SHALL ask the server to run those tasks now, disable itself while in progress, refresh the list on success, and say the action failed on failure. Running tasks and per-video tasks SHALL NOT offer them.
+
+#### Scenario: Run a Plex sync now
+- **WHEN** a user activates **Run now** on a pending Plex watch sync
+- **THEN** the application asks to run that task now and refreshes the list
+
+#### Scenario: Sync a batch now
+- **WHEN** a user activates **Sync all now** on a batch of 16 reconciliations
+- **THEN** the application asks to run all 16 tasks now
+
+#### Scenario: Sync one source now
+- **WHEN** a user expands a batch and activates **Sync now** on "chess"
+- **THEN** the application asks to run only chess's reconciliation now
+
+#### Scenario: Failing non-video task
+- **WHEN** a pending Plex watch sync with a last error is shown under **Needs attention**
+- **THEN** its card offers **Run now**, which asks to run that task now
+
+#### Scenario: Per-video task
+- **WHEN** the view lists a pending thumbnail fetch
+- **THEN** its row offers no **Run now**
+
+#### Scenario: Run now fails
+- **WHEN** a run-now request fails
+- **THEN** the row says the action failed and its action can be activated again
+
+### Requirement: Tasks View Buttons Name Their Task
+Every action button in the tasks view (**Run now**, **Sync now**, **Sync all now**, **Show sources** / **Hide sources**, **Retry now**, **Show error** / **Hide error**) SHALL be described to assistive technology by the task, batch or source it acts on, so that buttons with the same name can be told apart.
+
+#### Scenario: Two Run now buttons
+- **WHEN** the view lists a pending Plex watch sync and a pending yt-dlp update, each with **Run now**
+- **THEN** a screen reader announces each **Run now** with its task's description, "Sync watch state with Plex" or "Update yt-dlp"
+
+### Requirement: Tasks View On A Phone
+On a phone-width screen the tasks view SHALL keep each chip's visible name, letting the chip row scroll sideways rather than wrap or clip, SHALL stack each row's time above its description, and every control SHALL be at least 44 pixels tall.
+
+#### Scenario: Chips on a phone
+- **WHEN** the tasks view is shown 390 pixels wide
+- **THEN** every chip shows its name and count, and chips that do not fit can be scrolled into view
+
+#### Scenario: Touch targets
+- **WHEN** the tasks view is shown 390 pixels wide
+- **THEN** **Retry now**, **Run now**, **Sync now** and each chip are at least 44 pixels tall
+
+### Requirement: Tasks View With No Tasks
+When no task is pending or running, the tasks view SHALL say "All quiet. Nothing is scheduled." instead of chips and sections.
+
+#### Scenario: Empty queue
+- **WHEN** the task listing is empty
+- **THEN** the view shows the "Tasks" heading and "All quiet. Nothing is scheduled.", and no chips

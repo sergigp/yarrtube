@@ -155,7 +155,7 @@ The suite SHALL verify on the iPhone browser that:
 - Escape closes the drawer
 - dismissing the drawer without navigating restores the previous scroll position
 - the page behind the open drawer does not scroll
-- icon-only controls (Tasks tabs, "Run now") keep accessible names and work
+- the Tasks view's filter chips keep their visible names and a sync's "Sync now" or "Run now" works
 - a detail view's page header offers sync only through its "⋮" menu, and syncing from there works
 
 #### Scenario: Navigate from the drawer
@@ -171,8 +171,8 @@ The suite SHALL verify on the iPhone browser that:
 - **THEN** the page's scroll position does not change, and it is unchanged after the drawer closes
 
 #### Scenario: Icon-only controls
-- **WHEN** a user on a phone opens the Tasks view and taps the Syncs tab by its accessible name, then a sync's "Run now"
-- **THEN** the Syncs tab is selected and the sync runs without error
+- **WHEN** a user on a phone opens the Tasks view, taps the **Syncs** chip by its visible name, then a sync's "Run now"
+- **THEN** the Syncs chip is selected and the sync runs without error
 
 #### Scenario: Sync from the page header menu
 - **WHEN** a user on a phone opens a playlist's view
@@ -204,11 +204,11 @@ The suite SHALL verify that reloading the page on each client route (home, playl
 - **THEN** the view says "Playlist not found."
 
 ### Requirement: Source Settings And Task Coverage
-The suite SHALL verify that the Tasks view's Downloads tab lists a download while it is running, and that channel avatars load.
+The suite SHALL verify that the Tasks view lists a download under **Running now** while it is running, and that channel avatars load.
 
 #### Scenario: Download listed while running
 - **WHEN** a newly added playlist's video is downloading
-- **THEN** the Downloads tab lists its download
+- **THEN** the Tasks view lists its download under **Running now**
 
 #### Scenario: Channel avatar loads
 - **WHEN** a tracked channel's avatar is shown in the sidebar
@@ -255,14 +255,14 @@ The suite SHALL run the daemon against a fake YouTube: a fake YouTube Data API a
 - **THEN** its video downloads within seconds, with its thumbnail and subtitles, and plays
 
 ### Requirement: Errored Download Coverage
-The suite SHALL verify that a video whose download fails is shown as Retrying with the reason the downloader reported and its next attempt, that its download is listed pending for that attempt with the reason, and that "Retry now" runs it again at once, after which the next attempt is further away.
+The suite SHALL verify that a video whose download fails is shown as Retrying with the reason the downloader reported and its next attempt, that the Tasks view shows its download under **Needs attention** with the reason, and that "Retry now" runs it again at once, after which the next attempt is further away.
 
 #### Scenario: Download fails
 - **WHEN** a user adds the fixture playlist holding a video whose download always fails
-- **THEN** the video is shown as Retrying with the failure reason and "next attempt in 10 minutes", the Downloads tab lists its download pending with the reason, and after "Retry now" and another failure the video shows "next attempt in 1 hour"
+- **THEN** the video is shown as Retrying with the failure reason and "next attempt in 10 minutes", the Tasks view shows its download under **Needs attention** with the reason, and after "Retry now" and another failure the video shows "next attempt in 1 hour"
 
 ### Requirement: Search Coverage
-The suite SHALL verify the sidebar's search and the Tasks view's search, which only appear once there are more than 15 sources or tasks, including that the sidebar's search sits above the Categories section and filters categories too.
+The suite SHALL verify the sidebar's search, which only appears once there are more than 15 sources, and the Tasks view's search, including that the sidebar's search sits above the Categories section and filters categories too.
 
 #### Scenario: Sidebar search
 - **WHEN** more than 15 playlists are tracked and a user types part of one's name into the sidebar search
