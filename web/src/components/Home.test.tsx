@@ -267,12 +267,11 @@ describe('Home', () => {
 
     const videoLink = await screen.findByRole('link', { name: 'Fresh Video' })
     expect(videoLink).toHaveAttribute('href', '/channels/chan?video=vid%201')
-    // Two channel links per card: the avatar (aria-label) and the name.
-    const channelLinks = screen.getAllByRole('link', { name: 'The Channel' })
-    expect(channelLinks).toHaveLength(2)
-    for (const link of channelLinks) {
-      expect(link).toHaveAttribute('href', '/channels/chan')
-    }
+    // One channel link per card, holding both the avatar and the name.
+    expect(screen.getByRole('link', { name: 'The Channel' })).toHaveAttribute(
+      'href',
+      '/channels/chan',
+    )
   })
 
   it('shows an empty message when nothing has synced yet', async () => {

@@ -44,7 +44,7 @@ describe('AppShell', () => {
     renderShell({ preferences: aPreferences({ theme: 'dark' }) })
 
     await waitFor(() => expect(document.documentElement).toHaveClass('dark'))
-    expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Switch to light theme' })).toBeInTheDocument()
   })
 
   it('draws the saved light theme over a cached dark one', async () => {

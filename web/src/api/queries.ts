@@ -127,11 +127,13 @@ export function usePlaylists(): UseQueryResult<PlaylistListItem[], Error> {
   })
 }
 
-export function useCategories(): UseQueryResult<CategoryList, Error> {
+/** Every category; with `enabled: false`, only what another caller already fetched. */
+export function useCategories({ enabled = true } = {}): UseQueryResult<CategoryList, Error> {
   return useQuery({
     queryKey: queryKeys.categories,
     queryFn: listCategories,
     refetchInterval: LIBRARY_INTERVAL_MS,
+    enabled,
   })
 }
 

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
+  useCategories,
   useCategoriesShown,
   useChannels,
   useDeleteSource,
@@ -38,6 +39,9 @@ import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { SidebarCategories } from './SidebarCategories'
 import { SidebarCount } from './SidebarCount'
+import { SidebarFilter } from './SidebarFilter'
+import { PlaylistIcon } from './PlaylistIcon'
+import { SIDEBAR_ROW_CLASS, ShowMoreButton, sidebarRowLinkClassName } from './SidebarRowParts'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -46,6 +50,7 @@ import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
 import { channelPath } from '@/lib/sourcePath'
+import { matchesSearch } from '@/lib/search'
 
 interface SidebarRowMenuProps {
   item: LibraryItem
@@ -133,20 +138,20 @@ function SidebarRow({
 }: SidebarRowProps) {
   const unwatchedCount = shownUnwatchedCount(item)
   return (
-    <li className={cn('group/row relative flex items-center gap-1 rounded-md', active && 'bg-accent')}>
+    <li className={cn(SIDEBAR_ROW_CLASS, active && 'bg-accent')}>
       <Link
         to={href}
         onClick={onNavigate}
-        className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm no-underline transition-colors',
-          active ? 'font-medium text-primary' : 'text-foreground hover:text-primary',
-        )}
+        aria-current={active ? 'page' : undefined}
+        className={sidebarRowLinkClassName(active)}
       >
-        {showAvatar && (
+        {showAvatar ? (
           <Thumbnail
             src={item.avatar_filename ? avatarMediaUrl(item.avatar_filename) : null}
             className="size-5 shrink-0 rounded-full object-cover"
           />
+        ) : (
+          <PlaylistIcon />
         )}
         <span className="min-w-0 truncate">{item.name}</span>
         <span className={rowCountSlotClassName()}>
@@ -191,6 +196,11 @@ interface SidebarSectionProps {
   deleteDescription: string
   showAvatar?: boolean
   onNavigate: () => void
+  /** Rows left out past the section's limit; offers "Show N more" when > 0. */
+  hiddenCount: number
+  onShowMore: () => void
+  /** Filtering: a section with no match hides, and an empty one says so no more. */
+  filtering: boolean
 }
 
 function SidebarSection({
@@ -215,6 +225,9 @@ function SidebarSection({
   deleteDescription,
   showAvatar,
   onNavigate,
+  hiddenCount,
+  onShowMore,
+  filtering,
 }: SidebarSectionProps) {
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
   const [pendingMarkWatched, setPendingMarkWatched] = useState<LibraryItem | null>(null)
@@ -230,6 +243,9 @@ function SidebarSection({
   }
   // An empty section gets a full-width add row; otherwise a compact `+` on the heading.
   const empty = !error && items?.length === 0
+  if (filtering && (error || !items || items.length === 0)) {
+    return null
+  }
 
   return (
     <section aria-labelledby={headingId}>
@@ -303,6 +319,7 @@ function SidebarSection({
               ))}
             </ul>
           )}
+          {hiddenCount > 0 && <ShowMoreButton count={hiddenCount} onClick={onShowMore} />}
         </>
       )}
 
@@ -343,6 +360,10 @@ function SidebarSection({
 }
 
 export const SIDEBAR_ID = 'app-sidebar'
+
+/** Rows a section shows before "Show N more", most unwatched first. */
+const CHANNELS_SHOWN = 8
+const PLAYLISTS_SHOWN = 6
 
 interface SidebarProps {
   open?: boolean
@@ -386,6 +407,12 @@ export function Sidebar({
     'yarrtube.sidebar.folded.playlists',
     false,
   )
+  const [filterText, setFilterText] = useState('')
+  const filter = filterText.trim()
+  // Only to tell whether any category matches; SidebarCategories fetches the list.
+  const { data: categoryList } = useCategories({ enabled: withCategories && filter !== '' })
+  const [channelsExpanded, setChannelsExpanded] = useState(false)
+  const [playlistsExpanded, setPlaylistsExpanded] = useState(false)
 
   // The drawer scrolls on its own; keep the page behind it still.
   useEffect(() => {
@@ -422,11 +449,25 @@ export function Sidebar({
   const channelsView = sectionView(orderedChannels, {
     folded: channelsFolded,
     activeId: activeChannelId,
+    filter,
+    limit: CHANNELS_SHOWN,
+    expanded: channelsExpanded,
   })
   const playlistsView = sectionView(playlists && orderByUnwatched(playlists), {
     folded: playlistsFolded,
     activeId: activePlaylistId,
+    filter,
+    limit: PLAYLISTS_SHOWN,
+    expanded: playlistsExpanded,
   })
+  const categoryMatches = withCategories
+    ? (categoryList?.categories ?? []).filter((category) => matchesSearch(category, filter))
+    : []
+  const noMatches =
+    filter !== '' &&
+    categoryMatches.length === 0 &&
+    !channelsView.rows?.length &&
+    !playlistsView.rows?.length
 
   return (
     <>
@@ -442,12 +483,22 @@ export function Sidebar({
         id={SIDEBAR_ID}
         style={{ top }}
         className={cn(
-          'fixed bottom-0 left-0 z-40 flex w-64 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
+          'fixed bottom-0 left-0 z-40 flex w-64 max-w-[85%] flex-col overflow-y-auto border-r border-border bg-background p-3 shadow-lg transition-transform duration-200 ease-in-out',
           open ? 'translate-x-0' : '-translate-x-full',
-          'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
+          'md:static md:z-auto md:h-full md:w-62 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none',
+          // A rule between sections, once each is drawn.
+          '[&>section+section]:mt-3 [&>section+section]:border-t [&>section+section]:border-border [&>section+section]:pt-3',
         )}
       >
-        {withCategories && <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} />}
+        <SidebarFilter
+          value={filterText}
+          onChange={setFilterText}
+          withCategories={withCategories}
+        />
+        {noMatches && <p className="px-3 py-1 text-sm text-muted-foreground">No matches.</p>}
+        {withCategories && (
+          <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} filter={filter} />
+        )}
         <SidebarSection
           title="Channels"
           addLabel="Add channel"
@@ -463,6 +514,9 @@ export function Sidebar({
           hrefFor={(channel) => channelPath(channel.id)}
           showAvatar
           onNavigate={onClose}
+          hiddenCount={channelsView.hiddenCount}
+          onShowMore={() => setChannelsExpanded(true)}
+          filtering={filter !== ''}
           onSync={refreshing(reconcileChannel)}
           onMarkWatched={refreshing(markChannelWatched)}
           onEditRequest={setEditingChannelId}
@@ -487,6 +541,9 @@ export function Sidebar({
           activeId={activePlaylistId}
           hrefFor={(playlist) => `/playlists/${playlist.id}`}
           onNavigate={onClose}
+          hiddenCount={playlistsView.hiddenCount}
+          onShowMore={() => setPlaylistsExpanded(true)}
+          filtering={filter !== ''}
           onSync={refreshing(reconcilePlaylist)}
           onMarkWatched={refreshing(markPlaylistWatched)}
           onSetExcludedFromHome={setPlaylistExcludedFromHome}

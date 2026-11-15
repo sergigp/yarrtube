@@ -1,47 +1,45 @@
 import { Moon, Sun } from 'lucide-react'
-import { Switch as SwitchPrimitive } from 'radix-ui'
 import { usePreferences, useSaveTheme } from '@/api/queries'
+import { Button } from '@/components/ui/button'
 import { applyTheme, useTheme } from '@/hooks/useTheme'
 
 /**
- * The header's light/dark switch: a round knob that slides right into dark
- * mode, showing a sun in light mode and a moon in dark mode. The theme is
- * drawn at once and saved as a preference; a failed save draws the saved
- * one back. Disabled until the preferences load, the theme to fall back to.
+ * The header's light/dark control: a plain icon button showing the current
+ * theme (a moon in dark mode, a sun in light) and naming the one it switches
+ * to. The theme is drawn at once and saved as a preference; a failed save
+ * draws the saved one back. Disabled until the preferences load, the theme to
+ * fall back to.
  */
 export function ThemeToggle() {
   const theme = useTheme()
   const { data: preferences } = usePreferences()
   const saveTheme = useSaveTheme()
   const dark = theme === 'dark'
+  const label = dark ? 'Switch to light theme' : 'Switch to dark theme'
 
-  const toggle = async (checked: boolean) => {
+  const toggle = async () => {
     if (!preferences) {
       return
     }
-    applyTheme(checked ? 'dark' : 'light')
+    const next = dark ? 'light' : 'dark'
+    applyTheme(next)
     try {
-      await saveTheme(checked ? 'dark' : 'light')
+      await saveTheme(next)
     } catch {
       applyTheme(preferences.theme)
     }
   }
 
   return (
-    <SwitchPrimitive.Root
-      aria-label="Dark mode"
-      checked={dark}
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={label}
+      title={label}
       disabled={!preferences}
-      onCheckedChange={toggle}
-      className="inline-flex h-7 w-12 shrink-0 items-center rounded-full px-0.5 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input"
+      onClick={toggle}
     >
-      <SwitchPrimitive.Thumb className="pointer-events-none flex size-6 items-center justify-center rounded-full bg-white shadow-sm transition-transform duration-200 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0">
-        {dark ? (
-          <Moon aria-hidden="true" className="size-3.5 fill-current text-primary" />
-        ) : (
-          <Sun aria-hidden="true" className="size-3.5 text-amber-500" />
-        )}
-      </SwitchPrimitive.Thumb>
-    </SwitchPrimitive.Root>
+      {dark ? <Moon aria-hidden="true" className="size-5" /> : <Sun aria-hidden="true" className="size-5" />}
+    </Button>
   )
 }

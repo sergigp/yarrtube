@@ -94,7 +94,7 @@ describe('CategoryDetail', () => {
     expect(await screen.findByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
     await screen.findByText('Newest')
     const cards = screen.getAllByRole('listitem')
-    expect(cards.map((card) => within(card).getAllByRole('link')[1]?.textContent)).toEqual([
+    expect(cards.map((card) => within(card).getAllByRole('link')[0]?.textContent)).toEqual([
       'Newest',
       'Older',
     ])

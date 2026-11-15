@@ -17,10 +17,12 @@ describe('ThemeToggle', () => {
     renderWithProviders(<ThemeToggle />)
     const user = userEvent.setup()
 
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeEnabled())
-    await user.click(screen.getByRole('switch', { name: 'Dark mode' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Switch to dark theme' })).toBeEnabled(),
+    )
+    await user.click(screen.getByRole('button', { name: 'Switch to dark theme' }))
 
-    expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Switch to light theme' })).toBeInTheDocument()
     expect(document.documentElement).toHaveClass('dark')
     expect(window.localStorage.getItem('yarrtube.theme')).toBe('dark')
     await waitFor(() =>
@@ -43,10 +45,12 @@ describe('ThemeToggle', () => {
     renderWithProviders(<ThemeToggle />)
     const user = userEvent.setup()
 
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeEnabled())
-    await user.click(screen.getByRole('switch', { name: 'Dark mode' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Switch to light theme' })).toBeEnabled(),
+    )
+    await user.click(screen.getByRole('button', { name: 'Switch to light theme' }))
 
-    expect(screen.getByRole('switch', { name: 'Dark mode' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Switch to dark theme' })).toBeInTheDocument()
     expect(document.documentElement).not.toHaveClass('dark')
   })
 
@@ -58,11 +62,13 @@ describe('ThemeToggle', () => {
     renderWithProviders(<ThemeToggle />)
     const user = userEvent.setup()
 
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeEnabled())
-    await user.click(screen.getByRole('switch', { name: 'Dark mode' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Switch to dark theme' })).toBeEnabled(),
+    )
+    await user.click(screen.getByRole('button', { name: 'Switch to dark theme' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('switch', { name: 'Dark mode' })).not.toBeChecked(),
+      expect(screen.getByRole('button', { name: 'Switch to dark theme' })).toBeInTheDocument(),
     )
     expect(document.documentElement).not.toHaveClass('dark')
   })
@@ -72,6 +78,6 @@ describe('ThemeToggle', () => {
 
     renderWithProviders(<ThemeToggle />)
 
-    expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Switch to dark theme' })).toBeDisabled()
   })
 })

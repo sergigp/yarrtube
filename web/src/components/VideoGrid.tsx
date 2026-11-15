@@ -1,4 +1,4 @@
-import { ListVideo } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { videoMediaUrl, avatarMediaUrl } from '@/api/client'
 import type { HomeVideo } from '@/api/types'
@@ -14,6 +14,8 @@ import { Thumbnail } from './Thumbnail'
 import { CategoryChips, type CategoryChip } from './CategoryChips'
 import { ThumbnailOverlay } from './ThumbnailOverlay'
 import { VideoActionsMenu } from './VideoActionsMenu'
+import { CardMarkWatchedButton } from './CardMarkWatchedButton'
+import { PlaylistIcon } from './PlaylistIcon'
 import { channelPath, playlistPath } from '@/lib/sourcePath'
 
 interface VideoGridProps {
@@ -36,24 +38,28 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
     <ul className={videoGridListClassName(layout)}>
       {videos.map((video, index) => {
         const videoPath = videoPathOf?.(video) ?? videoPathInSource(video)
-        const channelLink = video.source.kind === 'channel' ? channelPath(video.source.id) : null
-        const sourcePath = channelLink ?? playlistPath(video.source.id)
+        const sourcePath =
+          video.source.kind === 'channel'
+            ? channelPath(video.source.id)
+            : playlistPath(video.source.id)
         const age = formatAge(video.published_at)
         return (
           <li
             key={`${video.source.kind}:${video.source.id}:${video.id}`}
-            // Frameless: the hover surface reaches past the content through the
-            // negative margin, so it never shifts the card. The title's link is
-            // stretched over the whole card, so a click anywhere opens the
-            // video; the source links and the menu sit above it (`z-10`).
+            // Frameless. The title's link is stretched over the whole card, so a
+            // click anywhere opens the video; the source link, the quick action
+            // and the menu sit above it (`z-10`).
             className={cn(
-              'group/card animate-enter relative -m-2 rounded-xl p-2 transition-colors hover:bg-muted/60',
+              'group/card animate-enter relative min-w-0',
               videoGridItemClassName(layout, index),
             )}
             style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
           >
-            <div className="flex flex-col gap-2">
-              <div className="relative overflow-hidden rounded-lg" data-slot="card-thumbnail">
+            <div className="flex flex-col gap-2.5">
+              <div
+                className="relative overflow-hidden rounded-xl bg-muted"
+                data-slot="card-thumbnail"
+              >
                 <Thumbnail
                   src={
                     video.thumbnail_filename
@@ -61,60 +67,52 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                       : null
                   }
                   className={cn(
-                    'aspect-video w-full rounded-lg object-cover transition-[opacity,transform] duration-300 group-hover/card:scale-[1.03]',
-                    video.watched && 'opacity-60 group-hover/card:opacity-100',
+                    'block aspect-video w-full object-cover transition-[opacity,transform] duration-300 group-hover/card:scale-[1.03]',
+                    video.watched && 'opacity-45 group-hover/card:opacity-80',
                   )}
                 />
+                <PlayHint />
                 <ThumbnailOverlay
                   watched={video.watched}
                   positionSeconds={video.position_seconds}
                   durationSeconds={video.duration_seconds}
                   size="card"
                 />
+                {!video.watched && <CardMarkWatchedButton videoId={video.id} title={video.title} />}
               </div>
-              <div className="flex items-start gap-2">
-                {channelLink ? (
-                  <Link
-                    to={channelLink}
-                    className="relative z-10 mt-0.5 shrink-0"
-                    aria-label={video.source.name}
-                  >
-                    <Thumbnail
-                      src={
-                        video.source.avatar_filename
-                          ? avatarMediaUrl(video.source.avatar_filename)
-                          : null
-                      }
-                      className="block size-6 rounded-full object-cover"
-                    />
-                  </Link>
-                ) : (
-                  // Stands in for a channel's avatar, so titles line up across cards.
-                  <Link
-                    to={sourcePath}
-                    className="relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
-                    aria-label={video.source.name}
-                  >
-                    <ListVideo role="img" aria-label="Playlist" className="size-3.5" />
-                  </Link>
-                )}
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="flex items-start gap-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <Link
                     to={videoPath}
                     className={cn(
-                      "line-clamp-2 text-sm leading-snug font-medium no-underline after:absolute after:inset-0 after:rounded-xl after:content-['']",
+                      "line-clamp-2 text-sm leading-snug font-semibold no-underline after:absolute after:inset-0 after:content-[''] sm:text-[0.9375rem]",
                       video.watched ? 'text-muted-foreground' : 'text-foreground',
                     )}
                   >
                     {video.title}
                   </Link>
                   {/* The source's name truncates first, so the age always shows whole. */}
-                  <p data-slot="card-meta" className="flex min-w-0 text-xs text-muted-foreground">
+                  <p
+                    data-slot="card-meta"
+                    className="flex min-w-0 items-center text-[0.8125rem] text-muted-foreground"
+                  >
                     <Link
                       to={sourcePath}
-                      className="relative z-10 truncate no-underline transition-colors hover:text-foreground"
+                      className="relative z-10 flex min-w-0 items-center gap-1.5 no-underline transition-colors hover:text-foreground"
                     >
-                      {video.source.name}
+                      {video.source.kind === 'channel' ? (
+                        <Thumbnail
+                          src={
+                            video.source.avatar_filename
+                              ? avatarMediaUrl(video.source.avatar_filename)
+                              : null
+                          }
+                          className="block size-4.5 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <PlaylistIcon className="size-4.5 rounded-[5px]" />
+                      )}
+                      <span className="truncate">{video.source.name}</span>
                     </Link>
                     {age && <span className="shrink-0 whitespace-pre">{` · ${age}`}</span>}
                   </p>
@@ -130,7 +128,11 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                       ? { id: video.source.id, name: video.source.name }
                       : undefined
                   }
-                  className="relative z-10 -mt-0.5 -mr-1.5"
+                  className={cn(
+                    'relative z-10 -mt-1 -mr-1.5',
+                    // Only on hover or focus where the device can hover; always on touch.
+                    '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:group-has-[:focus-visible]/card:opacity-100 [@media(hover:hover)]:data-[state=open]:opacity-100',
+                  )}
                 />
               </div>
             </div>
@@ -138,5 +140,19 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
         )
       })}
     </ul>
+  )
+}
+
+/** A play icon over the thumbnail while the card is hovered, under a dimming scrim. */
+function PlayHint() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover/card:opacity-100"
+    >
+      <span className="flex size-12 items-center justify-center rounded-full bg-black/70 text-white">
+        <Play className="ml-0.5 size-5 fill-current" />
+      </span>
+    </span>
   )
 }

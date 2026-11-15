@@ -1,10 +1,10 @@
 import { cn } from '@/lib/utils'
 import type { ThumbnailSize } from './ThumbnailOverlay'
 
-/** Thicker on cards; rounded to match each thumbnail's corners. */
+/** 3px on cards, whose thumbnail clips the corners; rounded to match a row's. */
 const SIZE_CLASSES: Record<ThumbnailSize, string> = {
-  card: 'h-1.5 rounded-b-lg',
-  row: 'h-1 rounded-b-md',
+  card: 'h-[3px] bg-white/25',
+  row: 'h-1 rounded-b-md bg-black/50',
 }
 
 interface WatchProgressBarProps {
@@ -20,7 +20,7 @@ interface WatchProgressBarProps {
 export function WatchProgressBar({ percent, size }: WatchProgressBarProps) {
   return (
     <div
-      className={cn('absolute inset-x-0 bottom-0 overflow-hidden bg-black/50', SIZE_CLASSES[size])}
+      className={cn('absolute inset-x-0 bottom-0 overflow-hidden', SIZE_CLASSES[size])}
       role="progressbar"
       aria-label="Watch progress"
       aria-valuemin={0}

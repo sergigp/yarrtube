@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { VideoGrid } from './VideoGrid'
 import { aHomeVideo, mockApi, renderWithProviders } from '@/test/helpers'
-import { inkShade, softTint } from '@/lib/categoryColors'
 
 /** The card (list item) holding the video titled `title`. */
 function card(title: string): HTMLElement {
@@ -49,14 +49,59 @@ describe('VideoGrid', () => {
     ).toEqual([])
   })
 
-  it('shows a hover surface behind the card and zooms the thumbnail within its rounded bounds', () => {
+  it('zooms the thumbnail within its rounded bounds and shows a play hint on hover', () => {
     mockApi({})
     renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Fresh Video' })]} />)
 
-    expect(card('Fresh Video')).toHaveClass('hover:bg-muted/60')
     const thumbnail = card('Fresh Video').querySelector('[data-slot="card-thumbnail"]')
-    expect(thumbnail).toHaveClass('overflow-hidden', 'rounded-lg')
+    expect(thumbnail).toHaveClass('overflow-hidden', 'rounded-xl')
     expect(thumbnail?.firstElementChild).toHaveClass('group-hover/card:scale-[1.03]')
+    expect(thumbnail?.querySelector('[aria-hidden="true"].group-hover\\/card\\:opacity-100')).not.toBeNull()
+  })
+
+  it('dims a watched card: a faded thumbnail, a "Watched" badge and a muted title', () => {
+    mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Seen It', watched: true })]} />)
+
+    const thumbnail = card('Seen It').querySelector('[data-slot="card-thumbnail"]')
+    expect(thumbnail?.firstElementChild).toHaveClass('opacity-45')
+    expect(within(card('Seen It')).getByRole('img', { name: 'Watched' })).toHaveTextContent(
+      'Watched',
+    )
+    expect(screen.getByRole('link', { name: 'Seen It' })).toHaveClass('text-muted-foreground')
+  })
+
+  it('marks a video watched from its quick action, shown only on hover where the device can hover', async () => {
+    const fetchMock = mockApi({ 'POST /api/videos/vid1/watched': {} })
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ id: 'vid1', title: 'Fresh Video' })]} />)
+
+    const quickAction = screen.getByRole('button', { name: 'Mark watched: Fresh Video' })
+    expect(quickAction).toHaveClass('hidden', '[@media(hover:hover)]:flex', 'opacity-0')
+    await userEvent.setup().click(quickAction)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/videos/vid1/watched',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('offers no quick action on a watched video', () => {
+    mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Seen It', watched: true })]} />)
+
+    expect(screen.queryByRole('button', { name: /^Mark watched/ })).not.toBeInTheDocument()
+  })
+
+  it('shows the menu only on hover or focus where the device can hover, always on touch', () => {
+    mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Fresh Video' })]} />)
+
+    expect(screen.getByRole('button', { name: 'Actions for Fresh Video' })).toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+      '[@media(hover:hover)]:group-hover/card:opacity-100',
+      '[@media(hover:hover)]:group-has-[:focus-visible]/card:opacity-100',
+      '[@media(hover:hover)]:data-[state=open]:opacity-100',
+    )
   })
 
   it("shows a channel card's avatar and its meta line: the channel's name and the video's age", () => {
@@ -76,7 +121,10 @@ describe('VideoGrid', () => {
     )
 
     expect(metaLine('BettaTech · 2d ago')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'BettaTech' })[0].querySelector('img')).toBeTruthy()
+    // The avatar sits in the meta line, inside the one link to the channel.
+    const channelLink = screen.getByRole('link', { name: 'BettaTech' })
+    expect(channelLink.closest('[data-slot="card-meta"]')).not.toBeNull()
+    expect(channelLink.querySelector('img')).toBeTruthy()
   })
 
   it("shows a playlist card's icon and its meta line: the playlist's name and the video's age", () => {
@@ -102,18 +150,11 @@ describe('VideoGrid', () => {
     )
 
     expect(metaLine('Chess Middlegames · 5w ago')).toBeInTheDocument()
-    expect(
-      within(card('The Minority Attack')).getByRole('img', {
-        name: 'Playlist',
-      }),
-    ).toBeInTheDocument()
-    // The icon and the name both lead to the playlist, as a channel's avatar and name do.
-    const playlistLinks = screen.getAllByRole('link', { name: 'Chess Middlegames' })
-    expect(playlistLinks.map((link) => link.getAttribute('href'))).toEqual([
-      '/playlists/PLmiddle',
-      '/playlists/PLmiddle',
-    ])
-    expect(within(playlistLinks[0]).getByRole('img', { name: 'Playlist' })).toBeInTheDocument()
+    // One link to the playlist, a list icon in place of an avatar.
+    const playlistLink = screen.getByRole('link', { name: 'Chess Middlegames' })
+    expect(playlistLink).toHaveAttribute('href', '/playlists/PLmiddle')
+    expect(playlistLink.querySelector('img')).toBeNull()
+    expect(playlistLink.querySelector('svg')).not.toBeNull()
   })
 
   it("shows only the source's name on the meta line of a video with no publish date", () => {
@@ -133,7 +174,7 @@ describe('VideoGrid', () => {
     expect(metaLine('BettaTech')).toBeInTheDocument()
   })
 
-  it("shows a video's category as a chip in its hue: ink text over a soft tint", () => {
+  it("shows a video's category as a dot in its colour and its name", () => {
     mockApi({})
     renderWithProviders(
       <VideoGrid
@@ -142,12 +183,12 @@ describe('VideoGrid', () => {
       />,
     )
 
-    const chips = within(card('Opening Traps')).getAllByRole('listitem')
-    expect(chips.map((chip) => chip.textContent)).toEqual(['Chess'])
-    expect(chips[0]).toHaveStyle({ background: softTint('#0ea5e9'), color: inkShade('#0ea5e9') })
+    const tags = within(card('Opening Traps')).getAllByRole('listitem')
+    expect(tags.map((tag) => tag.textContent)).toEqual(['Chess'])
+    expect(tags[0].querySelector('[aria-hidden="true"]')).toHaveStyle({ background: '#0ea5e9' })
   })
 
-  it('shows at most 2 chips, then a "+N" chip for the rest', () => {
+  it('shows only the first category, then "+N" for the rest, on one line', () => {
     mockApi({})
     renderWithProviders(
       <VideoGrid
@@ -159,8 +200,9 @@ describe('VideoGrid', () => {
     expect(
       within(card('Engines'))
         .getAllByRole('listitem')
-        .map((chip) => chip.textContent),
-    ).toEqual(['AI & Code', 'Chess', '+1'])
+        .map((tag) => tag.textContent),
+    ).toEqual(['AI & Code', '+2'])
+    expect(screen.getByText('+2')).toHaveAttribute('title', 'Chess, Science')
   })
 
   it('shows no chip row for a video in no category', () => {
@@ -244,7 +286,7 @@ describe('VideoGrid', () => {
       />,
     )
 
-    expect(screen.getByText('BettaTech', { selector: 'p a' })).toHaveClass('truncate')
+    expect(screen.getByText('BettaTech', { selector: 'p a span' })).toHaveClass('truncate')
     expect(screen.getByText('· 2d ago', { exact: false })).toHaveClass('shrink-0')
   })
 })
