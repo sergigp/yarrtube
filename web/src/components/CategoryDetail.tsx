@@ -184,7 +184,13 @@ export function CategoryDetail() {
       {empty ? (
         <EmptyCategory category={category} onAddSources={() => setEditingSettings(true)} />
       ) : playing ? (
-        <CategoryPlayer key={category.id} videos={queue} error={error} selection={selection} />
+        <CategoryPlayer
+          key={category.id}
+          videos={queue}
+          error={error}
+          selection={selection}
+          sort={sort}
+        />
       ) : error ? (
         <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
       ) : !videos ? (

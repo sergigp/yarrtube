@@ -2,12 +2,15 @@ import { avatarMediaUrl } from '@/api/client'
 import type { CategoryVideo } from '@/api/types'
 import type { VideoSelection } from '@/hooks/useVideoSelection'
 import { channelPath, playlistPath } from '@/lib/sourcePath'
+import type { VideoSort } from '@/lib/sourceVideos'
 import { WatchView } from './WatchView'
 
 interface CategoryPlayerProps {
   videos: CategoryVideo[] | undefined
   error: Error | null
   selection: VideoSelection<CategoryVideo>
+  /** The order `videos` is in, named in the queue header. */
+  sort: VideoSort
 }
 
 /**
