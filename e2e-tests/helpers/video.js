@@ -27,6 +27,16 @@ export async function enterWatching(page, { timeoutMs = 30_000 } = {}) {
   }
 }
 
+/**
+ * Leaves the watching layout of the playlist named `name` for its browse page,
+ * through the name in its header, so no video plays: a video still playing
+ * when its playlist is deleted reports its progress to a video that is gone.
+ */
+export async function leaveWatching(page, name) {
+  await page.locator('main').getByRole('link', { name, exact: true }).click()
+  await expect(page.locator('video')).toHaveCount(0)
+}
+
 export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', timeoutMs = 30_000 } = {}) {
   const main = page.locator('main')
   await enterWatching(page, { timeoutMs })

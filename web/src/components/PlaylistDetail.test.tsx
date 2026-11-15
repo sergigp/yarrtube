@@ -111,6 +111,29 @@ describe('PlaylistDetail', () => {
       expect(screen.queryByRole('link', { name: /Play next/ })).not.toBeInTheDocument()
     })
 
+    it('counts a failed episode under All only, offering no Play next for it', async () => {
+      renderPlaylist(
+        {
+          'GET /api/playlists': [aPlaylist({ id: 'PL1', unwatched_count: 0 })],
+          'GET /api/playlists/PL1/videos': [
+            aVideo({ title: 'Broken', episode: 1, status: 'FAILED', filename: null }),
+            aVideo({ episode: 2, watched: true }),
+            aVideo({ episode: 3, watched: true }),
+          ],
+        },
+        '/playlists/PL1',
+      )
+
+      await screen.findByRole('link', { name: 'Broken' })
+      const chips = within(screen.getByRole('group', { name: 'Show' }))
+        .getAllByRole('button')
+        .map((chip) => chip.textContent)
+
+      expect(screen.getByText('Playlist · 3 videos')).toBeInTheDocument()
+      expect(chips).toEqual(['All3', 'Unwatched0', 'In progress0', 'Watched2'])
+      expect(screen.queryByRole('link', { name: /Play next/ })).not.toBeInTheDocument()
+    })
+
     it('filters by watch state and sorts, remembering both for the playlist', async () => {
       const routes = {
         'GET /api/playlists': [aPlaylist({ id: 'PL1' })],

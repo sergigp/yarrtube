@@ -1,4 +1,4 @@
-import type { HomeVideo, HomeVideoSource, Video } from '@/api/types'
+import type { HomeVideo, HomeVideoSource, Video, VideoStatus } from '@/api/types'
 
 /** What a video list needs to filter, sort and pick by watch state. */
 export interface WatchableVideo {
@@ -6,6 +6,8 @@ export interface WatchableVideo {
   watched: boolean
   position_seconds: number
   published_at: string | null
+  /** Absent for a category's video, which is always downloaded. */
+  status?: VideoStatus
 }
 
 /** The watch-state chips over a channel, playlist or category's videos. */
@@ -29,9 +31,30 @@ export const VIDEO_SORT_LABELS: Record<VideoSort, string> = {
   oldest: 'Oldest first',
 }
 
+/** "Ep 4" on cards and buttons, "Episode 4" in prose; null without an episode number. */
+export function episodeLabel(
+  episode: number | null | undefined,
+  style: 'short' | 'long' = 'short',
+): string | null {
+  if (episode == null) {
+    return null
+  }
+  return `${style === 'short' ? 'Ep' : 'Episode'} ${episode}`
+}
+
+/** Whether the video can play; a video not downloaded yet can't be unwatched either. */
+export function isDownloaded(video: WatchableVideo): boolean {
+  return video.status === undefined || video.status === 'DOWNLOADED'
+}
+
+/** Downloaded and not watched, the same rule as the server's unwatched counts. */
+function isUnwatched(video: WatchableVideo): boolean {
+  return isDownloaded(video) && !video.watched
+}
+
 /** Started but not finished: a subset of unwatched. */
 export function isInProgress(video: WatchableVideo): boolean {
-  return !video.watched && video.position_seconds > 0
+  return isUnwatched(video) && video.position_seconds > 0
 }
 
 export function matchesWatchFilter(video: WatchableVideo, filter: WatchFilter): boolean {
@@ -39,7 +62,7 @@ export function matchesWatchFilter(video: WatchableVideo, filter: WatchFilter): 
     case 'all':
       return true
     case 'unwatched':
-      return !video.watched
+      return isUnwatched(video)
     case 'in_progress':
       return isInProgress(video)
     case 'watched':
@@ -49,12 +72,15 @@ export function matchesWatchFilter(video: WatchableVideo, filter: WatchFilter): 
 
 /** How many of `videos` each chip would show. */
 export function watchFilterCounts(videos: readonly WatchableVideo[]): Record<WatchFilter, number> {
-  return {
-    all: videos.length,
-    unwatched: videos.filter((video) => matchesWatchFilter(video, 'unwatched')).length,
-    in_progress: videos.filter((video) => matchesWatchFilter(video, 'in_progress')).length,
-    watched: videos.filter((video) => matchesWatchFilter(video, 'watched')).length,
-  }
+  return videos.reduce(
+    (counts, video) => ({
+      all: counts.all + 1,
+      unwatched: counts.unwatched + (matchesWatchFilter(video, 'unwatched') ? 1 : 0),
+      in_progress: counts.in_progress + (matchesWatchFilter(video, 'in_progress') ? 1 : 0),
+      watched: counts.watched + (matchesWatchFilter(video, 'watched') ? 1 : 0),
+    }),
+    { all: 0, unwatched: 0, in_progress: 0, watched: 0 },
+  )
 }
 
 /**
@@ -79,15 +105,15 @@ export function sortVideos<T extends WatchableVideo>(videos: readonly T[], sort:
 }
 
 /**
- * What "Play next" plays: the first video of `videos`, in the order given,
- * not watched yet, whether started or not. Watched 1, 3 and 5 of a playlist
- * plays 2. `null` when every video is watched.
+ * What "Play next" plays: the first downloaded video of `videos`, in the
+ * order given, not watched yet, whether started or not. Watched 1, 3 and 5
+ * of a playlist plays 2. `null` when no downloaded video is unwatched.
  */
 export function nextToPlay<T extends WatchableVideo>(videos: readonly T[]): T | null {
-  return videos.find((video) => !video.watched) ?? null
+  return videos.find(isUnwatched) ?? null
 }
 
-/** The newest video not watched yet, by publish date. */
+/** The newest downloaded video not watched yet, by publish date. */
 export function newestUnwatched<T extends WatchableVideo>(videos: readonly T[]): T | null {
   return nextToPlay(sortVideos(videos, 'newest'))
 }

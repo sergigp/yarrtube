@@ -24,8 +24,10 @@ import {
   videoSources,
   watchFilterCounts,
   type VideoSort,
+  type VideoSourceOption,
 } from '@/lib/sourceVideos'
 import { categoryPath } from '@/lib/sourcePath'
+import { videoPathIn } from '@/lib/videoPath'
 import { Button } from '@/components/ui/button'
 import { CategoryPlayer } from './CategoryPlayer'
 import { DetailHeader } from './DetailHeader'
@@ -39,10 +41,7 @@ import { VideoGridSkeleton } from './VideoSkeletons'
 
 const CATEGORY_SORTS: readonly VideoSort[] = ['newest', 'oldest']
 
-/** Where a category's video plays: its watching layout. */
-function videoInCategory(categoryId: string, videoId: string): string {
-  return `${categoryPath(categoryId)}?video=${encodeURIComponent(videoId)}`
-}
+
 
 /** Router state that opens the category settings dialog on arrival at a category's view. */
 export interface CategorySettingsState {
@@ -142,6 +141,7 @@ export function CategoryDetail() {
   const empty = sources === 0 && videos?.length === 0
   const hasVideos = sources > 0 || (videos?.length ?? 0) > 0
   const next = videos ? newestUnwatched(videos) : null
+  const sourceOptions = videos ? videoSources(videos) : []
 
   return (
     <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
@@ -155,7 +155,7 @@ export function CategoryDetail() {
           videos
             ? [
                 sourceSummary({ videoCount: videos.length, unwatchedCount: category.unwatched_count }),
-                sourcesSummary(videoSources(videos)),
+                sourcesSummary(sourceOptions),
               ]
                 .filter(Boolean)
                 .join(' · ')
@@ -163,7 +163,7 @@ export function CategoryDetail() {
         }
         primaryAction={
           !playing &&
-          next && <PlayLink to={videoInCategory(category.id, next.id)} label="Play newest unwatched" />
+          next && <PlayLink to={videoPathIn(categoryPath(category.id), next.id)} label="Play newest unwatched" />
         }
         unwatchedCount={category.unwatched_count}
         extraActions={[
@@ -193,6 +193,7 @@ export function CategoryDetail() {
         <CategoryBrowser
           category={category}
           videos={videos}
+          sources={sourceOptions}
           sort={sort}
           onSortChange={setSort}
         />
@@ -206,15 +207,16 @@ export function CategoryDetail() {
 function CategoryBrowser({
   category,
   videos,
+  sources,
   sort,
   onSortChange,
 }: {
   category: Category
   videos: CategoryVideo[]
+  sources: VideoSourceOption[]
   sort: VideoSort
   onSortChange: (sort: VideoSort) => void
 }) {
-  const sources = videoSources(videos)
   const [filter, setFilter] = useRememberedChoice(
     `yarrtube.category.${category.id}.filter`,
     WATCH_FILTERS,
@@ -277,7 +279,7 @@ function CategoryBrowser({
         <VideoGrid
           videos={shown}
           layout="feed"
-          videoPathOf={(video) => videoInCategory(category.id, video.id)}
+          videoPathOf={(video) => videoPathIn(categoryPath(category.id), video.id)}
         />
       )}
     </>

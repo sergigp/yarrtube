@@ -6,7 +6,13 @@ import {
   destinationNotice,
   slugOf,
 } from '../helpers/addDialog.js'
-import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow, chooseHeaderAction } from '../helpers/video.js'
+import {
+  waitForVideoStatus,
+  assertVideoPlays,
+  assertSubtitlesShow,
+  chooseHeaderAction,
+  leaveWatching,
+} from '../helpers/video.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
 import { addPlaylist } from '../helpers/seed.js'
@@ -87,8 +93,7 @@ test('playlist golden path: add, download, on disk, scanned by Plex, badge, dele
     // And Plex was asked to scan it in.
     await expectPlexScanned(page.request, PLAYLIST_PATH)
     // Back to its browse page, so nothing plays while it is deleted below.
-    await page.locator('main').getByRole('link', { name: PLAYLIST_NAME, exact: true }).click()
-    await expect(page.locator('video')).toHaveCount(0)
+    await leaveWatching(page, PLAYLIST_NAME)
   })
 
   await test.step('unwatched badge appears via periodic refresh without reload', async () => {

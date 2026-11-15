@@ -3,6 +3,7 @@ import type { Video } from '@/api/types'
 import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import type { VideoSelection } from '@/hooks/useVideoSelection'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
+import { episodeLabel } from '@/lib/sourceVideos'
 import { VideoDetail, type VideoDetailSource } from './VideoDetail'
 import { VideoListPane } from './VideoListPane'
 import { VideoPlayer } from './VideoPlayer'
@@ -63,7 +64,7 @@ export function WatchView<T extends Video>({
             basePath={basePathOf(video)}
             video={video}
             source={detailSourceOf?.(video)}
-            episodeLabel={episode !== null ? `Episode ${episode}` : null}
+            episodeLabel={episodeLabel(episode, 'long')}
             playbackRate={playbackSpeed.rate}
             onPlaybackRateChange={playbackSpeed.changeRate}
             videoElement={videoElement}

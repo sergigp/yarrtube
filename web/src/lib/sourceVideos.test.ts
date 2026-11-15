@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  episodeLabel,
   isInProgress,
   matchesWatchFilter,
   newestUnwatched,
@@ -40,6 +41,16 @@ describe('nextToPlay', () => {
     expect(nextToPlay(videos)?.id).toBe('2')
   })
 
+  it('skips a video not downloaded yet', () => {
+    const videos = [
+      video('failed', { status: 'FAILED' }),
+      video('2', { watched: true }),
+      video('3', { status: 'DOWNLOADED' }),
+    ]
+
+    expect(nextToPlay(videos)?.id).toBe('3')
+  })
+
   it('has nothing to play once every video is watched', () => {
     expect(nextToPlay([video('1', { watched: true })])).toBeNull()
   })
@@ -54,6 +65,15 @@ describe('newestUnwatched', () => {
     ]
 
     expect(newestUnwatched(videos)?.id).toBe('newer')
+  })
+
+  it('skips the newest video while it is still downloading', () => {
+    const videos = [
+      video('downloading', { published_at: '2026-03-01T00:00:00Z', status: 'IN_PROGRESS' }),
+      video('ready', { published_at: '2026-02-01T00:00:00Z', status: 'DOWNLOADED' }),
+    ]
+
+    expect(newestUnwatched(videos)?.id).toBe('ready')
   })
 })
 
@@ -83,6 +103,20 @@ describe('watch filters', () => {
       ['started'],
       ['watched'],
     ])
+  })
+
+  it('counts a video not downloaded yet under all only', () => {
+    const withFailed = [
+      video('ready', { status: 'DOWNLOADED' }),
+      video('failed', { status: 'FAILED', position_seconds: 5 }),
+    ]
+
+    expect(watchFilterCounts(withFailed)).toEqual({
+      all: 2,
+      unwatched: 1,
+      in_progress: 0,
+      watched: 0,
+    })
   })
 
   it('treats a watched video with a saved position as not in progress', () => {
@@ -153,5 +187,15 @@ describe('sourceSummary', () => {
 
   it('drops what is unknown or zero and singularizes one video', () => {
     expect(sourceSummary({ videoCount: 1, unwatchedCount: 0, syncedAgo: null })).toBe('1 video')
+  })
+})
+
+describe('episodeLabel', () => {
+  it('names the episode short or long, and nothing without one', () => {
+    expect([episodeLabel(4), episodeLabel(4, 'long'), episodeLabel(null)]).toEqual([
+      'Ep 4',
+      'Episode 4',
+      null,
+    ])
   })
 })

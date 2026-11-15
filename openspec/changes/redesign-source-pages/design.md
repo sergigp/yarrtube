@@ -208,13 +208,15 @@ interface PlaylistListItem { last_synced_at: string | null }
 interface Video { episode: number | null }
 
 // web/src/lib/sourceVideos.ts
+interface WatchableVideo { id; watched; position_seconds; published_at; status?: VideoStatus } // no status (a category video) = downloaded
+function isDownloaded(video: WatchableVideo): boolean
 type WatchFilter = 'all' | 'unwatched' | 'in_progress' | 'watched'
 type VideoSort = 'playlist' | 'newest' | 'oldest'
 function isInProgress(video: WatchableVideo): boolean
 function matchesWatchFilter(video: WatchableVideo, filter: WatchFilter): boolean
 function watchFilterCounts(videos: readonly WatchableVideo[]): Record<WatchFilter, number>
 function sortVideos<T extends WatchableVideo>(videos: readonly T[], sort: VideoSort): T[]
-function nextToPlay<T extends WatchableVideo>(videos: readonly T[]): T | null
+function nextToPlay<T extends WatchableVideo>(videos: readonly T[]): T | null // first downloaded, unwatched
 function newestUnwatched<T extends WatchableVideo>(videos: readonly T[]): T | null
 function sourceKey(source: Pick<HomeVideoSource, 'kind' | 'id'>): string
 function videoSources(videos: readonly { source: HomeVideoSource }[]): VideoSourceOption[]
@@ -286,10 +288,11 @@ Infrastructure (SQLite repositories, channel and playlist each):
 
 Web (Vitest, mocked `fetch` only):
 
-12. `lib/sourceVideos.test.ts` — next to play (gaps, started, all watched), newest unwatched, counts (in progress ⊂ unwatched), sorting (undated last), sources and summaries.
+12. `lib/sourceVideos.test.ts` — next to play (gaps, started, all watched, skips a video not downloaded), newest unwatched (skips one still downloading), counts and filters (in progress ⊂ unwatched, a video not downloaded only under all), sorting (undated last), sources and summaries.
 13. `hooks/useRememberedChoice.test.ts` — default, restore, stale value, late-valid value, key change, storage failure.
 14. `PlaylistDetail.test.tsx` — browse header/meta/chips/"Ep n" cards; Play next target; no Play next when all watched; filter + sort remembered; category chips; card → watching, name → back; queue position + episode; Hide watched remembered; header action layout mobile/desktop.
-15. `ChannelDetail.test.tsx` — "Channel · …" meta; Play next newest unwatched, hidden once playing.
+15. `ChannelDetail.test.tsx` — "Channel · …" meta; Play next newest unwatched, hidden once playing; skips a newest video still downloading.
+15b. `PlaylistDetail.test.tsx` — a failed episode: no Play next, "Unwatched" chip matching the header.
 16. `CategoryDetail.test.tsx` — colour dot, meta "from 2 playlists", Play newest unwatched, chips + From + sort remembered, Edit category.
 17. `DetailHeader.test.tsx` — badge/name/meta, placeholder, name link, icon vs ⋮ layout, always-confirm mark all watched.
 18. `VideoDetail.test.tsx` — source link + episode; desktop chapter list seeks.

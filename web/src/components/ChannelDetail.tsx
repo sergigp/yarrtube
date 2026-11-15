@@ -21,6 +21,7 @@ import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { formatRelativeTime } from '@/lib/formatDateTime'
 import { newestUnwatched, sourceSummary } from '@/lib/sourceVideos'
 import { channelPath, youtubeChannelUrl } from '@/lib/sourcePath'
+import { videoPathIn } from '@/lib/videoPath'
 import { DetailHeader } from './DetailHeader'
 import { EditChannelDialog } from './EditChannelDialog'
 import { PlayLink } from './PlayLink'
@@ -87,7 +88,7 @@ export function ChannelDetail() {
           next.id !== selection.selectedVideo?.id && (
             <PlayLink
               compact
-              to={`${channelPath(id)}?video=${encodeURIComponent(next.id)}`}
+              to={videoPathIn(channelPath(id), next.id)}
               label="Play next"
               title={next.title}
             />

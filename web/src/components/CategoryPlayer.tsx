@@ -1,4 +1,3 @@
-import { useChannels } from '@/api/queries'
 import { avatarMediaUrl } from '@/api/client'
 import type { CategoryVideo } from '@/api/types'
 import type { VideoSelection } from '@/hooks/useVideoSelection'
@@ -17,7 +16,6 @@ interface CategoryPlayerProps {
  * queue beside them.
  */
 export function CategoryPlayer({ videos, error, selection }: CategoryPlayerProps) {
-  const { data: channels } = useChannels()
   return (
     <WatchView
       noun="category"
@@ -26,20 +24,16 @@ export function CategoryPlayer({ videos, error, selection }: CategoryPlayerProps
       selection={selection}
       basePathOf={(item) => item.source.path}
       sourceNameOf={(item) => item.source.name}
-      detailSourceOf={({ source }) => {
-        const avatar =
-          source.avatar_filename ??
-          channels?.find((channel) => channel.id === source.id)?.avatar_filename ??
-          null
-        return source.kind === 'channel'
+      detailSourceOf={({ source }) =>
+        source.kind === 'channel'
           ? {
               kind: 'channel',
               name: source.name,
               href: channelPath(source.id),
-              avatarSrc: avatar ? avatarMediaUrl(avatar) : null,
+              avatarSrc: source.avatar_filename ? avatarMediaUrl(source.avatar_filename) : null,
             }
           : { kind: 'playlist', name: source.name, href: playlistPath(source.id) }
-      }}
+      }
       orderLabel="newest first"
     />
   )

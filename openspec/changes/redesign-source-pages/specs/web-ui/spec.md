@@ -16,7 +16,7 @@ Opening a playlist's view without a selected video SHALL show its browse page: t
 - **THEN** the view says no videos are recorded for the playlist yet
 
 ### Requirement: Play Next
-The page header SHALL offer, as its primary action, a link that plays one video in the watching layout: on a playlist's browse page "Play next · Ep <n>" followed, from the `sm` breakpoint up, by the video's title, playing the first video in playlist order that is not watched, started or not; on a channel's view "Play next" with the title, playing its newest video by publish date that is not watched, shown only while that video is not the one already playing; on a category's browse page "Play newest unwatched", playing its newest unwatched video by publish date. A started video SHALL resume from its saved position. When every video is watched the action SHALL NOT be shown. Below the desktop breakpoint it SHALL span the header's full width.
+The page header SHALL offer, as its primary action, a link that plays one video in the watching layout: on a playlist's browse page "Play next · Ep <n>" followed, from the `sm` breakpoint up, by the video's title, playing the first downloaded video in playlist order that is not watched, started or not; on a channel's view "Play next" with the title, playing its newest downloaded video by publish date that is not watched, shown only while that video is not the one already playing; on a category's browse page "Play newest unwatched", playing its newest downloaded unwatched video by publish date. A video not downloaded yet (pending, downloading, retrying or failed) SHALL never be its target. A started video SHALL resume from its saved position. When no downloaded video is unwatched the action SHALL NOT be shown. Below the desktop breakpoint it SHALL span the header's full width.
 
 #### Scenario: Gaps in a playlist
 - **WHEN** a playlist's episodes 1, 3 and 5 are watched and episode 2 was started at 4:10
@@ -30,12 +30,24 @@ The page header SHALL offer, as its primary action, a link that plays one video 
 - **WHEN** every video of a playlist is watched
 - **THEN** its header offers no "Play next"
 
+#### Scenario: Failed episode
+- **WHEN** a playlist's episode 1 failed to download and its episodes 2 and 3 are watched
+- **THEN** its header offers no "Play next"
+
+#### Scenario: Channel video still downloading
+- **WHEN** a channel's newest video is still downloading and its second newest is downloaded and not watched
+- **THEN** "Play next" opens the second newest video"
+
 ### Requirement: Video List Toolbar
-A playlist's and a category's browse page SHALL show one toolbar line above the grid: on the left the chips "All", "Unwatched", "In progress" and "Watched", each with its count of videos, exactly one pressed, where "In progress" counts unwatched videos with a saved position (a subset of "Unwatched"); on the right a sort control showing the current order. A playlist SHALL offer "Playlist order" (the default), "Newest first" and "Oldest first"; a category "Newest first" (the default) and "Oldest first". Sorting by date SHALL put videos without a publish date last. Below the `sm` breakpoint the chips SHALL scroll sideways in one row. The pressed chip and the order SHALL be remembered per playlist and per category in this browser, restored when the page is opened again; when the browser's storage can't be read or written, the defaults SHALL apply and changes SHALL last until the page is reloaded.
+A playlist's and a category's browse page SHALL show one toolbar line above the grid: on the left the chips "All", "Unwatched", "In progress" and "Watched", each with its count of videos, exactly one pressed: "All" counts every listed video, "Unwatched" the downloaded videos not watched, "In progress" those of them with a saved position (a subset of "Unwatched"), and "Watched" the watched videos; a video not downloaded yet shows only under "All", so the "Unwatched" count agrees with the header's unwatched count; on the right a sort control showing the current order. A playlist SHALL offer "Playlist order" (the default), "Newest first" and "Oldest first"; a category "Newest first" (the default) and "Oldest first". Sorting by date SHALL put videos without a publish date last. Below the `sm` breakpoint the chips SHALL scroll sideways in one row. The pressed chip and the order SHALL be remembered per playlist and per category in this browser, restored when the page is opened again; when the browser's storage can't be read or written, the defaults SHALL apply and changes SHALL last until the page is reloaded.
 
 #### Scenario: Chip counts
 - **WHEN** a playlist has 32 videos, 3 watched and 2 started
 - **THEN** the chips read "All 32", "Unwatched 29", "In progress 2" and "Watched 3"
+
+#### Scenario: Video not downloaded
+- **WHEN** a playlist has 3 videos, 2 of them downloaded and not watched and 1 that failed to download
+- **THEN** the header reads "Playlist · 3 videos · 2 unwatched", the chips read "All 3" and "Unwatched 2", and the failed video shows under "All" only
 
 #### Scenario: Filter and sort remembered
 - **WHEN** a user presses "Unwatched" and picks "Newest first" on a playlist, leaves and opens it again

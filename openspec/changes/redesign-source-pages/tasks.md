@@ -20,6 +20,7 @@
 - [x] 2.12 Channel page: meta and Play next newest unwatched, hidden once playing
 - [x] 2.13 Category page: colour dot, "from N …" meta, Play newest unwatched, From source filter, sort remembered, Edit category
 - [x] 2.14 Header layout (Sync + YouTube icons, rest in ⋮; stacked on phones) and always-confirmed Mark all watched, sidebar included
+- [x] 2.15 Only downloaded videos count as unwatched (audit): Play next never targets a video not downloaded yet; "Unwatched" and "In progress" chips count downloaded videos only, matching the header's count
 
 ## 3. Infrastructure adapters (TDD)
 

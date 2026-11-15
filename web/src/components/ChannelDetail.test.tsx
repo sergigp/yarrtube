@@ -53,6 +53,29 @@ describe('ChannelDetail', () => {
     expect(await screen.findByText('Channel · 2 videos · 1 unwatched')).toBeInTheDocument()
   })
 
+  it('plays next the newest downloaded video, skipping one still downloading', async () => {
+    renderChannel(
+      {
+        'GET /api/channels': [aChannel({ id: 'chan' })],
+        'GET /api/channels/chan/videos': [
+          aVideo({
+            id: 'downloading',
+            published_at: '2026-03-01T00:00:00Z',
+            status: 'IN_PROGRESS',
+            filename: null,
+          }),
+          aVideo({ id: 'ready', published_at: '2026-02-01T00:00:00Z' }),
+        ],
+      },
+      '/channels/chan?video=downloading',
+    )
+
+    expect(await screen.findByRole('link', { name: /^Play next/ })).toHaveAttribute(
+      'href',
+      '/channels/chan?video=ready',
+    )
+  })
+
   it('plays next the newest video not watched yet, unless it is already playing', async () => {
     renderChannel(
       {

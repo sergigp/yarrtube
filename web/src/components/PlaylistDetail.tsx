@@ -27,6 +27,7 @@ import { formatRelativeTime } from '@/lib/formatDateTime'
 import {
   WATCH_FILTERS,
   asHomeVideo,
+  episodeLabel,
   matchesWatchFilter,
   nextToPlay,
   sortVideos,
@@ -35,6 +36,7 @@ import {
   type VideoSort,
 } from '@/lib/sourceVideos'
 import { categoryPath, playlistPath, youtubePlaylistUrl } from '@/lib/sourcePath'
+import { videoPathIn } from '@/lib/videoPath'
 import { DetailHeader } from './DetailHeader'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { PlayLink } from './PlayLink'
@@ -44,11 +46,6 @@ import { VideoGridSkeleton } from './VideoSkeletons'
 import { WatchView } from './WatchView'
 
 const PLAYLIST_SORTS: readonly VideoSort[] = ['playlist', 'newest', 'oldest']
-
-/** Where the page path of a playlist's video leads: its watching layout. */
-function videoInPlaylist(playlistId: string, videoId: string): string {
-  return `${playlistPath(playlistId)}?video=${encodeURIComponent(videoId)}`
-}
 
 /**
  * A playlist's page (`/playlists/:id`). Browsing: its header with "Play
@@ -141,8 +138,8 @@ export function PlaylistDetail() {
           !watching &&
           next && (
             <PlayLink
-              to={videoInPlaylist(id, next.id)}
-              label={next.episode != null ? `Play next · Ep ${next.episode}` : 'Play next'}
+              to={videoPathIn(playlistPath(id), next.id)}
+              label={['Play next', episodeLabel(next.episode)].filter(Boolean).join(' · ')}
               title={next.title}
             />
           )
@@ -258,11 +255,8 @@ function PlaylistBrowser({
         <VideoGrid
           videos={shown}
           layout="feed"
-          videoPathOf={(video) => videoInPlaylist(playlist.id, video.id)}
-          labelOf={(video) => {
-            const episode = episodes.get(video.id)
-            return episode != null ? `Ep ${episode}` : null
-          }}
+          videoPathOf={(video) => videoPathIn(playlistPath(playlist.id), video.id)}
+          labelOf={(video) => episodeLabel(episodes.get(video.id))}
         />
       )}
     </>
