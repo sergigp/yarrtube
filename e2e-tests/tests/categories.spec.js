@@ -64,14 +64,24 @@ test('category on mobile: add from the drawer, edit settings full screen, then a
   })
 })
 
+/** Waits for the category named `name` to hold `count` channels and playlists. */
+async function expectSourceCount(page, name, count) {
+  await expect
+    .poll(async () => {
+      const { categories } = await (await page.request.get('/api/categories')).json()
+      const category = categories.find((candidate) => candidate.name === name)
+      return category ? category.channels.length + category.playlists.length : null
+    })
+    .toBe(count)
+}
+
 test('category lifecycle: create, edit settings, rename, assign from the add channel dialog, view, mark watched, delete', async ({ page }) => {
   await page.goto('/')
 
   const dialog = page.getByRole('dialog')
   const categoryRows = sectionRows(page, 'Categories')
-  const summary = page.locator('main').getByText(/^\d+ sources? · /)
   const openCategorySettings = async (name) => {
-    await page.getByRole('button', { name: 'Edit settings' }).click()
+    await page.getByRole('button', { name: 'Edit category' }).click()
     await expect(dialog).toContainText(`Edit ${name} settings`)
   }
 
@@ -85,11 +95,11 @@ test('category lifecycle: create, edit settings, rename, assign from the add cha
     await expect(categoryRows).toHaveText(['Chess'])
   })
 
-  await test.step('rename it in place', async () => {
-    await page.getByRole('button', { name: 'Rename', exact: true }).click()
-    const name = page.getByRole('textbox', { name: 'Name', exact: true })
-    await name.fill('Board games')
-    await name.press('Enter')
+  await test.step('rename it from its settings', async () => {
+    await openCategorySettings('Chess')
+    await dialog.getByLabel('Name').fill('Board games')
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
     await expect(page.getByRole('heading', { name: 'Board games', exact: true })).toBeVisible()
     await expect(categoryRows).toHaveText([/^Board games/])
   })
@@ -103,7 +113,7 @@ test('category lifecycle: create, edit settings, rename, assign from the add cha
     await dialog.getByRole('button', { name: /^Create Channel/ }).click()
     await dialog.waitFor({ state: 'hidden' })
     const [{ name }] = await (await page.request.get('/api/channels')).json()
-    await expect(summary).toHaveText(/^1 source · /)
+    await expectSourceCount(page, 'Board games', 1)
     return name
   })
 
@@ -128,7 +138,7 @@ test('category lifecycle: create, edit settings, rename, assign from the add cha
     await expect(dialog).toContainText('+1 added')
     await dialog.getByRole('button', { name: 'Save', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' })
-    await expect(summary).toHaveText(/^1 source · /)
+    await expectSourceCount(page, 'Board games', 1)
   })
 
   await test.step('wait for the channel video and mark it all watched', async () => {
@@ -143,6 +153,7 @@ test('category lifecycle: create, edit settings, rename, assign from the add cha
     )
     await page.locator('main').getByRole('button', { name: /^More actions for / }).click()
     await page.getByRole('menuitem', { name: 'Mark all watched' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Mark watched', exact: true }).click()
     expect((await marked).status()).toBe(204)
     await expect(cards.getByRole('img', { name: 'Watched' })).toBeVisible()
     await expect(categoryRows.getByLabel(/ unwatched$/)).toHaveCount(0)
@@ -237,9 +248,9 @@ test.describe('with a downloaded channel in a category', () => {
       playlists: [],
     })
     await dialog.waitFor({ state: 'hidden' })
-    await expect(page.locator('main').getByText(/^1 source · /)).toBeVisible()
+    await expectSourceCount(page, 'Chess', 1)
 
-    await page.getByRole('button', { name: 'Edit settings' }).click()
+    await page.getByRole('button', { name: 'Edit category' }).click()
     const settings = page.getByRole('dialog', { name: 'Edit Chess settings' })
     await settings.getByRole('radio', { name: 'Teal' }).check()
     await settings.getByRole('button', { name: 'Save', exact: true }).click()

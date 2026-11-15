@@ -40,7 +40,9 @@ test('home card opens the video selected, plays and resumes after reload @mobile
 
 test('player sticks under the header while the list scrolls @mobile', async ({ page }) => {
   const playlist = await addPlaylist(page.request, LONG_PLAYLIST)
-  await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
+  await page.goto(
+    `/playlists/${encodeURIComponent(playlist.id)}?video=${encodeURIComponent(playlist.videos[0].id)}`,
+  )
   await expect(page.locator('main ul li')).toHaveCount(LONG_PLAYLIST.videos.length)
 
   // On a phone the document scrolls, not `main`.

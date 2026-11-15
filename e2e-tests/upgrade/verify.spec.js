@@ -47,7 +47,9 @@ test('this build carries on the library the released image left behind', async (
   expect(tasks.filter((task) => task.task_type === 'download_video')).toEqual([])
 
   // Opened straight from its URL, the playlist plays its video.
-  await page.goto(`/playlists/${encodeURIComponent(PLAYLIST_ID)}`)
+  await page.goto(
+    `/playlists/${encodeURIComponent(PLAYLIST_ID)}?video=${encodeURIComponent(video.id)}`,
+  )
   await expect(page.locator('main h3').first()).toHaveText(video.title)
   await assertVideoPlays(page)
 

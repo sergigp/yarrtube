@@ -183,7 +183,7 @@ test('the AI fits a video into a category, and re-evaluating the category clears
 
   await test.step('re-evaluating "Openings" from its settings clears the AI\'s verdict', async () => {
     await page.goto(`/categories/${encodeURIComponent(openingsId)}`)
-    await page.getByRole('button', { name: 'Edit settings' }).click()
+    await page.getByRole('button', { name: 'Edit category' }).click()
     await page.getByRole('button', { name: 'Re-evaluate 1 video' }).click()
     const confirmation = page.getByRole('dialog', { name: 'Re-evaluate 1 video?' })
     const deleted = page.waitForResponse(

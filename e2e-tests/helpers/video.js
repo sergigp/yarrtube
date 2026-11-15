@@ -1,7 +1,8 @@
 import { expect } from '@playwright/test'
 
 // The detail pane shows a status badge only for videos that are not
-// downloaded; a downloaded one is recognised by the meta line's "Synced" part.
+// downloaded; a downloaded one is recognised by its speed control, which is
+// disabled until then.
 const STATUS_LABELS = {
   IN_PROGRESS: 'Downloading',
   PENDING: 'Pending',
@@ -10,8 +11,25 @@ const STATUS_LABELS = {
   UNAVAILABLE: 'Unavailable',
 }
 
+/**
+ * On a playlist's or category's browse page, opens its first card into the
+ * watching layout (player and queue), waiting up to `timeoutMs` for a video
+ * to be listed; a page already watching (a channel's) is left as it is.
+ */
+export async function enterWatching(page, { timeoutMs = 30_000 } = {}) {
+  const main = page.locator('main')
+  const queue = main.getByRole('complementary', { name: 'Queue' })
+  const firstCard = main.locator('li:has([data-slot="card-thumbnail"]) a').first()
+  await expect(queue.or(firstCard).first()).toBeVisible({ timeout: timeoutMs })
+  if (!(await queue.isVisible())) {
+    await firstCard.click()
+    await expect(queue).toBeVisible()
+  }
+}
+
 export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', timeoutMs = 30_000 } = {}) {
   const main = page.locator('main')
+  await enterWatching(page, { timeoutMs })
   if (title) {
     await main.getByRole('button').filter({ hasText: title }).first().click()
     // The detail pane shows the video asked about, so its status is the one read.
@@ -19,7 +37,7 @@ export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', t
   }
   const indicator =
     status === 'DOWNLOADED'
-      ? main.getByText(/^Synced /).first()
+      ? main.getByRole('button', { name: 'Playback speed', disabled: false })
       : main.getByText(STATUS_LABELS[status] ?? status, { exact: true }).first()
   if (status !== 'DOWNLOADED') {
     await expect(indicator).toBeVisible({ timeout: timeoutMs })
@@ -77,4 +95,13 @@ export async function assertSubtitlesShow(page, { timeoutMs = 120_000 } = {}) {
   expect(response.headers()['content-type']).toBe('text/vtt; charset=utf-8')
   expect(await response.text()).toMatch(/^WEBVTT\n/)
   await expect.poll(() => video.evaluate((el) => el.textTracks[0].cues?.length ?? 0)).toBeGreaterThan(0)
+}
+
+/**
+ * Picks `name` from the page header's "⋮" menu, where every action but
+ * Sync, the YouTube link and a category's "Edit category" lives.
+ */
+export async function chooseHeaderAction(page, name) {
+  await page.locator('main').getByRole('button', { name: /^More actions for / }).click()
+  await page.getByRole('menuitem', { name, exact: true }).click()
 }
