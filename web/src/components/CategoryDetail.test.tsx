@@ -501,6 +501,27 @@ describe('CategoryDetail', () => {
     ).not.toContainEqual(expect.stringMatching(/^\/api\/(channels|playlists)\//))
   })
 
+  it('names the remembered order in the queue header', async () => {
+    window.localStorage.setItem('yarrtube.category.chess.sort', 'oldest')
+    renderCategory(
+      {
+        'GET /api/categories': aCategoryList([
+          aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] }),
+        ]),
+        'GET /api/categories/chess/videos': [
+          aCategoryVideo({ id: 'new', title: 'Newest', published_at: '2026-03-01T00:00:00Z' }),
+          aCategoryVideo({ id: 'mid', title: 'Middle', published_at: '2026-02-01T00:00:00Z' }),
+          aCategoryVideo({ id: 'old', title: 'Oldest', published_at: '2026-01-01T00:00:00Z' }),
+        ],
+      },
+      '/categories/chess?video=old',
+    )
+
+    const queue = within(await screen.findByRole('complementary', { name: 'Queue' }))
+
+    expect(await queue.findByText('1 of 3 · oldest first')).toBeInTheDocument()
+  })
+
   it('shows the header from the categories list at once, with placeholders while the videos load', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
