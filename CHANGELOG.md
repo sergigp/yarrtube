@@ -23,7 +23,7 @@ redesigned web UI.
   position are synced between the web UI and Plex.
 - **Chapters.** YouTube chapters are embedded in the file, so Plex, Kodi
   and Jellyfin show them, and the web player lists them under the video.
-- **A redesigned web UI with Dark mode.**
+- **A redesigned web UI with dark mode.**
 
 ### Also new
 
