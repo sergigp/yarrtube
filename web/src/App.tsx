@@ -96,7 +96,8 @@ export function AppShell() {
       className="flex min-h-dvh flex-col md:h-dvh"
       style={headerHidden ? ({ '--header-offset': '0px' } as CSSProperties) : undefined}
     >
-      <div ref={announcementRef} className="shrink-0">
+      {/* Above the header from `sm` up; below it, as a card, on phones. */}
+      <div ref={announcementRef} className="shrink-0 max-sm:order-1">
         <AnnouncementBar />
       </div>
       <header
@@ -106,35 +107,40 @@ export function AppShell() {
           headerHidden && 'max-sm:-translate-y-full',
         )}
       >
-        <MobileNavToggle open={sidebarOpen} onToggle={toggleSidebar} controls={SIDEBAR_ID} />
-        <Link
-          to="/"
-          onClick={closeSidebar}
-          className="flex items-center no-underline"
-          aria-label="Yarrtube"
-        >
-          <img
-            src="/logo.png"
-            alt="Yarrtube"
-            // The intrinsic size reserves the logo's box before the image loads.
-            width={2048}
-            height={768}
-            className="h-10 w-auto sm:h-12"
-          />
-        </Link>
-        <VersionLabel />
-        <div className="ml-auto flex items-center gap-2">
+        {/* From `md` up as wide as the sidebar, so search centres on the page. */}
+        <div className="flex shrink-0 items-center gap-2 md:w-52">
+          <MobileNavToggle open={sidebarOpen} onToggle={toggleSidebar} controls={SIDEBAR_ID} />
+          <Link
+            to="/"
+            onClick={closeSidebar}
+            className="flex items-center no-underline"
+            aria-label="Yarrtube"
+          >
+            <img
+              src="/logo.png"
+              alt="Yarrtube"
+              // The intrinsic size reserves the logo's box before the image loads.
+              width={2048}
+              height={768}
+              className="h-10 w-auto sm:h-12"
+            />
+          </Link>
+          <VersionLabel />
+        </div>
+        <div className="flex min-w-0 flex-1 justify-end sm:justify-center">
           <SearchTrigger
             onOpen={() => {
               closeSidebar()
               setSearchOpen(true)
             }}
           />
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           <ThemeToggle />
           <SettingsMenu />
         </div>
       </header>
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col max-sm:order-2 md:flex-row">
         <Sidebar
           open={sidebarOpen}
           top={sidebarTop}

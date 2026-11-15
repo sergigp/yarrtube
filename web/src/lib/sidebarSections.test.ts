@@ -62,7 +62,7 @@ describe('sectionView', () => {
 
     const view = sectionView(items, { folded: false, activeId: null })
 
-    expect(view).toEqual({ folded: false, headingActive: false, rows: items })
+    expect(view).toEqual({ folded: false, headingActive: false, rows: items, hiddenCount: 0 })
   })
 
   it('shows nothing but the heading when folded', () => {
@@ -70,7 +70,7 @@ describe('sectionView', () => {
 
     const view = sectionView(items, { folded: true, activeId: null })
 
-    expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
+    expect(view).toEqual({ folded: true, headingActive: false, rows: [], hiddenCount: 0 })
   })
 
   it('marks the heading active when folded and the active row belongs to the section', () => {
@@ -78,7 +78,7 @@ describe('sectionView', () => {
 
     const view = sectionView(items, { folded: true, activeId: 'b' })
 
-    expect(view).toEqual({ folded: true, headingActive: true, rows: [] })
+    expect(view).toEqual({ folded: true, headingActive: true, rows: [], hiddenCount: 0 })
   })
 
   it('does not mark the heading active when unfolded', () => {
@@ -86,7 +86,7 @@ describe('sectionView', () => {
 
     const view = sectionView(items, { folded: false, activeId: 'b' })
 
-    expect(view).toEqual({ folded: false, headingActive: false, rows: items })
+    expect(view).toEqual({ folded: false, headingActive: false, rows: items, hiddenCount: 0 })
   })
 
   it('does not mark the heading active when the active id is not in the section', () => {
@@ -94,7 +94,68 @@ describe('sectionView', () => {
 
     const view = sectionView(items, { folded: true, activeId: 'elsewhere' })
 
-    expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
+    expect(view).toEqual({ folded: true, headingActive: false, rows: [], hiddenCount: 0 })
+  })
+})
+
+describe('sectionView with a limit', () => {
+  const named = (count: number) =>
+    Array.from({ length: count }, (_, index) => aChannel({ id: `c${index}`, name: `Chan ${index}` }))
+
+  it('shows the first rows up to the limit and counts the rest as hidden', () => {
+    const items = named(10)
+
+    const view = sectionView(items, { folded: false, activeId: null, limit: 8 })
+
+    expect(view.rows?.map((item) => item.id)).toEqual(items.slice(0, 8).map((item) => item.id))
+    expect(view.hiddenCount).toBe(2)
+  })
+
+  it('shows every row once expanded', () => {
+    const items = named(10)
+
+    const view = sectionView(items, { folded: false, activeId: null, limit: 8, expanded: true })
+
+    expect(view).toEqual({ folded: false, headingActive: false, rows: items, hiddenCount: 0 })
+  })
+
+  it('hides nothing when the section fits within the limit', () => {
+    const items = named(8)
+
+    expect(sectionView(items, { folded: false, activeId: null, limit: 8 }).hiddenCount).toBe(0)
+  })
+
+  it('keeps the viewed row past the limit in place', () => {
+    const items = named(10)
+
+    const view = sectionView(items, { folded: false, activeId: 'c9', limit: 8 })
+
+    expect(view.rows?.map((item) => item.id)).toEqual([
+      ...items.slice(0, 8).map((item) => item.id),
+      'c9',
+    ])
+    expect(view.hiddenCount).toBe(1)
+  })
+})
+
+describe('sectionView with a filter', () => {
+  const items = [
+    aChannel({ id: 'a', name: 'Eric Rosen' }),
+    aChannel({ id: 'b', name: 'Big Think' }),
+    aChannel({ id: 'c', name: 'Daniel Rensch' }),
+  ]
+
+  it('shows every match, ignoring case, past the limit', () => {
+    const view = sectionView(items, { folded: false, activeId: null, filter: 'ROS', limit: 0 })
+
+    expect(view).toEqual({ folded: false, headingActive: false, rows: [items[0]], hiddenCount: 0 })
+  })
+
+  it('shows the matches of a folded section', () => {
+    const view = sectionView(items, { folded: true, activeId: null, filter: 'think' })
+
+    expect(view.rows).toEqual([items[1]])
+    expect(view.folded).toBe(false)
   })
 })
 

@@ -18,6 +18,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { SidebarCount } from './SidebarCount'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
+import { SIDEBAR_ROW_CLASS, sidebarRowLinkClassName } from './SidebarRowParts'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 
 interface CategoryRowProps {
@@ -31,19 +32,17 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
   const navigate = useNavigate()
   const unwatchedCount = category.unwatched_count
   return (
-    <li className={cn('group/row relative flex items-center gap-1 rounded-md', active && 'bg-accent')}>
+    <li className={cn(SIDEBAR_ROW_CLASS, active && 'bg-accent')}>
       <Link
         to={`/categories/${encodeURIComponent(category.id)}`}
         onClick={onNavigate}
         aria-current={active ? 'page' : undefined}
-        className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm no-underline transition-colors',
-          active ? 'font-medium text-primary' : 'text-foreground hover:text-primary',
-        )}
+        className={sidebarRowLinkClassName(active)}
       >
+        {/* Centred in the same 20px slot as the channels' avatars. */}
         <span
           aria-hidden="true"
-          className="size-2.5 shrink-0 rounded-full border border-foreground/10"
+          className="mx-1.5 size-2 shrink-0 rounded-full border border-foreground/10"
           style={{ background: category.color }}
         />
         <span className="min-w-0 truncate">{category.name}</span>
@@ -76,10 +75,12 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
 interface SidebarCategoriesProps {
   onAddCategory: () => void
   onClose: () => void
+  /** Trimmed sidebar filter: while set, only matches show, and none hides the section. */
+  filter?: string
 }
 
 /** The sidebar's Categories section: every category, unread first. */
-export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesProps) {
+export function SidebarCategories({ onAddCategory, onClose, filter = '' }: SidebarCategoriesProps) {
   const { pathname } = useLocation()
   const activeId = activeIdFrom(pathname, '/categories/')
   const navigate = useNavigate()
@@ -97,6 +98,7 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
   } = sectionView(data && orderCategories(data.categories), {
     folded: rememberedFolded,
     activeId,
+    filter,
   })
   // Closing first lets the mobile drawer get out of the dialog's way.
   const add = () => {
@@ -106,6 +108,9 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
   // No categories yet gets a full-width add row; otherwise a compact `+` on the heading.
   const empty = data?.categories.length === 0
   const headingId = useId()
+  if (filter && !categories?.length) {
+    return null
+  }
 
   return (
     <section aria-labelledby={headingId}>

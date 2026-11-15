@@ -1,18 +1,13 @@
-import { useTheme } from '@/hooks/useTheme'
-import { inkShade, softTint } from '@/lib/categoryColors'
-
 /** What a chip shows of a category. */
 export interface CategoryChip {
   name: string
   color: string
 }
 
-/** Chips shown before the rest collapse into "+N". */
-const SHOWN_CHIPS = 2
-
 /**
- * A video's categories, in its order, as small chips in each category's hue:
- * at most 2, then "+N" for the rest. Nothing for a video in no known category.
+ * A video's categories on one line: the first as a dot in its colour and its
+ * name, then "+N" for the rest, so every card in a row keeps the same height.
+ * Nothing for a video in no known category.
  */
 export function CategoryChips({
   categoryIds,
@@ -21,26 +16,30 @@ export function CategoryChips({
   categoryIds: string[]
   chips: Map<string, CategoryChip>
 }) {
-  const theme = useTheme()
   const known = categoryIds.flatMap((id) => chips.get(id) ?? [])
   if (known.length === 0) {
     return null
   }
-  const hidden = known.length - SHOWN_CHIPS
+  const [first, ...rest] = known
   return (
-    <ul aria-label="Categories" className="mt-1 flex min-w-0 flex-wrap gap-1">
-      {known.slice(0, SHOWN_CHIPS).map((chip) => (
+    <ul
+      aria-label="Categories"
+      className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"
+    >
+      <li className="flex min-w-0 items-center gap-1.5">
+        <span
+          aria-hidden="true"
+          className="size-1.5 shrink-0 rounded-full"
+          style={{ background: first.color }}
+        />
+        <span className="truncate">{first.name}</span>
+      </li>
+      {rest.length > 0 && (
         <li
-          key={chip.name}
-          className="max-w-full truncate rounded px-1.5 py-px text-[0.6875rem] leading-4 font-medium"
-          style={{ background: softTint(chip.color, theme), color: inkShade(chip.color, theme) }}
+          className="shrink-0 rounded-full bg-muted px-1.5 leading-4"
+          title={rest.map((chip) => chip.name).join(', ')}
         >
-          {chip.name}
-        </li>
-      ))}
-      {hidden > 0 && (
-        <li className="rounded bg-muted px-1.5 py-px text-[0.6875rem] leading-4 font-medium text-muted-foreground">
-          +{hidden}
+          +{rest.length}
         </li>
       )}
     </ul>

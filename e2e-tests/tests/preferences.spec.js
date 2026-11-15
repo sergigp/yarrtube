@@ -167,26 +167,28 @@ test('preferences: each home switch takes its section off home, and its videos m
   })
 })
 
-test('preferences: the dark mode switch is saved on the daemon, not just in the browser', async ({ page }) => {
+test('preferences: the theme toggle is saved on the daemon, not just in the browser', async ({ page }) => {
   await page.goto('/')
-  const darkMode = page.getByRole('banner').getByRole('switch', { name: 'Dark mode' })
-  await expect(darkMode).toBeEnabled()
+  const banner = page.getByRole('banner')
+  const toDark = banner.getByRole('button', { name: 'Switch to dark theme' })
+  const toLight = banner.getByRole('button', { name: 'Switch to light theme' })
+  await expect(toDark).toBeEnabled()
   await expect(page.locator('html')).not.toHaveClass(/\bdark\b/)
 
-  await darkMode.click()
-  await expect(darkMode).toBeChecked()
+  await toDark.click()
+  await expect(toLight).toBeVisible()
   await expect(page.locator('html')).toHaveClass(/\bdark\b/)
 
   // With the browser's cache gone, only the saved preference can bring it back.
   await page.evaluate(() => window.localStorage.clear())
   await page.reload()
   await expect(page.locator('html')).toHaveClass(/\bdark\b/)
-  await expect(darkMode).toBeChecked()
+  await expect(toLight).toBeVisible()
 
-  await darkMode.click()
+  await toLight.click()
   await expect(page.locator('html')).not.toHaveClass(/\bdark\b/)
   await page.evaluate(() => window.localStorage.clear())
   await page.reload()
-  await expect(darkMode).toBeEnabled()
+  await expect(toDark).toBeEnabled()
   await expect(page.locator('html')).not.toHaveClass(/\bdark\b/)
 })

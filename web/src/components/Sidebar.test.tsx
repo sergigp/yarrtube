@@ -136,18 +136,68 @@ describe('Sidebar', () => {
     expect(screen.getByRole('region', { name: 'Categories' })).toBeInTheDocument()
   })
 
-  it('lists every channel of an unfolded section with no show-more control', async () => {
-    const channels = Array.from({ length: 40 }, (_, index) =>
-      aChannel({ name: `Chan ${index}`, unwatched_count: 0 }),
+  it('shows the 8 channels and 6 playlists with the most unwatched, then "Show N more"', async () => {
+    const channels = Array.from({ length: 10 }, (_, index) =>
+      aChannel({ name: `Chan ${index}`, unwatched_count: 10 - index }),
     )
+    const playlists = Array.from({ length: 9 }, (_, index) =>
+      aPlaylist({ name: `List ${index}`, unwatched_count: 9 - index }),
+    )
+    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': playlists })
+
+    const channelList = await screen.findByRole('list', { name: 'Channels' })
+    const playlistList = screen.getByRole('list', { name: 'Playlists' })
+
+    expect(within(channelList).getAllByRole('listitem')).toHaveLength(8)
+    expect(within(playlistList).getAllByRole('listitem')).toHaveLength(6)
+    expect(screen.queryByText('Chan 8')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'Channels' })).getByRole('button', {
+        name: 'Show 2 more',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'Playlists' })).getByRole('button', {
+        name: 'Show 3 more',
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('reveals every row of a section from "Show N more"', async () => {
+    const channels = Array.from({ length: 10 }, (_, index) => aChannel({ name: `Chan ${index}` }))
     renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
 
-    await screen.findByText('Chan 0')
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Show 2 more' }))
 
     expect(
-      channels.filter((channel) => screen.queryByText(channel.name) === null),
-    ).toEqual([])
+      within(screen.getByRole('list', { name: 'Channels' })).getAllByRole('listitem'),
+    ).toHaveLength(10)
     expect(screen.queryByRole('button', { name: /^Show / })).not.toBeInTheDocument()
+  })
+
+  it('keeps the viewed channel listed past the first 8', async () => {
+    const channels = Array.from({ length: 10 }, (_, index) =>
+      aChannel({ id: `@c${index}`, name: `Chan ${index}` }),
+    )
+    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] }, { route: '/channels/@c9' })
+
+    expect(await screen.findByRole('link', { name: 'Chan 9' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByText('Chan 8')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument()
+  })
+
+  it('shows a list icon in place of an avatar on playlist rows', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A', avatar_filename: 'a.jpg' })],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+    })
+
+    const playlistRow = (await screen.findByRole('link', { name: 'List B' })).closest('li')
+    const channelRow = screen.getByRole('link', { name: 'Chan A' }).closest('li')
+
+    expect(playlistRow?.querySelector('img')).toBeNull()
+    expect(playlistRow?.querySelector('svg')).not.toBeNull()
+    expect(channelRow?.querySelector('img')).not.toBeNull()
   })
 
   it('offers a labelled add row in an empty section and a heading + once it has items', async () => {
@@ -310,16 +360,106 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'Playlists' })).not.toHaveAttribute('aria-current')
   })
 
-  it('offers no search field, even for a large library', async () => {
+  it('filters categories, channels and playlists from one field, ignoring case', async () => {
     renderSidebar({
-      'GET /api/channels': Array.from({ length: 20 }, (_, index) =>
-        aChannel({ name: `Channel ${index}` }),
-      ),
+      'GET /api/channels': [aChannel({ name: 'Eric Rosen' }), aChannel({ name: 'Big Think' })],
+      'GET /api/playlists': [aPlaylist({ name: 'Rose garden' }), aPlaylist({ name: 'Music' })],
+      'GET /api/categories': aCategoryList([
+        aCategory({ name: 'Roses' }),
+        aCategory({ name: 'Chess' }),
+      ]),
+    })
+    await screen.findByText('Big Think')
+
+    await userEvent
+      .setup()
+      .type(screen.getByRole('searchbox', { name: 'Filter categories, channels and playlists' }), 'ROSE')
+
+    expect(screen.getAllByRole('listitem').map((row) => row.textContent)).toEqual([
+      'Roses',
+      'Eric Rosen',
+      'Rose garden',
+    ])
+  })
+
+  it('shows every match past the first rows, and hides sections with none', async () => {
+    const channels = Array.from({ length: 12 }, (_, index) => aChannel({ name: `Chess ${index}` }))
+    renderSidebar({
+      'GET /api/channels': channels,
+      'GET /api/playlists': [aPlaylist({ name: 'Music' })],
+      'GET /api/categories': aCategoryList([aCategory({ name: 'Science' })]),
+    })
+    await screen.findByText('Chess 0')
+
+    await userEvent.setup().type(screen.getByRole('searchbox'), 'chess')
+
+    expect(
+      within(screen.getByRole('list', { name: 'Channels' })).getAllByRole('listitem'),
+    ).toHaveLength(12)
+    expect(screen.queryByRole('button', { name: /^Show / })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Playlists' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Categories' })).not.toBeInTheDocument()
+  })
+
+  it('shows the matches of a folded section while filtering', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
+    })
+    await screen.findByText('Chan A')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Channels' }))
+
+    await user.type(screen.getByRole('searchbox'), 'chan')
+
+    expect(screen.getByText('Chan A')).toBeInTheDocument()
+  })
+
+  it('says when nothing matches the filter', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList([aCategory({ name: 'Chess' })]),
+    })
+    await screen.findByText('Chess')
+
+    await userEvent.setup().type(screen.getByRole('searchbox'), 'zzz')
+
+    expect(screen.getByText('No matches.')).toBeInTheDocument()
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+  })
+
+  it('clears the filter with Escape or its clear button, showing every section again', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
+    })
+    await screen.findByText('List B')
+    const user = userEvent.setup()
+    const field = screen.getByRole('searchbox')
+
+    await user.type(field, 'chan{Escape}')
+    const afterEscape = [field.getAttribute('value'), screen.queryByText('List B') !== null]
+    await user.type(field, 'chan')
+    await user.click(screen.getByRole('button', { name: 'Clear filter' }))
+
+    expect(afterEscape).toEqual(['', true])
+    expect(field).toHaveValue('')
+    expect(screen.getByText('List B')).toBeInTheDocument()
+  })
+
+  it('names only channels and playlists in the filter while categories are off', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [],
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
     })
 
-    expect(await screen.findByText('Channel 0')).toBeInTheDocument()
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('searchbox', { name: 'Filter channels and playlists' }),
+    ).toBeInTheDocument()
   })
 
   it('reports section load failures', async () => {

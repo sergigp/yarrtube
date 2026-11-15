@@ -1,3 +1,4 @@
+import { matchesSearch } from './search'
 import type { LibraryItem } from '@/api/types'
 
 /** The unwatched count to display: 0 when the entry hides it. */
@@ -16,6 +17,12 @@ export function orderByUnwatched<T extends LibraryItem>(items: T[]): T[] {
 export interface SectionViewOptions {
   folded: boolean
   activeId: string | null
+  /** Trimmed filter text; while non-blank, the section shows every match, unfolded. */
+  filter?: string
+  /** Rows shown before "Show N more"; absent shows every row. */
+  limit?: number
+  /** "Show N more" was clicked: every row shows. */
+  expanded?: boolean
 }
 
 export interface SectionView<T> {
@@ -23,20 +30,38 @@ export interface SectionView<T> {
   folded: boolean
   /** Folded, and the viewed entry belongs to this section. */
   headingActive: boolean
-  /** Every row, or `[]` when folded; undefined while loading. */
+  /** The rows to show, `[]` when folded; undefined while loading. */
   rows: T[] | undefined
+  /** Rows left out past the limit, offered as "Show N more". */
+  hiddenCount: number
 }
 
-/** What a section shows: only its heading when folded, otherwise every row. */
-export function sectionView<T extends { id: string }>(
+/**
+ * What a section shows: only its heading when folded; every match while
+ * filtering; otherwise its first `limit` rows (plus the viewed entry, if it
+ * comes later) until expanded.
+ */
+export function sectionView<T extends { id: string; name: string }>(
   items: T[] | undefined,
-  { folded, activeId }: SectionViewOptions,
+  { folded, activeId, filter = '', limit, expanded = false }: SectionViewOptions,
 ): SectionView<T> {
+  if (filter) {
+    return {
+      folded: false,
+      headingActive: false,
+      rows: items?.filter((item) => matchesSearch(item, filter)),
+      hiddenCount: 0,
+    }
+  }
   if (folded) {
     const headingActive = items?.some((item) => item.id === activeId) ?? false
-    return { folded: true, headingActive, rows: [] }
+    return { folded: true, headingActive, rows: [], hiddenCount: 0 }
   }
-  return { folded: false, headingActive: false, rows: items }
+  if (!items || limit === undefined || expanded || items.length <= limit) {
+    return { folded: false, headingActive: false, rows: items, hiddenCount: 0 }
+  }
+  const rows = items.filter((item, index) => index < limit || item.id === activeId)
+  return { folded: false, headingActive: false, rows, hiddenCount: items.length - rows.length }
 }
 
 /** Sum of the rows' unwatched counts (missing counts as 0). */
