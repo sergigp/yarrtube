@@ -3,6 +3,50 @@
 All notable changes to yarrtube are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0] - 2026-11-16
+
+AI summaries and categorization, two-way Plex watch sync, chapters, and a
+redesigned web UI.
+
+### Highlights
+
+- **AI summaries.** Each video gets a short AI summary, built from its
+  subtitles and shown instead of the YouTube description. Turn it on per
+  channel or playlist. See [AI](doc/AI.md).
+- **AI categorization.** Give a category a prompt ("videos about space")
+  and the AI adds matching videos from any channel or playlist. You can
+  fix any answer by hand, or ask the AI again for one video, a source or a
+  whole category.
+- **Run AI locally or on Anthropic.** Use your own Ollama server, or set
+  `YARRTUBE_ANTHROPIC_API_KEY` to use Claude: faster, no GPU needed.
+- **Plex watch state syncs both ways.** Watched, unwatched and resume
+  position are synced between the web UI and Plex.
+- **Chapters.** YouTube chapters are embedded in the file, so Plex, Kodi
+  and Jellyfin show them, and the web player lists them under the video.
+- **A redesigned web UI with Dark mode.**
+
+### Also new
+
+- Daily log files in `/config/logs`, kept for 30 days
+  (`YARRTUBE_LOGS_PATH`, `YARRTUBE_LOG_RETENTION_DAYS`).
+- Subtitles, chapters and quality that YouTube adds late to a new video
+  are picked up, without rechecking the whole library forever.
+- Choose whether Plex category playlists include watched episodes and how
+  they're ordered.
+- Open a channel or playlist on YouTube from its page.
+- Category videos are ordered by publish date, newest first.
+- Mobile player plays inline instead of jumping to fullscreen.
+- Clearer "Mark watched" for the current video. "Mark all watched" now
+  always asks for confirmation.
+
+### Fixed
+
+- Channels with non-Latin handles get correct folder names and links
+  (also in 0.10.1).
+- A stuck yt-dlp run is killed after a deadline instead of blocking its
+  queue.
+- Phone shelves on Home no longer catch vertical swipes.
+
 ## [0.10.0] - 2026-10-30
 
 Categories, subtitles and a redesigned web UI.
@@ -76,6 +120,7 @@ Existing libraries need a one-time migration. Read
   ([b0a6358], @jason-s13r)
 - The image builds with podman. ([491c8ff], @jason-s13r)
 
+[1.0.0]: https://github.com/sergigp/yarrtube/compare/v0.10.0...v1.0.0
 [0.10.0]: https://github.com/sergigp/yarrtube/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/sergigp/yarrtube/compare/v0.8.0...v0.9.0
 [33a1416]: https://github.com/sergigp/yarrtube/commit/33a1416
