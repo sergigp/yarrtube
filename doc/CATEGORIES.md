@@ -13,7 +13,8 @@ channel or playlist can be in several categories.
 
 - Press **+** next to **Categories** in the sidebar, and pick a name, a color
   and its channels and playlists, all in one dialog.
-- Change any of them later with **Edit settings**, or add a source from the
+- Change any of them later with **Edit category** on its page (or **Edit
+  settings** in its sidebar **⋮** menu), or add a source from the
   **Categories** field when adding or editing a channel or playlist.
 - New videos from those sources join the category on their own.
 
@@ -45,12 +46,12 @@ category or take it out.
 With [AI](AI.md) on, a category can also gather videos from sources outside
 it:
 
-1. In **Settings → AI**, turn on categorization (summaries too: a video is
-   judged from its summary).
-2. Give the category an **AI prompt** in its **Edit settings**, describing the
+1. In **Settings → AI**, turn on **Categorization** (and **Summaries** too: a
+   video is judged from its summary).
+2. Give the category an **AI prompt** with **Edit category**, describing the
    videos it should hold.
-3. Turn on categorization for the channels and playlists whose videos should
-   be judged.
+3. Tick **Categorize videos** on the channels and playlists whose videos
+   should be judged.
 
 <p align="center">
   <img src="category_dialog.jpeg" alt="A category's settings with its AI prompt" width="800"/>
@@ -62,10 +63,12 @@ can't answer in one go), and adds it to every category it fits. It never
 removes a category a video gets from its source.
 
 The more categories have a prompt, the more the AI has to read and think
-about per video: the categorization **Context length** in **Settings → AI**
-is Auto by default and grows with them (about 1,800 tokens each). Turn Auto
-off only to set it by hand; too small, and videos are asked about one
-category at a time, which is slower.
+about per video. With Ollama, the categorization **Context length** (under
+**Advanced categorization settings** in **Settings → AI**) is Auto by
+default and grows with them (about 1,800 tokens each). Turn Auto off only to
+set it by hand; too small, and videos are asked about one category at a time,
+which is slower. With Anthropic there's nothing to size: pick the
+**Categorization effort** instead.
 
 This happens on the video's next sync after its summary, at the latest its
 source's next reconcile pass (every 3 hours by default), so a new video
@@ -81,7 +84,7 @@ gave go at once:
   reads **Clear AI categories**: the AI categories go and nothing is asked
   again.
 - **A category**, e.g. after editing its prompt: **Re-evaluate N videos** in
-  its **Edit settings**, below the AI prompt. Save the prompt first: the
+  **Edit category**, below the AI prompt. Save the prompt first: the
   button waits for it, since the AI asks with the saved prompt.
 
 The videos are synced straight away, so the AI asks again within minutes when
@@ -107,7 +110,8 @@ of different shows on the same day are in Plex's own order.
 
 Two options in **Settings → Plex** change every category playlist:
 
-- **Watched episodes**: _Stay in the playlist_ (the default) or _Drop out_.
+- **Watched episodes**: _Keep them_ (the default) or _Remove them from
+  playlist_.
   Plex Web and the Mac app don't show a watched badge on playlist items,
   so a playlist that keeps them can't tell you which ones you've seen;
   dropping them turns each playlist into a queue of what's left.
@@ -138,11 +142,12 @@ Good to know:
   categories. It owns the labels of its episodes, so labels you add to them by
   hand are removed. If you restrict shared users by label, don't use a
   category name as a restriction label.
-- No playlist? Look for _Syncing Plex category labels_ in the Tasks page
-  (**Other** tab) and for `failed to reach Plex` in the log.
+- No playlist? Check **Settings → Plex**, look for _Updating category labels
+  in Plex_ in the Tasks page (**Plex & upkeep** tab), and for
+  `failed to reach Plex` in the log.
 
 ## Turning them off
 
-Don't need categories? Turn off **Enable categories** in **Preferences**: all
+Don't need categories? Turn off **Categories** in **Settings → General**: all
 category UI is hidden, and your categories are kept for when you turn it back
 on.

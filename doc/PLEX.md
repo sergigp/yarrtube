@@ -37,16 +37,15 @@ YouTube's auto-generated ones, never translations. Whether Plex turns them
 on by itself depends on each user's settings (_Account → Languages_).
 
 YouTube can take a while to generate captions for new videos, so yarrtube keeps
-trying for about a week. After upgrading, captions for episodes already
-downloaded are fetched in the background.
+trying for about a week.
 
 ### Chapters
 
 When a video has YouTube chapters, they're embedded in its file as chapter
 markers, so Plex (and Kodi or Jellyfin) shows a chapter list in the player
 to jump between them. For a picture per chapter, turn on _Settings → Library
-→ Generate chapter thumbnails_. Only videos downloaded since chapters were
-added get them in the file; older episodes keep playing without.
+→ Generate chapter thumbnails_. Chapters are embedded when a video
+downloads, so episodes downloaded by an older yarrtube play without them.
 
 ## Setup
 
@@ -173,12 +172,13 @@ in sync between the web UI and Plex, both ways. Nothing else to set up.
 **Settings → Plex** in the web UI shows how the integration is doing,
 without asking Plex anything when you open it:
 
-- **Connection**: whether the latest sync reached Plex (or its error), the
+- **Server**: whether the latest sync reached Plex (or its error), the
   Plex Media Server version, the libraries holding yarrtube's folders, and
-  when that was.
-- **Syncs**: when the watch state sync and the labels & playlists sync last
-  ran, how they ended and when they run next. **Sync now** runs one right
-  away.
+  when it was last checked.
+- **Sync**: **Watched status** (every 5 minutes) and **Categories to Plex**
+  (labels and category playlists, every 15 minutes), each with when it last
+  ran, how it ended and when it runs next. **Sync now** runs one right away
+  (**Retry now** after a failure).
 - **Category playlists**: the playlist options, see
   [Categories](CATEGORIES.md#in-plex).
 
