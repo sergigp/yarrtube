@@ -158,11 +158,15 @@ impl VideoReconciler {
 
     /// Regenerates the metadata of a `Downloaded` video that has none, the
     /// same way `VideoDownloader` does at download time, referencing the
-    /// thumbnail already on disk. Best effort: a failure is logged, the video
-    /// is left as it is and its next sync tries again. What it did, as
-    /// `metadata_repaired`.
+    /// thumbnail already on disk. A video still in the legacy layout is left
+    /// alone: its NFO would be a new file in that layout. Best effort: a
+    /// failure is logged, the video is left as it is and its next sync tries
+    /// again. What it did, as `metadata_repaired`.
     fn repair_metadata(&self, video: &Video, owner: &VideoOwner) -> VideoSyncChanges {
-        if video.download.status() != VideoStatus::Downloaded || self.has_metadata(video) {
+        if video.download.status() != VideoStatus::Downloaded
+            || video.download.is_in_legacy_layout()
+            || self.has_metadata(video)
+        {
             return VideoSyncChanges::default();
         }
         let Some(metadata) = self

@@ -2267,6 +2267,84 @@ fn it_should_leave_a_legacy_video_in_place_when_its_metadata_is_still_unavailabl
 }
 
 #[test]
+fn it_should_leave_a_legacy_video_without_metadata_untouched() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+    let videos_root = tempfile::tempdir().unwrap();
+    let legacy_dir = videos_root.path().join("creators/somechannel/My Video");
+    std::fs::create_dir_all(&legacy_dir).unwrap();
+    std::fs::write(legacy_dir.join("My Video.mp4"), b"").unwrap();
+    let video = my_video()
+        .start_download(fixed_timestamp())
+        .mark_downloaded(
+            Quality::High,
+            "My Video/My Video.mp4",
+            Some("My Video/My Video.jpg".to_string()),
+            None,
+            fixed_timestamp(),
+        )
+        .with_episode_number(
+            EpisodeNumber::from_columns(2026, 31501).unwrap(),
+            fixed_timestamp(),
+        );
+    save_channel_video(
+        &video_repository,
+        &channel_repository,
+        &channel_video_repository,
+        &video,
+    );
+    let task = SyncVideoTask::new(VideoReconciler::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            videos_root.path().to_string_lossy(),
+        )),
+        task_repository.clone(),
+        Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+        video_metadata_repository.clone(),
+        Arc::new(MetadataGenerator::new(
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        video_category_assigner(db.database()),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        video_categorizer(db.database()),
+    ));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            ..video.clone()
+        }]
+    );
+    assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
+    assert_eq!(
+        std::fs::read_dir(&legacy_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>(),
+        vec!["My Video.mp4"]
+    );
+}
+
+#[test]
 fn it_should_warn_about_a_stranded_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

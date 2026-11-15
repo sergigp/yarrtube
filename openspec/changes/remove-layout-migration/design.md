@@ -153,8 +153,8 @@ Deleted outright: `src/application/cli/migrate_layout.rs`,
      Downloaded legacy video (`My Video/My Video.mp4`) with no metadata, and
      YouTube metadata available; after a sync its recorded filename is
      unchanged, the legacy file is still in its folder, no season folder or
-     `.nfo` was written, no metadata is recorded, and the task reports
-     `unchanged`. Replaces
+     `.nfo` was written and no metadata is recorded (the task may still be
+     `done`: other steps, e.g. chapters, can be due). Replaces
      `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered`.
    - `it_should_leave_a_legacy_video_in_place_when_its_metadata_is_still_unavailable`:
      existing, kept as is.

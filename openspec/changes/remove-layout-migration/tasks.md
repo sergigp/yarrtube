@@ -10,7 +10,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_leave_a_legacy_video_without_metadata_untouched`: a sync of a Downloaded legacy video with no metadata, YouTube metadata available, writes no NFO or season folder, records no metadata, keeps its filename and reports `unchanged` (`repair_metadata` returns early on `is_in_legacy_layout()`).
+- [x] 2.1 `it_should_leave_a_legacy_video_without_metadata_untouched`: a sync of a Downloaded legacy video with no metadata, YouTube metadata available, writes no NFO or season folder, records no metadata and keeps its filename (`repair_metadata` returns early on `is_in_legacy_layout()`).
 
 ## 3. Infrastructure adapters (TDD)
 
