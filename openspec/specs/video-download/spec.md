@@ -100,7 +100,7 @@ The system SHALL save a downloaded video's file inside the `Season <season>` fol
 
 #### Scenario: Video downloaded under a legacy flat layout
 - **WHEN** a video was downloaded before the TV-show layout was introduced and its recorded file still exists at its original location (a per-video folder or a flat file under the source directory)
-- **THEN** the system continues to treat that file as valid, keeps serving it, and leaves moving it to the `migrate-layout` subcommand
+- **THEN** the system continues to treat that file as valid, keeps serving it where it is
 
 #### Scenario: Video's thumbnail was already fetched ahead of its download
 - **WHEN** a video's full download runs and that video already has a recorded episode number and thumbnail filename from an earlier thumbnail-only fetch
