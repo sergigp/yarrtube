@@ -10,6 +10,10 @@ operations:
       - Invoke the /rust-architect skill and follow its conventions when implementing Rust code
       - End every task with a commit
       - |
+        Pull requests are always opened as drafts (`gh pr create --draft`). Never mark a PR
+        ready for review (`gh pr ready`) yourself: the human does that by running
+        /openspec:finish, which is the signal that the change can be merged.
+      - |
         Walking skeleton task: create only the structure and wiring described in the task.
         Do not implement real logic yet, even if it looks trivial. If building the skeleton
         shows that design.md's types, signatures or call stack are wrong, stop and propose
