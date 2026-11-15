@@ -597,7 +597,7 @@ describe('Sidebar', () => {
     await waitFor(() => expect(screen.queryByTitle('2 unwatched')).not.toBeInTheDocument())
   })
 
-  it('marks a playlist with one unwatched video watched without asking', async () => {
+  it('asks even before marking a playlist with one unwatched video watched', async () => {
     const markWatched = vi.fn(() => null)
     renderSidebar({
       'GET /api/channels': [],
@@ -609,9 +609,11 @@ describe('Sidebar', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Actions for Courses' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Mark 1 video in "Courses" watched?' })
+    expect(markWatched).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Mark watched' }))
 
     await waitFor(() => expect(markWatched).toHaveBeenCalledOnce())
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('asks before marking a playlist watched even when its count is hidden', async () => {

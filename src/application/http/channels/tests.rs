@@ -2658,6 +2658,40 @@ async fn it_should_list_channels_with_their_interval() {
 }
 
 #[tokio::test]
+async fn it_should_list_channels_with_their_last_sync() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel").with_last_synced_at(fixed_timestamp()))
+        .unwrap();
+    let channel_view_searcher = ChannelViewSearcher::new(
+        channel_repository,
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(channel_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![ChannelListItemResponse {
+            last_synced_at: Some(fixed_timestamp()),
+            ..some_channel_list_item_response()
+        }])
+    );
+}
+
+#[tokio::test]
 async fn it_should_list_channels_sorted_by_name_ignoring_case() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -4040,6 +4074,7 @@ fn some_channel_list_item_response() -> ChannelListItemResponse {
         work_in_progress: false,
         summaries_enabled: false,
         categorization_enabled: false,
+        last_synced_at: None,
     }
 }
 

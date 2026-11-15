@@ -22,4 +22,5 @@ pub struct PlaylistView {
     pub created_at: DateTime<Utc>,
     pub unwatched_count: usize,
     pub work_in_progress: bool,
+    pub last_synced_at: Option<DateTime<Utc>>,
 }

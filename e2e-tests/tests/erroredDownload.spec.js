@@ -1,7 +1,7 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { BROKEN_PLAYLIST } from '../helpers/fakeYoutube.js'
 import { addPlaylist } from '../helpers/seed.js'
-import { waitForVideoStatus } from '../helpers/video.js'
+import { enterWatching, waitForVideoStatus } from '../helpers/video.js'
 
 // The stand-in yt-dlp fails this video's download, 2 s into each attempt,
 // with a transient reason, so the daemon schedules its next attempt.
@@ -31,6 +31,7 @@ test('a failed download is shown retrying with its reason, and Retry now runs it
   await test.step('Retry now runs the download again at once', async () => {
     const before = await downloadStep()
     await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
+    await enterWatching(page)
     const retried = page.waitForResponse(
       (response) => response.request().method() === 'POST' && response.url().endsWith('/retry'),
     )

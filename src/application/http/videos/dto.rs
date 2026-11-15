@@ -41,6 +41,9 @@ pub struct VideoResponse {
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
     pub summary: Option<String>,
+    /// The video's episode number within its show (the `<nnn>` of a
+    /// playlist's `S01E<nnn>`, a channel's `MMDDii`); `None` until assigned.
+    pub episode: Option<u32>,
 }
 
 /// Where each of a video's steps stands — see the `video-listing`
@@ -157,6 +160,7 @@ impl From<VideoView> for VideoResponse {
             created_at: video.created_at,
             updated_at: video.updated_at,
             synced_at: video.synced_at,
+            episode: video.episode_number.map(|number| number.episode()),
             published_at,
             channel_name,
             chapters: video
@@ -274,6 +278,7 @@ pub struct CategoryVideoResponse {
     pub subtitle_language: Option<String>,
     pub chapters: Vec<ChapterResponse>,
     pub summary: Option<String>,
+    pub episode: Option<u32>,
     pub source: HomeVideoSourceResponse,
     pub category_ids: Vec<String>,
 }
@@ -306,6 +311,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
             subtitle_language: video.subtitle_language,
             chapters: video.chapters,
             summary: video.summary,
+            episode: video.episode,
             source: HomeVideoSourceResponse::from(view.source),
             category_ids: view
                 .category_ids

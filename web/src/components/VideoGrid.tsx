@@ -26,10 +26,21 @@ interface VideoGridProps {
   layout?: VideoGridLayout
   /** Where a card leads; absent, to the video in its channel or playlist. */
   videoPathOf?: (video: HomeVideo) => string
+  /**
+   * Replaces the source link of the meta line, e.g. "Ep 4" on a playlist's
+   * own page, where naming the playlist again says nothing.
+   */
+  labelOf?: (video: HomeVideo) => string | null
 }
 
 /** Home-style video cards, each linking to its video in its source. */
-export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: VideoGridProps) {
+export function VideoGrid({
+  videos,
+  chips,
+  layout = 'grid',
+  videoPathOf,
+  labelOf,
+}: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }
@@ -96,25 +107,33 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                     data-slot="card-meta"
                     className="flex min-w-0 items-center text-[0.8125rem] text-muted-foreground"
                   >
-                    <Link
-                      to={sourcePath}
-                      className="relative z-10 flex min-w-0 items-center gap-1.5 no-underline transition-colors hover:text-foreground"
-                    >
-                      {video.source.kind === 'channel' ? (
-                        <Thumbnail
-                          src={
-                            video.source.avatar_filename
-                              ? avatarMediaUrl(video.source.avatar_filename)
-                              : null
-                          }
-                          className="block size-4.5 shrink-0 rounded-full object-cover"
-                        />
-                      ) : (
-                        <PlaylistIcon className="size-4.5 rounded-[5px]" />
-                      )}
-                      <span className="truncate">{video.source.name}</span>
-                    </Link>
-                    {age && <span className="shrink-0 whitespace-pre">{` · ${age}`}</span>}
+                    {labelOf ? (
+                      <MetaLabel label={labelOf(video)} />
+                    ) : (
+                      <Link
+                        to={sourcePath}
+                        className="relative z-10 flex min-w-0 items-center gap-1.5 no-underline transition-colors hover:text-foreground"
+                      >
+                        {video.source.kind === 'channel' ? (
+                          <Thumbnail
+                            src={
+                              video.source.avatar_filename
+                                ? avatarMediaUrl(video.source.avatar_filename)
+                                : null
+                            }
+                            className="block size-4.5 shrink-0 rounded-full object-cover"
+                          />
+                        ) : (
+                          <PlaylistIcon className="size-4.5 rounded-[5px]" />
+                        )}
+                        <span className="truncate">{video.source.name}</span>
+                      </Link>
+                    )}
+                    {age && (
+                      <span className="shrink-0 whitespace-pre">
+                        {labelOf && !labelOf(video) ? age : ` · ${age}`}
+                      </span>
+                    )}
                   </p>
                   {chips && <CategoryChips categoryIds={video.category_ids} chips={chips} />}
                 </div>
@@ -155,4 +174,9 @@ function PlayHint() {
       </span>
     </span>
   )
+}
+
+/** The meta line's own label in place of the source, e.g. "Ep 4". */
+function MetaLabel({ label }: { label: string | null }) {
+  return label ? <span className="truncate">{label}</span> : null
 }

@@ -49,8 +49,53 @@ describe('ChannelDetail', () => {
       '/channels/chan',
     )
 
-    expect(await screen.findByText('The Channel')).toBeInTheDocument()
-    expect(await screen.findByText('2 videos · 1 unwatched')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'The Channel' })).toBeInTheDocument()
+    expect(await screen.findByText('Channel · 2 videos · 1 unwatched')).toBeInTheDocument()
+  })
+
+  it('plays next the newest downloaded video, skipping one still downloading', async () => {
+    renderChannel(
+      {
+        'GET /api/channels': [aChannel({ id: 'chan' })],
+        'GET /api/channels/chan/videos': [
+          aVideo({
+            id: 'downloading',
+            published_at: '2026-03-01T00:00:00Z',
+            status: 'IN_PROGRESS',
+            filename: null,
+          }),
+          aVideo({ id: 'ready', published_at: '2026-02-01T00:00:00Z' }),
+        ],
+      },
+      '/channels/chan?video=downloading',
+    )
+
+    expect(await screen.findByRole('link', { name: /^Play next/ })).toHaveAttribute(
+      'href',
+      '/channels/chan?video=ready',
+    )
+  })
+
+  it('plays next the newest video not watched yet, unless it is already playing', async () => {
+    renderChannel(
+      {
+        'GET /api/channels': [aChannel({ id: 'chan' })],
+        'GET /api/channels/chan/videos': [
+          aVideo({ id: 'newest', published_at: '2026-03-01T00:00:00Z', watched: true }),
+          aVideo({ id: 'newer', title: 'Newer', published_at: '2026-02-01T00:00:00Z' }),
+          aVideo({ id: 'old', published_at: '2026-01-01T00:00:00Z' }),
+        ],
+      },
+      '/channels/chan',
+    )
+    const user = userEvent.setup()
+
+    const playNext = await screen.findByRole('link', { name: /^Play next/ })
+    expect(playNext).toHaveAttribute('href', '/channels/chan?video=newer')
+    await user.click(playNext)
+
+    expect(await screen.findByRole('heading', { name: 'Newer' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Play next/ })).not.toBeInTheDocument()
   })
 
   it.each([
@@ -66,7 +111,7 @@ describe('ChannelDetail', () => {
       channelPath(id),
     )
 
-    expect(await screen.findByText('Научный Сон')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Научный Сон' })).toBeInTheDocument()
     expect(screen.queryByText('Channel not found.')).not.toBeInTheDocument()
   })
 
@@ -307,7 +352,7 @@ describe('ChannelDetail', () => {
 
     expect(
       (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
-    ).toEqual(['Sync', 'Mark all watched', 'Edit settings', 'Open channel on YouTube', 'Delete'])
+    ).toEqual(['Sync', 'Open channel on YouTube', 'Mark all watched', 'Edit settings', 'Delete'])
   })
 
   it('marks the channel watched from its page header menu', async () => {
@@ -332,12 +377,14 @@ describe('ChannelDetail', () => {
     )
     const user = userEvent.setup()
 
-    expect(await screen.findByText('2 videos · 2 unwatched')).toBeInTheDocument()
+    expect(await screen.findByText('Channel · 2 videos · 2 unwatched')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
-    await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark watched' }),
+    )
 
-    expect(await screen.findByText('2 videos')).toBeInTheDocument()
+    expect(await screen.findByText('Channel · 2 videos')).toBeInTheDocument()
     expect(
       await screen.findByRole('button', { name: /^Watched.*Second Video$/ }),
     ).toBeInTheDocument()

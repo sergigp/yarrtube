@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 
 export interface VideoSelection<T> {
   /** The video the player shows, or `null` while none can be. */
@@ -16,13 +16,17 @@ export interface VideoSelection<T> {
  * The selection is kept as an ID and resolved against the current list, so
  * a poll refreshing `videos` never resets it. That includes the default: it
  * stays on the video first shown, even once a sync lists a newer one above
- * it, until that video leaves the list.
+ * it, until that video leaves the list. Any navigation (e.g. "Play next"
+ * linking to `?video=`, even the one already in the URL) drops the pick
+ * from the list, so the link is followed.
  */
 export function useVideoSelection<T extends { id: string }>(
   videos: T[] | undefined,
 ): VideoSelection<T> {
   const [searchParams] = useSearchParams()
-  const [manualSelectionId, setManualSelectionId] = useState<string | null>(null)
+  const { key: locationKey } = useLocation()
+  const [pick, setPick] = useState<{ id: string; at: string } | null>(null)
+  const manualSelectionId = pick?.at === locationKey ? pick.id : null
   const [defaultVideoId, setDefaultVideoId] = useState<string | null>(null)
 
   const manualSelection = manualSelectionId
@@ -43,5 +47,9 @@ export function useVideoSelection<T extends { id: string }>(
   const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
 
-  return { selectedVideo, autoplay, selectVideo: setManualSelectionId }
+  return {
+    selectedVideo,
+    autoplay,
+    selectVideo: (id) => setPick({ id, at: locationKey }),
+  }
 }

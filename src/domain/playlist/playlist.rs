@@ -21,6 +21,9 @@ pub struct Playlist {
     pub last_episode: Option<PlaylistEpisodeNumber>,
     pub summaries_enabled: bool,
     pub categorization_enabled: bool,
+    /// When a reconcile pass last listed the playlist's items on YouTube and
+    /// completed; `None` until the first one.
+    pub last_synced_at: Option<DateTime<Utc>>,
 }
 
 impl Playlist {
@@ -48,6 +51,7 @@ impl Playlist {
             last_episode: None,
             summaries_enabled: false,
             categorization_enabled: false,
+            last_synced_at: None,
         }
     }
 
@@ -102,6 +106,13 @@ impl Playlist {
     pub fn with_last_episode(self, number: PlaylistEpisodeNumber) -> Self {
         Self {
             last_episode: Some(number),
+            ..self
+        }
+    }
+
+    pub fn with_last_synced_at(self, last_synced_at: DateTime<Utc>) -> Self {
+        Self {
+            last_synced_at: Some(last_synced_at),
             ..self
         }
     }

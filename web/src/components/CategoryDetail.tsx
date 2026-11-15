@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Plus, Settings2 } from 'lucide-react'
-import { deleteCategory, updateCategory } from '@/api/client'
+import { FolderPlus, Plus, SlidersHorizontal } from 'lucide-react'
+import { avatarMediaUrl, deleteCategory } from '@/api/client'
 import {
   useCategories,
   useCategoryVideos,
@@ -9,16 +9,39 @@ import {
   useMarkCategoryWatched,
   usePreferences,
 } from '@/api/queries'
-import type { Category } from '@/api/types'
-import { useTheme } from '@/hooks/useTheme'
+import type { Category, CategoryVideo } from '@/api/types'
+import { useRememberedChoice } from '@/hooks/useRememberedChoice'
+import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
-import { softTint } from '@/lib/categoryColors'
+import {
+  WATCH_FILTERS,
+  matchesWatchFilter,
+  newestUnwatched,
+  sortVideos,
+  sourceKey,
+  sourceSummary,
+  sourcesSummary,
+  videoSources,
+  watchFilterCounts,
+  type VideoSort,
+  type VideoSourceOption,
+} from '@/lib/sourceVideos'
+import { categoryPath } from '@/lib/sourcePath'
+import { videoPathIn } from '@/lib/videoPath'
 import { Button } from '@/components/ui/button'
 import { CategoryPlayer } from './CategoryPlayer'
 import { DetailHeader } from './DetailHeader'
 import { CategoryDialog } from './CategoryDialog'
+import { PlayLink } from './PlayLink'
+import { PlaylistIcon } from './PlaylistIcon'
+import { Thumbnail } from './Thumbnail'
 import { VideoGrid } from './VideoGrid'
+import { ChoiceMenu, VideoListToolbar } from './VideoListToolbar'
 import { VideoGridSkeleton } from './VideoSkeletons'
+
+const CATEGORY_SORTS: readonly VideoSort[] = ['newest', 'oldest']
+
+
 
 /** Router state that opens the category settings dialog on arrival at a category's view. */
 export interface CategorySettingsState {
@@ -56,9 +79,11 @@ function EmptyCategory({ category, onAddSources }: { category: Category; onAddSo
 }
 
 /**
- * A category's view (`/categories/:id`): its header and videos, as a grid,
- * or, once one is picked (`?video=`), playing it with the category's videos
- * as the queue beside the player.
+ * A category's view (`/categories/:id`): its header ("Play newest
+ * unwatched", Edit category, ⋮) and videos as a grid, under one toolbar of
+ * watch-state chips, a source picker and the sort, all remembered per
+ * category; or, once one is picked (`?video=`), playing it with the
+ * category's videos, in the remembered sort, as the queue beside the player.
  */
 export function CategoryDetail() {
   const { id = '' } = useParams()
@@ -68,7 +93,6 @@ export function CategoryDetail() {
   const location = useLocation()
   const refreshing = useLibraryAction()
   const markCategoryWatched = useMarkCategoryWatched()
-  const theme = useTheme()
   const [editingSettings, setEditingSettings] = useState(false)
   // Arriving with CategorySettingsState opens the dialog once per navigation;
   // the state is then dropped from history so reload and back don't reopen it.
@@ -87,6 +111,13 @@ export function CategoryDetail() {
   const { data: videos, error } = useCategoryVideos(id)
   const { data: preferences } = usePreferences()
   const category = data?.categories.find((candidate) => candidate.id === id)
+  const [sort, setSort] = useRememberedChoice(
+    `yarrtube.category.${id}.sort`,
+    CATEGORY_SORTS,
+    'newest',
+  )
+  const queue = videos ? sortVideos(videos, sort) : undefined
+  const selection = useVideoSelection(queue)
 
   if (preferences && !preferences.categories_enabled) {
     return (
@@ -109,18 +140,39 @@ export function CategoryDetail() {
   // Videos set by hand or by the AI fill a category without sources too.
   const empty = sources === 0 && videos?.length === 0
   const hasVideos = sources > 0 || (videos?.length ?? 0) > 0
+  const next = videos ? newestUnwatched(videos) : null
+  const sourceOptions = videos ? videoSources(videos) : []
 
   return (
     <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
       <DetailHeader
         name={category.name}
-        tint={softTint(category.color, theme)}
-        videos={videos}
+        badge={{ kind: 'color', color: category.color }}
+        compact={playing}
+        nameHref={playing ? categoryPath(category.id) : undefined}
+        nameLinkLabel="Back to the category page"
+        summary={
+          videos
+            ? [
+                sourceSummary({ videoCount: videos.length, unwatchedCount: category.unwatched_count }),
+                sourcesSummary(sourceOptions),
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : null
+        }
+        primaryAction={
+          !playing &&
+          next && <PlayLink to={videoPathIn(categoryPath(category.id), next.id)} label="Play newest unwatched" />
+        }
         unwatchedCount={category.unwatched_count}
-        summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
-        onRename={refreshing((name: string) => updateCategory(category.id, { name }))}
         extraActions={[
-          { label: 'Edit settings', icon: <Settings2 />, onSelect: () => setEditingSettings(true) },
+          {
+            label: 'Edit category',
+            icon: <SlidersHorizontal />,
+            onSelect: () => setEditingSettings(true),
+            iconOnDesktop: true,
+          },
         ]}
         onMarkWatched={hasVideos ? () => markCategoryWatched(category.id) : undefined}
         onDelete={refreshing(async () => {
@@ -132,20 +184,105 @@ export function CategoryDetail() {
       {empty ? (
         <EmptyCategory category={category} onAddSources={() => setEditingSettings(true)} />
       ) : playing ? (
-        <CategoryPlayer key={category.id} videos={videos} error={error} />
+        <CategoryPlayer key={category.id} videos={queue} error={error} selection={selection} />
+      ) : error ? (
+        <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
       ) : !videos ? (
-        !error && <VideoGridSkeleton count={12} />
+        <VideoGridSkeleton count={12} />
       ) : (
-        videos && (
-          <VideoGrid
-            videos={videos}
-            videoPathOf={(video) =>
-              `/categories/${encodeURIComponent(category.id)}?video=${encodeURIComponent(video.id)}`
-            }
-          />
-        )
+        <CategoryBrowser
+          category={category}
+          videos={videos}
+          sources={sourceOptions}
+          sort={sort}
+          onSortChange={setSort}
+        />
       )}
       <CategoryDialog category={category} open={editingSettings} onOpenChange={setEditingSettings} />
     </div>
   )
 }
+
+/** The browsing body: chips, source picker and sort over the category's videos as cards. */
+function CategoryBrowser({
+  category,
+  videos,
+  sources,
+  sort,
+  onSortChange,
+}: {
+  category: Category
+  videos: CategoryVideo[]
+  sources: VideoSourceOption[]
+  sort: VideoSort
+  onSortChange: (sort: VideoSort) => void
+}) {
+  const [filter, setFilter] = useRememberedChoice(
+    `yarrtube.category.${category.id}.filter`,
+    WATCH_FILTERS,
+    'all',
+  )
+  const [from, setFrom] = useRememberedChoice(
+    `yarrtube.category.${category.id}.source`,
+    ['all', ...sources.map((source) => source.key)],
+    'all',
+  )
+  const fromSource = videos.filter((video) => from === 'all' || sourceKey(video.source) === from)
+  const shown = sortVideos(
+    fromSource.filter((video) => matchesWatchFilter(video, filter)),
+    sort,
+  )
+
+  if (videos.length === 0) {
+    return <VideoGrid videos={[]} />
+  }
+
+  return (
+    <>
+      <VideoListToolbar
+        counts={watchFilterCounts(fromSource)}
+        filter={filter}
+        onFilterChange={setFilter}
+        sorts={CATEGORY_SORTS}
+        sort={sort}
+        onSortChange={onSortChange}
+      >
+        {sources.length > 1 && (
+          <ChoiceMenu
+            label="From"
+            prefix="From:"
+            value={from}
+            choices={[
+              { value: 'all', label: 'All sources', count: videos.length },
+              ...sources.map((source) => ({
+                value: source.key,
+                label: source.name,
+                count: source.count,
+                icon:
+                  source.kind === 'channel' ? (
+                    <Thumbnail
+                      src={source.avatarFilename ? avatarMediaUrl(source.avatarFilename) : null}
+                      className="block size-4.5 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <PlaylistIcon className="size-4.5 rounded-[5px]" />
+                  ),
+              })),
+            ]}
+            onChange={setFrom}
+          />
+        )}
+      </VideoListToolbar>
+      {shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No videos match this filter.</p>
+      ) : (
+        <VideoGrid
+          videos={shown}
+          layout="feed"
+          videoPathOf={(video) => videoPathIn(categoryPath(category.id), video.id)}
+        />
+      )}
+    </>
+  )
+}
+

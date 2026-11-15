@@ -452,6 +452,7 @@ fn it_should_number_a_video_added_to_the_playlist_after_the_last_one() {
         playlist_repository.find(&playlist_id()).unwrap(),
         Some(Playlist {
             last_episode: Some(PlaylistEpisodeNumber::new(6).unwrap()),
+            last_synced_at: Some(fixed_timestamp()),
             ..numbered_playlist
         })
     );
@@ -497,6 +498,7 @@ fn it_should_not_reuse_the_number_of_a_removed_video() {
         playlist_repository.find(&playlist_id()).unwrap(),
         Some(Playlist {
             last_episode: Some(PlaylistEpisodeNumber::new(7).unwrap()),
+            last_synced_at: Some(fixed_timestamp()),
             ..playlist_after_removal
         })
     );
@@ -1004,6 +1006,84 @@ fn it_should_flag_downloaded_state_on_video_removed_events() {
             ),
         ]
     );
+}
+
+#[test]
+fn it_should_record_when_the_playlist_was_synced() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let previously_synced =
+        playlist("PL1").with_last_synced_at(fixed_timestamp() - chrono::Duration::hours(3));
+    playlist_repository.insert(&previously_synced).unwrap();
+    let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Vec::new(),
+        task_repository,
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        playlist_repository.list().unwrap(),
+        vec![previously_synced.with_last_synced_at(fixed_timestamp())]
+    );
+}
+
+#[test]
+fn it_should_keep_the_last_sync_if_listing_fails() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let previously_synced =
+        playlist("PL1").with_last_synced_at(fixed_timestamp() - chrono::Duration::hours(3));
+    playlist_repository.insert(&previously_synced).unwrap();
+    let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(FakeYoutubePlaylistItemsRepository::failing()),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        task_repository.clone(),
+        Arc::new(InternalVideoReconciler::new(
+            video_repository,
+            Arc::new(FakeVideoFileRepository::default()),
+            task_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )),
+        Arc::new(ShowFileWriter::new(
+            Arc::new(FakeShowFileRepository::default()),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            "/videos",
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(ShowLocks::default()),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(playlist_repository.list().unwrap(), vec![previously_synced]);
 }
 
 #[test]

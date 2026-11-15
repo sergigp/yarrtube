@@ -186,6 +186,7 @@ impl ChannelVideoReconciler {
         let membership = self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
         let folder = self.internal_video_reconciler.reconcile(&desired)?;
+        self.record_sync(channel, &membership)?;
         Self::log_pass(
             channel,
             &membership,
@@ -193,6 +194,16 @@ impl ChannelVideoReconciler {
             elapsed_seconds(started, self.clock.now()),
         );
         Ok(())
+    }
+
+    /// Records the pass as the channel's last sync, unless its listing
+    /// failed: a pass that couldn't reach YouTube didn't sync the channel.
+    fn record_sync(&self, channel: &Channel, membership: &MembershipChanges) -> anyhow::Result<()> {
+        if membership.listed.is_none() {
+            return Ok(());
+        }
+        self.channel_repository
+            .record_last_synced_at(&channel.clone().with_last_synced_at(self.clock.now()))
     }
 
     /// The pass's summary line.

@@ -13,7 +13,7 @@ import {
   slugOf,
   submitPlaylist,
 } from '../helpers/addDialog.js'
-import { waitForVideoStatus } from '../helpers/video.js'
+import { leaveWatching, waitForVideoStatus } from '../helpers/video.js'
 import { deleteItem, sectionList } from '../helpers/sidebar.js'
 import { expectEpisodeOnDisk } from '../helpers/library.js'
 import { CHANNEL, PLAYLIST } from '../helpers/fakeYoutube.js'
@@ -71,6 +71,7 @@ test('it should create a playlist into a browsed parent folder', async ({ page }
     videoTitle: await page.locator('main h3').first().innerText(),
   })
 
+  await leaveWatching(page, PLAYLIST_NAME)
   await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 })
 
@@ -114,6 +115,7 @@ test('it should create a playlist into a staged parent folder that did not exist
     videoTitle: await page.locator('main h3').first().innerText(),
   })
 
+  await leaveWatching(page, PLAYLIST_NAME)
   await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 })
 

@@ -4,7 +4,9 @@ import { videoMediaUrl, videoSubtitlesUrl } from '@/api/client'
 import type { Chapter, Video } from '@/api/types'
 import { useCurrentTime } from '@/hooks/useCurrentTime'
 import { type SeekFeedback, useSeekKeys } from '@/hooks/useSeekKeys'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { languageName } from '@/lib/languageName'
+import { playFrom } from '@/lib/playFrom'
 import { cn } from '@/lib/utils'
 import { ChapterRail } from './ChapterRail'
 
@@ -48,21 +50,15 @@ function SeekIndicator({ feedback }: { feedback: SeekFeedback }) {
   )
 }
 
-/** Moves `element` to `seconds` and plays it. */
-function playFrom(element: HTMLVideoElement, seconds: number) {
-  element.currentTime = seconds
-  // A rejected play (e.g. autoplay policy) leaves it paused there.
-  element.play().catch(() => {})
-}
-
 /**
  * The player area of a playlist or channel detail view: plays `video` from
  * `basePath` once downloaded, or explains why it can't yet. ← / → seek 10 s
  * with on-screen feedback.
  *
  * Below the desktop breakpoint it bleeds to the side edges of the screen
- * (cancelling the page gutter) and sticks right under the header while the
- * page scrolls.
+ * (cancelling the page gutter), sticks right under the header while the
+ * page scrolls, and carries the chapter rail; on desktop the chapters are
+ * listed beside the video's AI summary instead (`ChapterList`).
  */
 export function VideoPlayer({
   basePath,
@@ -91,7 +87,8 @@ export function VideoPlayer({
     [onVideoElement],
   )
 
-  const chapters = video && filename ? video.chapters : []
+  const isDesktop = useIsDesktop()
+  const chapters = video && filename && !isDesktop ? video.chapters : []
 
   return (
     <div
@@ -105,7 +102,7 @@ export function VideoPlayer({
       <div
         className={cn(
           'relative flex overflow-hidden aspect-video items-center justify-center',
-          'md:aspect-auto md:min-h-80 md:rounded-lg',
+          'md:aspect-auto md:min-h-80 md:rounded-xl',
           filename ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
         )}
       >
@@ -117,11 +114,7 @@ export function VideoPlayer({
             // rail stays reachable, fullscreen remains one tap away in the controls.
             playsInline
             autoPlay={autoplay}
-            className={cn(
-            'block h-full w-full md:h-auto md:rounded-lg',
-            // With chapters, the rail (4.5 rem cards + 0.5 rem gap) comes out of the same 70vh.
-            chapters.length > 0 ? 'md:max-h-[calc(70vh-5rem)]' : 'md:max-h-[70vh]',
-          )}
+            className="block h-full w-full md:h-auto md:max-h-[70vh] md:rounded-xl"
             src={videoMediaUrl(basePath, filename)}
             poster={
               video.thumbnail_filename ? videoMediaUrl(basePath, video.thumbnail_filename) : undefined

@@ -1,4 +1,5 @@
 import { test, expect } from '../helpers/fixtures.js'
+import { chooseHeaderAction } from '../helpers/video.js'
 import { slugOf } from '../helpers/addDialog.js'
 import { CHANNEL } from '../helpers/fakeYoutube.js'
 import { libraryPath } from '../helpers/library.js'
@@ -50,7 +51,7 @@ test('lowering a channel video limit deletes the videos beyond it on the next sy
   // Lower the limit to 1 from the channel page's settings; the dialog warns
   // what the next sync will do.
   await page.goto(`/channels/${encodeURIComponent(CHANNEL_HANDLE)}`)
-  await page.getByRole('button', { name: 'Edit settings' }).click()
+  await chooseHeaderAction(page, 'Edit settings')
   const editDialog = page.getByRole('dialog', { name: /^Edit .+ settings$/ })
   await editDialog.getByLabel('Video limit').fill('1')
   await expect(editDialog.getByText(/The next sync deletes the downloaded videos/)).toBeVisible()
@@ -68,8 +69,8 @@ test('lowering a channel video limit deletes the videos beyond it on the next sy
   )
   await page.getByRole('button', { name: 'Sync', exact: true }).click()
   expect((await synced).ok()).toBe(true)
-  // The header counts the videos ("1 video · 1 unwatched").
-  await expect(page.locator('main').getByText(/^1 video\b/)).toBeVisible({ timeout: 30_000 })
+  // The header counts the videos ("Channel · 1 video · 1 unwatched").
+  await expect(page.locator('main').getByText(/^Channel · 1 video\b/)).toBeVisible({ timeout: 30_000 })
   await expect(page.locator('main').getByText(oldest.title, { exact: true })).toHaveCount(0)
   await expect(page.locator('main').getByText(newest.title, { exact: true }).first()).toBeVisible()
   await expect

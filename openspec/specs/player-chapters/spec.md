@@ -9,10 +9,10 @@ to any chapter.
 ## Requirements
 
 ### Requirement: Chapter Rail Under The Player
-When the video in a playlist, channel or category player is downloaded and has chapters, the player SHALL show a chapter rail directly below the video: one card per chapter, in playback order, each showing the chapter's start time and title. Cards SHALL have the same width; titles that don't fit SHALL be cut with an ellipsis and offered in full on hover. When there are more cards than fit, the rail SHALL scroll sideways.
+Below the desktop breakpoint, when the video in a playlist, channel or category player is downloaded and has chapters, the player SHALL show a chapter rail directly below the video: one card per chapter, in playback order, each showing the chapter's start time and title. Cards SHALL have the same width; titles that don't fit SHALL be cut with an ellipsis and offered in full on hover. When there are more cards than fit, the rail SHALL scroll sideways. At or above the desktop breakpoint there SHALL be no rail; the chapters are listed as described in "Chapter List Beside The Summary".
 
 #### Scenario: Video with chapters
-- **WHEN** a user selects a downloaded video with chapters "Intro" (0–75 s), "Game 1" (75–1037 s) and "Game 2" (1037–2201 s)
+- **WHEN** a user on a mobile-width viewport selects a downloaded video with chapters "Intro" (0–75 s), "Game 1" (75–1037 s) and "Game 2" (1037–2201 s)
 - **THEN** below the video the rail shows three cards, in order: "0:00 Intro", "1:15 Game 1" and "17:17 Game 2"
 
 #### Scenario: Hour-long video
@@ -20,8 +20,12 @@ When the video in a playlist, channel or category player is downloaded and has c
 - **THEN** its card shows the start time "1:02:05"
 
 #### Scenario: Category player
-- **WHEN** a user plays a downloaded video with chapters from a category
+- **WHEN** a user on a mobile-width viewport plays a downloaded video with chapters from a category
 - **THEN** the rail is shown below the video the same way as in a playlist or channel
+
+#### Scenario: Desktop viewport
+- **WHEN** a user on a desktop-width viewport selects a downloaded video with chapters
+- **THEN** no rail is shown under the video
 
 ### Requirement: No Rail Without Chapters
 The player SHALL show no chapter rail, and nothing in its place, when the selected video has no chapters, its chapters were never checked, or it is not downloaded.
@@ -56,17 +60,6 @@ Activating a chapter card SHALL move the video's playback position to that chapt
 - **WHEN** the video is paused at 30 s and the user clicks the "Game 2" card starting at 1037 s
 - **THEN** the video is playing from 1037 s and "Game 2" is the current chapter
 
-### Requirement: Player Makes Room For The Rail On Desktop
-At or above the desktop breakpoint, when the chapter rail is shown, the video and the rail together SHALL stay within the same maximum height the video alone is limited to without the rail. A video already shorter than that limit SHALL NOT be shrunk; the rail is added below it.
-
-#### Scenario: Video limited by the maximum height
-- **WHEN** a user on a short desktop-width viewport, where a video without chapters is shown at the maximum player height, selects a downloaded video with chapters
-- **THEN** the video and the rail below it together take no more than that maximum height
-
-#### Scenario: Video below the maximum height
-- **WHEN** a user on a desktop-width viewport, where the video is limited by its width and below the maximum player height, selects a downloaded video with chapters
-- **THEN** the video keeps its size and the rail is shown below it
-
 ### Requirement: Rail Pinned With The Mobile Player
 Below the desktop breakpoint, the chapter rail SHALL stay pinned directly under the pinned player while the page scrolls, as a single row of cards swiped sideways.
 
@@ -88,3 +81,17 @@ Below the desktop breakpoint, the rail SHALL end with a control named "All chapt
 #### Scenario: Desktop viewport
 - **WHEN** a user on a desktop-width viewport selects a video with chapters
 - **THEN** the rail shows no "All chapters" control
+
+### Requirement: Chapter List Beside The Summary
+At or above the desktop breakpoint, when the selected video in a playlist, channel or category view is downloaded and has chapters, its info SHALL list them in a compact panel labeled "Chapters", beside the AI summary panel (or on its own without a summary): one row per chapter, in playback order, with its start time and its title, cut with an ellipsis when it doesn't fit and offered in full on hover. The list SHALL scroll within its panel when it holds more rows than fit.
+
+#### Scenario: Video with chapters on desktop
+- **WHEN** a user on a desktop-width viewport selects a downloaded video with chapters "Intro" (0–87 s) and "Open centre" (87–300 s)
+- **THEN** a "Chapters" panel beside the AI summary lists "0:00 Intro" and "1:27 Open centre", with "Intro" marked current
+
+### Requirement: Chapter List Navigation
+The chapter list SHALL mark the row of the chapter containing the playback position as current, visually and to assistive technology. Activating a row SHALL move the playback position to that chapter's start and play the video.
+
+#### Scenario: Picking a chapter from the list
+- **WHEN** the user activates "Open centre"
+- **THEN** the video is playing from 87 s

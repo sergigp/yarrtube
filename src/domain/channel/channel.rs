@@ -17,6 +17,9 @@ pub struct Channel {
     pub created_at: DateTime<Utc>,
     pub summaries_enabled: bool,
     pub categorization_enabled: bool,
+    /// When a reconcile pass last listed the channel's videos on YouTube and
+    /// completed; `None` until the first one.
+    pub last_synced_at: Option<DateTime<Utc>>,
 }
 
 impl Channel {
@@ -44,6 +47,7 @@ impl Channel {
             created_at,
             summaries_enabled: false,
             categorization_enabled: false,
+            last_synced_at: None,
         }
     }
 
@@ -86,6 +90,13 @@ impl Channel {
     pub fn with_avatar_filename(self, avatar_filename: Option<String>) -> Self {
         Self {
             avatar_filename,
+            ..self
+        }
+    }
+
+    pub fn with_last_synced_at(self, last_synced_at: DateTime<Utc>) -> Self {
+        Self {
+            last_synced_at: Some(last_synced_at),
             ..self
         }
     }

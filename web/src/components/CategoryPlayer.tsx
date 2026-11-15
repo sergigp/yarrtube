@@ -1,67 +1,40 @@
-import { useState } from 'react'
-import { useChannels } from '@/api/queries'
+import { avatarMediaUrl } from '@/api/client'
 import type { CategoryVideo } from '@/api/types'
-import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
-import { useVideoSelection } from '@/hooks/useVideoSelection'
-import { useWatchProgress } from '@/hooks/useWatchProgress'
-import { VideoDetail } from './VideoDetail'
-import { VideoListPane } from './VideoListPane'
-import { VideoPlayer } from './VideoPlayer'
+import type { VideoSelection } from '@/hooks/useVideoSelection'
+import { channelPath, playlistPath } from '@/lib/sourcePath'
+import { WatchView } from './WatchView'
 
 interface CategoryPlayerProps {
   videos: CategoryVideo[] | undefined
   error: Error | null
+  selection: VideoSelection<CategoryVideo>
 }
 
 /**
  * A category played like a playlist: the player and the selected video's
- * detail, with the category's videos as the queue beside them. Each video
- * plays from, and records its progress against, its own channel or playlist.
+ * info, linking its channel or playlist, with the category's videos as the
+ * queue beside them.
  */
-export function CategoryPlayer({ videos, error }: CategoryPlayerProps) {
-  const { selectedVideo: video, autoplay, selectVideo } = useVideoSelection(videos)
-  const source = video?.source ?? null
-  const { data: channels } = useChannels()
-  const channel =
-    source?.kind === 'channel' ? channels?.find((item) => item.id === source.id) : undefined
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
-  useWatchProgress(videoElement, video)
-  const playbackSpeed = usePlaybackSpeed(videoElement, video?.id ?? null)
-
+export function CategoryPlayer({ videos, error, selection }: CategoryPlayerProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
-      <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
-        {source && (
-          <VideoPlayer
-            basePath={source.path}
-            video={video}
-            autoplay={autoplay}
-            onVideoElement={setVideoElement}
-          />
-        )}
-
-        {source && video ? (
-          <VideoDetail
-            basePath={source.path}
-            video={video}
-            channel={channel}
-            playbackRate={playbackSpeed.rate}
-            onPlaybackRateChange={playbackSpeed.changeRate}
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">No video selected.</p>
-        )}
-      </div>
-
-      <VideoListPane
-        noun="category"
-        basePathOf={(item) => item.source.path}
-        sourceNameOf={(item) => item.source.name}
-        videos={videos}
-        error={error}
-        selectedVideoId={video?.id ?? null}
-        onSelect={selectVideo}
-      />
-    </div>
+    <WatchView
+      noun="category"
+      videos={videos}
+      error={error}
+      selection={selection}
+      basePathOf={(item) => item.source.path}
+      sourceNameOf={(item) => item.source.name}
+      detailSourceOf={({ source }) =>
+        source.kind === 'channel'
+          ? {
+              kind: 'channel',
+              name: source.name,
+              href: channelPath(source.id),
+              avatarSrc: source.avatar_filename ? avatarMediaUrl(source.avatar_filename) : null,
+            }
+          : { kind: 'playlist', name: source.name, href: playlistPath(source.id) }
+      }
+      orderLabel="newest first"
+    />
   )
 }

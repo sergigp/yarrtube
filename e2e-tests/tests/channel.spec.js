@@ -5,7 +5,7 @@ import {
   destinationNotice,
   slugOf,
 } from '../helpers/addDialog.js'
-import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
+import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow, chooseHeaderAction } from '../helpers/video.js'
 import {
   syncItem,
   deleteItem,
@@ -159,7 +159,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     // Change the video quality from the page header's "⋮" menu; reopening the
     // dialog shows the saved value (covers PATCH /channels/{handle}).
     const editChannel = async () => {
-      await page.getByRole('button', { name: 'Edit settings' }).click()
+      await chooseHeaderAction(page, 'Edit settings')
       return page.getByRole('dialog', { name: /^Edit .+ settings$/ })
     }
     let editDialog = await editChannel()

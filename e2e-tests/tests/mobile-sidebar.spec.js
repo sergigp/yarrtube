@@ -106,7 +106,11 @@ test('tapping a drawer entry navigates and closes it @mobile', async ({ page }) 
 test('dismissing the drawer keeps the scroll position and the page behind stays still @mobile', async ({ page }) => {
   // Six videos make the page taller than a phone's screen.
   const playlist = await addDownloadedPlaylist(page.request, LONG_PLAYLIST)
-  await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
+  // The watching layout: the browse page's chip row scrolls sideways, and
+  // mobile WebKit sends PageDown to it even while the drawer locks the page.
+  await page.goto(
+    `/playlists/${encodeURIComponent(playlist.id)}?video=${encodeURIComponent(playlist.videos[0].id)}`,
+  )
   await expect(page.locator('main ul li')).toHaveCount(LONG_PLAYLIST.videos.length)
   const scrollY = () => page.evaluate(() => window.scrollY)
 

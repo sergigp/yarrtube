@@ -30,6 +30,10 @@ test.describe('with a downloaded playlist, a channel and a category', () => {
       { path: '/', shown: page.getByRole('heading', { name: 'More about Mobile layout' }) },
       {
         path: `/playlists/${encodeURIComponent(seeded.id)}`,
+        shown: page.getByRole('link', { name: seeded.video.title, exact: true }),
+      },
+      {
+        path: `/playlists/${encodeURIComponent(seeded.id)}?video=${encodeURIComponent(seeded.video.id)}`,
         shown: page.getByRole('heading', { level: 3, name: seeded.video.title }),
       },
       {

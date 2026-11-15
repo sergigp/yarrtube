@@ -3,7 +3,7 @@ import { slugOf } from '../helpers/addDialog.js'
 import { CHANNEL, PLAYLIST } from '../helpers/fakeYoutube.js'
 import { expectEpisodeOnDisk, libraryPath } from '../helpers/library.js'
 import { expectPlexScanned, resetPlexStub } from '../helpers/plex.js'
-import { assertVideoPlays, waitForVideoStatus } from '../helpers/video.js'
+import { assertVideoPlays, waitForVideoStatus, chooseHeaderAction, enterWatching } from '../helpers/video.js'
 import { existsSync } from 'node:fs'
 
 const PLAYLIST_ID = PLAYLIST.id
@@ -54,7 +54,7 @@ async function waitUntilSettled(request, { listUrl, id, videosUrl }) {
  * the folder `newName` next to it through "Move…".
  */
 async function moveThroughEditDialog(page, { currentPath, newName, kind }) {
-  await page.getByRole('button', { name: 'Edit settings' }).click()
+  await chooseHeaderAction(page, 'Edit settings')
   const editDialog = page.getByRole('dialog', { name: /^Edit .+ settings$/ })
   await expect(editDialog.getByText(currentPath, { exact: true })).toBeVisible()
   await editDialog.getByRole('button', { name: 'Move…' }).click()
@@ -98,6 +98,7 @@ test('moving a playlist renames its show folder and keeps its videos', async ({ 
   await resetPlexStub(page.request)
 
   await page.goto(`/playlists/${playlist.id}`)
+  await enterWatching(page)
   const videoTitle = await page.locator('main h3').first().innerText()
   await moveThroughEditDialog(page, {
     currentPath: PLAYLIST_PATH,

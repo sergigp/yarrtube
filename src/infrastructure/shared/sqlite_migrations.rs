@@ -47,6 +47,8 @@ const EVENT_RUN_AT_SQL: &str = include_str!("../../../migrations/0029_event_run_
 const LOOKUP_INDEXES_SQL: &str = include_str!("../../../migrations/0030_lookup_indexes.sql");
 const EPISODE_WATCH_SQL: &str = include_str!("../../../migrations/0031_episode_watch.sql");
 const PLEX_SETTINGS_SQL: &str = include_str!("../../../migrations/0032_plex_settings.sql");
+const SOURCE_LAST_SYNCED_AT_SQL: &str =
+    include_str!("../../../migrations/0033_source_last_synced_at.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(migrations())
@@ -93,6 +95,7 @@ fn migrations() -> Vec<M<'static>> {
         M::up(LOOKUP_INDEXES_SQL),
         M::up(EPISODE_WATCH_SQL),
         M::up(PLEX_SETTINGS_SQL),
+        M::up(SOURCE_LAST_SYNCED_AT_SQL),
     ]
 }
 
@@ -254,6 +257,34 @@ mod tests {
                 ("@somechannel".to_string(), "PL1".to_string())
             )
         );
+    }
+
+    #[test]
+    fn it_should_leave_existing_sources_never_synced_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 32);
+        conn.execute_batch(
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, created_at)
+             VALUES ('@somechannel', 'Some Channel', 'UC1', 'high', 10, 'creators/some', '2026-11-11T10:00:00+00:00');
+             INSERT INTO playlists (id, name, path, quality, kind, created_at)
+             VALUES ('PL1', 'My Playlist', 'my-playlist', 'high', 'youtube_linked', '2026-11-11T10:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let last_synced_at = conn.query_row(
+            "SELECT c.last_synced_at, p.last_synced_at FROM channels c, playlists p
+             WHERE c.id = '@somechannel' AND p.id = 'PL1'",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        );
+        assert_eq!(last_synced_at, Ok((None, None)));
     }
 
     #[test]

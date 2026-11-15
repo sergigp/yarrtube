@@ -15,7 +15,12 @@ pub trait PlaylistRepository: Send + Sync {
     /// Writes every field but `last_episode`: a full-row write from a stale
     /// read (e.g. the home-visibility toggle racing a reconcile that numbers
     /// new videos) must not move the counter back and reuse an episode.
+    /// Nor `last_synced_at`, for the same reason: a stale full-row write
+    /// must not undo a recorded sync.
     fn update(&self, playlist: &Playlist) -> anyhow::Result<()>;
+    /// Writes only the playlist's `last_synced_at`, so it doesn't undo a
+    /// settings change made while the reconcile pass ran.
+    fn record_last_synced_at(&self, playlist: &Playlist) -> anyhow::Result<()>;
     /// Raises the playlist's episode counter to `number`; never lowers it.
     fn record_last_episode(
         &self,
@@ -54,7 +59,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO playlists (id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled, categorization_enabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO playlists (id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled, categorization_enabled, last_synced_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
@@ -68,6 +73,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                 playlist.hide_unwatched_count,
                 playlist.summaries_enabled,
                 playlist.categorization_enabled,
+                playlist.last_synced_at.map(|at| at.to_rfc3339()),
             ],
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to insert playlist"))
@@ -95,6 +101,20 @@ impl PlaylistRepository for SqlitePlaylistRepository {
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to update playlist"))
         .context("failed to update playlist")?;
+        Ok(())
+    }
+
+    fn record_last_synced_at(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE playlists SET last_synced_at = ?2 WHERE id = ?1",
+            params![
+                playlist.id.as_str(),
+                playlist.last_synced_at.map(|at| at.to_rfc3339())
+            ],
+        )
+        .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to record the playlist's last sync"))
+        .context("failed to record the playlist's last sync")?;
         Ok(())
     }
 
@@ -162,6 +182,7 @@ impl SqlitePlaylistRepository {
             hide_unwatched_count: row.get(9)?,
             summaries_enabled: row.get(10)?,
             categorization_enabled: row.get(11)?,
+            last_synced_at: row.get(12)?,
         })
     }
 
@@ -184,11 +205,16 @@ impl SqlitePlaylistRepository {
                 .last_episode
                 .map(PlaylistEpisodeNumber::new)
                 .transpose()?,
+            last_synced_at: row
+                .last_synced_at
+                .map(|at| DateTime::parse_from_rfc3339(&at).map(|at| at.with_timezone(&Utc)))
+                .transpose()
+                .context("failed to parse stored last_synced_at")?,
         })
     }
 }
 
-const PLAYLIST_COLUMNS: &str = "id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled, categorization_enabled";
+const PLAYLIST_COLUMNS: &str = "id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes, hide_unwatched_count, summaries_enabled, categorization_enabled, last_synced_at";
 
 struct PlaylistRow {
     id: String,
@@ -203,6 +229,7 @@ struct PlaylistRow {
     hide_unwatched_count: bool,
     summaries_enabled: bool,
     categorization_enabled: bool,
+    last_synced_at: Option<String>,
 }
 
 #[cfg(test)]
@@ -321,6 +348,45 @@ mod tests {
         repo.update(&updated).unwrap();
 
         assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
+    fn it_should_keep_the_last_sync_when_updating_from_a_stale_read() {
+        let repo = repo();
+        let stale = playlist("PL1", "First");
+        let synced = stale
+            .clone()
+            .with_last_synced_at(DateTime::<Utc>::from_timestamp(60, 0).unwrap());
+        repo.insert(&synced).unwrap();
+        let updated = stale.with_exclude_from_home(true);
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(
+            repo.find(&updated.id).unwrap(),
+            Some(synced.with_exclude_from_home(true))
+        );
+    }
+
+    #[test]
+    fn it_should_record_only_the_last_sync() {
+        let repo = repo();
+        let original = playlist("PL1", "First");
+        repo.insert(&original.clone().with_exclude_from_home(true))
+            .unwrap();
+        let synced_at = DateTime::<Utc>::from_timestamp(60, 0).unwrap();
+
+        repo.record_last_synced_at(&original.with_last_synced_at(synced_at))
+            .unwrap();
+
+        assert_eq!(
+            repo.list().unwrap(),
+            vec![
+                playlist("PL1", "First")
+                    .with_exclude_from_home(true)
+                    .with_last_synced_at(synced_at)
+            ]
+        );
     }
 
     #[test]

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Bell,
   BellOff,
@@ -14,7 +15,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { ConfirmDialog } from './ConfirmDialog'
-import { EditableTitle } from './EditableTitle'
+import { PlaylistIcon } from './PlaylistIcon'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,25 +34,7 @@ import { markWatchedConfirmation } from '@/lib/markWatchedConfirmation'
 import { unwatchedCountSettingAction } from '@/lib/unwatchedCountSetting'
 import { cn } from '@/lib/utils'
 
-function summaryFor(
-  videos: readonly unknown[] | undefined,
-  unwatchedCount: number | undefined,
-  prefix: string | undefined,
-): string | null {
-  if (!videos) {
-    return null
-  }
-  const parts = [`${videos.length} ${videos.length === 1 ? 'video' : 'videos'}`]
-  if (prefix) {
-    parts.unshift(prefix)
-  }
-  if (unwatchedCount !== undefined && unwatchedCount > 0) {
-    parts.push(`${unwatchedCount} unwatched`)
-  }
-  return parts.join(' · ')
-}
-
-/** One page-level action, rendered as a button on desktop and a menu item on mobile. */
+/** One page-level action: an icon button on desktop, or an item of the "⋮" menu. */
 export interface HeaderAction {
   label: string
   icon: ReactNode
@@ -60,9 +43,15 @@ export interface HeaderAction {
   /** Makes the action a link opening `href` in a new tab instead. */
   href?: string
   disabled?: boolean
-  /** On desktop, offered in the "⋮" menu rather than as an icon button. */
-  menuOnDesktop?: boolean
+  /** On desktop, laid out as an icon button rather than offered in the "⋮" menu. */
+  iconOnDesktop?: boolean
 }
+
+/** What stands for the source before its name. */
+export type HeaderBadge =
+  | { kind: 'avatar'; src: string | null }
+  | { kind: 'playlist' }
+  | { kind: 'color'; color: string }
 
 /** Runs `action`, alerting `failure: <error>` when it throws. */
 async function alertOnFailure(action: () => Promise<void>, failure: string): Promise<void> {
@@ -73,13 +62,14 @@ async function alertOnFailure(action: () => Promise<void>, failure: string): Pro
   }
 }
 
-/** A square, icon-only button naming its action in a tooltip and its accessible name. */
-function IconAction({ action }: { action: HeaderAction }) {
+/** A round, icon-only button naming its action in a tooltip and its accessible name. */
+function IconAction({ action, compact }: { action: HeaderAction; compact: boolean }) {
+  const className = cn('rounded-full', compact ? 'size-9' : 'size-10')
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         {action.href ? (
-          <Button variant="outline" size="icon" asChild>
+          <Button variant="outline" size="icon" className={className} asChild>
             <a href={action.href} target="_blank" rel="noopener" aria-label={action.label}>
               {action.icon}
             </a>
@@ -88,6 +78,7 @@ function IconAction({ action }: { action: HeaderAction }) {
           <Button
             variant="outline"
             size="icon"
+            className={className}
             aria-label={action.label}
             disabled={action.disabled}
             onClick={action.onSelect}
@@ -102,39 +93,34 @@ function IconAction({ action }: { action: HeaderAction }) {
 }
 
 /**
- * The "⋮" menu: on desktop it holds the menu-only actions and delete, after
- * the icon buttons; on mobile every action. Delete is always set apart. Non-modal so opening the delete
- * confirmation from it doesn't leave the page with pointer events disabled.
- * Labelled apart from the sidebar row's "Actions for <name>", which is on
- * screen at the same time.
+ * The "⋮" menu: every action not laid out as an icon button, then delete,
+ * set apart. Non-modal so opening a confirmation from it doesn't leave the
+ * page with pointer events disabled. Labelled apart from the sidebar row's
+ * "Actions for <name>", which is on screen at the same time.
  */
 function MoreActionsMenu({
   name,
   actions,
   onDelete,
-  desktop = false,
+  className,
 }: {
   name: string
   actions: HeaderAction[]
   onDelete: () => void
-  desktop?: boolean
+  className?: string
 }) {
   return (
     <DropdownMenu modal={false}>
-      {desktop ? (
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon" aria-label={`More actions for ${name}`}>
-            <EllipsisVertical />
-          </Button>
-        </DropdownMenuTrigger>
-      ) : (
-        <DropdownMenuTrigger
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className={cn('rounded-full', className)}
           aria-label={`More actions for ${name}`}
         >
-          <EllipsisVertical className="size-4" />
-        </DropdownMenuTrigger>
-      )}
+          <EllipsisVertical />
+        </Button>
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-44">
         {actions.map((action) =>
           action.href ? (
@@ -165,21 +151,61 @@ function MoreActionsMenu({
   )
 }
 
+/** The square before the name: a channel's avatar, a playlist's icon or a category's colour. */
+function Badge({ badge, compact }: { badge: HeaderBadge; compact: boolean }) {
+  const size = compact ? 'size-10 rounded-[10px]' : 'size-13 rounded-xl md:size-16 md:rounded-[14px]'
+  switch (badge.kind) {
+    case 'avatar':
+      return (
+        <Thumbnail
+          src={badge.src}
+          className={cn('shrink-0 rounded-full! object-cover', size)}
+        />
+      )
+    case 'playlist':
+      return (
+        <PlaylistIcon
+          className={cn(
+            size,
+            '[&>svg]:size-5',
+            !compact && 'md:[&>svg]:size-7 [&>svg]:size-6',
+          )}
+        />
+      )
+    case 'color':
+      return (
+        <span
+          aria-hidden="true"
+          className={cn('flex shrink-0 items-center justify-center bg-muted', size)}
+        >
+          <span
+            className={cn('rounded-full', compact ? 'size-3' : 'size-4 md:size-4.5')}
+            style={{ background: badge.color }}
+          />
+        </span>
+      )
+  }
+}
+
 interface DetailHeaderProps {
   name: string
-  /** Background color of the whole header, e.g. a category's soft tint. */
-  tint?: string
-  avatarSrc?: string | null
-  showAvatar?: boolean
-  videos: readonly unknown[] | undefined
+  badge: HeaderBadge
+  /** Makes the name a link, e.g. back to the playlist's page while watching it. */
+  nameHref?: string
+  nameLinkLabel?: string
+  /** The meta line, e.g. "Playlist · 32 videos · 29 unwatched"; null holds its place while loading. */
+  summary: string | null
+  /** Shown after the summary, e.g. the source's categories. */
+  chips?: ReactNode
+  /** The main call to action, e.g. "Play next"; full width on phones. */
+  primaryAction?: ReactNode
+  /** Smaller, for the watching layout where the player is the point. */
+  compact?: boolean
+  /** Real count of unwatched videos, named by the mark-all-watched confirmation. */
   unwatchedCount?: number
-  /** Shown before the video counts, e.g. "2 sources". */
-  summaryPrefix?: string
   /** Shows the Sync action; categories have none. */
   onSync?: () => Promise<void>
-  /** Shows a "Rename" pencil that edits the name in place. */
-  onRename?: (name: string) => Promise<void>
-  /** Actions listed right after Sync, e.g. a category's "Edit settings". */
+  /** Actions listed right after Sync, e.g. a category's "Edit category". */
   extraActions?: HeaderAction[]
   onMarkWatched?: () => Promise<void>
   /** Playlists only: whether the playlist is excluded from home. */
@@ -206,23 +232,25 @@ interface DetailHeaderProps {
 }
 
 /**
- * Title block at the top of a channel/playlist/category page: optional
- * avatar, the name, a video/unwatched summary and the page-level actions
- * (sync, mark all watched, settings, delete behind a confirmation). Desktop
- * lays every action but mark all watched and delete out as an icon button
- * named in its tooltip, then a "⋮" offering those two; mobile keeps them all
- * behind one "⋮".
+ * Title block at the top of a channel, playlist or category page: a badge,
+ * the name, a meta line, then the main call to action and the page-level
+ * actions. On desktop, Sync, the YouTube link and any extra action are icon
+ * buttons named in their tooltips, the rest (mark all watched, home and
+ * count settings, edit, AI, delete) wait behind "⋮"; on phones the header
+ * stacks, the call to action goes full width and every action is behind "⋮".
+ * Mark all watched and delete are always confirmed: neither can be undone.
  */
 export function DetailHeader({
   name,
-  tint,
-  avatarSrc,
-  showAvatar,
-  videos,
+  badge,
+  nameHref,
+  nameLinkLabel,
+  summary,
+  chips,
+  primaryAction,
+  compact = false,
   unwatchedCount,
-  summaryPrefix,
   onSync,
-  onRename,
   extraActions = [],
   onMarkWatched,
   excludedFromHome,
@@ -237,12 +265,10 @@ export function DetailHeader({
 }: DetailHeaderProps) {
   const isDesktop = useIsDesktop()
   const [syncing, setSyncing] = useState(false)
-  const [markingWatched, setMarkingWatched] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [confirmingMarkWatched, setConfirmingMarkWatched] = useState(false)
   const [confirmingAiDelete, setConfirmingAiDelete] = useState(false)
   const markWatchedPrompt = markWatchedConfirmation(name, unwatchedCount ?? 0)
-  const summary = summaryFor(videos, unwatchedCount, summaryPrefix)
 
   const actions: HeaderAction[] = []
   if (onSync) {
@@ -250,6 +276,7 @@ export function DetailHeader({
       label: 'Sync',
       icon: <RotateCw className={syncing ? 'animate-spin' : undefined} />,
       disabled: syncing,
+      iconOnDesktop: true,
       onSelect: async () => {
         setSyncing(true)
         await alertOnFailure(onSync, `Failed to sync "${name}"`)
@@ -257,23 +284,20 @@ export function DetailHeader({
       },
     })
   }
+  if (youtubeLink) {
+    actions.push({
+      label: youtubeLink.label,
+      icon: <ExternalLink />,
+      href: youtubeLink.href,
+      iconOnDesktop: true,
+    })
+  }
   actions.push(...extraActions)
   if (onMarkWatched) {
     actions.push({
       label: 'Mark all watched',
       icon: <CheckCheck />,
-      disabled: markingWatched,
-      // Bulk and hard to undo: kept behind the menu so it isn't hit by mistake.
-      menuOnDesktop: true,
-      onSelect: async () => {
-        if (markWatchedPrompt) {
-          setConfirmingMarkWatched(true)
-          return
-        }
-        setMarkingWatched(true)
-        await alertOnFailure(onMarkWatched, `Failed to mark "${name}" watched`)
-        setMarkingWatched(false)
-      },
+      onSelect: () => setConfirmingMarkWatched(true),
     })
   }
   if (excludedFromHome !== undefined && onSetExcludedFromHome) {
@@ -301,9 +325,6 @@ export function DetailHeader({
   if (onEditRequest) {
     actions.push({ label: 'Edit settings', icon: <SlidersHorizontal />, onSelect: onEditRequest })
   }
-  if (youtubeLink) {
-    actions.push({ label: youtubeLink.label, icon: <ExternalLink />, href: youtubeLink.href })
-  }
   const aiDeleteLabel = aiCategorization?.enabled
     ? 'Re-run AI categorization'
     : 'Clear AI categories'
@@ -311,60 +332,73 @@ export function DetailHeader({
     actions.push({
       label: aiDeleteLabel,
       icon: aiCategorization.enabled ? <Sparkles /> : <Eraser />,
-      // Wipes the AI's answers for every video: kept behind the menu.
-      menuOnDesktop: true,
       onSelect: () => setConfirmingAiDelete(true),
     })
   }
   const requestDelete = () => setConfirmingDelete(true)
+  const iconActions = isDesktop ? actions.filter((action) => action.iconOnDesktop) : []
+  const menuActions = actions.filter((action) => !iconActions.includes(action))
+  const menu = (
+    <MoreActionsMenu
+      name={name}
+      actions={menuActions}
+      onDelete={requestDelete}
+      className={compact ? 'size-9' : 'size-11 md:size-10'}
+    />
+  )
 
   return (
     <header
       className={cn(
-        'mb-4 flex items-center gap-3 md:mb-6',
-        tint && '-mx-2 rounded-xl px-2 py-3 md:-mx-3 md:px-3',
+        'flex flex-col md:flex-row md:flex-wrap md:items-center',
+        compact ? 'mb-4 gap-3 md:mb-5 md:gap-3.5' : 'mb-4 gap-3.5 md:mb-6 md:gap-5',
       )}
-      style={tint ? { background: tint } : undefined}
     >
-      {showAvatar && (
-        <Thumbnail
-          src={avatarSrc}
-          className="size-10 shrink-0 rounded-full object-cover md:size-12"
-        />
-      )}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {onRename ? (
-          <EditableTitle name={name} onRename={onRename} />
-        ) : (
-          <h2 className="truncate font-heading text-lg font-semibold text-foreground md:text-xl">
-            {name}
+      <div className={cn('flex min-w-0 items-center md:flex-1', compact ? 'gap-3' : 'gap-3.5 md:gap-5')}>
+        <Badge badge={badge} compact={compact} />
+        <div className={cn('flex min-w-0 flex-1 flex-col', compact ? 'gap-0.5' : 'gap-1 md:gap-1.5')}>
+          <h2
+            className={cn(
+              'truncate font-heading font-bold tracking-tight text-foreground',
+              compact ? 'text-lg md:text-[1.375rem]' : 'text-2xl md:text-3xl',
+            )}
+          >
+            {nameHref ? (
+              <Link
+                to={nameHref}
+                title={nameLinkLabel}
+                className="no-underline transition-colors hover:text-primary"
+              >
+                {name}
+              </Link>
+            ) : (
+              name
+            )}
           </h2>
-        )}
-        {summary ? (
-          <p className="truncate text-xs text-muted-foreground md:text-sm">{summary}</p>
-        ) : (
-          // Holds the summary's line until the videos it counts have loaded.
-          <Skeleton className="mt-1 h-3.5 w-40" />
-        )}
-      </div>
-      {isDesktop ? (
-        <TooltipProvider>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {actions
-              .filter((action) => !action.menuOnDesktop)
-              .map((action) => (
-                <IconAction key={action.label} action={action} />
-              ))}
-            <MoreActionsMenu
-              name={name}
-              actions={actions.filter((action) => action.menuOnDesktop)}
-              onDelete={requestDelete}
-              desktop
-            />
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem] text-muted-foreground">
+            {summary ? (
+              <p className="min-w-0 md:truncate">{summary}</p>
+            ) : (
+              // Holds the summary's line until the videos it counts have loaded.
+              <Skeleton className="my-0.5 h-3.5 w-40" />
+            )}
+            {chips}
           </div>
-        </TooltipProvider>
-      ) : (
-        <MoreActionsMenu name={name} actions={actions} onDelete={requestDelete} />
+        </div>
+        {!isDesktop && menu}
+      </div>
+      {(primaryAction || isDesktop) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {primaryAction && <div className="max-md:w-full max-md:*:w-full">{primaryAction}</div>}
+          {isDesktop && (
+            <TooltipProvider>
+              {iconActions.map((action) => (
+                <IconAction key={action.label} action={action} compact={compact} />
+              ))}
+              {menu}
+            </TooltipProvider>
+          )}
+        </div>
       )}
 
       <ConfirmDialog
@@ -389,7 +423,7 @@ export function DetailHeader({
           onConfirm={aiCategorization.onDeleteAiVerdicts}
         />
       )}
-      {onMarkWatched && markWatchedPrompt && (
+      {onMarkWatched && (
         <ConfirmDialog
           open={confirmingMarkWatched}
           onOpenChange={setConfirmingMarkWatched}

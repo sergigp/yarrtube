@@ -6,7 +6,13 @@ import {
   destinationNotice,
   slugOf,
 } from '../helpers/addDialog.js'
-import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
+import {
+  waitForVideoStatus,
+  assertVideoPlays,
+  assertSubtitlesShow,
+  chooseHeaderAction,
+  leaveWatching,
+} from '../helpers/video.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
 import { addPlaylist } from '../helpers/seed.js'
@@ -86,6 +92,8 @@ test('playlist golden path: add, download, on disk, scanned by Plex, badge, dele
     })
     // And Plex was asked to scan it in.
     await expectPlexScanned(page.request, PLAYLIST_PATH)
+    // Back to its browse page, so nothing plays while it is deleted below.
+    await leaveWatching(page, PLAYLIST_NAME)
   })
 
   await test.step('unwatched badge appears via periodic refresh without reload', async () => {
@@ -118,7 +126,9 @@ test.describe('with a downloaded playlist', () => {
     seeded = { ...playlist, video: playlist.videos[0] }
   })
 
-  const openPlaylist = (page) => page.goto(`/playlists/${encodeURIComponent(seeded.id)}`)
+  // Straight into the watching layout, its one video playing.
+  const openPlaylist = (page) =>
+    page.goto(`/playlists/${encodeURIComponent(seeded.id)}?video=${encodeURIComponent(seeded.video.id)}`)
 
   test('hides its unwatched badge and shows it again', async ({ page }) => {
     // Covers PATCH /playlists/{id} with hide_unwatched_count.
@@ -254,7 +264,7 @@ test.describe('with a downloaded playlist', () => {
     // /playlists/{id} with an interval).
     await openPlaylist(page)
     const editPlaylist = async () => {
-      await page.getByRole('button', { name: 'Edit settings' }).click()
+      await chooseHeaderAction(page, 'Edit settings')
       return page.getByRole('dialog', { name: `Edit ${PLAYLIST_NAME} settings` })
     }
     let editDialog = await editPlaylist()

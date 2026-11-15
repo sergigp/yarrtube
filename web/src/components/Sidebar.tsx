@@ -297,12 +297,8 @@ function SidebarSection({
                   onMarkWatched={
                     onMarkWatched &&
                     (async () => {
-                      // The real count, also when the badge hides it.
-                      if (markWatchedConfirmation(item.name, item.unwatched_count ?? 0)) {
-                        setPendingMarkWatched(item)
-                      } else {
-                        await onMarkWatched(item.id)
-                      }
+                      // No undo: always confirmed first.
+                      setPendingMarkWatched(item)
                     })
                   }
                   onSetExcludedFromHome={

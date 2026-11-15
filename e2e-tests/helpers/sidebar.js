@@ -99,6 +99,8 @@ export async function markItemWatched(page, { section, name }) {
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
     await chooseRowAction(page, row, 'Mark all watched')
+    // No undo, so it always asks first.
+    await page.getByRole('dialog').getByRole('button', { name: 'Mark watched', exact: true }).click()
     expect((await marked).ok(), 'mark watched response').toBe(true)
   } finally {
     page.off('dialog', onDialog)

@@ -15,9 +15,8 @@ interface MarkWatchedButtonProps {
 }
 
 /**
- * The selected video's "Mark watched" button in the video detail pane's
- * title row: labelled from the desktop breakpoint, a bare tick below it so
- * the title keeps room. Shown only while the video is downloaded and
+ * The selected video's "Mark watched" button, grouped with its other
+ * actions right of the title. Shown only while the video is downloaded and
  * unwatched; the meta line says when it is watched.
  */
 export function MarkWatchedButton({
@@ -36,10 +35,8 @@ export function MarkWatchedButton({
 
   return (
     <Button
-      variant="outline"
-      size="sm"
-      aria-label="Mark watched"
-      className={cn('max-md:w-7 max-md:px-0', className)}
+      variant="secondary"
+      className={cn('h-9 rounded-full px-3.5 font-semibold', className)}
       disabled={marking}
       onClick={async () => {
         setMarking(true)
@@ -53,7 +50,7 @@ export function MarkWatchedButton({
       }}
     >
       <Check />
-      <span className="max-md:hidden">Mark watched</span>
+      Mark watched
     </Button>
   )
 }

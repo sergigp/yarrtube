@@ -2,6 +2,7 @@ use super::channel_handle::ChannelHandle;
 use super::video_limit::VideoLimit;
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::{Quality, ReconcileInterval};
+use chrono::{DateTime, Utc};
 
 /// A channel as listed, with its count of downloaded videos not yet watched
 /// and whether it has work in progress (so can't be moved yet).
@@ -18,4 +19,5 @@ pub struct ChannelView {
     pub categorization_enabled: bool,
     pub unwatched_count: usize,
     pub work_in_progress: bool,
+    pub last_synced_at: Option<DateTime<Utc>>,
 }

@@ -186,6 +186,7 @@ mod tests {
                 .unwrap(),
             Some(Playlist {
                 last_episode: Some(PlaylistEpisodeNumber::new(3).unwrap()),
+                last_synced_at: Some(fixed_timestamp()),
                 ..playlist("PL1")
             })
         );
