@@ -310,6 +310,28 @@ describe('PlaylistDetail', () => {
       expect(await screen.findByRole('switch', { name: 'Hide watched' })).toBeChecked()
     })
 
+    it('counts only listed rows in the queue position with watched hidden', async () => {
+      renderPlaylist(
+        {
+          'GET /api/playlists': [aPlaylist({ id: 'PL1' })],
+          'GET /api/playlists/PL1/videos': [
+            aVideo({ watched: true }),
+            aVideo({ watched: true }),
+            aVideo({ watched: true }),
+            aVideo({ id: 'playing', title: 'Playing' }),
+            aVideo({ title: 'Fresh' }),
+          ],
+        },
+        '/playlists/PL1?video=playing',
+      )
+      const user = userEvent.setup()
+      const queue = within(await screen.findByRole('complementary', { name: 'Queue' }))
+
+      await user.click(queue.getByRole('switch', { name: 'Hide watched' }))
+
+      expect(queue.getByText('1 of 2 · playlist order')).toBeInTheDocument()
+    })
+
     it('shows progress and time left on an in-progress row', async () => {
       renderPlaylist(
         {

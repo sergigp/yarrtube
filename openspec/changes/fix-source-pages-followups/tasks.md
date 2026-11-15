@@ -9,7 +9,7 @@
 - [x] 2.1 "names the remembered order in the queue header" (CategoryDetail.test.tsx): queue header follows the remembered sort; verify the test fails red then passes.
 - [x] 2.2 "keeps the loaded videos when a refresh fails" (PlaylistDetail.test.tsx): `PlaylistBrowser` shows the error only without data; verify red then green.
 - [x] 2.3 "keeps the loaded videos when a refresh fails" (CategoryDetail.test.tsx): same for `CategoryDetail`; verify red then green.
-- [ ] 2.4 "counts only listed rows in the queue position with watched hidden": `VideoListPane` position and total from the shown rows; verify red then green.
+- [x] 2.4 "counts only listed rows in the queue position with watched hidden": `VideoListPane` position and total from the shown rows; verify red then green.
 - [ ] 2.5 "counts unwatched videos of hidden playlists in the header" (CategoryDetail.test.tsx): header count from the listed videos; verify red then green.
 - [ ] 2.6 "confirms marking every listed unwatched video" (CategoryDetail.test.tsx): mark-watched confirmation uses the same count; verify red then green.
 

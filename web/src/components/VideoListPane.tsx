@@ -76,12 +76,13 @@ export function VideoListPane<T extends Video>({
   orderLabel,
 }: VideoListPaneProps<T>) {
   const [hideWatched, toggleHideWatched] = useRememberedFlag(HIDE_WATCHED_KEY, false)
-  const position = videos ? videos.findIndex((video) => video.id === selectedVideoId) : -1
   const shown = hideWatched
     ? videos?.filter((video) => !video.watched || video.id === selectedVideoId)
     : videos
+  // The position among the listed rows, leaving out hidden watched ones.
+  const position = shown ? shown.findIndex((video) => video.id === selectedVideoId) : -1
   const positionLine = [
-    videos && videos.length > 0 && position >= 0 ? `${position + 1} of ${videos.length}` : null,
+    shown && shown.length > 0 && position >= 0 ? `${position + 1} of ${shown.length}` : null,
     orderLabel,
   ]
     .filter(Boolean)
