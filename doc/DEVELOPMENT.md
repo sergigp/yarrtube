@@ -125,6 +125,18 @@ goes to a log rather than the terminal: a progress line while it runs, its
 time and test counts once done, and on failure only the failing tests with
 their errors, plus the path of the kept logs.
 
+### Test-only variables
+
+The end-to-end suite points the daemon at fake services with variables a
+real install leaves unset:
+
+| Variable                               | Default                                  | What it does                                   |
+|----------------------------------------|------------------------------------------|------------------------------------------------|
+| `YARRTUBE_YOUTUBE_API_URL`             | `https://www.googleapis.com/youtube/v3`  | Where YouTube Data API requests go             |
+| `YARRTUBE_ANTHROPIC_API_URL`           | `https://api.anthropic.com`              | Where Anthropic API requests go                |
+| `YARRTUBE_YTDLP_SELF_UPDATE`           | `true`                                   | `false` stops the hourly `yt-dlp` self-update  |
+| `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS` | `5000`                                   | How often background work is picked up         |
+
 ### YouTube contract tests
 
 The adapters that talk to YouTube (`yt-dlp` downloads, thumbnails,
