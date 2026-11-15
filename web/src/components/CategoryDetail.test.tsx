@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
+import { queryKeys } from '@/api/queries'
 import { RouteProbe } from '@/test/RouteProbe'
 import {
   aCategory,
@@ -26,7 +27,7 @@ function renderCategory(routes: ApiRoutes, route: InitialEntry = '/categories/ch
     'GET /api/preferences': aPreferences(),
     ...routes,
   })
-  const { unmount } = renderWithProviders(
+  const { unmount, queryClient } = renderWithProviders(
     <>
       <Routes>
         <Route path="/categories/:id" element={<CategoryDetail />} />
@@ -36,7 +37,7 @@ function renderCategory(routes: ApiRoutes, route: InitialEntry = '/categories/ch
     </>,
     { route },
   )
-  return { fetchMock, unmount }
+  return { fetchMock, unmount, queryClient }
 }
 
 /** Leaves the view and comes back through history, as the browser's buttons would. */
@@ -520,6 +521,28 @@ describe('CategoryDetail', () => {
     const queue = within(await screen.findByRole('complementary', { name: 'Queue' }))
 
     expect(await queue.findByText('1 of 3 · oldest first')).toBeInTheDocument()
+  })
+
+  it('keeps the loaded videos when a refresh fails', async () => {
+    let videoLoads = 0
+    const { queryClient } = renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] }),
+      ]),
+      'GET /api/categories/chess/videos': () => {
+        videoLoads += 1
+        return videoLoads === 1
+          ? [aHomeVideo({ title: 'Opening' })]
+          : { status: 500, error: 'database is locked' }
+      },
+    })
+    await screen.findByRole('link', { name: 'Opening' })
+
+    await queryClient.refetchQueries({ queryKey: queryKeys.categoryVideos('chess') })
+
+    await waitFor(() => expect(videoLoads).toBe(2))
+    expect(screen.queryByText(/Failed to load videos/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Opening' })).toBeInTheDocument()
   })
 
   it('shows the header from the categories list at once, with placeholders while the videos load', async () => {

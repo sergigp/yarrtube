@@ -191,10 +191,13 @@ export function CategoryDetail() {
           selection={selection}
           sort={sort}
         />
-      ) : error ? (
-        <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
       ) : !videos ? (
-        <VideoGridSkeleton count={12} />
+        // A failed background refresh keeps the loaded videos on screen.
+        error ? (
+          <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
+        ) : (
+          <VideoGridSkeleton count={12} />
+        )
       ) : (
         <CategoryBrowser
           category={category}
