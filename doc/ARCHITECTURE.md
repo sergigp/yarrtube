@@ -47,6 +47,22 @@ flowchart TB
     handlers -- "call service" --> services
 ```
 
+### Task lanes
+
+The `TaskExecutor` runs each task in its type's lane (`Task::lane`), and each
+lane has its own concurrency cap, so a slow kind of work never starves the
+others:
+
+- `Download` (`DownloadVideo`, `UpgradeQuality`): `YARRTUBE_DOWNLOAD_CONCURRENCY`
+  at a time (2 by default).
+- `Thumbnail`, `Subtitles` (`FetchSubtitles`, `FetchChapters`), `VideoSync`,
+  `Plex` (`SyncPlexWatchState`, `SyncPlexLabels`), `Summaries`
+  (`SummarizeVideo`, `CategorizeVideo`) and `Light` (reconciles, file
+  deletes): one at a time each.
+- `Exclusive` (`UpdateYtdlp`): runs alone, with nothing else running.
+
+Two tasks about the same video never run at the same time either.
+
 ### LLM providers
 
 Summaries and categorization reach their model through one port,
@@ -69,6 +85,27 @@ hours without spending an attempt), any other error is a server fault (a
 failed attempt), and an `LlmReply` marked refused or stopped at the limit is a
 rejected call. `GET /api/llm/ollama?url=` and `GET /api/llm/anthropic` check
 either provider through `LlmServerSearcher`. See [AI features](AI.md).
+
+### Plex
+
+Plex is reached only from the background, through the Plex lane and the
+`ScanPlexFolderOn*` subscribers, never from an HTTP request:
+
+- **Scan trigger**: `PlexFolderScanner` asks Plex to scan a show folder after
+  a download or new subtitles.
+- **Watch sync**: `PlexWatchSyncer` (`SyncPlexWatchState`, every 5 minutes)
+  keeps watched, unwatched and the resume position the same on both sides.
+  Each video keeps the state both sides last agreed on (`episode_watch`);
+  whichever side differs is copied to the other, and when both changed the
+  most recently played wins.
+- **Labels and category playlists**: `PlexLabelSyncer` (`SyncPlexLabels`,
+  every 15 minutes, and shortly after a download or a category change) puts
+  a label per category on each episode and keeps one smart playlist per
+  category and library.
+- `PlexEpisodeFinder` maps a video to its Plex episode for both syncs, and
+  each run is recorded (`plex_sync_runs`) for **Settings → Plex**
+  (`PlexStatusSearcher`), whose **Sync now** goes through
+  `PlexSyncRequester`.
 
 For more information on the architectural decisions and conventions used in Yarrtube you can take a look at the [Rust Architect skill](../.claude/skills/rust-architect/SKILL.md).
 
@@ -149,6 +186,12 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    with the playlist, channel and category listings for the detail pane,
    hiding it unless AI and summaries are on and the video's own source opted
    in. See [AI features](AI.md).
+8. That `SyncVideo`, and every later pass, schedules a `CategorizeVideo` task
+   (`Summaries` lane) for a summarized video whose source has categorization
+   on while some category with an AI prompt has no verdict for it yet.
+   `VideoCategorizer` asks the provider about every pending category in one
+   call (one category per call when that doesn't fit) and stores a verdict
+   per category; a user's verdict is never overwritten.
 
 ```mermaid
 sequenceDiagram

@@ -109,7 +109,7 @@ web UI's typecheck and eslint, Rust formatting and clippy), the web UI's
 unit tests, the Rust tests, the YouTube contract tests and the end-to-end suite (`e2e-tests/`, see its
 README: the Docker image driven through real browsers against a fake
 YouTube). CI runs all of them except the contract tests, which need the real
-YouTube, on every pull request and push to `main`. Tools (`npm`, `cargo`,
+YouTube, on every pull request and push to `main` or a `release/**` branch. Tools (`npm`, `cargo`,
 Docker, and for the contract tests `yt-dlp` and `ffprobe`) must be
 installed; what the repo produces itself, the web UI's and `e2e-tests/`'s
 `node_modules`, the web UI build and the Playwright browsers, the script
