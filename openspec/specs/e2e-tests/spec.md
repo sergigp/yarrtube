@@ -179,11 +179,11 @@ The suite SHALL verify on the iPhone browser that:
 - **THEN** no sync button is shown outside the "⋮" menu, and tapping the menu's "Sync" item triggers a reconcile that succeeds
 
 ### Requirement: Category Detail Coverage
-The suite SHALL verify that a category's view lists the downloaded videos of its sources as cards and that a card opens its video, selected, in its source's view.
+The suite SHALL verify that a category's view lists the downloaded videos of its sources as cards and that a card plays its video within the category.
 
 #### Scenario: Play from a category
-- **WHEN** a category holds a channel with a downloaded video and the user opens the category and taps that video's card
-- **THEN** the channel's view opens with that video's title in the detail pane, and it plays
+- **WHEN** a category holds a source with a downloaded video and the user opens the category and activates that video's card
+- **THEN** the address identifies the category and the video, the info shows that video's title, and it plays from its source
 
 ### Requirement: Playback Speed Coverage
 The suite SHALL verify that choosing a speed from the video detail's speed menu changes the player's playback rate and that the menu shows the chosen speed.
@@ -336,11 +336,11 @@ The test script SHALL end every run, passing or failing, with a summary listing 
 - **THEN** the summary still prints, with the phases that ran and the failed one marked as failed
 
 ### Requirement: Page Header Actions Coverage
-The suite SHALL verify on the desktop browser that a detail view's page header shows every action as a button named after it, with no "⋮" control.
+The suite SHALL verify on the desktop browser that a playlist's page header lays out Sync and the YouTube link as icon buttons named after them, with every other action behind its "⋮" control.
 
 #### Scenario: Desktop page header
-- **WHEN** a user opens a playlist's view on a desktop viewport
-- **THEN** buttons named "Sync", "Mark all watched", "Exclude from home", "Hide unwatched count", "Edit settings" and "Delete" are visible, and no "More actions for" control exists
+- **WHEN** a user opens a playlist's page on a desktop viewport
+- **THEN** a "Sync" button and an "Open playlist on YouTube" link are visible, no button is named "Mark all watched", "Exclude from home", "Hide unwatched count", "Edit settings" or "Delete", and the "More actions for" menu offers "Mark all watched", "Exclude from home", "Hide unwatched count", "Edit settings", "Clear AI categories" and "Delete"
 
 ### Requirement: Keyboard Seeking Coverage
 The suite SHALL verify that ← and → seek a downloaded video 10 seconds with on-screen feedback, and that arrows typed into a text field do not seek.
