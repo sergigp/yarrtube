@@ -15,17 +15,103 @@ import {
 } from '@/test/helpers'
 
 describe('AiSettingsView', () => {
+  it('shows the AI features switch beside the title', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+
+    const toggle = await screen.findByRole('switch', { name: 'AI features' })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('AI')
+    expect(
+      screen.getByText(
+        'Summaries and automatic categorization, run on a local Ollama server or on Anthropic.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'AI guide' })).toHaveAttribute(
+      'href',
+      'https://github.com/sergigp/yarrtube/blob/main/doc/AI.md',
+    )
+    expect(
+      within(screen.getByRole('group', { name: 'Provider' })).queryByRole('switch'),
+    ).not.toBeInTheDocument()
+    expect(toggle).not.toBeChecked()
+  })
+
   it('shows the defaults, with the model disabled and the advanced settings hidden', async () => {
     mockApi({ 'GET /api/preferences': aPreferences() })
     renderWithProviders(<AiSettingsView />)
 
-    expect(await screen.findByRole('switch', { name: 'Enable AI' })).not.toBeChecked()
+    expect(await screen.findByRole('switch', { name: 'AI features' })).not.toBeChecked()
     expect(screen.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
-    expect(screen.getByRole('switch', { name: 'Summaries enabled' })).not.toBeChecked()
-    expect(screen.getByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: 'Summaries' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Summaries' })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Prompt/ })).not.toBeInTheDocument()
+  })
+
+  it('shows no save bar until a field changes', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await screen.findByRole('switch', { name: 'AI features' })
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: 'Ollama URL' }), 'http://mac.local:11434')
+
+    expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument()
+  })
+
+  it('lists the unsaved changes in the save bar', async () => {
+    mockApi({
+      'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+    await openAdvanced()
+    await user.click(screen.getByRole('button', { name: 'Advanced categorization settings' }))
+
+    await user.type(screen.getByRole('spinbutton', { name: 'Temperature' }), '5')
+    await user.type(screen.getByRole('spinbutton', { name: 'Categorization temperature' }), '5')
+
+    expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent(
+      '2 unsaved changes · Summaries temperature, Categorization temperature',
+    )
+  })
+
+  it('discards changes without a request', async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PATCH /api/preferences': { status: 400, error: 'Ollama URL must be set to enable AI' },
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await screen.findByRole('alert')
+    const callsBefore = fetchMock.mock.calls.length
+
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(screen.getByRole('switch', { name: 'AI features' })).not.toBeChecked()
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls).toHaveLength(callsBefore)
+    await user.click(screen.getByRole('switch', { name: 'AI features' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('describes each provider option', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ anthropic_available: true }) })
+    renderWithProviders(<AiSettingsView />)
+
+    expect(await screen.findByRole('radio', { name: 'Ollama' })).toHaveAccessibleDescription(
+      'Runs on your own hardware. Free, private, slower on small machines.',
+    )
+    expect(screen.getByRole('radio', { name: 'Anthropic' })).toHaveAccessibleDescription(
+      'Claude models in the cloud. Fast and accurate, billed per token to your API key.',
+    )
   })
 
   it('hides the provider choice without an Anthropic key', async () => {
@@ -34,7 +120,6 @@ describe('AiSettingsView', () => {
 
     const section = within(await screen.findByRole('group', { name: 'Provider' }))
     expect(section.queryByRole('radiogroup', { name: 'Provider' })).not.toBeInTheDocument()
-    expect(section.getByRole('switch', { name: 'Enable AI' })).toBeInTheDocument()
     expect(section.getByRole('textbox', { name: 'Ollama URL' })).toHaveValue('')
     expect(section.getByRole('button', { name: 'Test connection' })).toBeDisabled()
   })
@@ -54,7 +139,7 @@ describe('AiSettingsView', () => {
 
     expect(screen.queryByRole('textbox', { name: 'Ollama URL' })).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('claude-haiku-5-5')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(patchBodies(fetchMock)).toEqual([{ ai_provider: 'anthropic' }])
   })
@@ -78,7 +163,7 @@ describe('AiSettingsView', () => {
     )
   })
 
-  it("shows Effort and Prompt only under Anthropic's Advanced and saves only the changed effort", async () => {
+  it('shows Anthropic effort as a segmented choice outside Advanced', async () => {
     const saved = onAnthropic()
     const fetchMock = mockApi({
       'GET /api/preferences': saved,
@@ -88,20 +173,20 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Advanced' }))
-    await user.click(screen.getByRole('button', { name: 'Advanced categorization settings' }))
-
-    expect(screen.getByRole('combobox', { name: 'Effort' })).toHaveValue('low')
-    expect(screen.getByRole('combobox', { name: 'Categorization effort' })).toHaveValue('low')
-    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(saved.summaries_prompt)
-    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
-      saved.categorization_prompt,
-    )
+    const effort = await screen.findByRole('radiogroup', { name: 'Summaries effort' })
+    expect(within(effort).getByRole('radio', { name: 'Low' })).toBeChecked()
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Categorization effort' })).getByRole(
+        'radio',
+        { name: 'Low' },
+      ),
+    ).toBeChecked()
+    expect(screen.queryByRole('button', { name: /advanced/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: /thinking/i })).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Effort' }), 'high')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    await user.click(within(effort).getByRole('radio', { name: 'High' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
     expect(patchBodies(fetchMock)).toEqual([{ anthropic_summaries_effort: 'high' }])
   })
 
@@ -123,7 +208,7 @@ describe('AiSettingsView', () => {
     ])
   })
 
-  it("says the key isn't set when Anthropic is saved without one", async () => {
+  it('names the missing Anthropic key and the restart', async () => {
     mockApi({
       'GET /api/preferences': onAnthropic({ anthropic_available: false }),
     })
@@ -131,7 +216,9 @@ describe('AiSettingsView', () => {
 
     const section = within(await screen.findByRole('group', { name: 'Provider' }))
     expect(
-      section.getByText("Anthropic is selected but YARRTUBE_ANTHROPIC_API_KEY isn't set"),
+      section.getByText(
+        'Anthropic needs an API key. Set YARRTUBE_ANTHROPIC_API_KEY and restart yarrtube.',
+      ),
     ).toBeInTheDocument()
     expect(
       within(section.getByRole('radiogroup', { name: 'Provider' }))
@@ -145,8 +232,8 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
 
     const section = within(await screen.findByRole('group', { name: 'Categorization' }))
-    expect(section.getByRole('switch', { name: 'Categorization enabled' })).not.toBeChecked()
-    expect(section.getByRole('switch', { name: 'Categorization enabled' })).toBeDisabled()
+    expect(section.getByRole('switch', { name: 'Categorization' })).not.toBeChecked()
+    expect(section.getByRole('switch', { name: 'Categorization' })).toBeDisabled()
     expect(section.getByText('Model')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Categorization model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('textbox', { name: 'Categorization model' })).toBeDisabled()
@@ -161,23 +248,21 @@ describe('AiSettingsView', () => {
     expect(screen.queryByRole('group', { name: 'Categorization' })).not.toBeInTheDocument()
   })
 
-  it('shows the shipped categorization prompt under its Advanced', async () => {
+  it('shows the shipped categorization prompt under its Prompt', async () => {
     mockApi({
       'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
-    const user = userEvent.setup()
 
-    const advanced = await screen.findByRole('button', { name: 'Advanced categorization settings' })
-    expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    const card = within(await screen.findByRole('group', { name: 'Categorization' }))
+    expect(card.getByRole('button', { name: /^Prompt/ })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('textbox', { name: 'Categorization prompt' })).not.toBeInTheDocument()
 
-    await user.click(advanced)
+    await openPrompt('Categorization')
 
     expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
       aPreferences().categorization_prompt,
     )
-    expect(screen.getByText('Using the default prompt')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /reset/i })).not.toBeInTheDocument()
   })
 
@@ -195,9 +280,6 @@ describe('AiSettingsView', () => {
     expect(screen.getByRole('spinbutton', { name: 'Categorization context length' })).toHaveValue(4096)
     expect(screen.getByRole('spinbutton', { name: 'Categorization temperature' })).toHaveValue(0)
     expect(screen.getByRole('switch', { name: 'Categorization thinking' })).toBeChecked()
-    expect(screen.getByRole('textbox', { name: 'Categorization prompt' })).toHaveValue(
-      aPreferences().categorization_prompt,
-    )
   })
 
   it('saves only the changed categorization fields', async () => {
@@ -214,11 +296,11 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Categorization enabled' }))
+    await user.click(await screen.findByRole('switch', { name: 'Categorization' }))
     const model = screen.getByRole('textbox', { name: 'Categorization model' })
     await user.clear(model)
     await user.type(model, 'gemma3:4b')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(patchBodies(fetchMock)).toEqual([{ categorization_enabled: true, categorization_model: 'gemma3:4b' }])
@@ -240,7 +322,7 @@ describe('AiSettingsView', () => {
     const contextLength = screen.getByRole('spinbutton', { name: 'Categorization context length' })
     await user.clear(contextLength)
     await user.type(contextLength, '8192')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ categorization_context_length: 8192 }])
@@ -268,8 +350,8 @@ describe('AiSettingsView', () => {
     expect(contextLength).toHaveAttribute('readonly')
     expect(
       screen.getByText(
-        'Auto sizes it from your categories with an AI prompt, about 1,800 tokens each. ' +
-          'Too small and videos are asked about one category at a time, which is slower.',
+        "Auto: sized to fit your categories, about 1,800 tokens each. If it's too small, " +
+          'videos are checked one category at a time, which is slower.',
       ),
     ).toBeInTheDocument()
   })
@@ -318,7 +400,7 @@ describe('AiSettingsView', () => {
       await screen.findByRole('button', { name: 'Advanced categorization settings' }),
     )
     await user.click(screen.getByRole('switch', { name: 'Auto context length' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ categorization_context_length: null }])
@@ -346,15 +428,16 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(
-      await screen.findByRole('button', { name: 'Advanced categorization settings' }),
-    )
+    await openPrompt('Categorization')
+    const card = within(screen.getByRole('group', { name: 'Categorization' }))
     const prompt = screen.getByRole('textbox', { name: 'Categorization prompt' })
     expect(prompt).toHaveValue('my prompt')
-    expect(screen.queryByText('Using the default prompt')).not.toBeInTheDocument()
+    expect(card.getByRole('button', { name: /^Prompt/ })).toHaveTextContent('Prompt · edited')
     await user.click(screen.getByRole('button', { name: 'Reset to default' }))
 
-    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(card.getByRole('button', { name: /^Prompt/ })).toHaveTextContent('Prompt · default'),
+    )
     expect(prompt).toHaveValue(shipped)
     expect(patchBodies(fetchMock)).toEqual([{ categorization_prompt: null }])
   })
@@ -367,7 +450,7 @@ describe('AiSettingsView', () => {
     const model = await screen.findByRole('textbox', { name: 'Model' })
     expect(model).toBeDisabled()
 
-    await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
+    await user.click(screen.getByRole('switch', { name: 'Summaries' }))
 
     expect(model).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Advanced' })).toBeInTheDocument()
@@ -378,14 +461,15 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
-    await user.click(screen.getByRole('switch', { name: 'Summaries enabled' }))
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
+    await user.click(screen.getByRole('switch', { name: 'Summaries' }))
     await openAdvanced()
 
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('qwen3:4b')
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toHaveValue(12288)
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toHaveValue(0.3)
     expect(screen.getByRole('switch', { name: 'Thinking' })).toBeChecked()
+    await openPrompt('Summaries')
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(
       aPreferences().summaries_prompt,
     )
@@ -406,15 +490,16 @@ describe('AiSettingsView', () => {
 
     expect(advanced).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Prompt' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Prompt' })).not.toBeInTheDocument()
   })
 
   it('disables the summary settings while AI is off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
     await openAdvanced()
+    await openPrompt('Summaries')
 
-    expect(await screen.findByRole('switch', { name: 'Summaries enabled' })).toBeDisabled()
+    expect(await screen.findByRole('switch', { name: 'Summaries' })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: 'Model' })).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: 'Context length' })).toBeDisabled()
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toBeDisabled()
@@ -422,7 +507,7 @@ describe('AiSettingsView', () => {
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toBeDisabled()
   })
 
-  it('saves only the changed fields', async () => {
+  it('saves only the changed fields and shows Saved by the title', async () => {
     const fetchMock = mockApi({
       'GET /api/preferences': aPreferences(),
       'PATCH /api/preferences': aPreferences({
@@ -434,17 +519,23 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    const save = await screen.findByRole('button', { name: 'Save' })
-    expect(save).toBeDisabled()
-    await user.type(screen.getByRole('textbox', { name: 'Ollama URL' }), 'http://mac.local:11434')
-    await user.click(screen.getByRole('switch', { name: 'Enable AI' }))
-    await user.click(save)
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Ollama URL' }),
+      'http://mac.local:11434',
+    )
+    await user.click(screen.getByRole('switch', { name: 'AI features' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
+    expect(screen.getByRole('heading', { level: 1 }).parentElement).toContainElement(
+      screen.getByRole('status'),
+    )
     expect(patchBodies(fetchMock)).toEqual([
       { ai_enabled: true, ollama_url: 'http://mac.local:11434' },
     ])
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled())
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument(),
+    )
   })
 
   it('refetches video lists after saving', async () => {
@@ -465,14 +556,14 @@ describe('AiSettingsView', () => {
       queryFn: () => fetchChannelVideos('handle'),
     })
 
-    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Saved')).toBeInTheDocument()
     expect(videoListRequests).toBe(2)
   })
 
-  it('shows why a save failed and keeps the edits', async () => {
+  it("shows a rejected save's error in the save bar", async () => {
     mockApi({
       'GET /api/preferences': aPreferences(),
       'PATCH /api/preferences': { status: 400, error: 'Ollama URL must be set to enable AI' },
@@ -480,13 +571,14 @@ describe('AiSettingsView', () => {
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('switch', { name: 'Enable AI' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('switch', { name: 'AI features' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Ollama URL must be set to enable AI',
-    )
-    expect(screen.getByRole('switch', { name: 'Enable AI' })).toBeChecked()
+    await screen.findByRole('alert')
+    expect(
+      within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('alert'),
+    ).toHaveTextContent('Ollama URL must be set to enable AI')
+    expect(screen.getByRole('switch', { name: 'AI features' })).toBeChecked()
   })
 
   it('refuses to save a number field that holds no number', async () => {
@@ -503,7 +595,7 @@ describe('AiSettingsView', () => {
     const user = userEvent.setup()
 
     await user.clear(await screen.findByRole('spinbutton', { name: 'Temperature' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Context length and temperature must be numbers',
@@ -523,7 +615,7 @@ describe('AiSettingsView', () => {
       await screen.findByRole('button', { name: 'Advanced categorization settings' }),
     )
     await user.clear(screen.getByRole('spinbutton', { name: 'Categorization temperature' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Context length and temperature must be numbers',
@@ -636,7 +728,7 @@ describe('AiSettingsView', () => {
     const url = screen.getByRole('textbox', { name: 'Ollama URL' })
     await user.clear(url)
     await user.type(url, 'http://nas:11434')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
       expect(optionTexts(screen.getByRole('combobox', { name: 'Model' }))).toEqual([
@@ -691,7 +783,7 @@ describe('AiSettingsView', () => {
 
     expect(screen.queryByRole('switch', { name: 'Thinking' })).not.toBeInTheDocument()
     expect(screen.getByText("gemma3:4b doesn't support thinking")).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ summaries_model: 'gemma3:4b' }])
   })
@@ -720,7 +812,7 @@ describe('AiSettingsView', () => {
       screen.queryByRole('switch', { name: 'Categorization thinking' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText("gemma3:4b doesn't support thinking")).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await screen.findByText('Saved')
     expect(patchBodies(fetchMock)).toEqual([{ categorization_model: 'gemma3:4b' }])
   })
@@ -750,13 +842,19 @@ describe('AiSettingsView', () => {
     )
   })
 
-  it('says the default prompt is in use', async () => {
-    mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
+  it('marks the prompt default or edited', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
-    await openAdvanced()
+    await openPrompt('Summaries')
+    const toggle = within(screen.getByRole('group', { name: 'Summaries' })).getByRole('button', {
+      name: /^Prompt/,
+    })
 
-    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    expect(toggle).toHaveTextContent('Prompt · default')
     expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument()
+    await userEvent.setup().type(screen.getByRole('textbox', { name: 'Prompt' }), ' more')
+
+    expect(toggle).toHaveTextContent('Prompt · edited')
   })
 
   it('resets a saved prompt to the default', async () => {
@@ -770,40 +868,51 @@ describe('AiSettingsView', () => {
       'PATCH /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
-    await openAdvanced()
+    await openPrompt('Summaries')
     const user = userEvent.setup()
 
     expect(await screen.findByRole('textbox', { name: 'Prompt' })).toHaveValue('my prompt')
-    expect(screen.queryByText('Using the default prompt')).not.toBeInTheDocument()
+    const toggle = within(screen.getByRole('group', { name: 'Summaries' })).getByRole('button', {
+      name: /^Prompt/,
+    })
+    expect(toggle).toHaveTextContent('Prompt · edited')
     await user.click(screen.getByRole('button', { name: 'Reset to default' }))
 
-    expect(await screen.findByText('Using the default prompt')).toBeInTheDocument()
+    await waitFor(() => expect(toggle).toHaveTextContent('Prompt · default'))
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(
       aPreferences().summaries_prompt,
     )
     expect(patchBodies(fetchMock)).toEqual([{ summaries_prompt: null }])
   })
 
-  it('explains each prompt section and its variables behind a "?" next to the prompt', async () => {
+  it('lists the prompt variables behind a "?" next to the prompt', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ summaries_enabled: true }) })
     renderWithProviders(<AiSettingsView />)
-    await openAdvanced()
+    await openPrompt('Summaries')
     const user = userEvent.setup()
 
     expect(screen.queryByRole('region', { name: 'Prompt guide' })).not.toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: 'About Prompt' }))
 
     const guide = await screen.findByRole('region', { name: 'Prompt guide' })
-    const reducePart = within(guide).getByRole('group', { name: 'reduce part' })
-
-    expect(within(reducePart).getByText('How each part summary is written into {part_summaries}.')).toBeInTheDocument()
-    expect(within(reducePart).getAllByRole('term').map((term) => term.textContent)).toEqual([
-      '{part}',
-      '{span}',
-      '{summary}',
-    ])
+    const terms = within(guide).getAllByRole('term').map((term) => term.textContent)
+    expect(terms).toEqual(expect.arrayContaining(['{part}', '{span}', '{summary}']))
+    expect(new Set(terms).size).toBe(terms.length)
+    expect(within(guide).queryByRole('heading')).not.toBeInTheDocument()
+    expect(guide).not.toHaveTextContent('## ')
   })
 })
+
+/** Opens the "Prompt" disclosure of the `card` ("Summaries" or "Categorization"). */
+async function openPrompt(card: 'Summaries' | 'Categorization') {
+  await userEvent
+    .setup()
+    .click(
+      within(await screen.findByRole('group', { name: card })).getByRole('button', {
+        name: /^Prompt/,
+      }),
+    )
+}
 
 /** Opens the "Advanced" summary settings, once the page has loaded. */
 async function openAdvanced() {

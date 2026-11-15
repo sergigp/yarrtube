@@ -72,7 +72,8 @@ export function changedFields(
   const current: PreferencesPatch = {
     ai_enabled: form.ai_enabled,
     ai_provider: form.ai_provider,
-    ollama_url: form.ollama_url.trim(),
+    // The daemon stores the URL without trailing slashes: compare it the same way.
+    ollama_url: form.ollama_url.trim().replace(/\/+$/, ''),
     summaries_enabled: form.summaries_enabled,
     summaries_model: form.summaries_model,
     summaries_context_length: toNumber(form.summaries_context_length),

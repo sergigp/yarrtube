@@ -17,7 +17,7 @@ describe('PlexSettingsView', () => {
     vi.useRealTimers()
   })
 
-  it('explains how to set Plex up when it is not configured', async () => {
+  it("shows the setup card when Plex isn't configured", async () => {
     mockApi({
       'GET /api/plex': aPlexStatus({ configured: false, connection: null, syncs: [] }),
       'GET /api/preferences': aPreferences(),
@@ -25,10 +25,20 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    expect(await screen.findByText(/Plex isn't configured/)).toHaveTextContent(
-      "Plex isn't configured. Set YARRTUBE_PLEX_URL, YARRTUBE_PLEX_TOKEN and YARRTUBE_PLEX_VIDEOS_PATH to connect yarrtube to your Plex server.",
-    )
-    expect(screen.getByRole('link', { name: 'Plex guide' })).toHaveAttribute(
+    const setup = await screen.findByRole('group', { name: 'Watch your downloads in Plex' })
+    expect(lines(setup)).toEqual([
+      'Connect yarrtube to your Plex server and every channel and playlist shows up as a TV show.',
+      'New episodes appear in Plex right after they download.',
+      'Watched status stays in sync between yarrtube and Plex.',
+      'Each category becomes a smart playlist.',
+      'Set these environment variables and restart the container',
+    ])
+    expect(within(setup).getAllByRole('listitem').map((row) => row.textContent)).toEqual([
+      "YARRTUBE_PLEX_URL · your server's addressCopy",
+      'YARRTUBE_PLEX_TOKEN · your Plex tokenCopy',
+      'YARRTUBE_PLEX_VIDEOS_PATH · where Plex sees the videos folderCopy',
+    ])
+    expect(within(setup).getByRole('link', { name: 'Open the Plex guide' })).toHaveAttribute(
       'href',
       'https://github.com/sergigp/yarrtube/blob/main/doc/PLEX.md',
     )
@@ -36,7 +46,22 @@ describe('PlexSettingsView', () => {
     expect(screen.queryByRole('group', { name: 'Category playlists' })).not.toBeInTheDocument()
   })
 
-  it('shows the connection the latest sync saw', async () => {
+  it('copies a variable name', async () => {
+    mockApi({
+      'GET /api/plex': aPlexStatus({ configured: false, connection: null, syncs: [] }),
+      'GET /api/preferences': aPreferences(),
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup()
+
+    const copy = await screen.findByRole('button', { name: 'Copy YARRTUBE_PLEX_TOKEN' })
+    await user.click(copy)
+
+    expect(await navigator.clipboard.readText()).toBe('YARRTUBE_PLEX_TOKEN')
+    expect(copy).toHaveTextContent('Copied')
+  })
+
+  it('shows the server badge, version, libraries and last checked', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date('2026-11-14T10:02:00Z'))
     mockApi({
@@ -52,16 +77,25 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const connection = await screen.findByRole('group', { name: 'Connection' })
-    expect(lines(connection)).toEqual([
-      'Connected',
-      'Plex Media Server 1.43.5.11079',
-      "Libraries: Subscriptions, Sergi's Playlists",
-      'Checked 2 minutes ago',
+    const server = await screen.findByRole('group', { name: 'Server' })
+    expect(within(server).getByText('Connected')).toBeInTheDocument()
+    expect(details(server)).toEqual([
+      ['Version', '1.43.5.11079'],
+      ['Libraries', "Subscriptions, Sergi's Playlists"],
+      ['Last checked', '2 minutes ago'],
     ])
+    expect(
+      screen.getByText(
+        'Keep watched status in sync with Plex and turn categories into Plex playlists.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Plex guide' })).toHaveAttribute(
+      'href',
+      'https://github.com/sergigp/yarrtube/blob/main/doc/PLEX.md',
+    )
   })
 
-  it('says Plex cannot be reached, with the error and what was seen last', async () => {
+  it('tells what to check when Plex is unreachable', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date('2026-11-14T10:05:00Z'))
     mockApi({
@@ -79,16 +113,19 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const connection = await screen.findByRole('group', { name: 'Connection' })
-    expect(lines(connection)).toEqual([
-      "Can't reach Plex: connection refused",
-      'Plex Media Server 1.43.5.11079',
-      'Libraries: Subscriptions',
-      'Checked 1 minute ago',
+    const server = await screen.findByRole('group', { name: 'Server' })
+    expect(within(server).getByText("Can't reach Plex", { selector: 'span' })).toBeInTheDocument()
+    expect(lines(server)).toEqual([
+      "Can't reach Plex: connection refused. Check YARRTUBE_PLEX_URL and that the server is running.",
+    ])
+    expect(details(server)).toEqual([
+      ['Version', '1.43.5.11079'],
+      ['Libraries', 'Subscriptions'],
+      ['Last checked', '1 minute ago'],
     ])
   })
 
-  it('says the status shows after the first sync', async () => {
+  it('says the server is not checked yet before the first sync', async () => {
     mockApi({
       'GET /api/plex': aPlexStatus({ connection: null }),
       'GET /api/preferences': aPreferences(),
@@ -96,11 +133,11 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const connection = await screen.findByRole('group', { name: 'Connection' })
-    expect(lines(connection)).toEqual(['The connection shows here after the first Plex sync.'])
+    const server = await screen.findByRole('group', { name: 'Server' })
+    expect(lines(server)).toEqual(['Not checked yet. Server details appear after the first sync.'])
   })
 
-  it('shows when each sync last ran, how it ended and when it runs next', async () => {
+  it('shows Retry now on a failed sync', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date('2026-11-14T10:03:00Z'))
     mockApi({
@@ -113,9 +150,9 @@ describe('PlexSettingsView', () => {
           }),
           aPlexSync({
             kind: 'labels',
-            last_run_at: '2026-11-14T09:58:00Z',
+            last_run_at: '2026-11-14T09:59:00Z',
             last_error: 'timed out',
-            next_run_at: '2026-11-14T10:13:00Z',
+            next_run_at: '2026-11-14T10:14:00Z',
           }),
         ],
       }),
@@ -124,14 +161,20 @@ describe('PlexSettingsView', () => {
 
     renderWithProviders(<PlexSettingsView />)
 
-    const watchState = await screen.findByRole('group', { name: 'Watch state' })
-    const labels = screen.getByRole('group', { name: 'Labels & playlists' })
-    expect(lines(watchState)).toEqual(['Last run 3 minutes ago', 'Next run in 2 minutes'])
-    expect(lines(labels)).toEqual([
-      'Last run 5 minutes ago: timed out',
-      'Next run in 10 minutes',
+    const sync = await screen.findByRole('group', { name: 'Sync' })
+    expect(sync).not.toHaveTextContent('Runs on its own')
+    const watched = within(sync).getByRole('group', { name: 'Watched status' })
+    const labels = within(sync).getByRole('group', { name: 'Categories to Plex' })
+    expect(lines(watched)).toEqual([
+      "Both ways: watch a video here or in Plex and it's marked watched in both.",
+      'Last run 3 minutes ago · Next in 2 minutes',
     ])
-    expect(within(watchState).getByRole('button', { name: 'Sync now' })).toBeEnabled()
+    expect(lines(labels)).toEqual([
+      'Category labels and playlists in Plex follow your categories.',
+      'Failed 4 minutes ago: timed out. Retries in 11 minutes.',
+    ])
+    expect(within(watched).getByRole('button', { name: 'Sync now' })).toBeEnabled()
+    expect(within(labels).getByRole('button', { name: 'Retry now' })).toBeEnabled()
   })
 
   it('runs a sync now and shows it syncing until a newer run finishes', async () => {
@@ -147,7 +190,7 @@ describe('PlexSettingsView', () => {
     })
     renderWithProviders(<PlexSettingsView />)
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    const watchState = await screen.findByRole('group', { name: 'Watch state' })
+    const watchState = await screen.findByRole('group', { name: 'Watched status' })
 
     await user.click(within(watchState).getByRole('button', { name: 'Sync now' }))
 
@@ -171,7 +214,7 @@ describe('PlexSettingsView', () => {
     })
     renderWithProviders(<PlexSettingsView />)
     const user = userEvent.setup()
-    const labels = await screen.findByRole('group', { name: 'Labels & playlists' })
+    const labels = await screen.findByRole('group', { name: 'Categories to Plex' })
 
     await user.click(within(labels).getByRole('button', { name: 'Sync now' }))
 
@@ -181,7 +224,7 @@ describe('PlexSettingsView', () => {
     expect(within(labels).getByRole('button', { name: 'Sync now' })).toBeEnabled()
   })
 
-  it('saves a category playlist option on its own', async () => {
+  it('saves a playlist choice on its own', async () => {
     const fetchMock = mockApi({
       'GET /api/plex': aPlexStatus(),
       'GET /api/preferences': aPreferences(),
@@ -192,20 +235,22 @@ describe('PlexSettingsView', () => {
     const playlists = await screen.findByRole('group', { name: 'Category playlists' })
     const watched = within(playlists).getByRole('radiogroup', { name: 'Watched episodes' })
     const order = within(playlists).getByRole('radiogroup', { name: 'Order' })
-    expect(within(watched).getByRole('radio', { name: 'Stay in the playlist' })).toBeChecked()
+    expect(within(watched).getByRole('radio', { name: 'Keep them' })).toBeChecked()
     expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
+    expect(playlists).not.toHaveTextContent('queue of what')
+    expect(within(playlists).queryByRole('figure')).not.toBeInTheDocument()
 
-    await user.click(within(watched).getByRole('radio', { name: 'Drop out' }))
+    await user.click(within(watched).getByRole('radio', { name: 'Remove them from playlist' }))
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
-    expect(within(watched).getByRole('radio', { name: 'Drop out' })).toBeChecked()
+    expect(within(watched).getByRole('radio', { name: 'Remove them from playlist' })).toBeChecked()
     expect(
       fetchMock.mock.calls
         .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
         .map(([, init]) => JSON.parse(String((init as RequestInit).body))),
     ).toEqual([{ plex_playlist_watched: 'drop' }])
     expect(playlists).toHaveTextContent(
-      "Plex Web and the Mac app don't show watched badges in playlists, so dropping watched episodes is the way to tell what's left.",
+      'Each category becomes a smart playlist in Plex with all its episodes. These options apply to every category playlist.',
     )
   })
 
@@ -222,7 +267,7 @@ describe('PlexSettingsView', () => {
     await user.click(within(order).getByRole('radio', { name: 'Oldest first' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Failed to save: database is locked',
+      "Couldn't save: database is locked. Try again.",
     )
     expect(within(order).getByRole('radio', { name: 'Newest first' })).toBeChecked()
     expect(screen.getByRole('status')).toHaveTextContent('')
@@ -242,11 +287,47 @@ describe('PlexSettingsView', () => {
         .getAllByRole('radio')
         .map((radio) => (radio as HTMLInputElement).disabled),
     ).toEqual([true, true, true, true])
-    expect(playlists).toHaveTextContent(
-      'Category playlists need categories on, in General settings.',
+    expect(playlists).toHaveTextContent('Category playlists need categories, which are off.')
+  })
+
+  it('turns categories on from the Plex page', async () => {
+    let categoriesEnabled = false
+    const fetchMock = mockApi({
+      'GET /api/plex': aPlexStatus(),
+      'GET /api/preferences': () => aPreferences({ categories_enabled: categoriesEnabled }),
+      'PATCH /api/preferences': () => {
+        categoriesEnabled = true
+        return aPreferences({ categories_enabled: true })
+      },
+    })
+    renderWithProviders(<PlexSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Turn on categories' }))
+
+    const playlists = screen.getByRole('group', { name: 'Category playlists' })
+    await waitFor(() =>
+      expect(
+        within(playlists)
+          .getAllByRole('radio')
+          .every((radio) => !(radio as HTMLInputElement).disabled),
+      ).toBe(true),
     )
+    expect(playlists).not.toHaveTextContent('Category playlists need categories')
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
+        .map(([, init]) => JSON.parse(String((init as RequestInit).body))),
+    ).toEqual([{ categories_enabled: true }])
   })
 })
+
+/** Each term of the description list in `element`, with its description. */
+function details(element: HTMLElement): [string, string][] {
+  const terms = within(element).getAllByRole('term')
+  const definitions = within(element).getAllByRole('definition')
+  return terms.map((term, index) => [term.textContent ?? '', definitions[index]?.textContent ?? ''])
+}
 
 /** The text of each line (paragraph) in `element`. */
 function lines(element: HTMLElement): string[] {
