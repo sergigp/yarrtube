@@ -52,6 +52,10 @@ it:
 3. Turn on categorization for the channels and playlists whose videos should
    be judged.
 
+<p align="center">
+  <img src="category_dialog.jpeg" alt="A category's settings with its AI prompt" width="800"/>
+</p>
+
 Once a video of those sources has a summary, the AI asks, in one go, which of
 the categories with a prompt it belongs in (one at a time for a video it
 can't answer in one go), and adds it to every category it fits. It never
