@@ -5,19 +5,20 @@ export interface MarkWatchedConfirmation {
 }
 
 /**
- * The confirmation to show before marking `name` watched, or null to mark it
- * right away. `unwatchedCount` must be the real count, also when it is hidden.
+ * The confirmation every "Mark all watched" asks first, since it has no
+ * undo. `unwatchedCount` must be the real count, also when it is hidden.
  */
 export function markWatchedConfirmation(
   name: string,
   unwatchedCount: number,
-): MarkWatchedConfirmation | null {
-  // One video is no worse than a single video's "Mark as watched", which never asks.
-  if (unwatchedCount <= 1) {
-    return null
-  }
+): MarkWatchedConfirmation {
   return {
-    title: `Mark ${unwatchedCount} videos in "${name}" watched?`,
+    title:
+      unwatchedCount === 1
+        ? `Mark 1 video in "${name}" watched?`
+        : unwatchedCount > 1
+          ? `Mark ${unwatchedCount} videos in "${name}" watched?`
+          : `Mark everything in "${name}" watched?`,
     description: "This can't be undone in bulk: videos can only be marked unwatched one by one.",
   }
 }

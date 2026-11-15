@@ -138,6 +138,7 @@ export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListI
     categorization_enabled: false,
     unwatched_count: 0,
     work_in_progress: false,
+    last_synced_at: null,
     ...overrides,
   }
 }
@@ -158,6 +159,7 @@ export function aPlaylist(overrides: Partial<PlaylistListItem> = {}): PlaylistLi
     created_at: '2026-01-01T00:00:00Z',
     unwatched_count: 0,
     work_in_progress: false,
+    last_synced_at: null,
     ...overrides,
   }
 }
@@ -184,6 +186,7 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
     subtitle_language: null,
     chapters: [],
     summary: null,
+    episode: null,
     ...overrides,
   }
 }

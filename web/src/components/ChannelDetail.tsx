@@ -16,17 +16,21 @@ import {
   markChannelWatched,
   avatarMediaUrl,
 } from '@/api/client'
-import { useWatchProgress } from '@/hooks/useWatchProgress'
-import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
-import { youtubeChannelUrl } from '@/lib/sourcePath'
-import { VideoPlayer } from './VideoPlayer'
-import { VideoDetail } from './VideoDetail'
-import { VideoListPane } from './VideoListPane'
+import { formatRelativeTime } from '@/lib/formatDateTime'
+import { newestUnwatched, sourceSummary } from '@/lib/sourceVideos'
+import { channelPath, youtubeChannelUrl } from '@/lib/sourcePath'
 import { DetailHeader } from './DetailHeader'
 import { EditChannelDialog } from './EditChannelDialog'
+import { PlayLink } from './PlayLink'
+import { WatchView } from './WatchView'
 
+/**
+ * A channel's page (`/channels/:id`), straight into the watching layout:
+ * most channels keep only a few videos, so there's no grid to browse. Its
+ * header's "Play next" plays the newest video not watched yet.
+ */
 export function ChannelDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -40,10 +44,7 @@ export function ChannelDetail() {
   const channel = channels?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = useChannelVideos(id)
-  const { selectedVideo, autoplay, selectVideo } = useVideoSelection(videos)
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
-  useWatchProgress(videoElement, selectedVideo)
-  const playbackSpeed = usePlaybackSpeed(videoElement, selectedVideo?.id ?? null)
+  const selection = useVideoSelection(videos)
 
   // A failed background refresh keeps the loaded channel, and its player, on screen.
   if (channelsError && !channels) {
@@ -60,13 +61,38 @@ export function ChannelDetail() {
     return <p className="text-sm text-destructive">Channel not found.</p>
   }
 
+  const avatarSrc = channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null
+  const next = videos ? newestUnwatched(videos) : null
+
   return (
     <div className="flex flex-col md:h-full md:min-h-[480px]">
       <DetailHeader
         name={channel.name}
-        showAvatar
-        avatarSrc={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
-        videos={videos}
+        badge={{ kind: 'avatar', src: avatarSrc }}
+        compact
+        summary={
+          videos
+            ? sourceSummary({
+                kind: 'Channel',
+                videoCount: videos.length,
+                unwatchedCount: channel.unwatched_count,
+                syncedAgo: channel.last_synced_at
+                  ? formatRelativeTime(channel.last_synced_at)
+                  : null,
+              })
+            : null
+        }
+        primaryAction={
+          next &&
+          next.id !== selection.selectedVideo?.id && (
+            <PlayLink
+              compact
+              to={`${channelPath(id)}?video=${encodeURIComponent(next.id)}`}
+              label="Play next"
+              title={next.title}
+            />
+          )
+        }
         unwatchedCount={channel.unwatched_count}
         onSync={refreshing(() => reconcileChannel(id))}
         onMarkWatched={refreshing(() => markChannelWatched(id))}
@@ -94,38 +120,21 @@ export function ChannelDetail() {
         onOpenChange={setEditing}
         onSave={(changes) => saveChannelSettings(channel, changes)}
       />
-      <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
-        <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
-          <VideoPlayer
-            basePath={channel.path}
-            video={selectedVideo}
-            autoplay={autoplay}
-            onVideoElement={setVideoElement}
-          />
-
-          {selectedVideo ? (
-            <VideoDetail
-              basePath={channel.path}
-              video={selectedVideo}
-              channel={channel}
-              playbackRate={playbackSpeed.rate}
-              onPlaybackRateChange={playbackSpeed.changeRate}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">No video selected.</p>
-          )}
-        </div>
-
-        <VideoListPane
-          noun="channel"
-          basePathOf={() => channel.path}
-          sourceNameOf={() => channel.name}
-          videos={videos}
-          error={error}
-          selectedVideoId={selectedVideo?.id ?? null}
-          onSelect={selectVideo}
-        />
-      </div>
+      <WatchView
+        noun="channel"
+        videos={videos}
+        error={error}
+        selection={selection}
+        basePathOf={() => channel.path}
+        sourceNameOf={() => channel.name}
+        detailSourceOf={() => ({
+          kind: 'channel',
+          name: channel.name,
+          href: channelPath(id),
+          avatarSrc,
+        })}
+        orderLabel="newest first"
+      />
     </div>
   )
 }

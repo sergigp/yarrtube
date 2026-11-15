@@ -500,6 +500,101 @@ async fn it_should_list_playlist_videos() {
 }
 
 #[tokio::test]
+async fn it_should_include_the_episode_number_when_listing_playlist_videos() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let video = Video {
+        episode_number: Some(EpisodeNumber::from_columns(1, 7).unwrap()),
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+    };
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &video,
+    );
+    let video_searcher = VideoSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_playlist(video_searcher, "PL1").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![VideoResponse {
+            episode: Some(7),
+            ..pending_video_response("vid1", "My Video")
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_the_episode_number_when_listing_channel_videos() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let video = Video {
+        episode_number: Some(EpisodeNumber::from_columns(2024, 111501).unwrap()),
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+    };
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &video,
+        0,
+    );
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![VideoResponse {
+            episode: Some(111501),
+            ..pending_video_response("vid1", "My Video")
+        }])
+    );
+}
+
+#[tokio::test]
 async fn it_should_include_the_video_id_when_listing_playlist_videos() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -7519,6 +7614,7 @@ fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         subtitle_language: None,
         chapters: vec![],
         summary: None,
+        episode: None,
     }
 }
 
@@ -7601,6 +7697,7 @@ fn category_video_response(
         subtitle_language: None,
         chapters: vec![],
         summary: None,
+        episode: None,
         source,
         category_ids: vec![],
     }

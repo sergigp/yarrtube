@@ -2,47 +2,36 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DetailHeader } from './DetailHeader'
-import { aVideo } from '@/test/helpers'
+import { MemoryRouter } from 'react-router-dom'
 import { useDesktopViewport } from '@/test/viewport'
 
 const noop = async () => {}
 
 describe('DetailHeader', () => {
-  it('summarizes the videos and unwatched count', () => {
+  it('shows the badge, name and meta line', () => {
     render(
       <DetailHeader
         name="The Channel"
-        videos={[aVideo(), aVideo(), aVideo()]}
-        unwatchedCount={2}
+        badge={{ kind: 'color', color: '#ff0000' }}
+        summary="3 videos · 2 unwatched"
         onSync={noop}
         onDelete={noop}
         deleteDescription="desc"
       />,
     )
 
-    expect(screen.getByText('3 videos · 2 unwatched')).toBeInTheDocument()
+    expect([
+      screen.getByRole('heading', { name: 'The Channel' }),
+      screen.getByText('3 videos · 2 unwatched'),
+    ]).toHaveLength(2)
   })
 
-  it('drops the unwatched part when everything is watched, and singularizes one video', () => {
+  it('shows no meta line until it is known', () => {
     render(
       <DetailHeader
         name="The Channel"
-        videos={[aVideo()]}
-        unwatchedCount={0}
-        onSync={noop}
-        onDelete={noop}
-        deleteDescription="desc"
-      />,
-    )
-
-    expect(screen.getByText('1 video')).toBeInTheDocument()
-  })
-
-  it('shows no summary until the videos have loaded', () => {
-    render(
-      <DetailHeader
-        name="The Channel"
-        videos={undefined}
+        badge={{ kind: 'playlist' }}
+        summary={null}
         onSync={noop}
         onDelete={noop}
         deleteDescription="desc"
@@ -52,12 +41,33 @@ describe('DetailHeader', () => {
     expect(screen.queryByText(/videos/)).not.toBeInTheDocument()
   })
 
+  it('links the name back when given a link', () => {
+    render(
+      <MemoryRouter>
+        <DetailHeader
+          name="The Playlist"
+          badge={{ kind: 'playlist' }}
+          nameHref="/playlists/PL1"
+          summary="1 video"
+          onDelete={noop}
+          deleteDescription="desc"
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'The Playlist' })).toHaveAttribute(
+      'href',
+      '/playlists/PL1',
+    )
+  })
+
   it('keeps every action, Sync included, behind the ⋮ menu on mobile', async () => {
     const onSync = vi.fn(noop)
     render(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         onSync={onSync}
         onDelete={noop}
         deleteDescription="desc"
@@ -76,7 +86,8 @@ describe('DetailHeader', () => {
     render(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         youtubeLink={{ href: 'https://www.youtube.com/@thechannel', label: 'Open channel on YouTube' }}
         onDelete={noop}
         deleteDescription="desc"
@@ -97,7 +108,8 @@ describe('DetailHeader', () => {
     const { rerender } = render(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         onSync={noop}
         onMarkWatched={noop}
         onDelete={noop}
@@ -112,7 +124,8 @@ describe('DetailHeader', () => {
     rerender(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         onSync={noop}
         onDelete={noop}
         deleteDescription="desc"
@@ -130,7 +143,8 @@ describe('DetailHeader', () => {
     render(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         unwatchedCount={23}
         onMarkWatched={onMarkWatched}
         onDelete={noop}
@@ -161,7 +175,8 @@ describe('DetailHeader', () => {
     render(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         unwatchedCount={5}
         onMarkWatched={onMarkWatched}
         onDelete={noop}
@@ -177,13 +192,14 @@ describe('DetailHeader', () => {
     expect(onMarkWatched).not.toHaveBeenCalled()
   })
 
-  it('marks a single unwatched video watched without asking', async () => {
+  it('asks even before marking a single unwatched video watched', async () => {
     const user = userEvent.setup()
     const onMarkWatched = vi.fn(noop)
     render(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="1 video"
         unwatchedCount={1}
         onMarkWatched={onMarkWatched}
         onDelete={noop}
@@ -194,8 +210,10 @@ describe('DetailHeader', () => {
     await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
 
-    await waitFor(() => expect(onMarkWatched).toHaveBeenCalledOnce())
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('dialog', { name: 'Mark 1 video in "The Channel" watched?' }),
+    ).toBeVisible()
+    expect(onMarkWatched).not.toHaveBeenCalled()
   })
 
   it('keeps the mark-all-watched confirmation open with the error when marking fails', async () => {
@@ -204,7 +222,8 @@ describe('DetailHeader', () => {
     render(
       <DetailHeader
         name="The Channel"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         unwatchedCount={3}
         onMarkWatched={onMarkWatched}
         onDelete={noop}
@@ -222,51 +241,13 @@ describe('DetailHeader', () => {
     expect(await within(dialog).findByText('mark failed')).toBeInTheDocument()
   })
 
-  it('disables mark-all-watched while it runs', async () => {
-    let resolveMarkWatched = () => {}
-    const onMarkWatched = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveMarkWatched = resolve
-        }),
-    )
-    render(
-      <DetailHeader
-        name="The Channel"
-        videos={[]}
-        onSync={noop}
-        onMarkWatched={onMarkWatched}
-        onDelete={noop}
-        deleteDescription="desc"
-      />,
-    )
-    const user = userEvent.setup()
-
-    await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
-    await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
-
-    expect(await screen.findByRole('menuitem', { name: 'Mark all watched' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    resolveMarkWatched()
-    await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: 'Mark all watched' })).not.toHaveAttribute(
-        'aria-disabled',
-      ),
-    )
-    expect(onMarkWatched).toHaveBeenCalledOnce()
-  })
-
-  it('shows the summary prefix and menu items, and no Sync without onSync', async () => {
+  it('lists extra actions in the menu, and no Sync without onSync', async () => {
     render(
       <DetailHeader
         name="Chess"
-        videos={[aVideo(), aVideo()]}
-        unwatchedCount={1}
-        summaryPrefix="3 sources"
-        extraActions={[{ label: 'Edit settings', icon: null, onSelect: () => {} }]}
+        badge={{ kind: 'color', color: '#ff0000' }}
+        summary="2 videos"
+        extraActions={[{ label: 'Edit category', icon: null, onSelect: () => {} }]}
         onDelete={noop}
         deleteDescription="desc"
       />,
@@ -275,8 +256,7 @@ describe('DetailHeader', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'More actions for Chess' }))
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
 
-    expect(screen.getByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
-    expect(items).toEqual(['Edit settings', 'Delete'])
+    expect(items).toEqual(['Edit category', 'Delete'])
   })
 
   describe('on desktop', () => {
@@ -286,7 +266,8 @@ describe('DetailHeader', () => {
       render(
         <DetailHeader
           name="The Playlist"
-          videos={[]}
+          badge={{ kind: 'playlist' }}
+        summary="0 videos"
           youtubeLink={{ href: 'https://www.youtube.com/playlist?list=PL1', label: 'Open playlist on YouTube' }}
           onDelete={noop}
           deleteDescription="desc"
@@ -309,7 +290,8 @@ describe('DetailHeader', () => {
       render(
         <DetailHeader
           name="The Channel"
-          videos={[]}
+          badge={{ kind: 'playlist' }}
+        summary="0 videos"
           onSync={onSync}
           onDelete={noop}
           deleteDescription="desc"
@@ -331,7 +313,8 @@ describe('DetailHeader', () => {
       render(
         <DetailHeader
           name="The Channel"
-          videos={[]}
+          badge={{ kind: 'playlist' }}
+        summary="0 videos"
           onSync={async () => {
             throw new Error('yt down')
           }}
@@ -351,7 +334,8 @@ describe('DetailHeader', () => {
       render(
         <DetailHeader
           name="The Channel"
-          videos={[]}
+          badge={{ kind: 'playlist' }}
+        summary="0 videos"
           onSync={noop}
           onDelete={noop}
           deleteDescription="desc"
@@ -363,31 +347,53 @@ describe('DetailHeader', () => {
       expect(await screen.findByRole('tooltip')).toHaveTextContent('Sync')
     })
 
-    it('lays every action but mark-all-watched and delete out as an icon button, then a ⋮ menu offering both', async () => {
+    it('lays out Sync, YouTube and icon extras as buttons, then a ⋮ menu with the rest', async () => {
       const onEditRequest = vi.fn()
       render(
         <DetailHeader
           name="The Channel"
-          videos={[]}
+          badge={{ kind: 'playlist' }}
+          summary="0 videos"
+          primaryAction={<button type="button">Play next</button>}
           onSync={noop}
+          youtubeLink={{ href: 'https://www.youtube.com/@x', label: 'Open channel on YouTube' }}
+          extraActions={[
+            { label: 'Edit category', icon: null, onSelect: () => {}, iconOnDesktop: true },
+          ]}
           onMarkWatched={noop}
+          excludedFromHome={false}
+          onSetExcludedFromHome={noop}
+          unwatchedCountHidden={false}
+          onSetUnwatchedCountHidden={noop}
           onEditRequest={onEditRequest}
           onDelete={noop}
           deleteDescription="desc"
         />,
       )
 
-      const buttons = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))
+      const controls = [...screen.getAllByRole('button'), ...screen.getAllByRole('link')].map(
+        (control) => control.getAttribute('aria-label') ?? control.textContent,
+      )
       const user = userEvent.setup()
-      await user.click(screen.getByRole('button', { name: 'Edit settings' }))
       await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
       const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
-      await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Edit settings' }))
 
-      expect(buttons).toEqual(['Sync', 'Edit settings', 'More actions for The Channel'])
-      expect(items).toEqual(['Mark all watched', 'Delete'])
+      expect(controls).toEqual([
+        'Play next',
+        'Sync',
+        'Edit category',
+        'More actions for The Channel',
+        'Open channel on YouTube',
+      ])
+      expect(items).toEqual([
+        'Mark all watched',
+        'Exclude from home',
+        'Hide unwatched count',
+        'Edit settings',
+        'Delete',
+      ])
       expect(onEditRequest).toHaveBeenCalledOnce()
-      expect(screen.getByRole('dialog', { name: 'Delete "The Channel"?' })).toBeVisible()
     })
   })
 
@@ -396,7 +402,8 @@ describe('DetailHeader', () => {
     const header = (enabled: boolean) => (
       <DetailHeader
         name="@GothamChess"
-        videos={[]}
+        badge={{ kind: 'playlist' }}
+        summary="0 videos"
         onSync={noop}
         aiCategorization={{ enabled, onDeleteAiVerdicts: onDelete }}
         onDelete={noop}

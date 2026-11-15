@@ -51,6 +51,8 @@ export interface ChannelListItem {
   unwatched_count: number
   /** Still downloading or fetching something: it can't be moved yet. */
   work_in_progress: boolean
+  /** When its videos were last synced from YouTube; null until the first sync. */
+  last_synced_at: string | null
 }
 
 /** An entry of `GET /api/playlists`. */
@@ -71,6 +73,8 @@ export interface PlaylistListItem {
   unwatched_count: number
   /** Still downloading or fetching something: it can't be moved yet. */
   work_in_progress: boolean
+  /** When its videos were last synced from YouTube; null until the first sync. */
+  last_synced_at: string | null
 }
 
 /** A sidebar/detail library entry: what channels and playlists share. */
@@ -110,6 +114,8 @@ export interface Video {
   chapters: Chapter[]
   /** The AI summary; null when the video has none or it is hidden. */
   summary: string | null
+  /** Its episode number on disk (a playlist's S01E<n>); null until assigned. */
+  episode: number | null
 }
 
 /** One of a video's chapters, in whole seconds from the start of the video. */

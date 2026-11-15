@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   queryKeys,
+  useCategories,
   useCategoriesShown,
   useCategorizationAvailable,
   useDeleteSource,
@@ -18,18 +19,49 @@ import {
   deleteSourceAiVerdicts,
   markPlaylistWatched,
 } from '@/api/client'
-import { useWatchProgress } from '@/hooks/useWatchProgress'
-import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
+import type { PlaylistListItem, Video } from '@/api/types'
+import { useRememberedChoice } from '@/hooks/useRememberedChoice'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
-import { youtubePlaylistUrl } from '@/lib/sourcePath'
-import { VideoPlayer } from './VideoPlayer'
-import { VideoDetail } from './VideoDetail'
-import { VideoListPane } from './VideoListPane'
+import { isMember } from '@/lib/categories'
+import { formatRelativeTime } from '@/lib/formatDateTime'
+import {
+  WATCH_FILTERS,
+  asHomeVideo,
+  matchesWatchFilter,
+  nextToPlay,
+  sortVideos,
+  sourceSummary,
+  watchFilterCounts,
+  type VideoSort,
+} from '@/lib/sourceVideos'
+import { categoryPath, playlistPath, youtubePlaylistUrl } from '@/lib/sourcePath'
 import { DetailHeader } from './DetailHeader'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
+import { PlayLink } from './PlayLink'
+import { VideoGrid } from './VideoGrid'
+import { VideoListToolbar } from './VideoListToolbar'
+import { VideoGridSkeleton } from './VideoSkeletons'
+import { WatchView } from './WatchView'
 
+const PLAYLIST_SORTS: readonly VideoSort[] = ['playlist', 'newest', 'oldest']
+
+/** Where the page path of a playlist's video leads: its watching layout. */
+function videoInPlaylist(playlistId: string, videoId: string): string {
+  return `${playlistPath(playlistId)}?video=${encodeURIComponent(videoId)}`
+}
+
+/**
+ * A playlist's page (`/playlists/:id`). Browsing: its header with "Play
+ * next" (the first video in playlist order not watched yet), the
+ * watch-state chips and sort (remembered per playlist), and its videos as
+ * cards numbered by episode. Once a video is picked (`?video=`), the
+ * watching layout: player, video info and the playlist as the queue, the
+ * name in the header leading back to browsing.
+ */
 export function PlaylistDetail() {
   const { id = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const watching = searchParams.has('video')
   const navigate = useNavigate()
   const { data: playlists, error: playlistsError } = usePlaylists()
   const refreshing = useLibraryAction()
@@ -40,13 +72,11 @@ export function PlaylistDetail() {
   const [editing, setEditing] = useState(false)
   const categoriesShown = useCategoriesShown()
   const categorizationAvailable = useCategorizationAvailable()
+  const { data: categoryList } = useCategories({ enabled: categoriesShown })
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePlaylistVideos(id)
-  const { selectedVideo, autoplay, selectVideo } = useVideoSelection(videos)
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
-  useWatchProgress(videoElement, selectedVideo)
-  const playbackSpeed = usePlaybackSpeed(videoElement, selectedVideo?.id ?? null)
+  const selection = useVideoSelection(videos)
 
   // A failed background refresh keeps the loaded playlist, and its player, on screen.
   if (playlistsError && !playlists) {
@@ -63,11 +93,60 @@ export function PlaylistDetail() {
     return <p className="text-sm text-destructive">Playlist not found.</p>
   }
 
+  const next = videos ? nextToPlay(videos) : null
+  const categories = categoriesShown
+    ? (categoryList?.categories ?? []).filter((category) =>
+        isMember(category, { kind: 'playlist', id }),
+      )
+    : []
+
   return (
-    <div className="flex flex-col md:h-full md:min-h-[480px]">
+    <div className={watching ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
       <DetailHeader
         name={playlist.name}
-        videos={videos}
+        badge={{ kind: 'playlist' }}
+        compact={watching}
+        nameHref={watching ? playlistPath(id) : undefined}
+        nameLinkLabel="Back to the playlist page"
+        summary={
+          videos
+            ? sourceSummary({
+                kind: 'Playlist',
+                videoCount: videos.length,
+                unwatchedCount: playlist.unwatched_count,
+                syncedAgo: playlist.last_synced_at
+                  ? formatRelativeTime(playlist.last_synced_at)
+                  : null,
+              })
+            : null
+        }
+        chips={
+          !watching &&
+          categories.map((category) => (
+            <Link
+              key={category.id}
+              to={categoryPath(category.id)}
+              className="flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground no-underline hover:bg-accent"
+            >
+              <span
+                aria-hidden="true"
+                className="size-1.5 rounded-full"
+                style={{ background: category.color }}
+              />
+              {category.name}
+            </Link>
+          ))
+        }
+        primaryAction={
+          !watching &&
+          next && (
+            <PlayLink
+              to={videoInPlaylist(id, next.id)}
+              label={next.episode != null ? `Play next · Ep ${next.episode}` : 'Play next'}
+              title={next.title}
+            />
+          )
+        }
         unwatchedCount={playlist.unwatched_count}
         onSync={refreshing(() => reconcilePlaylist(id))}
         onMarkWatched={refreshing(() => markPlaylistWatched(id))}
@@ -99,37 +178,93 @@ export function PlaylistDetail() {
         onOpenChange={setEditing}
         onSave={(changes) => updatePlaylistSettings(id, changes)}
       />
-      <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
-        <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
-          <VideoPlayer
-            basePath={playlist.path}
-            video={selectedVideo}
-            autoplay={autoplay}
-            onVideoElement={setVideoElement}
-          />
-
-          {selectedVideo ? (
-            <VideoDetail
-              basePath={playlist.path}
-              video={selectedVideo}
-              playbackRate={playbackSpeed.rate}
-              onPlaybackRateChange={playbackSpeed.changeRate}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">No video selected.</p>
-          )}
-        </div>
-
-        <VideoListPane
+      {watching ? (
+        <WatchView
           noun="playlist"
-          basePathOf={() => playlist.path}
-          sourceNameOf={() => playlist.name}
           videos={videos}
           error={error}
-          selectedVideoId={selectedVideo?.id ?? null}
-          onSelect={selectVideo}
+          selection={selection}
+          basePathOf={() => playlist.path}
+          sourceNameOf={() => playlist.name}
+          episodeOf={(video) => video.episode}
+          orderLabel="playlist order"
         />
-      </div>
+      ) : (
+        <PlaylistBrowser playlist={playlist} videos={videos} error={error} />
+      )}
     </div>
+  )
+}
+
+/** The browsing body: chips and sort over the playlist's videos as cards. */
+function PlaylistBrowser({
+  playlist,
+  videos,
+  error,
+}: {
+  playlist: PlaylistListItem
+  videos: Video[] | undefined
+  error: Error | null
+}) {
+  const [filter, setFilter] = useRememberedChoice(
+    `yarrtube.playlist.${playlist.id}.filter`,
+    WATCH_FILTERS,
+    'all',
+  )
+  const [sort, setSort] = useRememberedChoice(
+    `yarrtube.playlist.${playlist.id}.sort`,
+    PLAYLIST_SORTS,
+    'playlist',
+  )
+
+  if (error) {
+    return <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
+  }
+  if (!videos) {
+    return <VideoGridSkeleton count={12} />
+  }
+  if (videos.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">No videos recorded for this playlist yet.</p>
+    )
+  }
+
+  const episodes = new Map(videos.map((video) => [video.id, video.episode]))
+  const source = {
+    kind: 'playlist' as const,
+    id: playlist.id,
+    name: playlist.name,
+    path: playlist.path,
+    avatar_filename: null,
+  }
+  const shown = sortVideos(
+    videos.filter((video) => matchesWatchFilter(video, filter)),
+    sort,
+  ).map((video) => asHomeVideo(video, source))
+
+  return (
+    <>
+      <VideoListToolbar
+        counts={watchFilterCounts(videos)}
+        filter={filter}
+        onFilterChange={setFilter}
+        sorts={PLAYLIST_SORTS}
+        sort={sort}
+        onSortChange={setSort}
+      />
+      {shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No videos match this filter.</p>
+      ) : (
+        <VideoGrid
+          videos={shown}
+          layout="feed"
+          videoPathOf={(video) => videoInPlaylist(playlist.id, video.id)}
+          labelOf={(video) => {
+            const episode = episodes.get(video.id)
+            return episode != null ? `Ep ${episode}` : null
+          }}
+        />
+      )}
+    </>
   )
 }

@@ -92,6 +92,7 @@ pub struct ChannelListItemResponse {
     pub avatar_filename: Option<String>,
     pub unwatched_count: usize,
     pub work_in_progress: bool,
+    pub last_synced_at: Option<DateTime<Utc>>,
 }
 
 impl From<ChannelView> for ChannelListItemResponse {
@@ -108,6 +109,7 @@ impl From<ChannelView> for ChannelListItemResponse {
             avatar_filename: channel.avatar_filename,
             unwatched_count: channel.unwatched_count,
             work_in_progress: channel.work_in_progress,
+            last_synced_at: channel.last_synced_at,
         }
     }
 }

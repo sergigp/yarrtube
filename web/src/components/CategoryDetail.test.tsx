@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
-import { softTint } from '@/lib/categoryColors'
 import { RouteProbe } from '@/test/RouteProbe'
 import {
   aCategory,
@@ -55,7 +54,16 @@ function HistoryControls() {
   )
 }
 
+/** The colour of the dot standing for the category before its name. */
+function headerDotColor(header: HTMLElement): string {
+  return (header.querySelector('[aria-hidden="true"] > span') as HTMLElement).style.background
+}
+
 describe('CategoryDetail', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
   it('says categories are turned off while they are', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
@@ -91,7 +99,9 @@ describe('CategoryDetail', () => {
     })
 
     expect(await screen.findByRole('heading', { name: 'Chess' })).toBeInTheDocument()
-    expect(await screen.findByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
+    expect(
+      await screen.findByText('2 videos · 1 unwatched · from 2 playlists'),
+    ).toBeInTheDocument()
     await screen.findByText('Newest')
     const cards = screen.getAllByRole('listitem')
     expect(cards.map((card) => within(card).getAllByRole('link')[0]?.textContent)).toEqual([
@@ -100,21 +110,90 @@ describe('CategoryDetail', () => {
     ])
   })
 
-  it('tints the header with the soft tint of the category color and leaves the cards untinted', async () => {
+  it('stands for the category with a dot of its colour, not a tinted header', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
         aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] }),
       ]),
+      'GET /api/categories/chess/videos': [aHomeVideo({ title: 'Opening' })],
+    })
+
+    const header = (await screen.findByRole('heading', { name: 'Chess' })).closest(
+      'header',
+    ) as HTMLElement
+
+    expect([header.style.background, headerDotColor(header)]).toEqual(['', 'rgb(14, 165, 233)'])
+  })
+
+  it('plays the newest unwatched video from its header', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
       'GET /api/categories/chess/videos': [
-        aHomeVideo({ title: 'Opening', category_ids: ['chess'] }),
+        aHomeVideo({ id: 'seen', watched: true, published_at: '2026-03-01T00:00:00Z' }),
+        aHomeVideo({ id: 'next', published_at: '2026-02-01T00:00:00Z' }),
+        aHomeVideo({ id: 'old', published_at: '2026-01-01T00:00:00Z' }),
       ],
     })
 
-    const heading = await screen.findByRole('heading', { name: 'Chess' })
-    const card = await screen.findByRole('listitem')
+    expect(await screen.findByRole('link', { name: 'Play newest unwatched' })).toHaveAttribute(
+      'href',
+      '/categories/chess?video=next',
+    )
+  })
 
-    expect(heading.closest('header')).toHaveStyle({ background: softTint('#0ea5e9') })
-    expect(card.style.background).toBe('')
+  it('filters by watch state and source and sorts, remembering all three for the category', async () => {
+    const hikaru = {
+      kind: 'channel' as const,
+      id: '@hikaru',
+      name: 'Hikaru',
+      path: 'channels/hikaru',
+      avatar_filename: null,
+    }
+    const endgames = {
+      kind: 'playlist' as const,
+      id: 'PLend',
+      name: 'Endgames',
+      path: 'playlists/endgames',
+      avatar_filename: null,
+    }
+    const routes = {
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
+      'GET /api/categories/chess/videos': [
+        aHomeVideo({ title: 'Blitz', source: hikaru, published_at: '2026-03-01T00:00:00Z' }),
+        aHomeVideo({ title: 'Rook', source: endgames, published_at: '2026-02-01T00:00:00Z' }),
+        aHomeVideo({
+          title: 'Bullet',
+          source: hikaru,
+          published_at: '2026-01-01T00:00:00Z',
+          position_seconds: 30,
+        }),
+        aHomeVideo({ title: 'Seen', source: hikaru, watched: true }),
+      ],
+    }
+    const cardTitles = () =>
+      screen
+        .getAllByRole('listitem')
+        .map((item) => within(item).getAllByRole('link')[0].textContent)
+    const { unmount } = renderCategory(routes)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'From: All sources' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: /^Hikaru/ }))
+    const chips = within(screen.getByRole('group', { name: 'Show' }))
+      .getAllByRole('button')
+      .map((chip) => chip.textContent)
+    await user.click(screen.getByRole('button', { name: /^Unwatched/ }))
+    await user.click(screen.getByRole('button', { name: 'Sort: Newest first' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Oldest first' }))
+
+    expect(chips).toEqual(['All3', 'Unwatched2', 'In progress1', 'Watched1'])
+    expect(cardTitles()).toEqual(['Bullet', 'Blitz'])
+    unmount()
+
+    renderCategory(routes)
+    await screen.findByRole('link', { name: 'Bullet' })
+    expect(cardTitles()).toEqual(['Bullet', 'Blitz'])
+    expect(screen.getByRole('button', { name: 'From: Hikaru' })).toBeInTheDocument()
   })
 
   it('shows progress and time left on an in-progress card', async () => {
@@ -189,7 +268,9 @@ describe('CategoryDetail', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
-    await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark watched' }),
+    )
 
     expect(await screen.findAllByRole('img', { name: 'Watched' })).toHaveLength(2)
     expect(markWatched).toHaveBeenCalledOnce()
@@ -246,13 +327,13 @@ describe('CategoryDetail', () => {
     expect(explanation).toBe(
       'Add channels and playlists to Chess to watch their videos here, newest first.',
     )
-    expect(items).toEqual(['Edit settings', 'Delete'])
+    expect(items).toEqual(['Edit category', 'Delete'])
     expect(dialogTitle).toBe('Edit Chess settings')
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
 
-  it('changes the color through "Edit settings" and tints the header with it', async () => {
+  it('changes the color through "Edit category" and shows it in the header', async () => {
     let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
       chess = { ...chess, color: '#8b5cf6' }
@@ -268,44 +349,19 @@ describe('CategoryDetail', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit category' }))
     await user.click(await screen.findByRole('radio', { name: 'Violet' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#8b5cf6') }))
+    const header = screen.getByRole('heading', { name: 'Chess' }).closest('header') as HTMLElement
+    await waitFor(() => expect(headerDotColor(header)).toBe('rgb(139, 92, 246)'))
     expect(recolor).toHaveBeenCalledOnce()
     const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ]
     expect(JSON.parse(init.body as string)).toEqual({ color: '#8b5cf6' })
-  })
-
-  it('renames from the header', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] })
-    const rename = vi.fn(() => {
-      chess = { ...chess, name: 'Board games' }
-      return null
-    })
-    const { fetchMock } = renderCategory({
-      'GET /api/categories': () => aCategoryList([chess]),
-      'GET /api/categories/chess/videos': [],
-      'PATCH /api/categories/chess': rename,
-    })
-    const user = userEvent.setup()
-
-    await user.click(await screen.findByRole('button', { name: 'Rename' }))
-    await user.clear(screen.getByRole('textbox', { name: 'Name' }))
-    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Board games{Enter}')
-
-    expect(await screen.findByRole('heading', { name: 'Board games' })).toBeInTheDocument()
-    const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
-      string,
-      RequestInit,
-    ]
-    expect(JSON.parse(init.body as string)).toEqual({ name: 'Board games' })
   })
 
   it('lists the videos of a category without sources, set by hand or by the AI, and marks them watched', async () => {
@@ -322,6 +378,9 @@ describe('CategoryDetail', () => {
     await screen.findByText('Najdorf in 10 minutes')
     await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark watched' }),
+    )
 
     expect(screen.queryByRole('region', { name: 'Nothing in Chess yet' })).not.toBeInTheDocument()
     await waitFor(() => expect(markWatched).toHaveBeenCalledOnce())
@@ -452,7 +511,6 @@ describe('CategoryDetail', () => {
 
     const heading = await screen.findByRole('heading', { name: 'Chess' })
     const header = heading.closest('header') as HTMLElement
-    expect(header).toHaveStyle({ background: softTint('#0ea5e9') })
     expect(
       within(header).getByRole('button', { name: 'More actions for Chess' }),
     ).toBeInTheDocument()

@@ -20,3 +20,7 @@ export function youtubeChannelUrl(id: string): string {
 export function youtubePlaylistUrl(id: string): string {
   return `https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`
 }
+
+export function categoryPath(id: string): string {
+  return `/categories/${encodeURIComponent(id)}`
+}

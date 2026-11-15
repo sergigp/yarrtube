@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VideoDetail } from './VideoDetail'
 import { usePlaylistVideos } from '@/api/queries'
 import type { Video } from '@/api/types'
-import { aChannel, aStep, aVideo, mockApi, renderWithProviders, someSteps } from '@/test/helpers'
+import { useDesktopViewport } from '@/test/viewport'
+import { aStep, aVideo, mockApi, renderWithProviders, someSteps } from '@/test/helpers'
 
 describe('VideoDetail', () => {
   afterEach(() => {
@@ -158,14 +159,14 @@ describe('VideoDetail', () => {
     expect(screen.queryByText(/Synced/)).not.toBeInTheDocument()
   })
 
-  it('links the channel avatar instead of naming the channel in a channel view', () => {
-    const channel = aChannel({ id: 'chan', name: 'The Channel' })
-    const video = aVideo({ channel_name: 'The Channel' })
+  it('links the source, with its avatar, instead of naming the channel', () => {
+    const video = aVideo({ channel_name: 'The Channel', episode: 4 })
     renderWithProviders(
       <VideoDetail
         basePath="channels/chan"
         video={video}
-        channel={channel}
+        source={{ kind: 'channel', name: 'The Channel', href: '/channels/chan', avatarSrc: null }}
+        episodeLabel="Episode 4"
         playbackRate={1}
         onPlaybackRateChange={() => {}}
       />,
@@ -175,7 +176,41 @@ describe('VideoDetail', () => {
       'href',
       '/channels/chan',
     )
-    expect(screen.queryByText('The Channel', { selector: 'span' })).not.toBeInTheDocument()
+    expect(screen.getByText('Episode 4')).toBeInTheDocument()
+  })
+
+  describe('on desktop', () => {
+    useDesktopViewport()
+
+    it('lists the chapters beside the AI summary, seeking the player to one picked', async () => {
+      const element = document.createElement('video')
+      element.play = vi.fn(() => Promise.resolve())
+      const video = aVideo({
+        summary: 'About pawns.',
+        chapters: [
+          { start_seconds: 0, end_seconds: 87, title: 'Intro' },
+          { start_seconds: 87, end_seconds: 300, title: 'Open centre' },
+        ],
+      })
+      renderWithProviders(
+        <VideoDetail
+          basePath="playlists/mix"
+          video={video}
+          playbackRate={1}
+          onPlaybackRateChange={() => {}}
+          videoElement={element}
+        />,
+      )
+
+      const chapters = screen.getByRole('navigation', { name: 'Chapters' })
+      const rows = within(chapters).getAllByRole('button')
+      await userEvent.setup().click(rows[1])
+
+      expect(rows.map((row) => row.textContent)).toEqual(['0:00Intro', '1:27Open centre'])
+      expect(rows[0]).toHaveAttribute('aria-current', 'true')
+      expect(element.currentTime).toBe(87)
+      expect(element.play).toHaveBeenCalledOnce()
+    })
   })
   it('retries a video from the detail pane and shows it refetched', async () => {
     const failed = aVideo({
@@ -280,7 +315,7 @@ describe('VideoDetail', () => {
       />,
     )
 
-    expect(screen.getByText(/Published/).parentElement).toHaveTextContent(/^Watched · Published/)
+    expect(screen.getByText(/Published/).parentElement).toHaveTextContent(/^Watched·Published/)
     expect(screen.queryByRole('button', { name: 'Mark watched' })).not.toBeInTheDocument()
   })
 

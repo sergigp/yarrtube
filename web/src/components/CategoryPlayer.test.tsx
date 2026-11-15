@@ -1,7 +1,13 @@
 import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import type { CategoryVideo } from '@/api/types'
+import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { aCategoryVideo, mockApi, renderWithProviders } from '@/test/helpers'
 import { CategoryPlayer } from './CategoryPlayer'
+
+function Player({ videos }: { videos: CategoryVideo[] }) {
+  return <CategoryPlayer videos={videos} error={null} selection={useVideoSelection(videos)} />
+}
 
 describe('CategoryPlayer', () => {
   it('shows the rail in the category player', async () => {
@@ -13,7 +19,7 @@ describe('CategoryPlayer', () => {
       ],
     })
 
-    renderWithProviders(<CategoryPlayer videos={[video]} error={null} />)
+    renderWithProviders(<Player videos={[video]} />)
 
     const rail = await screen.findByRole('navigation', { name: 'Chapters' })
     expect(

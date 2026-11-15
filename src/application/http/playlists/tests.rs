@@ -2018,6 +2018,40 @@ async fn it_should_list_playlists_with_their_interval() {
 }
 
 #[tokio::test]
+async fn it_should_list_playlists_with_their_last_sync() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH).with_last_synced_at(fixed_timestamp()))
+        .unwrap();
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            last_synced_at: Some(fixed_timestamp()),
+            ..playlist_list_item_response("PL1", DEFAULT_PATH)
+        }])
+    );
+}
+
+#[tokio::test]
 async fn it_should_list_playlists_sorted_by_name_ignoring_case() {
     let db = TestDatabase::new();
     let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -4663,6 +4697,10 @@ impl PlaylistRepository for FailingUpdatePlaylistRepository {
         self.0.record_last_episode(id, number)
     }
 
+    fn record_last_synced_at(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        self.0.record_last_synced_at(playlist)
+    }
+
     fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
         self.0.delete(id)
     }
@@ -5036,6 +5074,7 @@ fn playlist_list_item_response(id: &str, path: &str) -> PlaylistListItemResponse
         work_in_progress: false,
         summaries_enabled: false,
         categorization_enabled: false,
+        last_synced_at: None,
     }
 }
 

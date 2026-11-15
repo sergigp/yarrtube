@@ -11,7 +11,13 @@ use rusqlite::{OptionalExtension, params};
 pub trait ChannelRepository: Send + Sync {
     fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>>;
     fn insert(&self, channel: &Channel) -> anyhow::Result<()>;
+    /// Writes every field but `last_synced_at`: a full-row write from a stale
+    /// read (e.g. a settings change racing a reconcile pass) must not undo a
+    /// recorded sync.
     fn update(&self, channel: &Channel) -> anyhow::Result<()>;
+    /// Writes only the channel's `last_synced_at`, so it doesn't undo a
+    /// settings change made while the reconcile pass ran.
+    fn record_last_synced_at(&self, channel: &Channel) -> anyhow::Result<()>;
     fn delete(&self, id: &ChannelHandle) -> anyhow::Result<()>;
     fn list(&self) -> anyhow::Result<Vec<Channel>>;
 }
@@ -30,7 +36,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
         let conn = self.db.read()?;
         conn.query_row(
-            "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled FROM channels WHERE id = ?1",
+            "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled, last_synced_at FROM channels WHERE id = ?1",
             params![id.as_str()],
             |row| {
                 Ok((
@@ -45,6 +51,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, i64>(8)?,
                     row.get::<_, bool>(9)?,
                     row.get::<_, bool>(10)?,
+                    row.get::<_, Option<String>>(11)?,
                 ))
             },
         )
@@ -64,6 +71,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 reconcile_interval,
                 summaries_enabled,
                 categorization_enabled,
+                last_synced_at,
             )| {
                 Self::row_to_channel(
                     id,
@@ -77,6 +85,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     reconcile_interval,
                     summaries_enabled,
                     categorization_enabled,
+                    last_synced_at,
                 )
             },
         )
@@ -86,7 +95,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn insert(&self, channel: &Channel) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled, last_synced_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 channel.id.as_str(),
                 channel.name,
@@ -98,7 +107,8 @@ impl ChannelRepository for SqliteChannelRepository {
                 channel.created_at.to_rfc3339(),
                 channel.reconcile_interval.minutes(),
                 channel.summaries_enabled,
-                channel.categorization_enabled
+                channel.categorization_enabled,
+                channel.last_synced_at.map(|at| at.to_rfc3339())
             ],
         )
         .inspect_err(|e| tracing::error!(channel_id = %channel.id, error = %e, "failed to insert channel"))
@@ -131,6 +141,20 @@ impl ChannelRepository for SqliteChannelRepository {
         Ok(())
     }
 
+    fn record_last_synced_at(&self, channel: &Channel) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE channels SET last_synced_at = ?2 WHERE id = ?1",
+            params![
+                channel.id.as_str(),
+                channel.last_synced_at.map(|at| at.to_rfc3339())
+            ],
+        )
+        .inspect_err(|e| tracing::error!(channel_id = %channel.id, error = %e, "failed to record the channel's last sync"))
+        .context("failed to record the channel's last sync")?;
+        Ok(())
+    }
+
     fn delete(&self, id: &ChannelHandle) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute("DELETE FROM channels WHERE id = ?1", params![id.as_str()])
@@ -145,7 +169,7 @@ impl ChannelRepository for SqliteChannelRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled FROM channels ORDER BY name COLLATE NOCASE, rowid",
+                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes, summaries_enabled, categorization_enabled, last_synced_at FROM channels ORDER BY name COLLATE NOCASE, rowid",
             )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare list query"))
             .context("failed to prepare list query")?;
@@ -163,6 +187,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, i64>(8)?,
                     row.get::<_, bool>(9)?,
                     row.get::<_, bool>(10)?,
+                    row.get::<_, Option<String>>(11)?,
                 ))
             })
             .inspect_err(|e| tracing::error!(error = %e, "failed to list channels"))
@@ -181,6 +206,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 reconcile_interval,
                 summaries_enabled,
                 categorization_enabled,
+                last_synced_at,
             ) = row
                 .inspect_err(|e| tracing::error!(error = %e, "failed to read channel row"))
                 .context("failed to read channel row")?;
@@ -196,6 +222,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 reconcile_interval,
                 summaries_enabled,
                 categorization_enabled,
+                last_synced_at,
             )
         })
         .collect()
@@ -216,6 +243,7 @@ impl SqliteChannelRepository {
         reconcile_interval: i64,
         summaries_enabled: bool,
         categorization_enabled: bool,
+        last_synced_at: Option<String>,
     ) -> anyhow::Result<Channel> {
         let id = ChannelHandle::new(id)?;
         let quality = Quality::new(quality)?;
@@ -225,19 +253,26 @@ impl SqliteChannelRepository {
         let created_at = DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc);
-        Ok(Channel::create(
-            id,
-            name,
-            youtube_channel_id,
-            quality,
-            video_limit,
-            reconcile_interval,
-            path,
-            avatar_filename,
-            created_at,
-        )
-        .with_summaries_enabled(summaries_enabled)
-        .with_categorization_enabled(categorization_enabled))
+        let last_synced_at = last_synced_at
+            .map(|at| DateTime::parse_from_rfc3339(&at).map(|at| at.with_timezone(&Utc)))
+            .transpose()
+            .context("failed to parse stored last_synced_at")?;
+        Ok(Channel {
+            last_synced_at,
+            ..Channel::create(
+                id,
+                name,
+                youtube_channel_id,
+                quality,
+                video_limit,
+                reconcile_interval,
+                path,
+                avatar_filename,
+                created_at,
+            )
+            .with_summaries_enabled(summaries_enabled)
+            .with_categorization_enabled(categorization_enabled)
+        })
     }
 }
 
@@ -401,6 +436,45 @@ mod tests {
 
         assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
         assert_eq!(repo.find(&other.id).unwrap(), Some(other));
+    }
+
+    #[test]
+    fn it_should_keep_the_last_sync_when_updating_from_a_stale_read() {
+        let repo = repo();
+        let stale = channel("@somechannel", "Some Channel");
+        let synced = stale
+            .clone()
+            .with_last_synced_at(DateTime::<Utc>::from_timestamp(60, 0).unwrap());
+        repo.insert(&synced).unwrap();
+        let updated = stale.with_quality(Quality::Low);
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(
+            repo.find(&updated.id).unwrap(),
+            Some(synced.with_quality(Quality::Low))
+        );
+    }
+
+    #[test]
+    fn it_should_record_only_the_last_sync() {
+        let repo = repo();
+        let original = channel("@somechannel", "Some Channel");
+        repo.insert(&original.clone().with_quality(Quality::Low))
+            .unwrap();
+        let synced_at = DateTime::<Utc>::from_timestamp(60, 0).unwrap();
+
+        repo.record_last_synced_at(&original.with_last_synced_at(synced_at))
+            .unwrap();
+
+        assert_eq!(
+            repo.list().unwrap(),
+            vec![
+                channel("@somechannel", "Some Channel")
+                    .with_quality(Quality::Low)
+                    .with_last_synced_at(synced_at)
+            ]
+        );
     }
 
     #[test]

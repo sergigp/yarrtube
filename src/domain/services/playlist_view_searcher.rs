@@ -125,6 +125,7 @@ impl PlaylistViewSearcher {
             summaries_enabled: playlist.summaries_enabled,
             categorization_enabled: playlist.categorization_enabled,
             created_at: playlist.created_at,
+            last_synced_at: playlist.last_synced_at,
         }
     }
 }

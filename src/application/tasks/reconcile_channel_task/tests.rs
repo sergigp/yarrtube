@@ -1085,6 +1085,63 @@ fn it_should_keep_videos_if_listing_fails() {
 }
 
 #[test]
+fn it_should_record_when_the_channel_was_synced() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let previously_synced =
+        channel("@somechannel").with_last_synced_at(fixed_timestamp() - chrono::Duration::hours(3));
+    channel_repository.insert(&previously_synced).unwrap();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+        task_repository,
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        channel_repository.list().unwrap(),
+        vec![previously_synced.with_last_synced_at(fixed_timestamp())]
+    );
+}
+
+#[test]
+fn it_should_keep_the_last_sync_if_listing_fails() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let previously_synced =
+        channel("@somechannel").with_last_synced_at(fixed_timestamp() - chrono::Duration::hours(3));
+    channel_repository.insert(&previously_synced).unwrap();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(FakeChannelVideosRepository::failing()),
+        task_repository,
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(channel_repository.list().unwrap(), vec![previously_synced]);
+}
+
+#[test]
 fn it_should_always_schedule_the_next_reconcile() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1444,7 +1501,10 @@ fn it_should_restore_a_missing_channel_avatar() {
             PathBuf::from("avatars/@somechannel.jpg")
         )]
     );
-    assert_eq!(channel_repository.list().unwrap(), vec![stored_channel]);
+    assert_eq!(
+        channel_repository.list().unwrap(),
+        vec![stored_channel.with_last_synced_at(fixed_timestamp())]
+    );
 }
 
 #[test]
@@ -1520,7 +1580,10 @@ fn it_should_keep_a_stored_channel_avatar() {
             PathBuf::from("avatars/@somechannel.jpg")
         )]
     );
-    assert_eq!(channel_repository.list().unwrap(), vec![stored_channel]);
+    assert_eq!(
+        channel_repository.list().unwrap(),
+        vec![stored_channel.with_last_synced_at(fixed_timestamp())]
+    );
 }
 
 #[test]
@@ -1593,6 +1656,7 @@ fn it_should_record_a_restored_avatar_for_a_channel_without_one() {
         channel_repository.list().unwrap(),
         vec![Channel {
             avatar_filename: Some("@somechannel.jpg".to_string()),
+            last_synced_at: Some(fixed_timestamp()),
             ..channel("@somechannel")
         }]
     );
@@ -1674,6 +1738,7 @@ fn it_should_keep_settings_changed_while_restoring_a_channel_avatar() {
         vec![Channel {
             video_limit: VideoLimit::new(50).unwrap(),
             avatar_filename: Some("@somechannel.jpg".to_string()),
+            last_synced_at: Some(fixed_timestamp()),
             ..channel("@somechannel")
         }]
     );
@@ -1740,7 +1805,7 @@ fn it_should_sync_the_channel_even_if_its_avatar_cannot_be_restored() {
     assert_eq!(*show_file_repository.posters.lock().unwrap(), vec![]);
     assert_eq!(
         channel_repository.list().unwrap(),
-        vec![channel("@somechannel")]
+        vec![channel("@somechannel").with_last_synced_at(fixed_timestamp())]
     );
     let videos = video_repository.list().unwrap();
     let video_id = videos[0].id.clone();

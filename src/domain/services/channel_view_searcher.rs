@@ -123,6 +123,7 @@ impl ChannelViewSearcher {
             avatar_filename: channel.avatar_filename,
             summaries_enabled: channel.summaries_enabled,
             categorization_enabled: channel.categorization_enabled,
+            last_synced_at: channel.last_synced_at,
         }
     }
 }
