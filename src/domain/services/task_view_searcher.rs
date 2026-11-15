@@ -69,6 +69,7 @@ impl TaskViewSearcher {
             retries: task.retries,
             run_at: task.run_at,
             created_at: task.created_at,
+            started_at: task.started_at(),
             last_error: task.last_error,
             payload,
         })
@@ -129,10 +130,10 @@ impl TaskViewSearcher {
         Ok(view)
     }
 
-    /// The video's title, plus the name of the playlist or channel it
-    /// belongs to.
+    /// The video's id and title, plus the name of the playlist or channel
+    /// it belongs to.
     fn resolve_video(&self, video_id: VideoId) -> anyhow::Result<HashMap<String, String>> {
-        let mut view = HashMap::new();
+        let mut view = HashMap::from([("video_id".to_string(), video_id.as_str().to_string())]);
 
         if let Some(video) = self.video_repository.find(&video_id)? {
             view.insert("video_title".to_string(), video.title.clone());

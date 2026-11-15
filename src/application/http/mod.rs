@@ -20,8 +20,8 @@ use crate::domain::services::{
     DirectorySearcher, LlmServerSearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
     PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher, PlexStatusSearcher,
     PlexSyncRequester, PreferencesSearcher, PreferencesUpdater, ShowMover, SubtitleReader,
-    TaskViewSearcher, VideoCategoryChoiceSearcher, VideoCategoryEditor, VideoRetrier,
-    VideoSearcher, VideoWatchStateUpdater,
+    TaskRunNowRequester, TaskViewSearcher, VideoCategoryChoiceSearcher, VideoCategoryEditor,
+    VideoRetrier, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
@@ -50,6 +50,7 @@ pub struct ApiServices {
     pub playlist_view_searcher: PlaylistViewSearcher,
     pub video_searcher: VideoSearcher,
     pub task_view_searcher: TaskViewSearcher,
+    pub task_run_now_requester: TaskRunNowRequester,
     pub channel_creator: ChannelCreator,
     pub channel_deleter: ChannelDeleter,
     pub channel_previewer: ChannelPreviewer,
@@ -127,6 +128,7 @@ pub fn api_router(api_services: ApiServices) -> Router {
             axum::routing::delete(videos::delete_video_ai_verdicts),
         )
         .route("/tasks", get(tasks::list_tasks))
+        .route("/tasks/run-now", post(tasks::run_tasks_now))
         .route("/plex", get(plex::get_plex_status))
         .route("/plex/syncs/{kind}", post(plex::request_plex_sync))
         .route("/version", get(version::get_version))

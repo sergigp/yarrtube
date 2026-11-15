@@ -13,6 +13,8 @@ pub struct TaskView {
     pub retries: i64,
     pub run_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    /// When the running attempt started; `None` while pending.
+    pub started_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub payload: HashMap<String, String>,
 }

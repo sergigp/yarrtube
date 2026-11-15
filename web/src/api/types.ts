@@ -180,6 +180,8 @@ export interface Task {
   retries: number
   run_at: string
   created_at: string
+  /** When the running attempt started; null while pending. */
+  started_at: string | null
   last_error: string | null
   payload: Record<string, string>
 }

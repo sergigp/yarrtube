@@ -59,6 +59,12 @@ pub enum TaskFailureOutcome {
 }
 
 impl ScheduledTask {
+    /// When the running attempt started (its claim time); `None` while
+    /// pending.
+    pub fn started_at(&self) -> Option<DateTime<Utc>> {
+        (self.status == TaskStatus::Running).then_some(self.updated_at)
+    }
+
     /// The running task `TaskRepository::claim` stores and returns; the claim
     /// itself makes this transition atomically in storage.
     #[cfg(test)]

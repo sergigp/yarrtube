@@ -1,6 +1,6 @@
 use crate::domain::task::TaskView;
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -11,6 +11,7 @@ pub struct TaskResponse {
     pub retries: i64,
     pub run_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub payload: HashMap<String, String>,
 }
@@ -24,8 +25,15 @@ impl From<TaskView> for TaskResponse {
             retries: view.retries,
             run_at: view.run_at,
             created_at: view.created_at,
+            started_at: view.started_at,
             last_error: view.last_error,
             payload: view.payload,
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RunTasksNowRequest {
+    #[serde(default)]
+    pub ids: Option<Vec<i64>>,
 }

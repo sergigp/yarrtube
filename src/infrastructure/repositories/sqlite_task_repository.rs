@@ -26,6 +26,8 @@ pub trait TaskRepository: Send + Sync {
     /// Every task that has not yet completed (`pending` or `running`),
     /// regardless of scheduled run time.
     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>>;
+    /// The pending tasks among `ids`; running or unknown ids are skipped.
+    fn list_pending_by_ids(&self, ids: &[i64]) -> anyhow::Result<Vec<ScheduledTask>>;
     /// The pending task with this type and payload, if any.
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>>;
     /// The pending or running task of `task_type` for `video_id`, if any.
@@ -165,6 +167,15 @@ impl TaskRepository for SqliteTaskRepository {
 
     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
         self.list_where("status IN ('pending', 'running')")
+    }
+
+    fn list_pending_by_ids(&self, ids: &[i64]) -> anyhow::Result<Vec<ScheduledTask>> {
+        let ids = ids
+            .iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.list_where(&format!("status = 'pending' AND id IN ({ids})"))
     }
 
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>> {
@@ -474,6 +485,29 @@ mod tests {
             TaskFailureOutcome::Retry(retried) => repo.update(&retried).unwrap(),
             TaskFailureOutcome::DeadLetter(dead) => repo.dead_letter(&dead).unwrap(),
         }
+    }
+
+    #[test]
+    fn it_should_list_only_pending_tasks_among_the_given_ids() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let running = Task::UpdateYtdlp;
+        repo.schedule(&task(), now).unwrap();
+        repo.schedule(&running, now).unwrap();
+        repo.claim(2, now).unwrap();
+
+        let listed = repo.list_pending_by_ids(&[1, 2, 99]).unwrap();
+
+        assert_eq!(listed, vec![pending_task(1, &task(), now, now)]);
+    }
+
+    #[test]
+    fn it_should_list_nothing_for_an_empty_id_list() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&task(), now).unwrap();
+
+        assert_eq!(repo.list_pending_by_ids(&[]).unwrap(), vec![]);
     }
 
     #[test]

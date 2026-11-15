@@ -60,7 +60,7 @@ test('this build carries on the library the released image left behind', async (
 
   // The next sync is still scheduled from the playlist's own interval.
   await expectPendingSync(page, {
-    label: `Syncing playlist ${PLAYLIST_NAME}`,
-    due: /^in (3\d|4[0-5])m$/,
+    name: PLAYLIST_NAME,
+    due: /^in (3\d|4[0-5]) min$/,
   })
 })

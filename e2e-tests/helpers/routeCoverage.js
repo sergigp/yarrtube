@@ -56,12 +56,12 @@ export function hitRoutes() {
 // video's category (`/api/videos/v1/categories/c1`) →
 // `…/categories/{category_id}`.
 // Literal segments the router declares next to a parameter (`preview`,
-// `home`, `search`) are kept as they are, and so is every `/api/llm/...`
+// `home`, `search`, `run-now`) are kept as they are, and so is every `/api/llm/...`
 // path (`/api/llm/ollama`, `/api/llm/anthropic`): each names a provider.
 function toTemplate(pathname) {
   const segments = pathname.split('/')
   const [, api, resource, id, ...rest] = segments
-  if (id === undefined || resource === 'llm' || ['preview', 'home', 'search'].includes(id)) {
+  if (id === undefined || resource === 'llm' || ['preview', 'home', 'search', 'run-now'].includes(id)) {
     return pathname
   }
   if (resource === 'plex') {

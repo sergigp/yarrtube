@@ -10,15 +10,17 @@ test('tasks view lists the recurring yt-dlp self-update task', async ({ page }) 
   await expect(header.getByRole('button', { name: 'Add', exact: true })).toHaveCount(0)
 
   // The daemon seeds this task at startup and it only comes due an hour
-  // later, so it is always there, still pending, however the other tests ran.
+  // later, so it is always there, still scheduled, however the other tests ran.
   await header.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('menuitem', { name: 'Tasks', exact: true }).click()
 
-  // The view opens on the Active tab (running tasks only); the recurring
-  // self-update is a pending maintenance task, listed under "Other".
-  await page.getByRole('tab', { name: /^Other/ }).click()
+  // The view opens on All; the self-update is upkeep, under "Plex & upkeep".
+  await expect(page.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: /^Plex & upkeep/ }).click()
 
-  const updateYtdlpRow = page.locator('main li', { hasText: 'Updating yt-dlp' })
+  const updateYtdlpRow = page.locator('main li', { hasText: 'Update yt-dlp' })
   await expect(updateYtdlpRow).toBeVisible()
-  await expect(updateYtdlpRow.getByText('pending', { exact: true })).toBeVisible()
+  await expect(updateYtdlpRow.getByRole('button', { name: 'Run now' })).toBeVisible()
+  // Its state shows by its section, not by a badge.
+  await expect(page.locator('main').getByText(/^(pending|queued|running)$/)).toHaveCount(0)
 })

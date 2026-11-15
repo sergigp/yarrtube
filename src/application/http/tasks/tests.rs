@@ -5,7 +5,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::shared::{Quality, ReconcileInterval};
-use crate::domain::task::Task;
+use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
     Chapters, Download, DownloadedQuality, StepState, Subtitles, Thumbnail, Video, VideoId,
     WatchState, YoutubeVideoId,
@@ -30,6 +30,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::{
 };
 use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 use crate::infrastructure::shared::system_clock::FixedClock;
+use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -115,6 +116,7 @@ async fn it_should_include_running_tasks() {
         response,
         Ok(vec![TaskResponse {
             status: "running".to_string(),
+            started_at: Some(fixed_timestamp()),
             ..pending_task("update_ytdlp", &[])
         }])
     );
@@ -312,6 +314,7 @@ async fn it_should_include_video_and_playlist_in_download_tasks() {
         Ok(vec![pending_task(
             "download_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -365,6 +368,7 @@ async fn it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "fetch_thumbnail",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -418,6 +422,7 @@ async fn it_should_list_a_fetch_subtitles_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "fetch_subtitles",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -471,6 +476,7 @@ async fn it_should_list_a_fetch_chapters_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "fetch_chapters",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -524,6 +530,7 @@ async fn it_should_list_a_summarize_video_task_with_video_and_playlist_names() {
         Ok(vec![pending_task(
             "summarize_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -577,6 +584,7 @@ async fn it_should_list_a_summarize_video_task_with_video_and_channel_names() {
         Ok(vec![pending_task(
             "summarize_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("channel_name", "Some Channel")
             ]
@@ -610,7 +618,13 @@ async fn it_should_list_a_summarize_video_task_whose_video_is_gone() {
 
     let response = list(task_view_searcher).await;
 
-    assert_eq!(response, Ok(vec![pending_task("summarize_video", &[])]));
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "summarize_video",
+            &[("video_id", "rec1")]
+        )])
+    );
 }
 
 #[tokio::test]
@@ -659,6 +673,7 @@ async fn it_should_list_a_categorize_video_task_with_video_and_channel_names() {
         Ok(vec![pending_task(
             "categorize_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("channel_name", "Some Channel")
             ]
@@ -712,6 +727,7 @@ async fn it_should_list_an_upgrade_quality_task_with_its_video_context() {
         Ok(vec![pending_task(
             "upgrade_quality",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -765,6 +781,7 @@ async fn it_should_list_a_video_sync_with_its_video_title_and_owner_name() {
         Ok(vec![pending_task(
             "sync_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("playlist_name", "My Playlist")
             ]
@@ -813,6 +830,7 @@ async fn it_should_include_video_and_channel_in_download_tasks() {
         Ok(vec![pending_task(
             "download_video",
             &[
+                ("video_id", "rec1"),
                 ("video_title", "My Video"),
                 ("channel_name", "Some Channel")
             ]
@@ -841,7 +859,13 @@ async fn it_should_omit_details_if_video_is_untracked() {
 
     let response = list(task_view_searcher).await;
 
-    assert_eq!(response, Ok(vec![pending_task("download_video", &[])]));
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "download_video",
+            &[("video_id", "rec1")]
+        )])
+    );
 }
 
 #[tokio::test]
@@ -987,7 +1011,7 @@ async fn it_should_include_path_in_delete_channel_files_tasks() {
 }
 
 #[tokio::test]
-async fn it_should_omit_details_for_update_ytdlp_tasks() {
+async fn it_should_not_include_video_id_for_a_ytdlp_update() {
     let db = TestDatabase::new();
     let task_repository = Arc::new(SqliteTaskRepository::new(
         db.database(),
@@ -1010,6 +1034,286 @@ async fn it_should_omit_details_for_update_ytdlp_tasks() {
     assert_eq!(response, Ok(vec![pending_task("update_ytdlp", &[])]));
 }
 
+#[tokio::test]
+async fn it_should_include_video_id_for_a_download_task() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    task_repository
+        .schedule(&download_video_task("rec1"), fixed_timestamp())
+        .unwrap();
+    video_repository.insert(&video("rec1", "My Video")).unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        video_repository,
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "download_video",
+            &[("video_id", "rec1"), ("video_title", "My Video")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_video_id_when_the_video_no_longer_exists() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::FetchThumbnail {
+                video_id: "gone1".to_string(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_task(
+            "fetch_thumbnail",
+            &[("video_id", "gone1")]
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_include_started_at_for_a_running_task() {
+    let db = TestDatabase::new();
+    let started_at = fixed_timestamp() + chrono::Duration::seconds(30);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+        .unwrap();
+    let running = task_repository.list_non_completed().unwrap()[0]
+        .clone()
+        .start(started_at);
+    task_repository.update(&running).unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![TaskResponse {
+            status: "running".to_string(),
+            started_at: Some(started_at),
+            ..pending_task("update_ytdlp", &[])
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_have_null_started_at_for_a_pending_task() {
+    let db = TestDatabase::new();
+    let requeued_at = fixed_timestamp() + chrono::Duration::seconds(30);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+        .unwrap();
+    let requeued = task_repository.list_non_completed().unwrap()[0]
+        .clone()
+        .start(fixed_timestamp())
+        .run_again_at(fixed_timestamp(), "busy".to_string(), requeued_at);
+    task_repository.update(&requeued).unwrap();
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+    );
+
+    let response = list(task_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![TaskResponse {
+            last_error: Some("busy".to_string()),
+            ..pending_task("update_ytdlp", &[])
+        }])
+    );
+}
+
+#[tokio::test]
+async fn it_should_bring_a_pending_task_forward_when_run_now() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository
+        .schedule(
+            &Task::UpdateYtdlp,
+            fixed_timestamp() + chrono::Duration::hours(1),
+        )
+        .unwrap();
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![ScheduledTask {
+            run_at: now,
+            updated_at: now,
+            ..scheduled_task(1, Task::UpdateYtdlp)
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_bring_every_listed_task_forward() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let later = fixed_timestamp() + chrono::Duration::hours(1);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let reconciles = ["PL1", "PL2", "PL3"].map(|playlist_id| Task::ReconcilePlaylist {
+        playlist_id: playlist_id.to_string(),
+    });
+    reconciles
+        .iter()
+        .for_each(|task| task_repository.schedule(task, later).unwrap());
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1, 2, 3])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        reconciles
+            .into_iter()
+            .zip(1..)
+            .map(|(task, id)| ScheduledTask {
+                run_at: now,
+                updated_at: now,
+                ..scheduled_task(id, task)
+            })
+            .collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn it_should_ignore_running_and_unknown_ids_when_run_now() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let later = fixed_timestamp() + chrono::Duration::hours(1);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository.schedule(&Task::UpdateYtdlp, later).unwrap();
+    let running = ScheduledTask {
+        run_at: later,
+        ..scheduled_task(1, Task::UpdateYtdlp)
+    }
+    .start(fixed_timestamp());
+    task_repository.update(&running).unwrap();
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1, 99])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![running]);
+}
+
+#[tokio::test]
+async fn it_should_keep_retries_and_last_error_when_run_now() {
+    let db = TestDatabase::new();
+    let now = fixed_timestamp() + chrono::Duration::seconds(60);
+    let later = fixed_timestamp() + chrono::Duration::hours(1);
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    task_repository.schedule(&Task::UpdateYtdlp, later).unwrap();
+    let failed = ScheduledTask {
+        retries: 2,
+        run_at: later,
+        last_error: Some("boom".to_string()),
+        ..scheduled_task(1, Task::UpdateYtdlp)
+    };
+    task_repository.update(&failed).unwrap();
+    let requester = TaskRunNowRequester::new(task_repository.clone(), Arc::new(FixedClock(now)));
+
+    let response = run_now(requester, run_now_request(&[1])).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![ScheduledTask {
+            run_at: now,
+            updated_at: now,
+            ..failed
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_reject_run_now_without_ids() {
+    let empty = run_now(any_task_run_now_requester(), run_now_request(&[])).await;
+    let missing = run_now(
+        any_task_run_now_requester(),
+        RunTasksNowRequest { ids: None },
+    )
+    .await;
+
+    assert_eq!(
+        (empty, missing),
+        (
+            Err(ApiError::bad_request(
+                "At least one task id must be given (missing)"
+            )),
+            Err(ApiError::bad_request(
+                "At least one task id must be given (missing)"
+            )),
+        )
+    );
+}
+
 fn download_video_task(video_id: &str) -> Task {
     Task::DownloadVideo {
         video_id: video_id.to_string(),
@@ -1024,6 +1328,7 @@ fn pending_task(task_type: &str, payload: &[(&str, &str)]) -> TaskResponse {
         retries: 0,
         run_at: fixed_timestamp(),
         created_at: fixed_timestamp(),
+        started_at: None,
         last_error: None,
         payload: payload
             .iter()
@@ -1088,4 +1393,47 @@ async fn list(task_view_searcher: TaskViewSearcher) -> Result<Vec<TaskResponse>,
     list_tasks(State(task_view_searcher))
         .await
         .map(|Json(tasks)| tasks)
+}
+
+async fn run_now(
+    requester: TaskRunNowRequester,
+    request: RunTasksNowRequest,
+) -> Result<StatusCode, ApiError> {
+    run_tasks_now(State(requester), Json(request)).await
+}
+
+fn run_now_request(ids: &[i64]) -> RunTasksNowRequest {
+    RunTasksNowRequest {
+        ids: Some(ids.to_vec()),
+    }
+}
+
+/// A pending task as `schedule` stores it at `fixed_timestamp()`.
+fn scheduled_task(id: i64, task: Task) -> ScheduledTask {
+    ScheduledTask {
+        id,
+        task,
+        status: TaskStatus::Pending,
+        retries: 0,
+        run_at: fixed_timestamp(),
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        last_error: None,
+    }
+}
+
+fn any_task_run_now_requester() -> TaskRunNowRequester {
+    TaskRunNowRequester::new(
+        Arc::new(SqliteTaskRepository::new(
+            unused_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+    )
+}
+
+fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+    crate::infrastructure::shared::sqlite_connection::Database::single(
+        rusqlite::Connection::open_in_memory().unwrap(),
+    )
 }

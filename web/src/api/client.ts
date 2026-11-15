@@ -391,6 +391,15 @@ export async function retryVideo(videoId: string): Promise<void> {
   })
 }
 
+/** Brings the pending tasks among `ids` forward so they run now. */
+export async function runTasksNow(ids: number[]): Promise<void> {
+  await send('/tasks/run-now', {
+    method: 'POST',
+    body: { ids },
+    label: 'run tasks now',
+  })
+}
+
 /** Deletes a video copy's AI verdicts so the AI is asked again. */
 export async function deleteVideoAiVerdicts(videoId: string): Promise<void> {
   await send(`/videos/${encodeURIComponent(videoId)}/ai-verdicts`, {

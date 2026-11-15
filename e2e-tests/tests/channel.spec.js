@@ -180,7 +180,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     await editDialog.getByRole('button', { name: 'Save' }).click()
     expect((await intervalSaved).status()).toBe(200)
     await editDialog.waitFor({ state: 'hidden' })
-    await expectPendingSync(page, { label: `Syncing channel ${channelName}`, due: /^in (59m|1h)$/ })
+    await expectPendingSync(page, { name: channelName, due: /^in (59 min|1 h)$/ })
   })
 
   await test.step('delete it', async () => {

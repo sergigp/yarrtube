@@ -20,12 +20,12 @@ test('a failed download is shown retrying with its reason, and Retry now runs it
     ).toBeVisible()
   })
 
-  await test.step('its download is listed pending for that attempt with the reason', async () => {
+  await test.step('its download needs attention in the Tasks view, with the reason', async () => {
     await page.goto('/tasks')
-    await page.getByRole('tab', { name: /^Downloads/ }).click()
-    const download = page.locator('main li', { hasText: new RegExp(`^Downloading .+ in ${playlist.name}`) })
-    await expect(download.getByText(FAILURE_REASON).first()).toBeVisible({ timeout: 15_000 })
-    await expect(download.getByText('pending', { exact: true })).toBeVisible()
+    const attention = page.getByRole('region', { name: 'Needs attention' })
+    const card = attention.locator('li', { hasText: new RegExp(`Download .+ from ${playlist.name}`) })
+    await expect(card.getByText(FAILURE_REASON, { exact: false })).toBeVisible({ timeout: 15_000 })
+    await expect(card.getByText(/Yarrtube tries again at .+, in (9|10) min\./)).toBeVisible()
   })
 
   await test.step('Retry now runs the download again at once', async () => {

@@ -11,10 +11,10 @@ use crate::domain::services::{
     PlaylistVideoReconciler, PlaylistViewSearcher, PlexEpisodeFinder, PlexFolderScanner,
     PlexLabelSyncer, PlexLabelSyncerApi, PlexStatusSearcher, PlexSyncRequester, PlexWatchSyncer,
     PlexWatchSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
-    ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
-    VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
-    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator,
-    VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    ShowMover, SubtitleFetcher, SubtitleReader, TaskRunNowRequester, TaskViewSearcher,
+    ThumbnailFetcher, VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher,
+    VideoCategoryEditor, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
+    VideoRelocator, VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -681,6 +681,10 @@ fn api_services(
         video_retrier: VideoRetrier::new(
             infrastructure.video_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
+            infrastructure.task_repository.clone(),
+            infrastructure.clock.clone(),
+        ),
+        task_run_now_requester: TaskRunNowRequester::new(
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
         ),

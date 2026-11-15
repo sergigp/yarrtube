@@ -3,8 +3,8 @@ import { PLAYLIST, SEARCH_PLAYLISTS } from '../helpers/fakeYoutube.js'
 import { addPlaylist } from '../helpers/seed.js'
 
 test.describe('with 16 empty playlists', () => {
-  // The Tasks view's search box only shows beyond 15 tasks in a tab: the 16
-  // empty fixture playlists, each with its sync, are just enough.
+  // The 16 empty fixture playlists, each with its sync due about the same
+  // time, so the Tasks view batches them.
   test.beforeEach(async ({ request }) => {
     for (const playlist of SEARCH_PLAYLISTS) {
       await addPlaylist(request, playlist, { downloaded: false })
@@ -27,14 +27,17 @@ test.describe('with 16 empty playlists', () => {
 
   test('tasks search lists only matching tasks', async ({ page }) => {
     await page.goto('/tasks')
-    await page.getByRole('tab', { name: /^Syncs/ }).click()
-    const syncs = page.locator('main li', { hasText: /^Syncing playlist / })
-    await expect(syncs).toHaveCount(SEARCH_PLAYLISTS.length)
+    await page.getByRole('button', { name: /^Syncs/ }).click()
+    // Batched: a sync may still be running its first check, outside the batch.
+    await expect(page.locator('main li', { hasText: /^.*Check \d+ channels and playlists for new videos/ })).toHaveCount(1)
 
     await page.getByRole('searchbox', { name: 'Search tasks' }).fill('Search 07')
 
-    await expect(syncs).toHaveText([/^Syncing playlist Search 07/])
+    await expect(page.locator('main li', { hasText: /for new videos/ })).toHaveText([
+      /Check Search 07 for new videos/,
+    ])
   })
+
 })
 
 test('header search finds a downloaded video by title and opens it in its playlist', async ({ page }) => {

@@ -61,6 +61,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
+    // Clock times render in the browser's time zone; tests pin it.
+    env: { TZ: 'UTC' },
     css: false,
   },
 })
