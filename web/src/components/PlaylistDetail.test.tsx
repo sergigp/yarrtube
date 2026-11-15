@@ -219,6 +219,29 @@ describe('PlaylistDetail', () => {
       expect(document.querySelector('video')).toBeNull()
     })
 
+    it('keeps the loaded videos when a refresh fails', async () => {
+      let videoLoads = 0
+      const { queryClient } = renderPlaylist(
+        {
+          'GET /api/playlists': [aPlaylist({ id: 'PL1' })],
+          'GET /api/playlists/PL1/videos': () => {
+            videoLoads += 1
+            return videoLoads === 1
+              ? [aVideo({ title: 'Pawns' })]
+              : { status: 500, error: 'database is locked' }
+          },
+        },
+        '/playlists/PL1',
+      )
+      await screen.findByRole('link', { name: 'Pawns' })
+
+      await queryClient.refetchQueries({ queryKey: queryKeys.playlistVideos('PL1') })
+
+      await waitFor(() => expect(videoLoads).toBe(2))
+      expect(screen.queryByText(/Failed to load videos/)).not.toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Pawns' })).toBeInTheDocument()
+    })
+
     it('says when the playlist has no videos yet', async () => {
       renderPlaylist(
         {
