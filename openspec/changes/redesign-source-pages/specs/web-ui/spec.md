@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Playlist Browse Page
-Opening a playlist's view without a selected video SHALL show its browse page: the page header, a toolbar as described in "Video List Toolbar", and the playlist's videos as the same cards as the home view, in a grid that is one card per row below the `sm` breakpoint. Each card's meta line SHALL show "Ep <n>" (the video's episode number) and how long ago it was published, in place of the source's avatar and name; a video without an episode number SHALL show only its age. Activating a card SHALL open the playlist's watching layout with that video selected and autoplaying, at an address identifying the playlist and the video. While the playlist's videos load the grid SHALL show placeholders; a playlist with no recorded videos SHALL say so; a filter that leaves no video SHALL say that no video matches it.
+Opening a playlist's view without a selected video SHALL show its browse page: the page header, the toolbar described in "Video List Toolbar", and the playlist's videos as the same cards as the home view, in a grid that is one card per row below the `sm` breakpoint. Activating a card SHALL open the playlist's watching layout with that video selected and autoplaying, at an address identifying the playlist and the video.
 
 #### Scenario: Browsing a playlist
 - **WHEN** a user opens the playlist "Chess" from the sidebar
@@ -11,16 +11,33 @@ Opening a playlist's view without a selected video SHALL show its browse page: t
 - **WHEN** a user activates the card of "The Backward Pawn" on the "Chess" browse page
 - **THEN** the address identifies "Chess" and "The Backward Pawn", and the watching layout plays it
 
+### Requirement: Playlist Card Episode
+On a playlist's browse page each card's meta line SHALL show "Ep <n>", the video's episode number, and how long ago it was published, in place of the source's avatar and name. A video without an episode number SHALL show only its age.
+
+#### Scenario: Card of an episode
+- **WHEN** a user browses a playlist whose episode 4 was published a year ago
+- **THEN** that card's meta line reads "Ep 4 · 1y ago"
+
+### Requirement: Playlist Browse Page States
+While a playlist's videos load, its browse page SHALL show placeholder cards. A playlist with no recorded videos SHALL say so. A filter that leaves no video SHALL say that no video matches it.
+
 #### Scenario: Empty playlist
 - **WHEN** a user opens a playlist with no recorded videos
 - **THEN** the view says no videos are recorded for the playlist yet
 
+#### Scenario: Nothing matches
+- **WHEN** a user presses "In progress" on a playlist with no started video
+- **THEN** the page says no video matches the filter
+
 ### Requirement: Play Next
-The page header SHALL offer, as its primary action, a link that plays one video in the watching layout: on a playlist's browse page "Play next · Ep <n>" followed, from the `sm` breakpoint up, by the video's title, playing the first downloaded video in playlist order that is not watched, started or not; on a channel's view "Play next" with the title, playing its newest downloaded video by publish date that is not watched, shown only while that video is not the one already playing; on a category's browse page "Play newest unwatched", playing its newest downloaded unwatched video by publish date. A video not downloaded yet (pending, downloading, retrying or failed) SHALL never be its target. A started video SHALL resume from its saved position. When no downloaded video is unwatched the action SHALL NOT be shown. Below the desktop breakpoint it SHALL span the header's full width.
+The page header's primary action SHALL be a link playing the video chosen in "Play Next Target": "Play next · Ep <n>" and, from `sm` up, the title on a playlist's browse page; "Play next" and the title on a channel's view, unless that video is already playing; "Play newest unwatched" on a category's browse page. A started video SHALL resume from its saved position. Below the desktop breakpoint the link SHALL span the header's full width.
 
 #### Scenario: Gaps in a playlist
 - **WHEN** a playlist's episodes 1, 3 and 5 are watched and episode 2 was started at 4:10
 - **THEN** "Play next · Ep 2" opens episode 2, which resumes at 4:10
+
+### Requirement: Play Next Target
+"Play next" SHALL play, on a playlist, the first downloaded video in playlist order that is not watched; on a channel or category, the newest downloaded video by publish date that is not watched. A video not downloaded yet (pending, downloading, retrying or failed) SHALL never be its target. When no downloaded video is unwatched the action SHALL NOT be shown.
 
 #### Scenario: Channel
 - **WHEN** a user opens a channel whose newest video is watched and whose second newest is not
@@ -39,15 +56,21 @@ The page header SHALL offer, as its primary action, a link that plays one video 
 - **THEN** "Play next" opens the second newest video"
 
 ### Requirement: Video List Toolbar
-A playlist's and a category's browse page SHALL show one toolbar line above the grid: on the left the chips "All", "Unwatched", "In progress" and "Watched", each with its count of videos, exactly one pressed: "All" counts every listed video, "Unwatched" the downloaded videos not watched, "In progress" those of them with a saved position (a subset of "Unwatched"), and "Watched" the watched videos; a video not downloaded yet shows only under "All", so the "Unwatched" count agrees with the header's unwatched count; on the right a sort control showing the current order. A playlist SHALL offer "Playlist order" (the default), "Newest first" and "Oldest first"; a category "Newest first" (the default) and "Oldest first". Sorting by date SHALL put videos without a publish date last. Below the `sm` breakpoint the chips SHALL scroll sideways in one row. The pressed chip and the order SHALL be remembered per playlist and per category in this browser, restored when the page is opened again; when the browser's storage can't be read or written, the defaults SHALL apply and changes SHALL last until the page is reloaded.
+A playlist's and a category's browse page SHALL show one toolbar line above the grid: the chips "All", "Unwatched", "In progress" and "Watched" with their counts, exactly one pressed, then a sort control showing the order. A playlist SHALL offer "Playlist order" (default), "Newest first" and "Oldest first"; a category "Newest first" (default) and "Oldest first". Videos without a publish date SHALL sort last. Below `sm` the chips SHALL scroll sideways in one row.
 
 #### Scenario: Chip counts
 - **WHEN** a playlist has 32 videos, 3 watched and 2 started
 - **THEN** the chips read "All 32", "Unwatched 29", "In progress 2" and "Watched 3"
 
+### Requirement: Watch-State Chip Counts
+"All" SHALL count every listed video, "Unwatched" the downloaded videos not watched, "In progress" those of them with a saved position (a subset of "Unwatched"), and "Watched" the watched videos. A video not downloaded yet SHALL show only under "All", so the "Unwatched" count agrees with the header's unwatched count.
+
 #### Scenario: Video not downloaded
 - **WHEN** a playlist has 3 videos, 2 of them downloaded and not watched and 1 that failed to download
 - **THEN** the header reads "Playlist · 3 videos · 2 unwatched", the chips read "All 3" and "Unwatched 2", and the failed video shows under "All" only
+
+### Requirement: Remembered Toolbar
+The pressed chip and the order SHALL be remembered per playlist and per category in this browser, and restored when the page is opened again. When the browser's storage can't be read or written, the defaults SHALL apply and changes SHALL last until the page is reloaded.
 
 #### Scenario: Filter and sort remembered
 - **WHEN** a user presses "Unwatched" and picks "Newest first" on a playlist, leaves and opens it again
@@ -58,14 +81,14 @@ A playlist's and a category's browse page SHALL show one toolbar line above the 
 - **THEN** "All" is pressed and the order is "Playlist order"
 
 ### Requirement: Category Source Filter
-A category's toolbar SHALL offer, before its sort, a "From: <source>" control, shown when its videos come from more than one channel or playlist, whose menu lists "All sources" and every channel and playlist its videos come from, each with its avatar or playlist icon and video count, the source with most videos first. Choosing one SHALL show only that source's videos, and the chip counts SHALL count only them. The choice SHALL be remembered per category as described in "Video List Toolbar"; a remembered source that no longer has videos in the category SHALL fall back to "All sources".
+When a category's videos come from more than one channel or playlist, its toolbar SHALL offer, before the sort, a "From: <source>" control whose menu lists "All sources" and each of those sources with its avatar or playlist icon and video count, most videos first. Choosing one SHALL show only its videos, and the chips SHALL count only them. The choice SHALL be remembered per category; a remembered source no longer in the category SHALL fall back to "All sources".
 
 #### Scenario: Filtering by source
 - **WHEN** a user picks "Eric Rosen" under "From" on the "Chess" view
 - **THEN** the button reads "From: Eric Rosen", only Eric Rosen's videos show, and the chips count only them
 
 ### Requirement: Watching Queue
-Beside the player in a channel's, playlist's or category's watching layout (below it on phones) the video list SHALL be headed "Up next", with the playing video's position among the listed videos and the list's order ("1 of 32 · playlist order", "newest first"), and a "Hide watched" switch. With "Hide watched" on, watched videos SHALL leave the list, except the one playing. The switch SHALL be remembered in this browser for every list. In a playlist, each row SHALL start with the video's episode number.
+Beside the player in a channel's, playlist's or category's watching layout (below it on phones) the video list SHALL be headed "Up next", with the playing video's position and the list's order ("1 of 32 · playlist order"), and a "Hide watched" switch. With it on, watched videos SHALL leave the list, except the one playing. The switch SHALL be remembered in this browser for every list. In a playlist each row SHALL start with the video's episode number.
 
 #### Scenario: Position in the queue
 - **WHEN** a user plays the 5th video of a 32-video playlist

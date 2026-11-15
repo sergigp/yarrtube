@@ -1,11 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: Chapter List Beside The Summary
-At or above the desktop breakpoint, when the selected video in a playlist, channel or category view is downloaded and has chapters, its info SHALL list them in a compact panel labeled "Chapters", beside the AI summary panel (or on its own when there is no summary): one row per chapter, in playback order, with its start time and its title cut with an ellipsis when it doesn't fit, offered in full on hover. The row of the chapter containing the playback position SHALL be marked as current, visually and to assistive technology. Activating a row SHALL move the playback position to that chapter's start and play the video. The list SHALL scroll within its panel when it holds more rows than fit.
+At or above the desktop breakpoint, when the selected video in a playlist, channel or category view is downloaded and has chapters, its info SHALL list them in a compact panel labeled "Chapters", beside the AI summary panel (or on its own without a summary): one row per chapter, in playback order, with its start time and its title, cut with an ellipsis when it doesn't fit and offered in full on hover. The list SHALL scroll within its panel when it holds more rows than fit.
 
 #### Scenario: Video with chapters on desktop
 - **WHEN** a user on a desktop-width viewport selects a downloaded video with chapters "Intro" (0–87 s) and "Open centre" (87–300 s)
 - **THEN** a "Chapters" panel beside the AI summary lists "0:00 Intro" and "1:27 Open centre", with "Intro" marked current
+
+### Requirement: Chapter List Navigation
+The chapter list SHALL mark the row of the chapter containing the playback position as current, visually and to assistive technology. Activating a row SHALL move the playback position to that chapter's start and play the video.
 
 #### Scenario: Picking a chapter from the list
 - **WHEN** the user activates "Open centre"
