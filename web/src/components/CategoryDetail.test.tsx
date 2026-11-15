@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
+import { queryKeys } from '@/api/queries'
 import { RouteProbe } from '@/test/RouteProbe'
 import {
   aCategory,
@@ -26,7 +27,7 @@ function renderCategory(routes: ApiRoutes, route: InitialEntry = '/categories/ch
     'GET /api/preferences': aPreferences(),
     ...routes,
   })
-  const { unmount } = renderWithProviders(
+  const { unmount, queryClient } = renderWithProviders(
     <>
       <Routes>
         <Route path="/categories/:id" element={<CategoryDetail />} />
@@ -36,7 +37,7 @@ function renderCategory(routes: ApiRoutes, route: InitialEntry = '/categories/ch
     </>,
     { route },
   )
-  return { fetchMock, unmount }
+  return { fetchMock, unmount, queryClient }
 }
 
 /** Leaves the view and comes back through history, as the browser's buttons would. */
@@ -94,7 +95,7 @@ describe('CategoryDetail', () => {
       'GET /api/playlists': [aPlaylist({ id: 'PLend', name: 'Endgame course' })],
       'GET /api/categories/chess/videos': [
         aHomeVideo({ title: 'Newest' }),
-        aHomeVideo({ title: 'Older' }),
+        aHomeVideo({ title: 'Older', watched: true }),
       ],
     })
 
@@ -226,7 +227,11 @@ describe('CategoryDetail', () => {
         aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 3 }),
       ]),
       'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru' })],
-      'GET /api/categories/chess/videos': [aHomeVideo({ id: 'v1' })],
+      'GET /api/categories/chess/videos': [
+        aHomeVideo({ id: 'v1' }),
+        aHomeVideo({ id: 'v2' }),
+        aHomeVideo({ id: 'v3' }),
+      ],
       'POST /api/categories/chess/watched': markWatched,
     })
 
@@ -499,6 +504,80 @@ describe('CategoryDetail', () => {
     expect(
       fetchMock.mock.calls.map(([url]) => url as string).filter((url) => url.includes('/videos')),
     ).not.toContainEqual(expect.stringMatching(/^\/api\/(channels|playlists)\//))
+  })
+
+  it('names the remembered order in the queue header', async () => {
+    window.localStorage.setItem('yarrtube.category.chess.sort', 'oldest')
+    renderCategory(
+      {
+        'GET /api/categories': aCategoryList([
+          aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] }),
+        ]),
+        'GET /api/categories/chess/videos': [
+          aCategoryVideo({ id: 'new', title: 'Newest', published_at: '2026-03-01T00:00:00Z' }),
+          aCategoryVideo({ id: 'mid', title: 'Middle', published_at: '2026-02-01T00:00:00Z' }),
+          aCategoryVideo({ id: 'old', title: 'Oldest', published_at: '2026-01-01T00:00:00Z' }),
+        ],
+      },
+      '/categories/chess?video=old',
+    )
+
+    const queue = within(await screen.findByRole('complementary', { name: 'Queue' }))
+
+    expect(await queue.findByText('1 of 3 · oldest first')).toBeInTheDocument()
+  })
+
+  it('keeps the loaded videos when a refresh fails', async () => {
+    let videoLoads = 0
+    const { queryClient } = renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] }),
+      ]),
+      'GET /api/categories/chess/videos': () => {
+        videoLoads += 1
+        return videoLoads === 1
+          ? [aHomeVideo({ title: 'Opening' })]
+          : { status: 500, error: 'database is locked' }
+      },
+    })
+    await screen.findByRole('link', { name: 'Opening' })
+
+    await queryClient.refetchQueries({ queryKey: queryKeys.categoryVideos('chess') })
+
+    await waitFor(() => expect(videoLoads).toBe(2))
+    expect(screen.queryByText(/Failed to load videos/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Opening' })).toBeInTheDocument()
+  })
+
+  it('counts unwatched videos of hidden playlists in the header', async () => {
+    renderCategory({
+      // The API leaves out the playlist whose unwatched count is hidden.
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 1 }),
+      ]),
+      'GET /api/categories/chess/videos': [aHomeVideo(), aHomeVideo(), aHomeVideo({ watched: true })],
+    })
+
+    expect(await screen.findByText(/^3 videos · 2 unwatched · /)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Unwatched/ })).toHaveTextContent('Unwatched2')
+  })
+
+  it('confirms marking every listed unwatched video', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 1 }),
+      ]),
+      'GET /api/categories/chess/videos': [aHomeVideo({ title: 'Opening' }), aHomeVideo()],
+    })
+    const user = userEvent.setup()
+    await screen.findByRole('link', { name: 'Opening' })
+
+    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Mark 2 videos in "Chess" watched?' }),
+    ).toBeInTheDocument()
   })
 
   it('shows the header from the categories list at once, with placeholders while the videos load', async () => {

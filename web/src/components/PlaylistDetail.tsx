@@ -214,11 +214,13 @@ function PlaylistBrowser({
     'playlist',
   )
 
-  if (error) {
-    return <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
-  }
+  // A failed background refresh keeps the loaded videos on screen.
   if (!videos) {
-    return <VideoGridSkeleton count={12} />
+    return error ? (
+      <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
+    ) : (
+      <VideoGridSkeleton count={12} />
+    )
   }
   if (videos.length === 0) {
     return (
