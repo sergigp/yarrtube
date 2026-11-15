@@ -19,7 +19,7 @@ None: no adapter changes.
 
 ## 4. Verification
 
-- [ ] 4.1 Run `scripts/run-tests.sh --lint --web`; all pass.
+- [x] 4.1 Run `scripts/run-tests.sh --lint --web`; all pass.
 - [ ] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, open a category with "Oldest first" chosen and play a video, check via the Playwright MCP browser that the queue header reads "… · oldest first"; with "Hide watched" on, check the position counts only listed rows; stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 
 ## Workflow follow-up
