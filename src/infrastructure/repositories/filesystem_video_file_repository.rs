@@ -41,10 +41,6 @@ pub trait VideoFileRepository: Send + Sync {
     /// first. A rename, so it is atomic within one filesystem.
     fn move_file(&self, from: &Path, to: &Path) -> anyhow::Result<()>;
 
-    /// Removes `dir` if it is empty; a non-empty or missing `dir` is left
-    /// alone, not an error.
-    fn remove_if_empty(&self, dir: &Path) -> anyhow::Result<()>;
-
     /// Reads the UTF-8 content of the file at `output_dir.join(filename)`.
     /// A missing file is `Ok(None)`, not an error.
     fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>>;
@@ -125,23 +121,6 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
                 |e| tracing::error!(from = ?from, to = ?to, error = %e, "failed to move file"),
             )
             .map_err(|e| anyhow::anyhow!("failed to move {from:?} to {to:?}: {e}"))
-    }
-
-    fn remove_if_empty(&self, dir: &Path) -> anyhow::Result<()> {
-        let is_empty = match std::fs::read_dir(dir) {
-            Ok(mut entries) => entries.next().is_none(),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
-            Err(e) => {
-                tracing::error!(dir = ?dir, error = %e, "failed to read directory");
-                return Err(anyhow::anyhow!("failed to read directory {dir:?}: {e}"));
-            }
-        };
-        if !is_empty {
-            return Ok(());
-        }
-        std::fs::remove_dir(dir)
-            .inspect_err(|e| tracing::error!(dir = ?dir, error = %e, "failed to remove directory"))
-            .map_err(|e| anyhow::anyhow!("failed to remove directory {dir:?}: {e}"))
     }
 
     fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>> {
@@ -239,7 +218,6 @@ pub struct FakeVideoFileRepository {
     pub(crate) deleted_dirs: std::sync::Mutex<Vec<std::path::PathBuf>>,
     pub(crate) file_exists_result: std::sync::Mutex<Option<bool>>,
     pub(crate) moved: std::sync::Mutex<Vec<(std::path::PathBuf, std::path::PathBuf)>>,
-    pub(crate) removed_if_empty: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Runs on every `move_file`, before it is recorded, e.g. to observe
     /// what is already on disk when a file is moved into place.
     #[allow(clippy::type_complexity)]
@@ -388,14 +366,6 @@ impl VideoFileRepository for FakeVideoFileRepository {
         Ok(())
     }
 
-    fn remove_if_empty(&self, dir: &Path) -> anyhow::Result<()> {
-        self.removed_if_empty
-            .lock()
-            .unwrap()
-            .push(dir.to_path_buf());
-        Ok(())
-    }
-
     fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>> {
         let path = output_dir.join(filename);
         Ok(self
@@ -516,45 +486,6 @@ mod tests {
 
         assert_eq!(std::fs::read(&to).ok(), Some(b"media".to_vec()));
         assert!(!dir.join(".downloads/yt1/yt1.mp4").exists());
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn it_should_remove_an_empty_dir_only() {
-        let dir = unique_temp_dir("video-file-repository-remove-if-empty");
-        std::fs::create_dir_all(dir.join("Empty")).unwrap();
-        std::fs::create_dir_all(dir.join("Full")).unwrap();
-        std::fs::write(dir.join("Full/leftover.mp4"), b"").unwrap();
-
-        let results = [
-            FilesystemVideoFileRepository.remove_if_empty(&dir.join("Empty")),
-            FilesystemVideoFileRepository.remove_if_empty(&dir.join("Full")),
-            FilesystemVideoFileRepository.remove_if_empty(&dir.join("Missing")),
-        ];
-
-        assert_eq!(results.map(|result| result.is_ok()), [true, true, true]);
-        assert_eq!(
-            [dir.join("Empty"), dir.join("Full/leftover.mp4")].map(|path| path.exists()),
-            [false, true]
-        );
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn it_should_fail_to_remove_a_dir_it_cannot_read() {
-        let dir = unique_temp_dir("video-file-repository-remove-if-empty-unreadable");
-        let not_a_dir = dir.join("leftover.mp4");
-        std::fs::write(&not_a_dir, b"").unwrap();
-
-        let result = FilesystemVideoFileRepository.remove_if_empty(&not_a_dir);
-
-        assert_eq!(
-            result.map_err(|e| e.to_string()),
-            Err(format!(
-                "failed to read directory {not_a_dir:?}: Not a directory (os error 20)"
-            ))
-        );
-        assert!(not_a_dir.exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

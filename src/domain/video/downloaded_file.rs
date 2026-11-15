@@ -17,7 +17,8 @@ impl DownloadedFile {
         !is_episode_path(&self.filename)
     }
 
-    /// The file recorded at `filename` (a relocation).
+    /// The file recorded at `filename`.
+    #[cfg(test)]
     pub fn with_filename(self, filename: impl Into<String>) -> Self {
         Self {
             filename: filename.into(),

@@ -1,8 +1,8 @@
 use crate::domain::preferences::Preferences;
 use crate::domain::services::{
-    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategorizer, VideoCategorizerApi,
+    MetadataGenerator, MetadataGeneratorApi, VideoCategorizer, VideoCategorizerApi,
     VideoCategoryAssigner, VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi,
-    VideoRelocator, VideoRelocatorApi, VideoUpdater, VideoUpdaterApi,
+    VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{
     StepStatus, Video, VideoId, VideoOwner, VideoStatus, VideoSyncChanges, VideoSyncPlan,
@@ -33,7 +33,6 @@ pub struct VideoReconciler {
     video_file_repository: Arc<dyn VideoFileRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     metadata_generator: Arc<MetadataGenerator>,
-    video_relocator: Arc<VideoRelocator>,
     clock: Arc<dyn Clock>,
     video_category_assigner: VideoCategoryAssigner,
     preferences_repository: Arc<dyn PreferencesRepository>,
@@ -49,7 +48,6 @@ impl VideoReconciler {
         video_file_repository: Arc<dyn VideoFileRepository>,
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         metadata_generator: Arc<MetadataGenerator>,
-        video_relocator: Arc<VideoRelocator>,
         clock: Arc<dyn Clock>,
         video_category_assigner: VideoCategoryAssigner,
         preferences_repository: Arc<dyn PreferencesRepository>,
@@ -63,7 +61,6 @@ impl VideoReconciler {
             video_file_repository,
             video_metadata_repository,
             metadata_generator,
-            video_relocator,
             clock,
             video_category_assigner,
             preferences_repository,
@@ -118,7 +115,6 @@ impl VideoReconciler {
             steps_due = ?changes.steps_due,
             reset_for_redownload = changes.reset_for_redownload,
             metadata_repaired = changes.metadata_repaired,
-            relocated = changes.relocated,
             "synced video"
         );
     }
@@ -164,7 +160,7 @@ impl VideoReconciler {
     /// same way `VideoDownloader` does at download time, referencing the
     /// thumbnail already on disk. Best effort: a failure is logged, the video
     /// is left as it is and its next sync tries again. What it did, as
-    /// `metadata_repaired` and `relocated`.
+    /// `metadata_repaired`.
     fn repair_metadata(&self, video: &Video, owner: &VideoOwner) -> VideoSyncChanges {
         if video.download.status() != VideoStatus::Downloaded || self.has_metadata(video) {
             return VideoSyncChanges::default();
@@ -175,13 +171,8 @@ impl VideoReconciler {
         else {
             return VideoSyncChanges::default();
         };
-        let Some((video, relocated)) = self.relocate_if_legacy(video, &metadata, &owner.target)
-        else {
-            return VideoSyncChanges::default();
-        };
         VideoSyncChanges {
-            metadata_repaired: self.save_metadata(&video, metadata, &owner.target),
-            relocated,
+            metadata_repaired: self.save_metadata(video, metadata, &owner.target),
             ..VideoSyncChanges::default()
         }
     }
@@ -201,36 +192,6 @@ impl VideoReconciler {
                 warn!(video_id = %video.id, error = %e, "failed to save video metadata during sync")
             })
             .is_ok()
-    }
-
-    /// `video` itself when already in its season folder, else `video` as
-    /// stored once relocated there, now that its publish time is known, with
-    /// whether it moved; `None` when the relocation failed or moved nothing.
-    fn relocate_if_legacy(
-        &self,
-        video: &Video,
-        metadata: &VideoMetadata,
-        target: &VideoTarget,
-    ) -> Option<(Video, bool)> {
-        if !video.download.is_in_legacy_layout() {
-            return Some((video.clone(), false));
-        }
-        match self
-            .video_relocator
-            .relocate(video, Some(metadata.published_at), &target.output_dir)
-        {
-            Ok(Relocation::Moved { .. }) => self
-                .video_repository
-                .find(&video.id)
-                .ok()
-                .flatten()
-                .map(|moved| (moved, true)),
-            Ok(_) => None,
-            Err(e) => {
-                warn!(video_id = %video.id, error = %e, "failed to relocate legacy video during sync");
-                None
-            }
-        }
     }
 
     /// Whether `video` has metadata recorded; a failed read counts as

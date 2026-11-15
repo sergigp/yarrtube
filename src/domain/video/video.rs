@@ -473,29 +473,6 @@ impl Video {
         }
     }
 
-    /// Records a legacy video's files at their new paths in its season
-    /// folder, under the episode number they were relocated for.
-    pub fn relocate_to_episode(
-        self,
-        number: EpisodeNumber,
-        filename: impl Into<String>,
-        thumbnail_filename: Option<String>,
-        now: DateTime<Utc>,
-    ) -> Self {
-        let file = self
-            .download
-            .file
-            .clone()
-            .map(|file| file.with_filename(filename));
-        Self {
-            download: self.download.with_file(file),
-            thumbnail: self.thumbnail.with_filename(thumbnail_filename),
-            episode_number: Some(number),
-            updated_at: now,
-            ..self
-        }
-    }
-
     /// The recorded duration, else the reported one. The reported one is
     /// always positive (`VideoDuration`), but yt-dlp truncates a sub-second
     /// video's duration to a recorded 0, which counts as unknown so progress
@@ -690,47 +667,6 @@ mod tests {
         assert_eq!(
             numbered,
             Video {
-                episode_number: Some(number),
-                updated_at: now,
-                ..video
-            }
-        );
-    }
-
-    #[test]
-    fn it_should_record_its_files_when_relocated_to_an_episode() {
-        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let number = EpisodeNumber::from_columns(1, 3).unwrap();
-        let video = video().mark_downloaded(
-            Quality::High,
-            "My Video/My Video.mp4",
-            Some("My Video/My Video.jpg".to_string()),
-            Some(223),
-            now,
-        );
-
-        let relocated = video.clone().relocate_to_episode(
-            number,
-            "Season 1/S01E003 - My Video.mp4",
-            Some("Season 1/S01E003 - My Video.jpg".to_string()),
-            now,
-        );
-
-        assert_eq!(
-            relocated,
-            Video {
-                download: Download {
-                    file: Some(DownloadedFile {
-                        filename: "Season 1/S01E003 - My Video.mp4".to_string(),
-                        quality: Quality::High,
-                        duration_seconds: Some(223),
-                    }),
-                    ..video.download.clone()
-                },
-                thumbnail: Thumbnail {
-                    filename: Some("Season 1/S01E003 - My Video.jpg".to_string()),
-                    ..video.thumbnail.clone()
-                },
                 episode_number: Some(number),
                 updated_at: now,
                 ..video

@@ -62,9 +62,4 @@ impl Thumbnail {
             ..self
         }
     }
-
-    /// The file recorded at `filename` (a relocation), state unchanged.
-    pub fn with_filename(self, filename: Option<String>) -> Self {
-        Self { filename, ..self }
-    }
 }
