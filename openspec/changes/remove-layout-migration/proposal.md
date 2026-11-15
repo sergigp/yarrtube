@@ -24,8 +24,8 @@ upgrade guide are dead weight.
 - Docs: delete `doc/UPGRADING-TO-0.9.0.md` and its references (CLAUDE.md,
   CHANGELOG 0.9.0 entry link, ARCHITECTURE "Legacy layout"). The 0.9.0
   announcement in `announcements/announcements.json` links to the guide; it
-  is no longer shown to anyone who dismissed it, and its link is retargeted
-  to the 0.9.0 release notes.
+  is no longer shown to anyone who dismissed it; it and the CHANGELOG link
+  are retargeted to the guide as of the `v0.9.0` tag.
 
 ## Capabilities
 

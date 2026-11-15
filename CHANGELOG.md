@@ -47,6 +47,11 @@ redesigned web UI.
   queue.
 - Phone shelves on Home no longer catch vertical swipes.
 
+### Removed
+
+- The `yarrtube migrate-layout` command, which moved 0.8.x libraries to the
+  TV-show layout.
+
 ## [0.10.0] - 2026-10-30
 
 Categories, subtitles and a redesigned web UI.
@@ -92,7 +97,7 @@ Categories, subtitles and a redesigned web UI.
 ## [0.9.0] - 2026-10-13
 
 Existing libraries need a one-time migration. Read
-[UPGRADING-TO-0.9.0.md](doc/UPGRADING-TO-0.9.0.md) before upgrading.
+[UPGRADING-TO-0.9.0.md](https://github.com/sergigp/yarrtube/blob/v0.9.0/doc/UPGRADING-TO-0.9.0.md) before upgrading.
 
 ### Breaking
 

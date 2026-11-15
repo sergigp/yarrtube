@@ -9,14 +9,13 @@ embedded React web UI, syncs tracked sources on an interval, lays each
 tracked source out as a TV show (channels: `Season <year>/S<year>E<MMDDii> -
 <title>.*` by publish date; playlists: `Season 1/S01E<nnn> - <title>.*` in
 playlist order; with NFO metadata) for Plex/Kodi/Jellyfin, and optionally asks Plex to scan a
-show folder after each download. `yarrtube migrate-layout` moves a library
-from the old per-video-folder layout.
+show folder after each download.
 
 Docs: `doc/INSTALLATION.md` (Docker, Compose, every environment variable),
 `doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex TV Shows
 library, scan trigger, subtitles), `doc/CATEGORIES.md` (categories in the
-web UI and as Plex smart playlists), `doc/UPGRADING-TO-0.9.0.md` (layout migration
-from 0.8.x, temporary), `doc/ARCHITECTURE.md`. Every merge to `main` that
+web UI and as Plex smart playlists), `doc/AI.md` (AI summaries and
+categorization), `doc/ARCHITECTURE.md`. Every merge to `main` that
 passes CI publishes the multi-arch image to `ghcr.io` as `:edge` +
 `:sha-<short sha>` via `.github/workflows/release.yml`, with no git tag
 and no `:latest`. Stable releases (`:latest`, `:X.Y.Z`, `:X.Y`) are cut

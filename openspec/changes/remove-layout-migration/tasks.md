@@ -18,8 +18,8 @@ None.
 
 ## 4. Docs
 
-- [ ] 4.1 Delete `doc/UPGRADING-TO-0.9.0.md`; remove its mention in `CLAUDE.md` (docs list and the `yarrtube migrate-layout` sentence), the `migrate-layout` line in `CLAUDE.md`'s "What this is", and the "Legacy layout" bullet's `migrate-layout` mention in `doc/ARCHITECTURE.md` (legacy files are still served, nothing moves them); point the CHANGELOG 0.9.0 entry's guide link and the 0.9.0 announcement's link in `announcements/announcements.json` at the v0.9.0 GitHub release instead.
-- [ ] 4.2 Add a **Removed** line to the 1.0.0 CHANGELOG entry: the `migrate-layout` command, which moved 0.8.x libraries to the TV-show layout.
+- [x] 4.1 Delete `doc/UPGRADING-TO-0.9.0.md`; remove its mention in `CLAUDE.md` (docs list and the `yarrtube migrate-layout` sentence), the `migrate-layout` line in `CLAUDE.md`'s "What this is", and the "Legacy layout" bullet's `migrate-layout` mention in `doc/ARCHITECTURE.md` (legacy files are still served, nothing moves them); point the CHANGELOG 0.9.0 entry's guide link and the 0.9.0 announcement's link in `announcements/announcements.json` at the guide as of the `v0.9.0` tag instead (there's no v0.9.0 GitHub release).
+- [x] 4.2 Add a **Removed** line to the 1.0.0 CHANGELOG entry: the `migrate-layout` command, which moved 0.8.x libraries to the TV-show layout.
 
 ## 5. Verification
 

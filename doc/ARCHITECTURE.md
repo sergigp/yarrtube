@@ -253,9 +253,9 @@ Each tracked playlist or channel is a TV show under its storage path:
   a removed video's number is never reused.
 - **Staging**: `yt-dlp` writes into `.downloads/<video id>`, then files
   are moved into the season folder, so players never see a partial file.
-- **Legacy layout** (per-video folders from 0.8.x) is still served;
-  `VideoRelocator` moves it into the TV layout via `migrate-layout` or
-  reconcile.
+- **Legacy layout** (per-video folders from 0.8.x) is still served and
+  deleted as a unit, but nothing moves it: a legacy video gets no new files
+  (metadata, subtitles).
 
 ## Testing
 
