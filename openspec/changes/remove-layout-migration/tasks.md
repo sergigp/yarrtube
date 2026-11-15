@@ -23,5 +23,5 @@ None.
 
 ## 5. Verification
 
-- [ ] 5.1 `scripts/run-tests.sh --lint --web --rust` passes.
-- [ ] 5.2 `cargo run -- migrate-layout` fails with clap's unknown-subcommand error; `cargo run -- --help` no longer lists it.
+- [x] 5.1 `scripts/run-tests.sh --lint --web --rust` passes.
+- [x] 5.2 `cargo run -- migrate-layout` fails with clap's unknown-subcommand error; `cargo run -- --help` no longer lists it.
