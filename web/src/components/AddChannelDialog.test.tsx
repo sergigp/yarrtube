@@ -201,7 +201,7 @@ describe('AddChannelDialog', () => {
 
   it('creates the channel with categorization when checked', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
       'GET /api/channels/preview?channel=%40chan': {
         id: '@chan',
         title: 'The Channel',

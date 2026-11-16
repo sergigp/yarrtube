@@ -250,7 +250,7 @@ describe('AiSettingsView', () => {
 
   it('shows the shipped categorization prompt under its Prompt', async () => {
     mockApi({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
 
@@ -268,7 +268,7 @@ describe('AiSettingsView', () => {
 
   it('shows the categorization generation settings under its Advanced', async () => {
     mockApi({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()

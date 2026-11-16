@@ -77,7 +77,7 @@ describe('EditChannelDialog', () => {
   it('sends only the changed categorization setting', async () => {
     const { onSave, onOpenChange } = renderDialog(aChannel(), undefined, {
       'GET /api/categories': aCategoryList(),
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
     const user = userEvent.setup()
     const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })

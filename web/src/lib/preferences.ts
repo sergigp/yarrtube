@@ -46,10 +46,13 @@ export function summariesAvailable(preferences: Preferences | undefined): boolea
   return aiEnabled(preferences) && (preferences?.summaries_enabled ?? false)
 }
 
-/** Whether sources can have their videos categorized: AI, categories and categorization on. */
+/**
+ * Whether sources can have their videos categorized: summaries available (a
+ * video is judged from its summary), categories and categorization on.
+ */
 export function categorizationAvailable(preferences: Preferences | undefined): boolean {
   return (
-    aiEnabled(preferences) &&
+    summariesAvailable(preferences) &&
     (preferences?.categories_enabled ?? false) &&
     (preferences?.categorization_enabled ?? false)
   )

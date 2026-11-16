@@ -261,7 +261,7 @@ describe('AddPlaylistDialog', () => {
 
   it('creates the playlist with categorization when checked', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
       'POST /api/playlists': aPlaylist(),
     })
