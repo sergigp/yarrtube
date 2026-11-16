@@ -91,6 +91,29 @@ describe('EditChannelDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it('keeps Categorize videos checked but disabled when Summarize videos is unchecked', async () => {
+    const { onSave, onOpenChange } = renderDialog(
+      aChannel({ summaries_enabled: true, categorization_enabled: true }),
+      undefined,
+      {
+        'GET /api/categories': aCategoryList(),
+        'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
+      },
+    )
+    const user = userEvent.setup()
+    const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })
+    await waitFor(() => expect(summaries).toBeEnabled())
+
+    await user.click(summaries)
+
+    const categorization = screen.getByRole('checkbox', { name: 'Categorize videos' })
+    expect(categorization).toBeChecked()
+    expect(categorization).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ summaries_enabled: false })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('lets summaries be turned off while AI is off', async () => {
     const { onSave, onOpenChange, fetchMock } = renderDialog(aChannel({ summaries_enabled: true }))
     const user = userEvent.setup()
