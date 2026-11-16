@@ -78,9 +78,10 @@ categories are kept for when you turn them back on.
 - **No playlist in Plex**: a playlist appears within 15 minutes after Plex
   imports its first episode, and only for the Plex user whose token
   yarrtube uses. Check **Settings → Plex**.
-- **Several playlists for one category**: a category with episodes in
-  several Plex libraries gets one playlist per library, e.g.
-  `Science · Subscriptions` and `Science · Kids TV`.
+- **Several playlists for one category**: a Plex smart playlist can only
+  draw from one library, so a category with episodes in several libraries
+  gets one playlist per library, e.g. `Science · Subscriptions` and
+  `Science · Kids TV`.
 - **Labels you added in Plex disappear**: yarrtube builds the playlists
   from labels named after your categories and owns the labels of its
   episodes. If you restrict shared users by label, don't use a category
