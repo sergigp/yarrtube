@@ -68,7 +68,7 @@ describe('EditPlaylistDialog', () => {
   })
 
   it('sends only the checked categorization setting', async () => {
-    const { onSave, onOpenChange } = renderDialog(aPlaylist(), undefined, {
+    const { onSave, onOpenChange } = renderDialog(aPlaylist({ summaries_enabled: true }), undefined, {
       'GET /api/categories': aCategoryList(),
       'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })

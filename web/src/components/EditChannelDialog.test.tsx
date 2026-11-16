@@ -75,7 +75,7 @@ describe('EditChannelDialog', () => {
   })
 
   it('sends only the changed categorization setting', async () => {
-    const { onSave, onOpenChange } = renderDialog(aChannel(), undefined, {
+    const { onSave, onOpenChange } = renderDialog(aChannel({ summaries_enabled: true }), undefined, {
       'GET /api/categories': aCategoryList(),
       'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
