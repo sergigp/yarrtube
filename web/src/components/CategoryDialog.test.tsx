@@ -90,7 +90,7 @@ function shownChips(): string[] {
 
 const chess = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] })
 
-const categorizationOn = aPreferences({ ai_enabled: true, categorization_enabled: true })
+const categorizationOn = aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true })
 
 /** The bodies sent with `method`, in order. */
 function bodies(fetchMock: ReturnType<typeof mockApi>, method: string): unknown[] {

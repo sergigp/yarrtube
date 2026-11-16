@@ -261,15 +261,17 @@ describe('AddPlaylistDialog', () => {
 
   it('creates the playlist with categorization when checked', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
       'POST /api/playlists': aPlaylist(),
     })
     const user = userEvent.setup()
 
     await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
-    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
-    await waitFor(() => expect(categorization).toBeEnabled())
+    const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })
+    await waitFor(() => expect(summaries).toBeEnabled())
+    await user.click(summaries)
+    const categorization = screen.getByRole('checkbox', { name: 'Categorize videos' })
     await user.click(categorization)
     const submit = screen.getByRole('button', { name: 'Create Playlist' })
     await waitFor(() => expect(submit).toBeEnabled())
@@ -280,6 +282,7 @@ describe('AddPlaylistDialog', () => {
       ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
     ) as [string, RequestInit]
     expect(JSON.parse(createCall[1].body as string)).toMatchObject({
+      summaries_enabled: true,
       categorization_enabled: true,
     })
   })

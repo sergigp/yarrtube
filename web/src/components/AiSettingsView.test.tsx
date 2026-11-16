@@ -240,6 +240,39 @@ describe('AiSettingsView', () => {
     expect(section.queryByRole('button', { name: /advanced/i })).not.toBeInTheDocument()
   })
 
+  it('disables Categorization while summaries are off', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({ ai_enabled: true }),
+    })
+    renderWithProviders(<AiSettingsView />)
+
+    const section = within(await screen.findByRole('group', { name: 'Categorization' }))
+    expect(section.getByRole('switch', { name: 'Categorization' })).toBeDisabled()
+    expect(section.getByText('Needs summaries.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Categorization model' })).toBeDisabled()
+  })
+
+  it('keeps Categorization on but disabled when summaries are turned off unsaved', async () => {
+    mockApi({
+      'GET /api/preferences': { ...aiOn(), categorization_enabled: true },
+      'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': anOllamaServer(),
+    })
+    renderWithProviders(<AiSettingsView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: 'Summaries' }))
+
+    const section = within(screen.getByRole('group', { name: 'Categorization' }))
+    expect(section.getByRole('switch', { name: 'Categorization' })).toBeChecked()
+    expect(section.getByRole('switch', { name: 'Categorization' })).toBeDisabled()
+    expect(section.getByText('Needs summaries.')).toBeInTheDocument()
+    expect(await screen.findByRole('combobox', { name: 'Categorization model' })).toBeDisabled()
+    expect(
+      section.queryByRole('button', { name: 'Advanced categorization settings' }),
+    ).not.toBeInTheDocument()
+    expect(section.queryByRole('button', { name: /^Prompt/ })).not.toBeInTheDocument()
+  })
+
   it('hides the Categorization section while categories are off', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ categories_enabled: false }) })
     renderWithProviders(<AiSettingsView />)
@@ -250,7 +283,7 @@ describe('AiSettingsView', () => {
 
   it('shows the shipped categorization prompt under its Prompt', async () => {
     mockApi({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
 
@@ -268,7 +301,7 @@ describe('AiSettingsView', () => {
 
   it('shows the categorization generation settings under its Advanced', async () => {
     mockApi({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
     renderWithProviders(<AiSettingsView />)
     const user = userEvent.setup()
@@ -283,7 +316,7 @@ describe('AiSettingsView', () => {
   })
 
   it('saves only the changed categorization fields', async () => {
-    const saved = aPreferences({ ai_enabled: true, ollama_url: 'http://mac.local:11434' })
+    const saved = aiOn()
     const fetchMock = mockApi({
       'GET /api/preferences': saved,
       'GET /api/llm/ollama?url=http%3A%2F%2Fmac.local%3A11434': { status: 502, error: 'down' },
@@ -332,6 +365,7 @@ describe('AiSettingsView', () => {
     mockApi({
       'GET /api/preferences': aPreferences({
         ai_enabled: true,
+        summaries_enabled: true,
         categorization_enabled: true,
         categorization_context_length: 16384,
         categorization_context_length_is_auto: true,
@@ -360,6 +394,7 @@ describe('AiSettingsView', () => {
     mockApi({
       'GET /api/preferences': aPreferences({
         ai_enabled: true,
+        summaries_enabled: true,
         categorization_enabled: true,
         categorization_context_length: 16384,
         categorization_context_length_is_auto: true,
@@ -381,6 +416,7 @@ describe('AiSettingsView', () => {
   it('goes back to the Auto context length', async () => {
     const saved = aPreferences({
       ai_enabled: true,
+      summaries_enabled: true,
       categorization_enabled: true,
       categorization_context_length: 8192,
       categorization_context_length_is_auto: false,
@@ -413,6 +449,7 @@ describe('AiSettingsView', () => {
     const shipped = aPreferences().categorization_prompt
     const saved = aPreferences({
       ai_enabled: true,
+      summaries_enabled: true,
       categorization_enabled: true,
       categorization_prompt: 'my prompt',
       categorization_prompt_is_default: false,

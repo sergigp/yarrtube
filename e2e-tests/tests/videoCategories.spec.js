@@ -87,7 +87,12 @@ test.describe('with a channel in "Chess" and a "Sicilian" category', () => {
   // The seeded channel has categorization off: the dialog's button clears.
   test("clear a video's AI categories from its dialog", async ({ page, request, daemon }) => {
     const preferences = await request.patch('/api/preferences', {
-      data: { ai_enabled: true, ollama_url: daemon.ollamaUrl, categorization_enabled: true },
+      data: {
+        ai_enabled: true,
+        ollama_url: daemon.ollamaUrl,
+        summaries_enabled: true,
+        categorization_enabled: true,
+      },
     })
     expect(preferences.ok(), await preferences.text()).toBeTruthy()
     const [{ title }] = channel.videos

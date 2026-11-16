@@ -11,7 +11,7 @@ use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::SummaryModel;
 use crate::domain::preferences::{
     AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
-    CategorizationSettings, ContextLength, Preferences, Temperature,
+    CategorizationSettings, ContextLength, Preferences, SummarySettings, Temperature,
 };
 use crate::domain::services::{CategorizationResetter, VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -744,6 +744,50 @@ fn it_should_do_nothing_when_the_conditions_no_longer_hold() {
             (Ok(TaskOutcome::Done), vec![])
         ]
     );
+}
+
+#[test]
+fn it_should_skip_the_categorization_when_ai_summaries_are_off() {
+    let db = TestDatabase::new();
+    let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Sicilian")]);
+    let task = categorize_video_task(&db, llm.clone());
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            summaries: SummarySettings {
+                enabled: false,
+                ..categorization_on().summaries
+            },
+            ..categorization_on()
+        })
+        .unwrap();
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(asked_categories(&llm), Vec::<Vec<&str>>::new());
+}
+
+#[test]
+fn it_should_skip_the_categorization_when_the_source_has_summaries_off() {
+    let db = TestDatabase::new();
+    let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Sicilian")]);
+    let task = categorize_video_task(&db, llm.clone());
+    SqliteChannelRepository::new(db.database())
+        .update(
+            &my_channel()
+                .with_summaries_enabled(false)
+                .with_categorization_enabled(true),
+        )
+        .unwrap();
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(asked_categories(&llm), Vec::<Vec<&str>>::new());
 }
 
 #[test]
@@ -2561,10 +2605,15 @@ fn seed(db: &TestDatabase, video: &Video, categories: &[&Category]) {
         .unwrap();
 }
 
-/// Stores `my_channel()`, with categorization on or off, as the owner of `video`.
+/// Stores `my_channel()`, with summaries on and categorization on or off, as
+/// the owner of `video`.
 fn seed_channel(db: &TestDatabase, video: &Video, categorization_enabled: bool) {
     SqliteChannelRepository::new(db.database())
-        .insert(&my_channel().with_categorization_enabled(categorization_enabled))
+        .insert(
+            &my_channel()
+                .with_summaries_enabled(true)
+                .with_categorization_enabled(categorization_enabled),
+        )
         .unwrap();
     SqliteChannelVideoRepository::new(db.database())
         .save(&ChannelVideo::create(
@@ -2580,6 +2629,10 @@ fn categorization_on() -> Preferences {
     Preferences {
         ai_enabled: true,
         ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+        summaries: SummarySettings {
+            enabled: true,
+            ..SummarySettings::default()
+        },
         categorization: CategorizationSettings {
             enabled: true,
             ..CategorizationSettings::default()

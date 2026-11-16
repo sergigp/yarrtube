@@ -20,6 +20,7 @@ import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { formatRelativeTime } from '@/lib/formatDateTime'
 import { newestUnwatched, sourceSummary } from '@/lib/sourceVideos'
+import { sourceCategorizes } from '@/lib/sourceAi'
 import { channelPath, youtubeChannelUrl } from '@/lib/sourcePath'
 import { videoPathIn } from '@/lib/videoPath'
 import { DetailHeader } from './DetailHeader'
@@ -102,7 +103,7 @@ export function ChannelDetail() {
         aiCategorization={
           categoriesShown
             ? {
-                enabled: categorizationAvailable && channel.categorization_enabled,
+                enabled: categorizationAvailable && sourceCategorizes(channel),
                 onDeleteAiVerdicts: refreshing(() =>
                   deleteSourceAiVerdicts({ kind: 'channel', id }),
                 ),

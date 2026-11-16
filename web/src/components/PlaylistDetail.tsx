@@ -35,6 +35,7 @@ import {
   watchFilterCounts,
   type VideoSort,
 } from '@/lib/sourceVideos'
+import { sourceCategorizes } from '@/lib/sourceAi'
 import { categoryPath, playlistPath, youtubePlaylistUrl } from '@/lib/sourcePath'
 import { videoPathIn } from '@/lib/videoPath'
 import { DetailHeader } from './DetailHeader'
@@ -161,7 +162,7 @@ export function PlaylistDetail() {
         aiCategorization={
           categoriesShown
             ? {
-                enabled: categorizationAvailable && playlist.categorization_enabled,
+                enabled: categorizationAvailable && sourceCategorizes(playlist),
                 onDeleteAiVerdicts: refreshing(() =>
                   deleteSourceAiVerdicts({ kind: 'playlist', id }),
                 ),
