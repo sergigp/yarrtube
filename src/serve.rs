@@ -6,15 +6,15 @@ use crate::domain::services::{
     CategoryUpdater, CategoryVideoCollector, CategoryViewSearcher, ChannelAvatarRestorer,
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler,
     ChannelViewSearcher, ChapterFetcher, DaemonHealthSearcher, DaemonHealthSearcherApi,
-    DirectorySearcher, InternalVideoReconciler, LayoutMigrator, LlmServerSearcher,
-    MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
-    PlaylistVideoReconciler, PlaylistViewSearcher, PlexEpisodeFinder, PlexFolderScanner,
-    PlexLabelSyncer, PlexLabelSyncerApi, PlexStatusSearcher, PlexSyncRequester, PlexWatchSyncer,
-    PlexWatchSyncerApi, PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter,
-    ShowMover, SubtitleFetcher, SubtitleReader, TaskRunNowRequester, TaskViewSearcher,
-    ThumbnailFetcher, VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher,
-    VideoCategoryEditor, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
-    VideoRelocator, VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    DirectorySearcher, InternalVideoReconciler, LlmServerSearcher, MetadataGenerator,
+    PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
+    PlaylistViewSearcher, PlexEpisodeFinder, PlexFolderScanner, PlexLabelSyncer,
+    PlexLabelSyncerApi, PlexStatusSearcher, PlexSyncRequester, PlexWatchSyncer, PlexWatchSyncerApi,
+    PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover,
+    SubtitleFetcher, SubtitleReader, TaskRunNowRequester, TaskViewSearcher, ThumbnailFetcher,
+    VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
+    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRetrier,
+    VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -183,20 +183,6 @@ pub(crate) fn build_infrastructure() -> Result<InfrastructureContainer> {
         ytdlp_path: target_path(),
         anthropic: anthropic_config(),
     })
-}
-
-pub(crate) fn layout_migrator(infrastructure: &InfrastructureContainer) -> LayoutMigrator {
-    LayoutMigrator::new(
-        infrastructure.video_repository.clone(),
-        infrastructure.playlist_repository.clone(),
-        infrastructure.channel_repository.clone(),
-        infrastructure.playlist_video_repository.clone(),
-        infrastructure.channel_video_repository.clone(),
-        infrastructure.video_metadata_repository.clone(),
-        video_relocator(infrastructure),
-        show_file_writer(infrastructure),
-        videos_path(),
-    )
 }
 
 fn port() -> u16 {
@@ -947,15 +933,6 @@ fn show_file_writer(infrastructure: &InfrastructureContainer) -> Arc<ShowFileWri
     ))
 }
 
-fn video_relocator(infrastructure: &InfrastructureContainer) -> Arc<VideoRelocator> {
-    Arc::new(VideoRelocator::new(
-        infrastructure.video_repository.clone(),
-        infrastructure.video_file_repository.clone(),
-        infrastructure.video_metadata_repository.clone(),
-        infrastructure.clock.clone(),
-    ))
-}
-
 fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader {
     VideoDownloader::new(
         infrastructure.video_repository.clone(),
@@ -1031,7 +1008,6 @@ fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler
         infrastructure.video_file_repository.clone(),
         infrastructure.video_metadata_repository.clone(),
         metadata_generator(infrastructure),
-        video_relocator(infrastructure),
         infrastructure.clock.clone(),
         video_category_assigner(infrastructure),
         infrastructure.preferences_repository.clone(),

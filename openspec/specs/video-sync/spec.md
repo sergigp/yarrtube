@@ -163,7 +163,7 @@ A video sync SHALL reset a Downloaded video whose recorded file is missing from 
 - **THEN** the video is not reset
 
 ### Requirement: Sync Repairs Missing Metadata
-A video sync SHALL regenerate the metadata of a Downloaded video with a healthy file that has no metadata recorded as populated, without re-downloading it, resolving its `sorttitle` from its playlist position or, for a channel video, its publish date. When such a video is still stored in the previous layout, the sync SHALL also move its file set into its season folder and record the new filenames. A failed regeneration SHALL leave the video unchanged and be retried by its next sync.
+A video sync SHALL regenerate the metadata of a Downloaded video with a healthy file that has no metadata recorded as populated, without re-downloading it, resolving its `sorttitle` from its playlist position or, for a channel video, its publish date. A video still stored in the previous per-video-folder layout SHALL be left as it is: no metadata is regenerated or written for it and nothing is moved. A failed regeneration SHALL leave the video unchanged and be retried by its next sync.
 
 #### Scenario: Downloaded video has no recorded metadata
 - **WHEN** a video sync runs for a Downloaded playlist video with no metadata recorded as populated
@@ -174,8 +174,8 @@ A video sync SHALL regenerate the metadata of a Downloaded video with a healthy 
 - **THEN** its metadata is not regenerated
 
 #### Scenario: Video still in the previous layout
-- **WHEN** a video sync regenerates the metadata of a Downloaded video whose recorded file is still in a per-video folder
-- **THEN** its file, thumbnail and NFO are moved under the episode base name in its season folder, the empty per-video folder is removed, and the new filenames are recorded
+- **WHEN** a video sync runs for a Downloaded video with no recorded metadata whose recorded file is still in a per-video folder or a flat file
+- **THEN** no metadata is generated or written for it, its files stay where they are, and no new filename is recorded
 
 #### Scenario: Metadata still unavailable
 - **WHEN** a video sync runs for a Downloaded video with no recorded metadata and YouTube returns no metadata for it

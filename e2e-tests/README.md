@@ -31,11 +31,12 @@ the run); Playwright's traces/videos are kept under `e2e-tests/test-results/`.
 Each run uses its own container names, image tag and free ports, so the
 suite can run from several worktrees at the same time.
 
-The script installs nothing: install the suite's dependencies and browsers
-once (`npm --prefix e2e-tests ci && npx --prefix e2e-tests playwright install
---with-deps chromium webkit`). With `E2E_IMAGE` set it tests that image
-instead of building one. CI (`.github/workflows/ci.yml`) runs the suite on
-every pull request and push to `main`, with the image built once with layer
+The script installs the suite's dependencies and Playwright browsers when
+they're missing (Playwright's system dependencies are up to you:
+`npx --prefix e2e-tests playwright install-deps chromium webkit`). With
+`E2E_IMAGE` set it tests that image instead of building one. CI
+(`.github/workflows/ci.yml`) runs the suite on every pull request and push to
+`main` or a `release/**` branch, with the image built once with layer
 caching and passed in as `E2E_IMAGE`, and without a YouTube API key (so the
 upgrade check is skipped).
 
@@ -68,11 +69,15 @@ Overrides (defaults shown):
 
 | Env var                      | Default                 |
 | ----------------------------- | ------------------------ |
+| `E2E_IMAGE`                   | built from this tree     |
 | `E2E_PORT`                    | a free port              |
 | `E2E_READY_TIMEOUT_SECONDS` | `120`                    |
 | `E2E_PLEX_STUB_PORT`          | a free port              |
 | `E2E_YOUTUBE_STUB_PORT`       | a free port              |
 | `E2E_UPGRADE_FROM_IMAGE`    | `ghcr.io/sergigp/yarrtube:latest` (`none` skips the upgrade check) |
+| `E2E_PLAYLIST_ID`             | `PLXWRoRTUXjks` (upgrade check) |
+| `E2E_PLAYLIST_NAME`           | `test` (upgrade check)   |
+| `E2E_RETRY_BASE_DELAY_SECONDS` | `10` (upgrade check)   |
 
 The upgrade check starts the released image, which can't be pointed at the
 fake YouTube, so it needs a real `YOUTUBE_API_KEY` (from the environment or
@@ -214,6 +219,23 @@ actually loaded rather than the placeholder a broken one is swapped for.
 - **Announcements** (`tests/announcements.spec.js`): the bar shows, links,
   dismisses and remembers dismissals, and stays hidden when the fetch fails.
 - **Version** (`tests/version.spec.js`): the header shows the running version.
+- **Preferences** (`tests/preferences.spec.js`): turning categories off hides
+  them everywhere and back on shows them again; each home switch takes its
+  section off home; the theme toggle is saved on the daemon, not just in the
+  browser.
+- **AI settings** (`tests/aiSettings.spec.js`): point at the Ollama stub, pick
+  a model and save, then reset the prompt; a broken prompt is refused with the
+  reason; test the Anthropic stub's connection and save it as the provider.
+- **Video categories** (`tests/videoCategories.spec.js`): edit and clear a
+  video's categories by hand, clear a channel's AI categories, and the AI (the
+  Ollama stub) fits a video into a category, whose re-evaluation clears its
+  verdicts.
+- **Plex settings** (`tests/plexSettings.spec.js`): the Plex section shows how
+  the syncs are doing and runs one now.
+- **Source header** (`tests/detailHeader.spec.js`): on desktop a playlist page
+  shows Sync and its YouTube link as icons, every other action behind ⋮.
+- **Seek keys** (`tests/seekKeys.spec.js`): ← / → seek the playing video 10 s,
+  with on-screen feedback.
 
 Together these are also the only coverage of the HTTP API's route wiring
 (Rust handler tests call handlers directly, bypassing the router), so every
@@ -235,23 +257,17 @@ logged a panic.
 
 ## Local development
 
-```bash
-npm --prefix e2e-tests ci
-npx --prefix e2e-tests playwright install --with-deps chromium webkit
-```
-
-Then start the stubs (`node e2e-tests/plex-stub.js`,
-`node e2e-tests/fake-youtube/youtube-stub.js`) and a yarrtube container
-configured like `scripts/run-tests.sh`'s `e2e_start_container ... fake`
-(fake YouTube URL, stand-in `yt-dlp` and samples mounted, self-update off),
-and run:
+`scripts/run-tests.sh --e2e` is the way to run the suite. To run Playwright
+by hand instead (e.g. one spec, headed), start the fake YouTube
+(`node e2e-tests/fake-youtube/youtube-stub.js`, port `18326`) and point the
+suite at an image; each worker starts its own container and its Plex, Ollama
+and Anthropic stubs:
 
 ```bash
-BASE_URL=http://localhost:8080 \
-  E2E_VIDEOS_DIR=$PWD/videos \
-  E2E_PLEX_STUB_URL=http://localhost:18324 \
+E2E_IMAGE=yarrtube:dev \
+  E2E_RUN_ID=local \
   E2E_YOUTUBE_STUB_PORT=18326 \
-  npm --prefix e2e-tests test
+  npm --prefix e2e-tests test -- tests/playlist.spec.js
 ```
 
 Add `--project=chromium` or `--project=mobile-safari` to run one browser

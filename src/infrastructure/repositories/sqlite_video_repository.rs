@@ -102,13 +102,6 @@ pub trait VideoRepository: Send + Sync {
     /// Up to `limit` `Downloaded` videos whose title contains `text`, ignoring
     /// ASCII case, newest sync first.
     fn find_downloaded_by_title(&self, text: &str, limit: usize) -> anyhow::Result<Vec<Video>>;
-    /// The number `assign_episode_number` would return right now, without
-    /// recording it.
-    fn next_episode_number(
-        &self,
-        id: &VideoId,
-        published_at: DateTime<Utc>,
-    ) -> anyhow::Result<EpisodeNumber>;
 }
 
 pub struct SqliteVideoRepository {
@@ -341,18 +334,6 @@ impl VideoRepository for SqliteVideoRepository {
         )
         .context("failed to record the episode number")?;
         Ok(number)
-    }
-
-    fn next_episode_number(
-        &self,
-        id: &VideoId,
-        published_at: DateTime<Utc>,
-    ) -> anyhow::Result<EpisodeNumber> {
-        let conn = self.db.read()?;
-        match Self::recorded_episode_number(&conn, id)? {
-            Some(recorded) => Ok(recorded),
-            None => Self::next_free_episode_number(&conn, id, published_at),
-        }
     }
 
     fn list(&self) -> anyhow::Result<Vec<Video>> {
@@ -1659,24 +1640,6 @@ mod tests {
             found.unwrap(),
             vec![videos[4].clone(), videos[3].clone(), videos[2].clone()]
         );
-    }
-
-    #[test]
-    fn it_should_peek_the_next_episode_number_without_recording_it() {
-        let db = TestDatabase::new();
-        let repo = SqliteVideoRepository::new(db.database());
-        let sibling = video("Sibling", fixed_timestamp());
-        let video = video("Next", fixed_timestamp());
-        repo.insert(&sibling).unwrap();
-        repo.insert(&video).unwrap();
-        let _ = numbered(&repo, sibling.clone(), episode(31501));
-        link_to_channel(&db, &sibling, "@somechannel");
-        link_to_channel(&db, &video, "@somechannel");
-
-        let number = repo.next_episode_number(&video.id, published_at());
-
-        assert_eq!(number.unwrap(), episode(31502));
-        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
 
     fn downloaded(title: &str, created_at_seconds: i64) -> Video {

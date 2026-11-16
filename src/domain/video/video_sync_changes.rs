@@ -8,7 +8,6 @@ pub struct VideoSyncChanges {
     pub steps_due: Vec<VideoSyncStep>,
     pub reset_for_redownload: bool,
     pub metadata_repaired: bool,
-    pub relocated: bool,
 }
 
 impl VideoSyncChanges {

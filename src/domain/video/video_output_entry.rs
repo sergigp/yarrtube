@@ -12,9 +12,6 @@ pub(crate) const SEASON_FOLDER_PREFIX: &str = "Season ";
 pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
 /// A show's poster, at the root of its playlist's or channel's directory.
 pub const SHOW_POSTER_FILENAME: &str = "poster.jpg";
-/// The per-video-folder NFO of the legacy layout, removed when a legacy
-/// video is relocated into its season folder.
-pub const MOVIE_NFO_FILENAME: &str = "movie.nfo";
 
 /// Returns the first path component of a stored `filename`/`thumbnail_filename`:
 /// a legacy video's own folder name for a `"folder/file.ext"` path (one video

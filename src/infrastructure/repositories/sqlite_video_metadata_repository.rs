@@ -33,8 +33,6 @@ pub trait VideoMetadataRepository: Send + Sync {
         number: &EpisodeNumber,
         nfo_path: &Path,
     ) -> anyhow::Result<()>;
-    /// Removes the NFO at `nfo_path`; a missing file is not an error.
-    fn remove_nfo(&self, nfo_path: &Path) -> anyhow::Result<()>;
 }
 
 /// A `video_metadata` row as read, before its values are parsed into a
@@ -138,17 +136,6 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
     ) -> anyhow::Result<()> {
         Self::write_episode_nfo(metadata, number, nfo_path)
     }
-
-    fn remove_nfo(&self, nfo_path: &Path) -> anyhow::Result<()> {
-        match std::fs::remove_file(nfo_path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => {
-                tracing::error!(path = ?nfo_path, error = %e, "failed to remove NFO");
-                Err(anyhow::anyhow!("failed to remove {nfo_path:?}: {e}"))
-            }
-        }
-    }
 }
 
 impl SqliteVideoMetadataRepository {
@@ -211,7 +198,7 @@ impl SqliteVideoMetadataRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::video::{MOVIE_NFO_FILENAME, YoutubeVideoId};
+    use crate::domain::video::YoutubeVideoId;
 
     fn metadata() -> VideoMetadata {
         VideoMetadata::new(
@@ -311,19 +298,6 @@ mod tests {
     }
 
     #[test]
-    fn it_should_return_none_when_no_row_exists_even_if_movie_nfo_is_present_on_disk() {
-        let repo = repo();
-        let video_dir = unique_temp_dir("video-metadata-orphan-file");
-        std::fs::write(video_dir.join(MOVIE_NFO_FILENAME), "<movie></movie>").unwrap();
-        let video_id = VideoId::new_generated();
-
-        let found = repo.find(&video_id).unwrap();
-
-        assert!(found.is_none());
-        std::fs::remove_dir_all(&video_dir).unwrap();
-    }
-
-    #[test]
     fn it_should_overwrite_an_existing_row_on_a_second_save() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-overwrite");
@@ -379,54 +353,6 @@ mod tests {
         );
         assert_eq!(repo.find(&VideoId::new_generated()).unwrap(), None);
         std::fs::remove_dir_all(&show_dir).unwrap();
-    }
-
-    #[test]
-    fn it_should_remove_the_nfo_at_the_given_path() {
-        let repo = repo();
-        let season_dir = unique_temp_dir("video-metadata-remove-nfo");
-        std::fs::write(season_dir.join(NFO), "<episodedetails/>").unwrap();
-        std::fs::write(season_dir.join("S2024E010201 - My Video.jpg"), "jpg").unwrap();
-
-        repo.remove_nfo(&season_dir.join(NFO)).unwrap();
-
-        assert_eq!(
-            std::fs::read_dir(&season_dir)
-                .unwrap()
-                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-                .collect::<Vec<_>>(),
-            vec!["S2024E010201 - My Video.jpg".to_string()]
-        );
-        std::fs::remove_dir_all(&season_dir).unwrap();
-    }
-
-    #[test]
-    fn it_should_ignore_removing_a_missing_nfo() {
-        let repo = repo();
-        let video_dir = unique_temp_dir("video-metadata-remove-missing-nfo");
-
-        let result = repo.remove_nfo(&video_dir.join(NFO));
-
-        assert!(result.is_ok());
-        std::fs::remove_dir_all(&video_dir).unwrap();
-    }
-
-    #[test]
-    fn it_should_fail_to_remove_an_nfo_it_cannot_reach() {
-        let repo = repo();
-        let video_dir = unique_temp_dir("video-metadata-remove-unreachable-nfo");
-        std::fs::write(video_dir.join("not-a-folder"), "file").unwrap();
-        let nfo_path = video_dir.join("not-a-folder").join(NFO);
-
-        let result = repo.remove_nfo(&nfo_path);
-
-        assert_eq!(
-            result.map_err(|e| e.to_string()),
-            Err(format!(
-                "failed to remove {nfo_path:?}: Not a directory (os error 20)"
-            ))
-        );
-        std::fs::remove_dir_all(&video_dir).unwrap();
     }
 
     #[test]

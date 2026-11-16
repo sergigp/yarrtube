@@ -45,8 +45,8 @@ Then you can open `http://<YOUR_NAS_IP>:8080/` or `http://localhost:8080/`.
 | Tag                        | What it is                                                                 |
 | -------------------------- | -------------------------------------------------------------------------- |
 | `latest`                   | The latest stable release. Recommended.                                    |
-| `X.Y.Z` (e.g. `0.9.5`)     | One exact release, to pin a version.                                       |
-| `X.Y` (e.g. `0.9`)         | The latest patch release of a minor version.                               |
+| `X.Y.Z` (e.g. `1.0.0`)     | One exact release, to pin a version.                                       |
+| `X.Y` (e.g. `1.0`)         | The latest patch release of a minor version.                               |
 | `edge`                     | The latest commit on `main`, published on every merge. Unreleased and can break. |
 | `sha-<short sha>`          | The image of one specific commit.                                          |
 
@@ -92,18 +92,10 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 | `RUST_LOG`                            | `info`                | Log verbosity (e.g. `RUST_LOG=debug`)                                                                                                                                                                         |
 | `YARRTUBE_LOGS_PATH`                  | `/config/logs`        | Directory the daily log files are written to (inside the container), see [Logs](#logs)                                                                                                                       |
 | `YARRTUBE_LOG_RETENTION_DAYS`         | `30`                  | How many daily log files are kept; older ones are deleted                                                                                                                                                     |
-| `YARRTUBE_PLEX_URL`                   | —                     | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). With the token and `YARRTUBE_PLEX_VIDEOS_PATH`, enables the [Plex scan trigger](#plex)                                                       |
+| `YARRTUBE_PLEX_URL`                   | —                     | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). With the token and `YARRTUBE_PLEX_VIDEOS_PATH`, enables the [Plex integration](#plex)                                                     |
 | `YARRTUBE_PLEX_TOKEN`                 | —                     | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                    |
 | `YARRTUBE_PLEX_VIDEOS_PATH`           | —                     | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. Plex is asked to scan a show's folder after each download |
-| `YARRTUBE_ANTHROPIC_API_KEY`          | —                     | Anthropic API key. When set, the AI page offers Anthropic as the provider for summaries and categorization, billed to this key; see [doc/AI.md](AI.md). Never stored, returned or logged |
-
-Three more variables exist only for running Yarrtube against a fake
-YouTube in its own tests; leave them unset:
-`YARRTUBE_YOUTUBE_API_URL` (where YouTube Data API requests go, default
-`https://www.googleapis.com/youtube/v3`), `YARRTUBE_YTDLP_SELF_UPDATE`
-(`false` stops the hourly `yt-dlp` self-update) and
-`YARRTUBE_BACKGROUND_POLL_INTERVAL_MS` (how often background work is
-picked up, default `5000`).
+| `YARRTUBE_ANTHROPIC_API_KEY`          | —                     | Anthropic API key. When set, **Settings → AI** offers Anthropic as the provider for summaries and categorization, billed to this key; see [doc/AI.md](AI.md). Never stored, returned or logged |
 
 How often each channel and playlist is checked for new videos is not an
 environment variable: it is set per source in the web UI ("Check for new
@@ -201,11 +193,6 @@ covered step by step in [PLEX.md](PLEX.md).
 > Back up the database (`/config/yarrtube.db` by default, `YARRTUBE_DB_PATH`) before
 > updating. Some updates migrate it in a way an older image can't read, so
 > going back to an older version means restoring that backup.
-
-> [!NOTE]
-> Updating from 0.8.x or older? 0.9.0 moved the library to a TV show layout
-> and changed the Plex settings. Follow
-> [UPGRADING-TO-0.9.0.md](UPGRADING-TO-0.9.0.md) once instead.
 
 With `docker run`:
 
