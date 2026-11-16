@@ -747,6 +747,50 @@ fn it_should_do_nothing_when_the_conditions_no_longer_hold() {
 }
 
 #[test]
+fn it_should_skip_the_categorization_when_ai_summaries_are_off() {
+    let db = TestDatabase::new();
+    let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Sicilian")]);
+    let task = categorize_video_task(&db, llm.clone());
+    SqlitePreferencesRepository::new(db.database())
+        .save(&Preferences {
+            summaries: SummarySettings {
+                enabled: false,
+                ..categorization_on().summaries
+            },
+            ..categorization_on()
+        })
+        .unwrap();
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(asked_categories(&llm), Vec::<Vec<&str>>::new());
+}
+
+#[test]
+fn it_should_skip_the_categorization_when_the_source_has_summaries_off() {
+    let db = TestDatabase::new();
+    let llm = llm_replying(vec![reply(&answers(&[("Sicilian", YES)]))]);
+    let video = summarized_video();
+    seed(&db, &video, &[&prompted_category("Sicilian")]);
+    let task = categorize_video_task(&db, llm.clone());
+    SqliteChannelRepository::new(db.database())
+        .update(
+            &my_channel()
+                .with_summaries_enabled(false)
+                .with_categorization_enabled(true),
+        )
+        .unwrap();
+
+    let result = run(&task, &video);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(asked_categories(&llm), Vec::<Vec<&str>>::new());
+}
+
+#[test]
 fn it_should_not_store_a_verdict_for_a_category_deleted_during_its_call() {
     let db = TestDatabase::new();
     let verdict_repository = SqliteVideoCategoryVerdictRepository::new(db.database());

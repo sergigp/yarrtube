@@ -268,7 +268,7 @@ impl VideoCategorizer {
         };
         if !owner.categorizes() {
             return Err(Skip::NotWanted(
-                "its channel or playlist has categorization off",
+                "its channel or playlist has summaries or categorization off",
             ));
         }
         let summary = self
