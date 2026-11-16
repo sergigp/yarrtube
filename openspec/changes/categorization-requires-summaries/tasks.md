@@ -12,7 +12,7 @@
 - [x] 2.4 `it_should_skip_the_categorization_when_the_source_has_summaries_off` (categorize_video_task): the skip reason names summaries or categorization off.
 - [x] 2.5 `it_should_fail_to_enable_categorization_on_a_channel_while_summaries_are_off` (http/channels): 409, nothing changed.
 - [x] 2.6 `it_should_enable_categorization_on_a_playlist_with_its_summaries_off` (http/playlists): accepted and stored, inactive.
-- [ ] 2.7 `it_should_report_categorization_off_for_a_video_whose_source_has_summaries_off` (http/videos): `categorization_enabled` is the effective value.
+- [x] 2.7 `it_should_report_categorization_off_for_a_video_whose_source_has_summaries_off` (http/videos): `categorization_enabled` is the effective value.
 - [ ] 2.8 Web `preferences.test.ts`: `categorizationAvailable` requires `summaries_enabled`.
 - [ ] 2.9 Web `AiSettingsView.test.tsx`: with summaries off, the Categorization switch is disabled, "Needs summaries." is shown and Model is disabled.
 - [ ] 2.10 Web `AiSettingsView.test.tsx`: turning Summaries off unsaved keeps Categorization checked but disabled and hides Advanced/Prompt.
