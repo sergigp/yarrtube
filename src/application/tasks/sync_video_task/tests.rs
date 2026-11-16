@@ -3028,6 +3028,35 @@ fn it_should_not_schedule_a_categorization_when_the_source_has_categorization_of
 }
 
 #[test]
+fn it_should_not_schedule_a_categorization_when_the_source_has_summaries_off() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = summarized_video();
+    video_repository.insert(&video).unwrap();
+    seed_channel_with_ai(&db, &video, false, true);
+    SqliteCategoryRepository::new(db.database())
+        .insert(&prompted_category("Sicilian", &[]))
+        .unwrap();
+    preferences_repository.save(&categorization_on()).unwrap();
+    let task = sync_task_of_downloaded_video(
+        &db,
+        video_repository,
+        task_repository.clone(),
+        preferences_repository,
+    );
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[test]
 fn it_should_not_schedule_a_categorization_when_ai_categorization_is_off() {
     let ai_off = Preferences {
         ai_enabled: false,
@@ -3271,8 +3300,21 @@ fn seed_channel_with_categorization(
     video: &Video,
     categorization_enabled: bool,
 ) {
+    seed_channel_with_ai(db, video, true, categorization_enabled);
+}
+
+fn seed_channel_with_ai(
+    db: &TestDatabase,
+    video: &Video,
+    summaries_enabled: bool,
+    categorization_enabled: bool,
+) {
     SqliteChannelRepository::new(db.database())
-        .insert(&my_channel().with_categorization_enabled(categorization_enabled))
+        .insert(
+            &my_channel()
+                .with_summaries_enabled(summaries_enabled)
+                .with_categorization_enabled(categorization_enabled),
+        )
         .unwrap();
     SqliteChannelVideoRepository::new(db.database())
         .save(&ChannelVideo::create(

@@ -6,7 +6,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_not_schedule_a_categorization_when_the_source_has_summaries_off` (sync_video_task): `VideoOwner::categorizes()` requires `summaries_enabled`.
+- [x] 2.1 `it_should_not_schedule_a_categorization_when_the_source_has_summaries_off` (sync_video_task): `VideoOwner::categorizes()` requires `summaries_enabled`.
 - [ ] 2.2 `it_should_not_schedule_a_categorization_when_ai_summaries_are_off` (sync_video_task): `Preferences::categorization_available()` requires summaries on.
 - [ ] 2.3 `it_should_skip_the_categorization_when_ai_summaries_are_off` (categorize_video_task): a queued run is skipped without calling the model.
 - [ ] 2.4 `it_should_skip_the_categorization_when_the_source_has_summaries_off` (categorize_video_task): the skip reason names summaries or categorization off.

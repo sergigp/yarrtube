@@ -6560,7 +6560,11 @@ async fn it_should_report_the_source_for_a_member_category_even_with_a_verdict()
 async fn it_should_say_whether_the_videos_source_has_categorization_on() {
     let db = TestDatabase::new();
     SqliteChannelRepository::new(db.database())
-        .insert(&channel("@GothamChess", None).with_categorization_enabled(true))
+        .insert(
+            &channel("@GothamChess", None)
+                .with_summaries_enabled(true)
+                .with_categorization_enabled(true),
+        )
         .unwrap();
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),

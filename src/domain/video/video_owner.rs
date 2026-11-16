@@ -21,6 +21,6 @@ impl VideoOwner {
     /// Whether the source categorizes its videos: summaries and
     /// categorization both on, since a video is judged from its summary.
     pub fn categorizes(&self) -> bool {
-        self.categorization_enabled
+        self.summaries_enabled && self.categorization_enabled
     }
 }

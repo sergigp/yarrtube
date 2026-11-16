@@ -2561,10 +2561,15 @@ fn seed(db: &TestDatabase, video: &Video, categories: &[&Category]) {
         .unwrap();
 }
 
-/// Stores `my_channel()`, with categorization on or off, as the owner of `video`.
+/// Stores `my_channel()`, with summaries on and categorization on or off, as
+/// the owner of `video`.
 fn seed_channel(db: &TestDatabase, video: &Video, categorization_enabled: bool) {
     SqliteChannelRepository::new(db.database())
-        .insert(&my_channel().with_categorization_enabled(categorization_enabled))
+        .insert(
+            &my_channel()
+                .with_summaries_enabled(true)
+                .with_categorization_enabled(categorization_enabled),
+        )
         .unwrap();
     SqliteChannelVideoRepository::new(db.database())
         .save(&ChannelVideo::create(
