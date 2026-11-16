@@ -52,6 +52,11 @@ videos it should hold, and the AI adds every video that fits.
 The AI never overrides you: change a video's categories by hand (see above)
 and your choice stays.
 
+Changed a prompt? **Re-evaluate N videos** in **Edit category** asks the AI
+again for that category. For one video, use **Re-run AI** in its **Edit
+categories…**; for a channel or playlist, **Re-run AI categorization** in
+its **⋮** menu.
+
 ## In Plex
 
 Each category becomes a **smart playlist** in Plex, newest first, across all
@@ -64,3 +69,19 @@ its channels and playlists. It needs the Plex integration set up, see the
 
 Don't need categories at all? Turn them off in **Settings → General**; your
 categories are kept for when you turn them back on.
+
+## Troubleshooting
+
+- **No AI categories**: check the category has an **AI prompt**, its
+  sources have **Categorize videos** ticked, and the video has a summary.
+  See [AI](AI.md#troubleshooting).
+- **No playlist in Plex**: a playlist appears within 15 minutes after Plex
+  imports its first episode, and only for the Plex user whose token
+  yarrtube uses. Check **Settings → Plex**.
+- **Several playlists for one category**: a category with episodes in
+  several Plex libraries gets one playlist per library, e.g.
+  `Science · Subscriptions` and `Science · Kids TV`.
+- **Labels you added in Plex disappear**: yarrtube builds the playlists
+  from labels named after your categories and owns the labels of its
+  episodes. If you restrict shared users by label, don't use a category
+  name as a restriction label.
