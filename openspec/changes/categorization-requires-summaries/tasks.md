@@ -14,8 +14,8 @@
 - [x] 2.6 `it_should_enable_categorization_on_a_playlist_with_its_summaries_off` (http/playlists): accepted and stored, inactive.
 - [x] 2.7 `it_should_report_categorization_off_for_a_video_whose_source_has_summaries_off` (http/videos): `categorization_enabled` is the effective value.
 - [x] 2.8 Web `preferences.test.ts`: `categorizationAvailable` requires `summaries_enabled`.
-- [ ] 2.9 Web `AiSettingsView.test.tsx`: with summaries off, the Categorization switch is disabled, "Needs summaries." is shown and Model is disabled.
-- [ ] 2.10 Web `AiSettingsView.test.tsx`: turning Summaries off unsaved keeps Categorization checked but disabled and hides Advanced/Prompt.
+- [x] 2.9 Web `AiSettingsView.test.tsx`: with summaries off, the Categorization switch is disabled, "Needs summaries." is shown and Model is disabled.
+- [x] 2.10 Web `AiSettingsView.test.tsx`: turning Summaries off unsaved keeps Categorization checked but disabled and hides Advanced/Prompt.
 - [ ] 2.11 Web `AddChannelDialog.test.tsx`: "Categorize videos" is blocked with "Needs Summarize videos." until "Summarize videos" is checked; both are sent true.
 - [ ] 2.12 Web `EditPlaylistDialog.test.tsx`: a playlist with summaries off has "Categorize videos" disabled with "Needs Summarize videos." until "Summarize videos" is checked.
 - [ ] 2.13 Web `EditChannelDialog.test.tsx`: unchecking "Summarize videos" keeps "Categorize videos" checked and disabled, and only `summaries_enabled` `false` is sent.
