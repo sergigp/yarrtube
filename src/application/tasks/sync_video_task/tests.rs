@@ -2969,7 +2969,7 @@ fn it_should_not_schedule_a_categorization_without_a_generated_summary() {
         subtitled_video().mark_summary_failed(fixed_timestamp()),
     ];
 
-    let scheduled = videos.map(|video| {
+    let scheduled = videos.clone().map(|video| {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -2995,7 +2995,10 @@ fn it_should_not_schedule_a_categorization_without_a_generated_summary() {
         task_repository.list_non_completed().unwrap()
     });
 
-    assert_eq!(scheduled, [vec![], vec![]]);
+    assert_eq!(
+        scheduled,
+        [vec![pending_task(1, &summarize_video(&videos[0]))], vec![]]
+    );
 }
 
 #[test]
@@ -3102,6 +3105,43 @@ fn it_should_not_schedule_a_categorization_when_ai_categorization_is_off() {
     });
 
     assert_eq!(scheduled, [vec![], vec![], vec![]]);
+}
+
+#[test]
+fn it_should_not_schedule_a_categorization_when_ai_summaries_are_off() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = summarized_video();
+    video_repository.insert(&video).unwrap();
+    seed_channel_with_categorization(&db, &video, true);
+    SqliteCategoryRepository::new(db.database())
+        .insert(&prompted_category("Sicilian", &[]))
+        .unwrap();
+    preferences_repository
+        .save(&Preferences {
+            summaries: SummarySettings {
+                enabled: false,
+                ..categorization_on().summaries
+            },
+            ..categorization_on()
+        })
+        .unwrap();
+    let task = sync_task_of_downloaded_video(
+        &db,
+        video_repository,
+        task_repository.clone(),
+        preferences_repository,
+    );
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
 #[test]
@@ -3332,6 +3372,10 @@ fn categorization_on() -> Preferences {
         ai_enabled: true,
         categories_enabled: true,
         ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+        summaries: SummarySettings {
+            enabled: true,
+            ..SummarySettings::default()
+        },
         categorization: CategorizationSettings {
             enabled: true,
             ..preferences.categorization

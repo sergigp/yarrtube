@@ -11,7 +11,7 @@ use crate::domain::playlist::PlaylistPath;
 use crate::domain::preferences::SummaryModel;
 use crate::domain::preferences::{
     AiProvider, AnthropicSettings, CategorizationModel, CategorizationPrompt,
-    CategorizationSettings, ContextLength, Preferences, Temperature,
+    CategorizationSettings, ContextLength, Preferences, SummarySettings, Temperature,
 };
 use crate::domain::services::{CategorizationResetter, VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
@@ -2585,6 +2585,10 @@ fn categorization_on() -> Preferences {
     Preferences {
         ai_enabled: true,
         ollama_url: Some(OllamaUrl::new("http://mac.local:11434").unwrap()),
+        summaries: SummarySettings {
+            enabled: true,
+            ..SummarySettings::default()
+        },
         categorization: CategorizationSettings {
             enabled: true,
             ..CategorizationSettings::default()
