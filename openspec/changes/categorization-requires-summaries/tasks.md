@@ -28,8 +28,8 @@ None. No adapter changes.
 
 ## 4. Verification
 
-- [ ] 4.1 Run `scripts/run-tests.sh --lint --web --rust`; all pass.
-- [ ] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`. Seed AI on, categories on, summaries off and categorization on via `PATCH /api/preferences`, plus a channel via the API. With the Playwright MCP browser:
+- [x] 4.1 Run `scripts/run-tests.sh --lint --web --rust`; all pass.
+- [x] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`. Seed AI on, categories on, summaries off and categorization on via `PATCH /api/preferences`, plus a channel via the API. With the Playwright MCP browser:
   - On `/settings/ai`, Categorization is disabled with "Needs summaries."; turning Summaries on enables it.
   - In the channel's "Edit settings", "Categorize videos" is disabled with "Needs Summarize videos." until "Summarize videos" is checked.
   - The channel menu offers "Clear AI categories" while the channel's summaries are off.
