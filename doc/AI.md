@@ -52,7 +52,7 @@ _Categorizing …_ in the Tasks page (**AI** tab).
 
 From my own tests:
 
-- **Ollama** with `qwen3` on a spare MacBook Air M2 Pro: summarizing and
+- **Ollama** with `qwen3` on a spare MacBook Air M2: summarizing and
   categorizing a 10–12 minute video took about 5 minutes, with some wrong
   categories.
 - **Anthropic** with Haiku 5.5: a few seconds per video, and much more
