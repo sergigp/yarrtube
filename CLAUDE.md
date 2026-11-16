@@ -12,7 +12,7 @@ playlist order; with NFO metadata) for Plex/Kodi/Jellyfin, and optionally asks P
 show folder after each download.
 
 Docs: `doc/INSTALLATION.md` (Docker, Compose, every environment variable),
-`doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex TV Shows
+`doc/DEVELOPMENT.md` (building from source, running the tests), `doc/PLEX.md` (Plex TV Shows
 library, scan trigger, subtitles), `doc/CATEGORIES.md` (categories in the
 web UI and as Plex smart playlists), `doc/AI.md` (AI summaries and
 categorization), `doc/ARCHITECTURE.md`. Every merge to `main` that
@@ -50,7 +50,7 @@ npm run build       # produces dist/, embedded into the binary by cargo build
 
 | Flag | Runs |
 |---|---|
-| `--lint` | web typecheck + eslint, `cargo fmt --check`, clippy |
+| `--lint` | web typecheck + oxlint, `cargo fmt --check`, clippy |
 | `--web` | Vitest |
 | `--rust` | `cargo test` |
 | `--contract` | adapters against the real yt-dlp / YouTube API |

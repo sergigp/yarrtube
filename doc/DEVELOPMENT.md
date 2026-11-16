@@ -1,8 +1,8 @@
-# Building from source
+# Development
 
 Docker is the supported way to run Yarrtube (see
-[INSTALLATION.md](INSTALLATION.md)). This guide is for building and running
-the binary directly, e.g. to hack on it.
+[INSTALLATION.md](INSTALLATION.md)). This guide is for working on it:
+running it from source, iterating on the web UI and running the tests.
 
 ## Requirements
 
@@ -13,16 +13,7 @@ the binary directly, e.g. to hack on it.
 - [Deno](https://deno.com/), which yt-dlp uses to solve YouTube's player
   challenges. Without it some videos fail with "This video is not available"
 - A YouTube Data API v3 key (see [INSTALLATION.md](INSTALLATION.md#requirements))
-
-## Build
-
-The web UI is embedded into the binary at compile time, so build it first.
-`cargo build` fails if `web/dist/` is missing:
-
-```bash
-(cd web && npm ci && npm run build)   # produces web/dist/
-cargo build --release                 # produces target/release/yarrtube
-```
+- Docker, only for the end-to-end tests
 
 ## Run
 
@@ -31,19 +22,24 @@ cp .env.example .env    # then fill in YOUTUBE_API_KEY
 scripts/run-local.sh
 ```
 
-`run-local.sh` rebuilds the web UI, loads `.env`, points `YTDLP_PATH` at the
-`yt-dlp` on your `PATH`, and starts `yarrtube serve` on
-<http://localhost:8080>. The SQLite database (`yarrtube.sqlite3`) and
-downloaded videos (`videos/`) live in the repo root, and both are gitignored.
-Pass `--skip-web-build` to reuse the existing `web/dist/`, or `--help` for the
-other options.
+`run-local.sh` rebuilds the web UI, loads `.env` and starts a debug build of
+`yarrtube serve` on <http://localhost:8080>. The SQLite database
+(`yarrtube.sqlite3`) and downloaded videos (`videos/`) live in the repo
+root, and both are gitignored. Pass `--skip-web-build` to reuse the existing
+`web/dist/`, or `--help` for the other options.
 
-To run the binary yourself, set at least `YOUTUBE_API_KEY`, `YTDLP_PATH`
-and `YARRTUBE_VIDEOS_PATH` (their defaults, `/app/bin/yt-dlp` and `/videos`,
-only make sense in the Docker image) and run `target/release/yarrtube serve`.
-All variables are listed in [INSTALLATION.md](INSTALLATION.md#configuration);
-that table shows the image's defaults, but outside Docker the database and
-avatars default to `yarrtube.sqlite3` and `avatars/` in the working directory.
+To build the release binary by hand, build the web UI first: it's embedded
+at compile time, and `cargo build` fails if `web/dist/` is missing.
+
+```bash
+(cd web && npm ci && npm run build)   # produces web/dist/
+cargo build --release                 # produces target/release/yarrtube
+```
+
+To run it, set `YTDLP_PATH` and `YARRTUBE_VIDEOS_PATH`: their defaults
+(`/app/bin/yt-dlp` and `/videos`) only exist in the Docker image. The
+database, avatars and logs default to the working directory. All variables
+are listed in [INSTALLATION.md](INSTALLATION.md#configuration).
 
 ## Web UI
 
@@ -56,98 +52,72 @@ proxies `/api`, `/media` and `/avatars` to `localhost:8080`:
 cd web
 npm run dev          # dev server with hot reload
 npm run test:watch   # Vitest suite, re-running on change
-npm run check        # typecheck + lint + test, what CI runs
+npm run check        # typecheck + lint + test
 ```
 
+Tests sit next to what they test (`foo.ts` / `foo.test.ts`) and run in jsdom
+with only `fetch` mocked, so the suite finishes in seconds.
+
 To try UI changes against a real library instead of an empty local one, point
-the dev server at a running daemon, e.g. on a NAS. Only frontend changes show
-up; backend changes need a daemon running an image that has them.
+the dev server at a running daemon, e.g. on a NAS:
 
 ```bash
 YARRTUBE_REMOTE_URL=http://192.168.1.142:8080 scripts/run-spa-against-remote.sh
 ```
 
-It's read-only by default: the dev server answers every request but GET and
-HEAD with 405, so actions like mark watched or delete fail instead of changing
-the remote library. Pass `--allow-writes` to forward them. When node can't
-reach the remote but curl can (macOS Local Network privacy blocks node from LAN
-addresses until the terminal app is allowed under System Settings → Privacy &
-Security → Local Network), the script bridges the proxy through curl by itself.
-
-Layout of `web/src/`:
-
-- `api/`: the HTTP layer. Response types mirroring the Rust DTOs
-  (`types.ts`), fetch wrappers (`client.ts`) and react-query hooks
-  (`queries.ts`).
-- `lib/`: pure, unit-tested helpers (formatting, slugs, sidebar ordering,
-  task descriptions).
-- `hooks/`: React hooks (debouncing, the add-dialog lookup flow, video
-  selection, watch-progress reporting).
-- `components/`: the app's components; `components/ui/` holds the shadcn/ui
-  primitives.
-- `test/`: test setup and helpers. `mockApi` stubs `fetch` with a route
-  table, `renderWithProviders` wraps a component in react-query and a memory
-  router, and `aChannel`/`aVideo`/… build API fixtures.
-
-Tests sit next to what they test (`foo.ts` / `foo.test.ts`) and run in jsdom
-against the mocked API, so the suite finishes in seconds.
+Only frontend changes show up. It's read-only by default, so actions like
+mark watched or delete fail instead of changing the remote library; pass
+`--allow-writes` to forward them.
 
 ## Checks
 
-One script runs every test suite, locally and in CI:
+One script runs every test suite, locally and in CI. It takes one flag per
+suite, and needs at least one:
+
+| Flag         | Runs                                                                                       |
+|--------------|--------------------------------------------------------------------------------------------|
+| `--lint`     | The web UI's typecheck and oxlint, `cargo fmt --check`, clippy                             |
+| `--web`      | The web UI's unit tests (Vitest)                                                           |
+| `--rust`     | `cargo test`                                                                               |
+| `--contract` | The [contract tests](#contract-tests): adapters against the real YouTube                   |
+| `--e2e`      | The end-to-end suite: the Docker image driven through real browsers against a fake YouTube |
+| `--all`      | Every suite                                                                                |
+| `--ci`       | Every suite but `--contract`, with failing end-to-end tests retried                        |
 
 ```bash
-scripts/run-tests.sh --all                 # everything
-scripts/run-tests.sh --lint --rust         # suites combine: --lint, --web,
-                                           # --rust, --contract, --e2e
-scripts/run-tests.sh --ci                  # what CI runs: all but --contract
-scripts/run-tests.sh --e2e --workers 2     # end-to-end tests at once (default 3)
+scripts/run-tests.sh --lint --rust         # flags combine
+scripts/run-tests.sh --e2e --workers 2     # run 2 end-to-end tests at once (default 3)
 ```
 
-At least one suite flag (or `--all`, or `--ci`) is required. The suites are lint (the
-web UI's typecheck and eslint, Rust formatting and clippy), the web UI's
-unit tests, the Rust tests, the YouTube contract tests and the end-to-end suite (`e2e-tests/`, see its
-README: the Docker image driven through real browsers against a fake
-YouTube). CI runs all of them except the contract tests, which need the real
-YouTube, on every pull request and push to `main` or a `release/**` branch. Tools (`npm`, `cargo`,
-Docker, and for the contract tests `yt-dlp` and `ffprobe`) must be
-installed; what the repo produces itself, the web UI's and `e2e-tests/`'s
-`node_modules`, the web UI build and the Playwright browsers, the script
-installs or builds when missing (or `node_modules` older than its lockfile),
-so it runs as is in a fresh clone or worktree. Each
-end-to-end worker runs its own container on its own ports, so the suite runs
-in parallel and worktrees can run it at the same time. Before running
-anything it checks every selected suite's tools, listing all that are
-missing, and prints what will run: the suites, CI mode (`--ci`
-only, not the `CI` variable: failing end-to-end tests retried) and the
-end-to-end workers and upgrade check. Each phase's output
-goes to a log rather than the terminal: a progress line while it runs, its
-time and test counts once done, and on failure only the failing tests with
-their errors, plus the path of the kept logs.
+The script lists missing tools up front, and installs or builds what the
+repo produces itself (`node_modules`, the web UI build, the Playwright
+browsers), so it runs as is in a fresh clone or worktree.
 
-### Test-only variables
+CI runs `--ci` on every pull request and push to `main` or a `release/**`
+branch. It leaves the contract tests out because YouTube bot-checks CI
+runners. A second CI job fails while `openspec/changes/` holds a change that
+isn't archived.
 
-The end-to-end suite points the daemon at fake services with variables a
-real install leaves unset:
+### End-to-end tests
 
-| Variable                               | Default                                  | What it does                                   |
-|----------------------------------------|------------------------------------------|------------------------------------------------|
-| `YARRTUBE_YOUTUBE_API_URL`             | `https://www.googleapis.com/youtube/v3`  | Where YouTube Data API requests go             |
-| `YARRTUBE_ANTHROPIC_API_URL`           | `https://api.anthropic.com`              | Where Anthropic API requests go                |
-| `YARRTUBE_YTDLP_SELF_UPDATE`           | `true`                                   | `false` stops the hourly `yt-dlp` self-update  |
-| `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS` | `5000`                                   | How often background work is picked up         |
+The suite lives in `e2e-tests/`; its [README](../e2e-tests/README.md)
+covers the fake YouTube, what's tested, the variables that tune a run and
+how to run Playwright by hand.
 
-### YouTube contract tests
+Before the suite comes the upgrade check: the latest released image tracks
+a real playlist, then the image under test starts on the same data. It
+needs a real `YOUTUBE_API_KEY`, so it's skipped without one, as in CI.
+
+### Contract tests
 
 The adapters that talk to YouTube (`yt-dlp` downloads, thumbnails,
 captions, channel listings, and the Data API's playlists, videos, channels
 and avatars) have tests against the real thing, in modules named
 `youtube_contract_tests` next to each adapter. They're `#[ignore]`d, so
-`cargo test` and CI skip them; run them with
-`scripts/run-tests.sh --contract`. It needs `yt-dlp` and `ffprobe` on `PATH` (or `YTDLP_PATH`), the network,
-and `YOUTUBE_API_KEY` (from the environment or `.env`), and takes about ten
-seconds. Run it after upgrading `yt-dlp` or when downloads start failing,
-to tell a change on YouTube's side from a bug of ours. The fixtures (a short
-Creative-Commons clip, Big Buck Bunny, the project's "test" playlist and an
-inactive Creative-Commons channel) are listed with their credits in
-`src/infrastructure/shared/youtube_contract.rs`.
+`cargo test` and CI skip them. Run them with
+`scripts/run-tests.sh --contract`, which needs `YOUTUBE_API_KEY`, after
+upgrading `yt-dlp` or when downloads start failing, to tell a change on
+YouTube's side from a bug of ours.
+
+The same flag runs the Anthropic adapter's contract test when
+`YARRTUBE_ANTHROPIC_API_KEY` is set: one tiny call, billed to that key.
