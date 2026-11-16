@@ -6560,7 +6560,11 @@ async fn it_should_report_the_source_for_a_member_category_even_with_a_verdict()
 async fn it_should_say_whether_the_videos_source_has_categorization_on() {
     let db = TestDatabase::new();
     SqliteChannelRepository::new(db.database())
-        .insert(&channel("@GothamChess", None).with_categorization_enabled(true))
+        .insert(
+            &channel("@GothamChess", None)
+                .with_summaries_enabled(true)
+                .with_categorization_enabled(true),
+        )
         .unwrap();
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),
@@ -6581,6 +6585,40 @@ async fn it_should_say_whether_the_videos_source_has_categorization_on() {
         response,
         Ok(VideoCategoriesResponse {
             categorization_enabled: true,
+            categories: vec![],
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_report_categorization_off_for_a_video_whose_source_has_summaries_off() {
+    let db = TestDatabase::new();
+    SqliteChannelRepository::new(db.database())
+        .insert(
+            &channel("@GothamChess", None)
+                .with_summaries_enabled(false)
+                .with_categorization_enabled(true),
+        )
+        .unwrap();
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    save_channel_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@GothamChess",
+        &video,
+        0,
+    );
+
+    let response = list_categories_of(video_category_choice_searcher(&db), video.id.as_str()).await;
+
+    assert_eq!(
+        response,
+        Ok(VideoCategoriesResponse {
+            categorization_enabled: false,
             categories: vec![],
         })
     );

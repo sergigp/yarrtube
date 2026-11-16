@@ -183,6 +183,9 @@ describe('AddChannelDialog', () => {
       }),
     })
     const section = await screen.findByRole('group', { name: 'AI' })
+    const summaries = within(section).getByRole('checkbox', { name: 'Summarize videos' })
+    await waitFor(() => expect(summaries).toBeEnabled())
+    await userEvent.setup().click(summaries)
 
     await waitFor(() =>
       expect(within(section).getByRole('checkbox', { name: 'Categorize videos' })).toBeEnabled(),
@@ -199,9 +202,9 @@ describe('AddChannelDialog', () => {
     )
   })
 
-  it('creates the channel with categorization when checked', async () => {
+  it('creates the channel with categorization once summaries are checked', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
       'GET /api/channels/preview?channel=%40chan': {
         id: '@chan',
         title: 'The Channel',
@@ -213,7 +216,12 @@ describe('AddChannelDialog', () => {
 
     await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
     const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
-    await waitFor(() => expect(categorization).toBeEnabled())
+    await waitFor(() =>
+      expect(categorization).toHaveAccessibleDescription('Needs Summarize videos.'),
+    )
+    expect(categorization).toBeDisabled()
+    await user.click(screen.getByRole('checkbox', { name: 'Summarize videos' }))
+    expect(categorization).toBeEnabled()
     await user.click(categorization)
     const submit = screen.getByRole('button', { name: 'Create Channel' })
     await waitFor(() => expect(submit).toBeEnabled())
@@ -224,6 +232,7 @@ describe('AddChannelDialog', () => {
       ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
     ) as [string, RequestInit]
     expect(JSON.parse(createCall[1].body as string)).toMatchObject({
+      summaries_enabled: true,
       categorization_enabled: true,
     })
   })

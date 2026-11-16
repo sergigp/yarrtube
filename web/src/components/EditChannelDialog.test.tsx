@@ -75,9 +75,9 @@ describe('EditChannelDialog', () => {
   })
 
   it('sends only the changed categorization setting', async () => {
-    const { onSave, onOpenChange } = renderDialog(aChannel(), undefined, {
+    const { onSave, onOpenChange } = renderDialog(aChannel({ summaries_enabled: true }), undefined, {
       'GET /api/categories': aCategoryList(),
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
     const user = userEvent.setup()
     const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
@@ -88,6 +88,29 @@ describe('EditChannelDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ categorization_enabled: true })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps Categorize videos checked but disabled when Summarize videos is unchecked', async () => {
+    const { onSave, onOpenChange } = renderDialog(
+      aChannel({ summaries_enabled: true, categorization_enabled: true }),
+      undefined,
+      {
+        'GET /api/categories': aCategoryList(),
+        'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
+      },
+    )
+    const user = userEvent.setup()
+    const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })
+    await waitFor(() => expect(summaries).toBeEnabled())
+
+    await user.click(summaries)
+
+    const categorization = screen.getByRole('checkbox', { name: 'Categorize videos' })
+    expect(categorization).toBeChecked()
+    expect(categorization).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ summaries_enabled: false })
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 

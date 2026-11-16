@@ -68,9 +68,9 @@ describe('EditPlaylistDialog', () => {
   })
 
   it('sends only the checked categorization setting', async () => {
-    const { onSave, onOpenChange } = renderDialog(aPlaylist(), undefined, {
+    const { onSave, onOpenChange } = renderDialog(aPlaylist({ summaries_enabled: true }), undefined, {
       'GET /api/categories': aCategoryList(),
-      'GET /api/preferences': aPreferences({ ai_enabled: true, categorization_enabled: true }),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
     })
     const user = userEvent.setup()
     const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
@@ -82,6 +82,23 @@ describe('EditPlaylistDialog', () => {
 
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ categorization_enabled: true })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('needs Summarize videos before Categorize videos on a playlist with summaries off', async () => {
+    renderDialog(aPlaylist(), undefined, {
+      'GET /api/categories': aCategoryList(),
+      'GET /api/preferences': aPreferences({ ai_enabled: true, summaries_enabled: true, categorization_enabled: true }),
+    })
+    const user = userEvent.setup()
+    const categorization = await screen.findByRole('checkbox', { name: 'Categorize videos' })
+    const summaries = screen.getByRole('checkbox', { name: 'Summarize videos' })
+    await waitFor(() => expect(summaries).toBeEnabled())
+
+    expect(categorization).not.toBeChecked()
+    expect(categorization).toBeDisabled()
+    expect(categorization).toHaveAccessibleDescription('Needs Summarize videos.')
+    await user.click(summaries)
+    expect(categorization).toBeEnabled()
   })
 
   it('disables summaries while AI is off', async () => {

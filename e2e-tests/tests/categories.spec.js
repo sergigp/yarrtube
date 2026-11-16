@@ -216,7 +216,12 @@ test.describe('with a downloaded channel in a category', () => {
     daemon,
   }) => {
     const preferences = await request.patch('/api/preferences', {
-      data: { ollama_url: daemon.ollamaUrl, ai_enabled: true, categorization_enabled: true },
+      data: {
+        ollama_url: daemon.ollamaUrl,
+        ai_enabled: true,
+        summaries_enabled: true,
+        categorization_enabled: true,
+      },
     })
     expect(preferences.ok(), await preferences.text()).toBeTruthy()
     const [{ name: channelName }] = await (await request.get('/api/channels')).json()

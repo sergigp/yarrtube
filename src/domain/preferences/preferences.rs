@@ -55,10 +55,11 @@ impl Preferences {
         self.ai_enabled && self.summaries.enabled
     }
 
-    /// Whether sources can have their videos categorized: AI, categories and
+    /// Whether sources can have their videos categorized: summaries
+    /// available (a video is judged from its summary), categories and
     /// categorization on.
     pub fn categorization_available(&self) -> bool {
-        self.ai_enabled && self.categories_enabled && self.categorization.enabled
+        self.summaries_available() && self.categories_enabled && self.categorization.enabled
     }
 
     /// Where AI calls go: `None` only for Ollama without a URL.

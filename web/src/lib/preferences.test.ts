@@ -41,11 +41,17 @@ describe('categorizationAvailable', () => {
     expect(categorizationAvailable(undefined)).toBe(false)
   })
 
-  it('is available only with AI, categories and categorization on', () => {
-    const on = { ai_enabled: true, categories_enabled: true, categorization_enabled: true }
+  it('is available only with AI, summaries, categories and categorization on', () => {
+    const on = {
+      ai_enabled: true,
+      summaries_enabled: true,
+      categories_enabled: true,
+      categorization_enabled: true,
+    }
 
     expect(categorizationAvailable(aPreferences(on))).toBe(true)
     expect(categorizationAvailable(aPreferences({ ...on, ai_enabled: false }))).toBe(false)
+    expect(categorizationAvailable(aPreferences({ ...on, summaries_enabled: false }))).toBe(false)
     expect(categorizationAvailable(aPreferences({ ...on, categories_enabled: false }))).toBe(false)
     expect(categorizationAvailable(aPreferences({ ...on, categorization_enabled: false }))).toBe(
       false,

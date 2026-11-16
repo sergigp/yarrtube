@@ -98,6 +98,8 @@ function AiSettings({ saved }: { saved: Preferences }) {
   // from the evals, so they stay out of the way until asked for.
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [categorizationAdvancedOpen, setCategorizationAdvancedOpen] = useState(false)
+  // A video is categorized from its summary, so categorization needs summaries on.
+  const categorizationOn = form.summaries_enabled && form.categorization_enabled
   const savePreferences = useSavePreferences()
   const savedFlash = useSavedFlash()
   const [saving, setSaving] = useState(false)
@@ -375,14 +377,14 @@ function AiSettings({ saved }: { saved: Preferences }) {
               <Link to="/settings/general" className="text-primary underline-offset-4 hover:underline">
                 Uses your categories
               </Link>
-              .
+              .{!form.summaries_enabled && <> <span>Needs summaries.</span></>}
             </>
           }
           action={
             <Switch
               aria-label="Categorization"
               checked={form.categorization_enabled}
-              disabled={aiOff}
+              disabled={aiOff || !form.summaries_enabled}
               onCheckedChange={(value) => set('categorization_enabled', value)}
             />
           }
@@ -393,10 +395,10 @@ function AiSettings({ saved }: { saved: Preferences }) {
             models={models}
             missing={missingModel}
             value={form[categorizationModelKey]}
-            disabled={aiOff || !form.categorization_enabled}
+            disabled={aiOff || !categorizationOn}
             onChange={(value) => set(categorizationModelKey, value)}
           />
-          {form.categorization_enabled && (
+          {categorizationOn && (
             <>
               {onAnthropic ? (
                 <EffortField

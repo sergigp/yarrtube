@@ -153,6 +153,7 @@ describe("VideoCategoriesDialog", () => {
     const { fetchMock } = renderDialog({
       "GET /api/preferences": aPreferences({
         ai_enabled: true,
+        summaries_enabled: true,
         categorization_enabled: true,
       }),
       "GET /api/videos/rec1/categories": () =>
@@ -180,6 +181,7 @@ describe("VideoCategoriesDialog", () => {
     const { fetchMock } = renderDialog({
       "GET /api/preferences": aPreferences({
         ai_enabled: true,
+        summaries_enabled: true,
         categorization_enabled: true,
       }),
       "GET /api/videos/rec1/categories": {

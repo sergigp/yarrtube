@@ -49,6 +49,18 @@ videos it should hold, and the AI adds every video that fits.
   <img src="category_dialog.jpeg" alt="A category's settings with its AI prompt" width="800"/>
 </p>
 
+1. In **Settings → AI**, turn on summaries, then categorization: a video is
+   judged from its summary, so categorization can't be turned on without
+   summaries.
+2. Give the category an **AI prompt** in its **Edit settings**, describing the
+   videos it should hold.
+3. Turn on **Summarize videos**, then **Categorize videos**, for the channels
+   and playlists whose videos should be judged.
+
+Turning summaries off, in **Settings → AI** or on a channel or playlist, pauses
+its categorization without turning it off: it picks up again once summaries are
+back on.
+
 The AI never overrides you: change a video's categories by hand (see above)
 and your choice stays.
 

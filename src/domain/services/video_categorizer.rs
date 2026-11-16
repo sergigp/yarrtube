@@ -266,9 +266,9 @@ impl VideoCategorizer {
         let Some(owner) = self.video_owner_finder.find(video)? else {
             return Err(Skip::NotWanted("the video has no channel or playlist"));
         };
-        if !owner.categorization_enabled {
+        if !owner.categorizes() {
             return Err(Skip::NotWanted(
-                "its channel or playlist has categorization off",
+                "its channel or playlist has summaries or categorization off",
             ));
         }
         let summary = self

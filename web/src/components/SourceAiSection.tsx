@@ -56,6 +56,7 @@ export function SourceAiSection({
           feature="AI categorization"
           available={categorizationAvailable}
           option={categorization}
+          blockedBy={summaries.checked ? undefined : 'Needs Summarize videos.'}
           onNavigateAway={onNavigateAway}
         />
       )}
@@ -71,12 +72,16 @@ interface AiCheckboxProps {
   feature: string
   available: boolean
   option: SourceAiOption
+  /** Set while another option must be checked first, e.g. "Needs Summarize videos." */
+  blockedBy?: string
   onNavigateAway: () => void
 }
 
 /**
  * Only usable while its feature is available, or to turn it off on a source
  * that already has it; otherwise it is disabled and points to the AI settings.
+ * While available but `blockedBy` another option, it is disabled and keeps
+ * its checked state, saying what it needs.
  */
 function AiCheckbox({
   id,
@@ -85,9 +90,11 @@ function AiCheckbox({
   feature,
   available,
   option: { checked, onChange, enabledOnSource = false },
+  blockedBy,
   onNavigateAway,
 }: AiCheckboxProps) {
   const hintId = `${id}-hint`
+  const blocked = available && blockedBy !== undefined
   return (
     <div className="flex items-start gap-2">
       <input
@@ -95,14 +102,16 @@ function AiCheckbox({
         type="checkbox"
         className="mt-0.5 size-4 shrink-0 accent-primary"
         checked={checked}
-        disabled={!available && !enabledOnSource}
+        disabled={blocked || (!available && !enabledOnSource)}
         onChange={(event) => onChange(event.target.checked)}
         aria-describedby={hintId}
       />
       <div className="flex flex-col gap-1">
         <Label htmlFor={id}>{label}</Label>
         <p id={hintId} className="text-xs text-muted-foreground">
-          {available ? (
+          {blocked ? (
+            blockedBy
+          ) : available ? (
             hint
           ) : (
             <>
