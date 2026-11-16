@@ -1884,6 +1884,49 @@ async fn it_should_fail_to_enable_categorization_on_a_channel_if_unavailable() {
 }
 
 #[tokio::test]
+async fn it_should_fail_to_enable_categorization_on_a_channel_while_summaries_are_off() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel").with_summaries_enabled(true))
+        .unwrap();
+    let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+    preferences_repository
+        .save(&Preferences {
+            summaries: SummarySettings::default(),
+            ..categorization_on()
+        })
+        .unwrap();
+    let channel_updater = ChannelUpdater::new(
+        channel_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        preferences_repository,
+    );
+
+    let request = UpdateChannelRequest {
+        categorization_enabled: Some(true),
+        ..update_request()
+    };
+    let response = update(channel_updater, "@somechannel", request).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "Turn on AI categorization before enabling it for a channel"
+        ))
+    );
+    assert_eq!(
+        channel_repository.list().unwrap(),
+        vec![channel("@somechannel").with_summaries_enabled(true)]
+    );
+}
+
+#[tokio::test]
 async fn it_should_disable_summaries_on_a_channel_while_ai_is_off() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));

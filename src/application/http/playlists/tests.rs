@@ -2615,11 +2615,11 @@ async fn it_should_enable_summaries_on_a_playlist() {
 }
 
 #[tokio::test]
-async fn it_should_enable_categorization_on_a_playlist() {
+async fn it_should_enable_categorization_on_a_playlist_with_its_summaries_off() {
     let db = TestDatabase::new();
     let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
     playlist_repository
-        .insert(&playlist("PL1", DEFAULT_PATH))
+        .insert(&playlist("PL1", DEFAULT_PATH).with_summaries_enabled(false))
         .unwrap();
     let preferences_repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
     preferences_repository.save(&categorization_on()).unwrap();
