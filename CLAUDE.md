@@ -20,7 +20,7 @@ passes CI publishes the multi-arch image to `ghcr.io` as `:edge` +
 `:sha-<short sha>` via `.github/workflows/release.yml`, with no git tag
 and no `:latest`. Stable releases (`:latest`, `:X.Y.Z`, `:X.Y`) are cut
 only by pushing a `vX.Y.Z` tag by hand; the tag is the version
-(`Cargo.toml`'s isn't used). See "Deploy" in `doc/DEVELOPMENT.md`.
+(`Cargo.toml`'s isn't used).
 
 ## Commands
 
