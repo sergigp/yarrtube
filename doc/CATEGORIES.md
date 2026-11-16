@@ -81,7 +81,7 @@ categories are kept for when you turn them back on.
 - **Several playlists for one category**: a Plex smart playlist can only
   draw from one library, so a category with episodes in several libraries
   gets one playlist per library, e.g. `Science · Subscriptions` and
-  `Science · Kids TV`.
+  `Science · Playlists`.
 - **Labels you added in Plex disappear**: yarrtube builds the playlists
   from labels named after your categories and owns the labels of its
   episodes. If you restrict shared users by label, don't use a category
