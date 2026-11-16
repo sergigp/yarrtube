@@ -37,117 +37,30 @@ category or take it out.
   video's source: change the source's categories instead.
 - A chip marked **AI** was decided by the AI (see below). Clicking it replaces
   the AI's answer with yours.
-- What you set by hand is never changed by the AI, nor by any **Re-run AI**
-  or **Clear AI categories**, even when you set it while the AI is still
-  answering for that video.
+- What you set by hand is never changed by the AI.
 
 ## Let AI fill them
 
-With [AI](AI.md) on, a category can also gather videos from sources outside
-it:
-
-1. In **Settings → AI**, turn on **Categorization** (and **Summaries** too: a
-   video is judged from its summary).
-2. Give the category an **AI prompt** with **Edit category**, describing the
-   videos it should hold.
-3. Tick **Categorize videos** on the channels and playlists whose videos
-   should be judged.
+With [AI](AI.md) set up, a category can also gather videos from any channel
+or playlist: give it an **AI prompt** with **Edit category**, describing the
+videos it should hold, and the AI adds every video that fits.
 
 <p align="center">
   <img src="category_dialog.jpeg" alt="A category's settings with its AI prompt" width="800"/>
 </p>
 
-Once a video of those sources has a summary, the AI asks, in one go, which of
-the categories with a prompt it belongs in (one at a time for a video it
-can't answer in one go), and adds it to every category it fits. It never
-removes a category a video gets from its source.
-
-The more categories have a prompt, the more the AI has to read and think
-about per video. With Ollama, the categorization **Context length** (under
-**Advanced categorization settings** in **Settings → AI**) is Auto by
-default and grows with them (about 1,800 tokens each). Turn Auto off only to
-set it by hand; too small, and videos are asked about one category at a time,
-which is slower. With Anthropic there's nothing to size: pick the
-**Categorization effort** instead.
-
-This happens on the video's next sync after its summary, at the latest its
-source's next reconcile pass (every 3 hours by default), so a new video
-shows its AI categories some time after it appears.
-
-To ask the AI again, deleting its answers (not yours) so the categories it
-gave go at once:
-
-- **One video**: **Re-run AI** in its **Edit categories…** dialog. With its
-  source's categorization off it reads **Clear AI categories**.
-- **A channel or playlist**: **Re-run AI categorization** in its page's **⋮**
-  menu. With categorization off, for that source or in **Settings → AI**, it
-  reads **Clear AI categories**: the AI categories go and nothing is asked
-  again.
-- **A category**, e.g. after editing its prompt: **Re-evaluate N videos** in
-  **Edit category**, below the AI prompt. Save the prompt first: the
-  button waits for it, since the AI asks with the saved prompt.
-
-The videos are synced straight away, so the AI asks again within minutes when
-categorization is on.
-
-Good to know:
-
-- Otherwise each answer is final: editing a category's prompt, turning a
-  source's categorization off or turning AI off doesn't re-judge anything or
-  remove the categories the AI gave.
-- A video the AI couldn't judge is tried again after you change the model,
-  the categorization prompt, the Ollama URL, or that category's prompt.
-- Judging takes a while (10 s to 100 s per video and category on a small
-  machine) and runs in the background: look for _Categorizing …_ in the
-  Tasks page (**AI** tab).
+The AI never overrides you: change a video's categories by hand (see above)
+and your choice stays.
 
 ## In Plex
 
-Each category becomes a **smart playlist** in Plex: all its episodes,
-newest first, across all its channels and playlists, like its page in the
-web UI. A channel's episodes from the same day are newest first; episodes
-of different shows on the same day are in Plex's own order.
-
-Two options in **Settings → Plex** change every category playlist:
-
-- **Watched episodes**: _Keep them_ (the default) or _Remove them from
-  playlist_.
-  Plex Web and the Mac app don't show a watched badge on playlist items,
-  so a playlist that keeps them can't tell you which ones you've seen;
-  dropping them turns each playlist into a queue of what's left.
-- **Order**: _Newest first_ (the default) or _Oldest first_, for working
-  through a backlog.
-
-A change applies within a minute: yarrtube replaces the playlists, under
-the same titles.
-
-It needs the Plex integration working: a TV Shows library and the scan
-trigger, steps 1 and 2 of the [Plex guide](PLEX.md). Nothing else to set up.
+Each category becomes a **smart playlist** in Plex, newest first, across all
+its channels and playlists. It needs the Plex integration set up, see the
+[Plex guide](PLEX.md). **Settings → Plex** has the playlist options.
 
 <p align="center">
   <img src="smart_playlist.jpeg" alt="A category smart playlist in Plex" width="800"/>
 </p>
 
-Good to know:
-
-- Playlists are visible only to the Plex user whose token yarrtube uses
-  (`YARRTUBE_PLEX_TOKEN`). Managed and shared users, like a kid's profile,
-  don't get them.
-- A category with episodes in several Plex libraries gets one playlist per
-  library, e.g. `Science · Subscriptions` and `Science · Kids TV`.
-- A playlist shows up within 15 minutes after Plex imports its first episode, and
-  follows renames and deletes of its category. A playlist you delete in Plex
-  comes back; delete the category instead.
-- yarrtube builds the playlists from Plex labels named after your
-  categories. It owns the labels of its episodes, so labels you add to them by
-  hand are removed. If you restrict shared users by label, don't use a
-  category name as a restriction label.
-- No playlist? Check **Settings → Plex**, look for _Updating category labels
-  in Plex_ in the Tasks page (**Plex & upkeep** tab), and for
-  `failed to reach Plex` in the log.
-
-## Turning them off
-
-Don't need categories? Turn off **Categories** in **Settings → General**: all
-category UI is hidden, and your categories are kept for when you turn it back
-on.
+Don't need categories at all? Turn them off in **Settings → General**; your
+categories are kept for when you turn them back on.

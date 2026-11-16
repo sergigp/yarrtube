@@ -137,7 +137,7 @@ UI, since `ports:` is ignored).
 
 Once the scan trigger is configured (step 2), each yarrtube category also
 becomes a smart playlist in Plex. Nothing else to set up. See
-[Categories](CATEGORIES.md#in-plex) for what you get and its limits.
+[Categories](CATEGORIES.md#in-plex).
 
 ## Watch state
 
@@ -160,8 +160,10 @@ ran, with **Sync now** to run one right away.
   download. If you see `no Plex section contains the folder` instead,
   `YARRTUBE_PLEX_VIDEOS_PATH` doesn't match the folders your TV Shows
   library points at.
-- **Category playlists don't show up**: see
-  [Categories](CATEGORIES.md#in-plex).
+- **Category playlists don't show up**: a playlist appears within 15
+  minutes after Plex imports its first episode, and only for the Plex user
+  whose token yarrtube uses. Check **Settings → Plex** and the log for
+  `failed to reach Plex`.
 - **Watch state doesn't sync**: an episode syncs once Plex has imported it;
   check the log for `failed to reach Plex, retrying the watch sync later`
   or `failed to write the Plex watch state`. Watch state is per Plex user:

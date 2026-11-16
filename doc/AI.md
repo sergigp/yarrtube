@@ -8,7 +8,7 @@ AI is optional and off by default. With it on, yarrtube can:
 - **Categorize videos**: add each video to the categories it fits, from any
   channel or playlist. A video is judged from its summary, so this needs
   summaries on too, and only against categories with an **AI prompt**
-  describing the videos they should hold. How it works, and how to ask the AI again, is in
+  describing the videos they should hold. See
   [Categories](CATEGORIES.md#let-ai-fill-them).
 
 ## Setup
