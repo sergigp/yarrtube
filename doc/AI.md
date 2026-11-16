@@ -7,7 +7,8 @@ AI is optional and off by default. With it on, yarrtube can:
   downloaded, so a video without subtitles gets no summary.
 - **Categorize videos**: add each video to the categories it fits, from any
   channel or playlist. A video is judged from its summary, so this needs
-  summaries on too. How it works, and how to ask the AI again, is in
+  summaries on too, and only against categories with an **AI prompt**
+  describing the videos they should hold. How it works, and how to ask the AI again, is in
   [Categories](CATEGORIES.md#let-ai-fill-them).
 
 ## Setup
@@ -40,6 +41,9 @@ key is never stored, returned or logged.
    You can tune the prompts and other parameters in the advanced settings.
 3. On each channel or playlist (add or edit dialog), tick **Summarize
    videos** and/or **Categorize videos**.
+4. For categorization, give each category an **AI prompt** with **Edit
+   category**, e.g. "Videos about physics, astronomy or biology". A category
+   without one never gets AI videos.
 
 <p align="center">
   <img src="ai_settings.jpeg" alt="The AI settings page" width="800"/>
