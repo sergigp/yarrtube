@@ -1,19 +1,22 @@
 # Architecture
 
 Yarrtube is a single process (`yarrtube serve`) backed by one SQLite database.
-Inside it, the HTTP API does only the synchronous part of each request: it
-validates the input, saves state and publishes a **domain event**. Everything
-slow or fallible (talking to YouTube, running `yt-dlp`, touching the
-filesystem) happens later in the background in an event-driven fashion.
+An HTTP request does as little as it can: it validates the input, saves state
+and publishes a **domain event**. The long-running and failure-prone work
+(listing a channel, running `yt-dlp` downloads, writing show folders, calling
+Plex or an LLM) happens later in the background, driven by events and tasks.
 
-## Architecture Overview
+The queues are SQLite tables rather than a message broker, so the whole
+application ships as one container with nothing else to run.
+
+## Overview
 
 ```mermaid
 flowchart TB
     client(["Web UI / HTTP client"])
     api["HTTP API (axum)"]
     services["Domain services<br/>ChannelCreator, ChannelVideoReconciler,<br/>VideoDownloader, ..."]
-    external(["YouTube API / yt-dlp / filesystem /<br/>Ollama / Anthropic API"])
+    external(["YouTube API / yt-dlp / filesystem /<br/>Plex / Ollama / Anthropic API"])
 
     subgraph db["SQLite"]
         direction LR
@@ -47,151 +50,61 @@ flowchart TB
     handlers -- "call service" --> services
 ```
 
-### Task lanes
+The background has two queues:
 
-The `TaskExecutor` runs each task in its type's lane (`Task::lane`), and each
-lane has its own concurrency cap, so a slow kind of work never starves the
-others:
+- A **domain event** records something that happened (`ChannelCreated`,
+  `VideoDownloaded`). The `DomainEventsConsumer` hands it to every subscriber
+  of its type. A subscriber is small: it schedules a task or calls one
+  service.
+- A **task** is one unit of work due at a given time (`DownloadVideo`,
+  `ReconcileChannel`). The `TaskExecutor` hands it to the handler of its
+  type. Tasks can be scheduled in the future, recur by scheduling their own
+  next run, and are limited by lane (see [Task lanes](#task-lanes)).
 
-- `Download` (`DownloadVideo`, `UpgradeQuality`): `YARRTUBE_DOWNLOAD_CONCURRENCY`
-  at a time (2 by default).
-- `Thumbnail`, `Subtitles` (`FetchSubtitles`, `FetchChapters`), `VideoSync`,
-  `Plex` (`SyncPlexWatchState`, `SyncPlexLabels`), `Summaries`
-  (`SummarizeVideo`, `CategorizeVideo`) and `Light` (reconciles, file
-  deletes): one at a time each.
-- `Exclusive` (`UpdateYtdlp`): runs alone, with nothing else running.
+An event or task that fails is retried with a growing delay, and moved to its
+dead-letter table on the 5th failure. A video's own steps (download,
+subtitles, summary, ...) also keep a retry state on the video, so a step
+that keeps failing backs off for up to a day between attempts and ends up
+`FAILED` until the user retries it (see
+[`video-retries`](../openspec/specs/video-retries/spec.md)).
 
-Two tasks about the same video never run at the same time either.
+The code is split into three layers (`application`, `domain`,
+`infrastructure`); its conventions are in the
+[Rust Architect skill](../.claude/skills/rust-architect/SKILL.md).
 
-### LLM providers
+## Example: track a channel and download its videos
 
-Summaries and categorization reach their model through one port,
-`LlmServerRepository` (`find` the provider's models, `chat` with one), given
-an `LlmConnection`: `Ollama(url)` or `Anthropic`. `Preferences::connection()`
-picks it from the saved `ai_provider`. The production implementation,
-`RoutingLlmServerRepository`, sends each connection to its adapter:
+What happens when a user adds a channel. Playlists follow the same flow with
+their own events and reconciler.
 
-- `OllamaLlmServerRepository`: Ollama's native API at the saved URL
-  (`/api/version`, `/api/tags`, `/api/show`, `/api/chat`).
-- `AnthropicLlmServerRepository`: Anthropic's API with the key from
-  `YARRTUBE_ANTHROPIC_API_KEY` (`GET /v1/models`, paged, and
-  `POST /v1/messages`; raw `reqwest`, there's no Rust SDK). Without a key the
-  router has no Anthropic adapter and answers every Anthropic call as
-  unavailable.
+1. **The request.** `POST /api/channels` resolves the channel on YouTube,
+   saves it and publishes `ChannelCreated`.
+2. **The channel sync.** The `ReconcileOnChannelCreated` subscriber runs
+   `ChannelVideoReconciler`, which lists the channel's recent uploads with
+   `yt-dlp`, saves each new video as `PENDING` (publishing
+   `VideoAddedToChannel`), schedules a `SyncVideo` task for every stored
+   video, and schedules the next `ReconcileChannel` task one interval later
+   (3 hours by default).
+3. **The video sync.** `SyncVideo` runs `VideoReconciler`, the one place
+   that decides what a video needs next. It looks at the video's stored
+   state and schedules a task for each step still missing: thumbnail and
+   download first, then subtitles, chapters and a quality upgrade once
+   downloaded, then summary and categorization. A step already queued, or
+   waiting for its next retry, is skipped. It also repairs what it finds
+   broken (a missing file, missing metadata).
+4. **Each step.** The task runs, stores its result and publishes an event
+   (`VideoDownloaded`, `VideoSubtitlesFetched`, `VideoSummaryGenerated`).
+   A subscriber of that event schedules `SyncVideo` again, which schedules
+   the following step. Other subscribers react on the side, e.g. asking Plex
+   to scan the show folder.
+5. **Every interval after that.** `ReconcileChannel` repeats step 2. Since
+   it schedules a `SyncVideo` for every stored video, not only the new ones,
+   it is also the safety net: it picks up a step lost in a crash, a retry
+   that is now due, or captions YouTube published late.
 
-Both adapters map their failures the same way: an error tagged
-`LlmServerUnreachable` means the provider is unavailable (the step waits 6
-hours without spending an attempt), any other error is a server fault (a
-failed attempt), and an `LlmReply` marked refused or stopped at the limit is a
-rejected call. `GET /api/llm/ollama?url=` and `GET /api/llm/anthropic` check
-either provider through `LlmServerSearcher`. See [AI features](AI.md).
-
-### Plex
-
-Plex is reached only from the background, through the Plex lane and the
-`ScanPlexFolderOn*` subscribers, never from an HTTP request:
-
-- **Scan trigger**: `PlexFolderScanner` asks Plex to scan a show folder after
-  a download or new subtitles.
-- **Watch sync**: `PlexWatchSyncer` (`SyncPlexWatchState`, every 5 minutes)
-  keeps watched, unwatched and the resume position the same on both sides.
-  Each video keeps the state both sides last agreed on (`episode_watch`);
-  whichever side differs is copied to the other, and when both changed the
-  most recently played wins.
-- **Labels and category playlists**: `PlexLabelSyncer` (`SyncPlexLabels`,
-  every 15 minutes, and shortly after a download or a category change) puts
-  a label per category on each episode and keeps one smart playlist per
-  category and library.
-- `PlexEpisodeFinder` maps a video to its Plex episode for both syncs, and
-  each run is recorded (`plex_sync_runs`) for **Settings → Plex**
-  (`PlexStatusSearcher`), whose **Sync now** goes through
-  `PlexSyncRequester`.
-
-For more information on the architectural decisions and conventions used in Yarrtube you can take a look at the [Rust Architect skill](../.claude/skills/rust-architect/SKILL.md).
-
-## Example: track a channel and download its videos and subtitles
-
-To illustrate this domain-driven flow we can take a look at what happens when a user adds a channel subscription and all the videos end up downloaded, with their subtitles:
-
-1. `POST /api/channels` saves the channel and publishes `ChannelCreated` domain event.
-2. The `ReconcileOnChannelCreated` subscriber runs asynchronously, polling the domain events table (which acts like a queue), and runs the first channel sync.
-   - The sync writes the channel's show files (`tvshow.nfo`, and
-     `poster.jpg` from its avatar), as every later sync does too.
-   - The sync reads the channel's most recent uploads from YouTube using the YouTube API.
-   - It saves each new video as `PENDING` and publishes one
-     `VideoAddedToChannel` domain event per video.
-   - It runs `VideoReconciler` for every stored video (see step 6), which
-     already schedules the new videos' tasks.
-   - It schedules the next `ReconcileChannel` task one reconcile interval
-     later: the channel's own interval as stored when the sync finishes
-     (3 hours by default, editable per channel and playlist from the web UI).
-3. For each `VideoAddedToChannel`, the `SyncVideoOnVideoAddedToChannel`
-   subscriber schedules a `SyncVideo` task (own `VideoSync` lane). The
-   `VideoReconciler` it runs schedules, as the video's stored state needs,
-   a `FetchThumbnail` task, a `DownloadVideo` task and a `FetchSubtitles`
-   task.
-4. The `TaskExecutor` runs them. The download calls `yt-dlp` inside the
-   video's staging folder (`<videos root>/.downloads/<video id>`), takes
-   its episode number from the publish time `yt-dlp` reports, and moves the
-   result into the show's season folder (see below). It also records the
-   chapters `yt-dlp` reports and embeds them in the mp4 (`videos.chapters`,
-   JSON; NULL = never checked, `[]` = none). The thumbnail task is
-   scheduled first, so it usually arrives first and the UI can show it
-   while the video is still downloading.
-   A finished download publishes `VideoDownloaded`, which has two
-   subscribers:
-   - `SyncVideoOnVideoDownloaded` schedules a `SyncVideo` task, whose
-     reconciler schedules the `FetchSubtitles` task.
-   - `ScanPlexFolderOnVideoDownloaded` asks Plex to scan the show folder,
-     when the scan trigger is configured.
-5. The `TaskExecutor` runs `FetchSubtitles` in its own lane, one at a time,
-   so a large backfill never floods YouTube or delays downloads. It probes
-   the video's caption tracks, writes the original-language track as
-   `<episode>.<lang>.srt` (`<lang>` being the base language code, e.g. `es`
-   for `es-US`) and stores its plain-text transcript (`video_transcripts`),
-   then publishes `VideoSubtitlesFetched`, whose
-   `ScanPlexFolderOnVideoSubtitlesFetched` subscriber asks Plex to scan the
-   show folder again so the subtitle shows up. A video with no
-   original-language captions records its first such check
-   (`subtitles_first_missing_at`) and becomes `UNAVAILABLE` once both its
-   publish date and that first check are 7 days old; any failure, or a probe
-   where yt-dlp warned (it can withhold caption tracks silently), leaves it
-   `MISSING`.
-6. Every interval, the `ReconcileChannel` task runs the sync again and schedules
-   the next one. New uploads repeat steps 3–5. Once membership is up to
-   date, the sync runs `VideoReconciler` inline for every stored video of
-   the channel, including the ones it just added, holding each video's lock
-   so it never overlaps a `SyncVideo` task of the same video. Per video it
-   assigns the channel's categories, resets a `DOWNLOADED` video whose file
-   is missing or not mp4, regenerates missing metadata (relocating a video still in the
-   previous layout), warns about a stranded video, and schedules every step
-   still needed (`FetchThumbnail`, `DownloadVideo`, `FetchSubtitles`,
-   `FetchChapters`, each skipped when one is already pending, or when its
-   step is Failed or Retrying with its next attempt not due yet: a failed
-   step re-queues its own task for its next attempt, see the
-   `video-retries` capability). That backfills
-   an upgraded library and retries videos whose captions weren't available
-   yet. `FetchChapters` (subtitles lane) reads a `DOWNLOADED` video's
-   chapters with `yt-dlp` when they were never checked, downloading nothing. Only then does
-   it sweep files of the show folder that no stored video accounts for.
-7. `VideoSubtitlesFetched` also has `SyncVideoOnVideoSubtitlesFetched`, which
-   schedules a `SyncVideo` task. When AI and summaries are on and the channel
-   opted in, its reconciler schedules a `SummarizeVideo` task (own `Summaries`
-   lane, one at a time), and so does every later pass for each stored video
-   still without a summary. `VideoSummarizer` fills the prompt and asks the AI provider (Ollama or Anthropic),
-   by map-reduce when the transcript doesn't fit, and stores the result
-   (`video_summaries`), then publishes `VideoSummaryGenerated`, whose
-   `SyncVideoOnVideoSummaryGenerated` schedules a `SyncVideo` so the video's
-   categorization doesn't wait for the next pass. `VideoSearcher` returns it
-   with the playlist, channel and category listings for the detail pane,
-   hiding it unless AI and summaries are on and the video's own source opted
-   in. See [AI features](AI.md).
-8. That `SyncVideo`, and every later pass, schedules a `CategorizeVideo` task
-   (`Summaries` lane) for a summarized video whose source has categorization
-   on while some category with an AI prompt has no verdict for it yet.
-   `VideoCategorizer` asks the provider about every pending category in one
-   call (one category per call when that doesn't fit) and stores a verdict
-   per category; a user's verdict is never overwritten.
+So the flow is driven by stored state rather than by a chain of calls: the
+video sync can run any number of times, and the system converges to
+"everything downloaded and enriched" even when a step fails or is lost.
 
 ```mermaid
 sequenceDiagram
@@ -210,84 +123,91 @@ sequenceDiagram
     API-->>User: 201 Created
 
     Events->>Reconciler: ReconcileOnChannelCreated (first sync)
-    Reconciler->>YT: list recent uploads
-    YT-->>Reconciler: videos
+    Reconciler->>YT: yt-dlp lists recent uploads
     loop each new video
         Reconciler->>Events: save PENDING, publish VideoAddedToChannel
     end
-    Reconciler->>Tasks: schedule next ReconcileChannel (now + interval)
+    Reconciler->>Tasks: schedule SyncVideo per video + next ReconcileChannel
 
-    Events->>Tasks: schedule SyncVideo per video (SyncVideoOnVideoAddedToChannel)
-    Executor->>Tasks: poll and run SyncVideo (VideoReconciler)
-    Executor->>Tasks: schedule FetchThumbnail + DownloadVideo as needed
+    Executor->>Tasks: run SyncVideo: schedule FetchThumbnail + DownloadVideo
     Executor->>YT: yt-dlp fetches thumbnail, then downloads video
     Executor->>Events: publish VideoDownloaded
 
-    Events->>Tasks: schedule SyncVideo (SyncVideoOnVideoDownloaded)
-    Executor->>Tasks: SyncVideo schedules FetchSubtitles
+    Events->>Tasks: schedule SyncVideo
     Events->>Plex: scan show folder (if configured)
-    Executor->>YT: yt-dlp probes captions, downloads original-language .srt
-    Executor->>Events: save transcript, publish VideoSubtitlesFetched
-    Events->>Plex: scan show folder again (if configured)
+    Executor->>Tasks: run SyncVideo: schedule FetchSubtitles
+    Executor->>YT: yt-dlp downloads original-language subtitles
+    Executor->>Events: publish VideoSubtitlesFetched
 
-    Note over Reconciler,Executor: One interval later, ReconcileChannel<br/>re-syncs and schedules the next run.
+    Note over Events,Executor: Summary and categorization follow the same loop:<br/>event → SyncVideo → next step's task.
 ```
+
+## Task lanes
+
+The `TaskExecutor` runs each task in its type's lane, and each lane has its
+own concurrency cap, so a slow kind of work never starves the others:
+
+| Lane | Tasks | At a time |
+|---|---|---|
+| `Download` | `DownloadVideo`, `UpgradeQuality` | `YARRTUBE_DOWNLOAD_CONCURRENCY` (2 by default) |
+| `Thumbnail` | `FetchThumbnail` | 1 |
+| `Subtitles` | `FetchSubtitles`, `FetchChapters` | 1 |
+| `VideoSync` | `SyncVideo` | 1 |
+| `Plex` | `SyncPlexWatchState`, `SyncPlexLabels` | 1 |
+| `Summaries` | `SummarizeVideo`, `CategorizeVideo` | 1 |
+| `Light` | `ReconcileChannel`, `ReconcilePlaylist`, file deletes | 1 |
+| `Exclusive` | `UpdateYtdlp` | alone, with nothing else running |
+
+Two tasks about the same video never run at the same time either, whatever
+their lanes, so the steps of a video never race each other.
+
+## Integrations
+
+Every external system sits behind a port (a trait) with a real adapter and a
+`Fake*` double for tests.
+
+- **YouTube**: `yt-dlp` for listings, downloads, thumbnails and captions,
+  and the YouTube Data API for playlist and channel lookups. `yt-dlp`
+  updates itself hourly, running alone in the `Exclusive` lane.
+- **LLM** ([AI features](AI.md)): summaries and categorization go through
+  one port, `LlmServerRepository`, with an Ollama adapter and an Anthropic
+  one; a router picks the adapter from the saved provider. An unreachable
+  provider makes the step wait without spending a retry attempt.
+- **Plex** ([Plex](PLEX.md), [Categories](CATEGORIES.md)): reached only
+  from the background, never from an HTTP request. Three jobs: scan a show
+  folder after a download, new subtitles or a show move, sync watch state both ways
+  (every 5 minutes), and sync category labels and smart playlists (every 15
+  minutes).
 
 ## Videos on disk
 
-Each tracked playlist or channel is a TV show under its storage path:
+Each tracked playlist or channel is laid out as a TV show, so Plex, Kodi and
+Jellyfin read it without configuration:
 
 ```
 <storage path>/
-├── tvshow.nfo                                  ShowFileWriter, on every sync
+├── tvshow.nfo
 ├── poster.jpg                                  channels only (avatar copy)
 └── Season <year>/                              Season 1/ for a playlist
     └── S<year>E<MMDDii> - <title>.{mp4,jpg,nfo,<lang>.srt}  S01E<nnn> - <title>.* for a playlist
 ```
 
-- **Episode number** (`ChannelEpisodeNumber` / `PlaylistEpisodeNumber`) is
-  assigned once and stored on the video, so files never rename. Channels:
-  publish date plus a per-day index, assigned in the database
-  (`VideoRepository::assign_episode_number`). Playlists: the next number
-  from `Playlist::last_episode`, assigned by `PlaylistVideoReconciler`, so
-  a removed video's number is never reused.
-- **Staging**: `yt-dlp` writes into `.downloads/<video id>`, then files
+- **Episode numbers** are assigned once and stored on the video, so files
+  never rename. Channels number by publish date plus a per-day index;
+  playlists take the next number in playlist order, never reusing one.
+- **Staging**: `yt-dlp` writes into `<videos root>/.downloads/`, then files
   are moved into the season folder, so players never see a partial file.
-- **Legacy layout** (per-video folders from 0.8.x) is still served and
-  deleted as a unit, but nothing moves it: a legacy video gets no new files
-  (metadata, subtitles).
 
 ## Testing
 
-Several layers, from fast/isolated to slow/real:
-
-- **Rust unit tests** — inline `mod tests` in domain value objects and
-  entities (`src/domain/**`). Pure logic: parsing/validation, state
-  transitions, invariants. No I/O.
-- **Rust behavior tests** — `mod tests` in HTTP handlers and tasks, kept
-  in a sibling `tests.rs` (`http/<resource>/tests.rs`,
-  `tasks/<task>/tests.rs`) so the production file stays short; inline
-  `mod tests` in subscribers and services. Exercise the real wiring (service +
-  real SQLite repos via `Connection::open_in_memory()`) with `Fake*`
-  doubles only at the external boundaries (YouTube API, yt-dlp,
-  filesystem). Assert the full outcome: response, persisted state, and
-  events/tasks produced.
-- **Rust repository tests** — inline `mod tests` in the SQLite repos,
-  run against in-memory SQLite with migrations applied. Verify queries,
-  mapping and persistence.
-- **Web tests** (`web/`, Vitest + jsdom + Testing Library) — unit tests
-  for pure logic in `src/lib/` and hooks, and component tests that render
-  through the real `QueryClient`/router with only `fetch` mocked. Assert
-  user-visible behavior.
-- **YouTube contract tests** — `#[ignore]`d `youtube_contract_tests`
-  modules next to each YouTube adapter, run against the real `yt-dlp` and
-  Data API. They pin down what the fakes assume, so a YouTube change is
-  told apart from a bug of ours. Run locally only (they need the network
-  and an API key), not in CI.
-- **End-to-end tests** (`e2e-tests/`, Playwright) — the real Docker image
-  driven through real browsers against a fake YouTube and a Plex stub, one
-  daemon per parallel worker. Covers add → download → playback and the
-  rest of the UI flows; runs in CI on every pull request.
+| Layer | Where | What it covers |
+|---|---|---|
+| Rust unit tests | inline in `src/domain/**` | Pure logic: validation, state transitions, invariants. No I/O. |
+| Rust behavior tests | HTTP handlers, tasks, subscribers | The real wiring (services + in-memory SQLite), faking only external boundaries. Assert the response, the persisted state and the events/tasks produced. |
+| Rust repository tests | inline in the SQLite repositories | Queries and mapping against in-memory SQLite with migrations applied. |
+| Web tests | `web/` (Vitest, Testing Library) | Pure logic and components, with only `fetch` mocked. |
+| Contract tests | next to each adapter, `#[ignore]`d | Adapters against the real `yt-dlp`, YouTube and Anthropic APIs, so the fakes stay honest. Local only. |
+| End-to-end tests | `e2e-tests/` (Playwright) | The real Docker image driven through real browsers against fake YouTube, Plex and LLM services. Runs in CI on every pull request. |
 
 `scripts/run-tests.sh --all` runs every suite; see
 [DEVELOPMENT.md](DEVELOPMENT.md).
