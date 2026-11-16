@@ -41,12 +41,18 @@ key is never stored, returned or logged.
    You can tune the prompts and other parameters in the advanced settings.
 3. On each channel or playlist (add or edit dialog), tick **Summarize
    videos** and/or **Categorize videos**.
-4. For categorization, give each category an **AI prompt** with **Edit
-   category**, e.g. "Videos about physics, astronomy or biology". A category
-   without one never gets AI videos.
+4. For categorization, give each category an **AI prompt**: open the
+   category's page and press **Edit category** (or **Edit settings** in its
+   sidebar **⋮** menu). A category without one never gets AI videos.
 
 <p align="center">
   <img src="ai_settings.jpeg" alt="The AI settings page" width="800"/>
+</p>
+
+A good prompt says what belongs and what doesn't:
+
+<p align="center">
+  <img src="category_dialog.jpeg" alt="A category's AI prompt in Edit category" width="800"/>
 </p>
 
 Everything runs in the background: look for _Summarizing …_ and
