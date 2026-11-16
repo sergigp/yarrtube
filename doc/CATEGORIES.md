@@ -45,12 +45,17 @@ category or take it out.
 With [AI](AI.md) on, a category can also gather videos from sources outside
 it:
 
-1. In **Settings → AI**, turn on categorization (summaries too: a video is
-   judged from its summary).
+1. In **Settings → AI**, turn on summaries, then categorization: a video is
+   judged from its summary, so categorization can't be turned on without
+   summaries.
 2. Give the category an **AI prompt** in its **Edit settings**, describing the
    videos it should hold.
-3. Turn on categorization for the channels and playlists whose videos should
-   be judged.
+3. Turn on **Summarize videos**, then **Categorize videos**, for the channels
+   and playlists whose videos should be judged.
+
+Turning summaries off, in **Settings → AI** or on a channel or playlist, pauses
+its categorization without turning it off: it picks up again once summaries are
+back on.
 
 Once a video of those sources has a summary, the AI asks, in one go, which of
 the categories with a prompt it belongs in (one at a time for a video it

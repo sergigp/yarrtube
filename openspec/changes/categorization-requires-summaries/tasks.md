@@ -20,7 +20,7 @@
 - [x] 2.12 Web `EditPlaylistDialog.test.tsx`: a playlist with summaries off has "Categorize videos" disabled with "Needs Summarize videos." until "Summarize videos" is checked.
 - [x] 2.13 Web `EditChannelDialog.test.tsx`: unchecking "Summarize videos" keeps "Categorize videos" checked and disabled, and only `summaries_enabled` `false` is sent.
 - [x] 2.14 Web `ChannelDetail.test.tsx`: a channel with categorization on and summaries off offers "Clear AI categories".
-- [ ] 2.15 Docs: `doc/CATEGORIES.md` and `doc/AI.md` say categorization needs summaries on the AI page and on each channel or playlist, and that turning summaries off pauses categorization without clearing it.
+- [x] 2.15 Docs: `doc/CATEGORIES.md` and `doc/AI.md` say categorization needs summaries on the AI page and on each channel or playlist, and that turning summaries off pauses categorization without clearing it.
 
 ## 3. Infrastructure adapters (TDD)
 
