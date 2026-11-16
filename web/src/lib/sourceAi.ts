@@ -6,5 +6,5 @@ interface SourceAiSettings {
 
 /** Whether the source categorizes its videos: summaries and categorization both on. */
 export function sourceCategorizes(source: SourceAiSettings): boolean {
-  return source.categorization_enabled
+  return source.summaries_enabled && source.categorization_enabled
 }

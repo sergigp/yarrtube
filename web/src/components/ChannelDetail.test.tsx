@@ -355,6 +355,36 @@ describe('ChannelDetail', () => {
     ).toEqual(['Sync', 'Open channel on YouTube', 'Mark all watched', 'Edit settings', 'Delete'])
   })
 
+  it('offers Clear AI categories for a channel with categorization on and summaries off', async () => {
+    renderChannel(
+      {
+        'GET /api/preferences': aPreferences({
+          ai_enabled: true,
+          summaries_enabled: true,
+          categorization_enabled: true,
+        }),
+        'GET /api/channels': [
+          aChannel({
+            id: 'chan',
+            name: 'The Channel',
+            summaries_enabled: false,
+            categorization_enabled: true,
+          }),
+        ],
+        'GET /api/channels/chan/videos': [],
+      },
+      '/channels/chan',
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Channel' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Clear AI categories' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Re-run AI categorization' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('marks the channel watched from its page header menu', async () => {
     const first = aVideo({ title: 'First Video' })
     const second = aVideo({ title: 'Second Video' })
