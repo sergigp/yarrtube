@@ -71,6 +71,8 @@ interface AiCheckboxProps {
   feature: string
   available: boolean
   option: SourceAiOption
+  /** Set while another option must be checked first, e.g. "Needs Summarize videos." */
+  blockedBy?: string
   onNavigateAway: () => void
 }
 

@@ -52,7 +52,7 @@ impl VideoCategoryChoiceSearcherApi for VideoCategoryChoiceSearcher {
             .map_err(EditVideoCategoriesError::Repository)?;
         Ok(VideoCategoryChoices {
             choices: VideoCategoryChoice::list(&categories, &owner.source, &verdicts),
-            categorization_enabled: owner.categorization_enabled,
+            categorization_enabled: owner.categorizes(),
         })
     }
 }

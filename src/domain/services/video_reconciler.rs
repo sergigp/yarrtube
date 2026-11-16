@@ -275,7 +275,7 @@ impl VideoReconciler {
 
     /// Whether `video` has categories pending for the AI.
     fn categorization_wanted(&self, video: &Video, owner: &VideoOwner) -> anyhow::Result<bool> {
-        Ok(owner.categorization_enabled
+        Ok(owner.categorizes()
             && self.preferences()?.categorization_available()
             && video.summary.status == StepStatus::Done
             && !self.video_categorizer.pending(video, owner)?.is_empty())

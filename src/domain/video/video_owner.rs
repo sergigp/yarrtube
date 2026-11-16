@@ -16,3 +16,11 @@ pub struct VideoOwner {
     /// The channel's or playlist's name.
     pub source_name: String,
 }
+
+impl VideoOwner {
+    /// Whether the source categorizes its videos: summaries and
+    /// categorization both on, since a video is judged from its summary.
+    pub fn categorizes(&self) -> bool {
+        self.categorization_enabled
+    }
+}
