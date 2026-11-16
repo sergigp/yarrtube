@@ -141,49 +141,13 @@ becomes a smart playlist in Plex. Nothing else to set up. See
 
 ## Watch state
 
-Once the scan trigger is configured (step 2), what you watch is also kept
-in sync between the web UI and Plex, both ways. Nothing else to set up.
+Once the scan trigger is configured (step 2), what you watch is kept in sync
+between the web UI and Plex, both ways: watched videos and where you stopped
+them, every 5 minutes. It's the watch state of the Plex user whose token
+yarrtube uses; other Plex users keep their own.
 
-- **What syncs**: whether a video is watched, and where you stopped it.
-  Finish a video in Plex and it shows as watched in the web UI; stop it
-  halfway in Plex and it appears under _Continue watching_ at that point.
-  The same goes the other way: mark a video watched in the web UI (or a
-  whole channel, playlist or category) and it is watched in Plex. A video
-  stopped within its first 30 seconds counts as not started, so a quick
-  look never lands in Plex's Continue Watching.
-- **When**: every 5 minutes, and right after yarrtube starts. A large batch
-  (e.g. marking a whole channel watched) is sent over a few back-to-back
-  syncs.
-- **Whose**: only the Plex user whose token yarrtube uses. Other Plex
-  users (managed, shared or Home users) keep their own watch state. If you
-  switch the token to another user, yarrtube keeps what you watched and
-  copies it to that user instead of taking their (empty) history.
-- **Both changed**: if a video changed in both places since the last
-  sync, the one played (or marked) most recently wins.
-- **First sync**: whatever you had already watched or started on either
-  side is copied to the other one.
-- **Rewatching**: replaying a watched episode in Plex keeps it watched in
-  yarrtube until you get past 10% of it, like in the web UI's player.
-- **Several copies**: a video tracked by both a channel and a playlist is
-  two episodes in Plex; watching either one marks both.
-
-## Status and syncs
-
-**Settings → Plex** in the web UI shows how the integration is doing,
-without asking Plex anything when you open it:
-
-- **Server**: whether the latest sync reached Plex (or its error), the
-  Plex Media Server version, the libraries holding yarrtube's folders, and
-  when it was last checked.
-- **Sync**: **Watched status** (every 5 minutes) and **Categories to Plex**
-  (labels and category playlists, every 15 minutes), each with when it last
-  ran, how it ended and when it runs next. **Sync now** runs one right away
-  (**Retry now** after a failure).
-- **Category playlists**: the playlist options, see
-  [Categories](CATEGORIES.md#in-plex).
-
-Without the three `YARRTUBE_PLEX_*` variables it says how to set Plex up
-instead.
+**Settings → Plex** shows whether Plex is reachable and when each sync last
+ran, with **Sync now** to run one right away.
 
 ## Troubleshooting
 
