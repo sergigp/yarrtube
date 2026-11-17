@@ -671,7 +671,7 @@ impl SqliteVideoRepository {
                 },
             },
             started: status == VideoStatus::InProgress,
-            discarded: false,
+            discarded: status == VideoStatus::Discarded,
             failure,
             file: Self::decode_downloaded_file(filename, quality, duration_seconds)?,
         })

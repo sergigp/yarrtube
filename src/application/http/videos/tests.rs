@@ -7218,6 +7218,55 @@ async fn it_should_return_not_found_when_rerunning_an_unknown_video() {
     );
 }
 
+#[tokio::test]
+async fn it_should_discard_a_retrying_video() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository =
+        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_errored("HTTP Error 503", fixed_timestamp())
+    .mark_errored("HTTP Error 503", fixed_timestamp())
+    .mark_errored("HTTP Error 503", fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+    task_repository
+        .schedule(
+            &Task::DownloadVideo {
+                video_id: video.id.as_str().to_string(),
+            },
+            fixed_timestamp() + Duration::hours(6),
+        )
+        .unwrap();
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                state: StepState::pending(),
+                started: false,
+                discarded: true,
+                failure: None,
+                file: None,
+            },
+            ..video.clone()
+        })
+    );
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
@@ -7275,6 +7324,19 @@ async fn set_category_with(
     )
     .await
     .map(|Json(body)| body)
+}
+
+/// A video discarder over every SQLite repository `db` opens, at
+/// `fixed_timestamp()`.
+fn video_discarder(db: &TestDatabase) -> VideoDiscarder {
+    let clock = Arc::new(FixedClock(fixed_timestamp()));
+    VideoDiscarder::new(
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(video_owner_finder(&|| db.database())),
+        Arc::new(SqliteTaskRepository::new(db.database(), clock.clone())),
+        Arc::new(SqliteEventPublisher::new(db.database(), clock.clone())),
+        clock,
+    )
 }
 
 /// A video retrier over every SQLite repository `db` opens, at

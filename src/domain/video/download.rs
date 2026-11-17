@@ -37,6 +37,9 @@ impl Download {
     /// The download's lifecycle status: In Progress while started, else its
     /// step's status (Done is Downloaded).
     pub fn status(&self) -> VideoStatus {
+        if self.discarded {
+            return VideoStatus::Discarded;
+        }
         if self.started {
             return VideoStatus::InProgress;
         }
@@ -52,14 +55,19 @@ impl Download {
     /// Whether the user discarded it.
     #[allow(dead_code)] // walking skeleton
     pub fn is_discarded(&self) -> bool {
-        false
+        self.discarded
     }
 
-    #[allow(dead_code)] // walking skeleton
     /// Whether it can be discarded: Pending, Retrying, Failed or
     /// Downloaded, not started nor already discarded.
     pub fn is_discardable(&self) -> bool {
-        false
+        matches!(
+            self.status(),
+            VideoStatus::Pending
+                | VideoStatus::Retrying
+                | VideoStatus::Failed
+                | VideoStatus::Downloaded
+        )
     }
 
     pub fn is_downloaded(&self) -> bool {
@@ -147,11 +155,13 @@ impl Download {
         }
     }
 
-    #[allow(dead_code)] // walking skeleton
     /// Discarded for good: Pending with no attempts, no failure and no
     /// file.
     pub fn discard(self) -> Self {
-        self
+        Self {
+            discarded: true,
+            ..Self::pending()
+        }
     }
 
     /// The file recorded as `file` (a relocation or quality upgrade), state

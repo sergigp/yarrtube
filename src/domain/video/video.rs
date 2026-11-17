@@ -132,12 +132,18 @@ impl Video {
         }
     }
 
-    #[allow(dead_code)] // walking skeleton
     /// Discards the video for good (see the `video-discard` capability):
     /// `None` unless its download is discardable; else its download
     /// Discarded and its thumbnail and subtitle filenames cleared.
-    pub fn discard(self, _now: DateTime<Utc>) -> Option<Self> {
-        None
+    pub fn discard(self, now: DateTime<Utc>) -> Option<Self> {
+        if !self.download.is_discardable() {
+            return None;
+        }
+        Some(Self {
+            download: self.download.discard(),
+            updated_at: now,
+            ..self
+        })
     }
 
     #[allow(dead_code)] // walking skeleton

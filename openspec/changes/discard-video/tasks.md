@@ -11,7 +11,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_discard_a_retrying_video` — download Discarded, attempts and failure cleared, its pending download task removed.
+- [x] 2.1 `it_should_discard_a_retrying_video` — download Discarded, attempts and failure cleared, its pending download task removed.
 - [ ] 2.2 `it_should_cancel_every_pending_task_of_a_discarded_video` — every pending task of the video deleted.
 - [ ] 2.3 `it_should_discard_a_failed_video` — a Failed download can be discarded.
 - [ ] 2.4 `it_should_discard_a_downloaded_video_and_clear_its_files` — recorded file, thumbnail and subtitle filenames cleared.

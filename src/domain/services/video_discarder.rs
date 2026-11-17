@@ -1,4 +1,4 @@
-use crate::domain::services::{VideoOwnerFinder, VideoUpdater};
+use crate::domain::services::{VideoOwnerFinder, VideoUpdater, VideoUpdaterApi};
 use crate::domain::video::{DiscardVideoError, VideoId};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -46,7 +46,13 @@ pub trait VideoDiscarderApi: Send + Sync {
 }
 
 impl VideoDiscarderApi for VideoDiscarder {
-    fn discard(&self, _video_id: &VideoId) -> Result<(), DiscardVideoError> {
-        Ok(())
+    fn discard(&self, video_id: &VideoId) -> Result<(), DiscardVideoError> {
+        let now = self.clock.now();
+        self.video_updater
+            .update(video_id, |video| video.discard(now))
+            .map_err(DiscardVideoError::Repository)?;
+        self.task_repository
+            .delete_pending_for_video(video_id)
+            .map_err(DiscardVideoError::Repository)
     }
 }
