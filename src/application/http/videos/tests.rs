@@ -7336,6 +7336,43 @@ async fn it_should_discard_a_failed_video() {
     );
 }
 
+#[tokio::test]
+async fn it_should_discard_a_downloaded_video_and_clear_its_files() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = downloaded_video("vid1", "My Video", Some("My Video.jpg"), 0)
+        .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                discarded: true,
+                ..Download::pending()
+            },
+            thumbnail: Thumbnail {
+                filename: None,
+                ..video.thumbnail.clone()
+            },
+            subtitles: Subtitles {
+                filename: None,
+                ..video.subtitles.clone()
+            },
+            ..video.clone()
+        })
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,

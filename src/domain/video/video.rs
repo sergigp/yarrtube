@@ -141,6 +141,14 @@ impl Video {
         }
         Some(Self {
             download: self.download.discard(),
+            thumbnail: Thumbnail {
+                filename: None,
+                ..self.thumbnail
+            },
+            subtitles: Subtitles {
+                filename: None,
+                ..self.subtitles
+            },
             updated_at: now,
             ..self
         })
