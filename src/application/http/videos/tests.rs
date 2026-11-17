@@ -7515,6 +7515,34 @@ async fn it_should_refuse_to_discard_a_video_being_downloaded() {
     );
 }
 
+#[tokio::test]
+async fn it_should_refuse_to_discard_an_unavailable_video() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_unavailable(fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "video rec-vid1 can't be discarded while unavailable"
+        ))
+    );
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,

@@ -19,7 +19,7 @@
 - [x] 2.6 `it_should_publish_nothing_when_discarding_a_video_never_downloaded`.
 - [x] 2.7 `it_should_leave_a_discarded_video_unchanged_when_discarded_again` — 204, nothing written or published.
 - [x] 2.8 `it_should_refuse_to_discard_a_video_being_downloaded` — 409, video and tasks unchanged.
-- [ ] 2.9 `it_should_refuse_to_discard_an_unavailable_video` — 409.
+- [x] 2.9 `it_should_refuse_to_discard_an_unavailable_video` — 409.
 - [ ] 2.10 `it_should_fail_to_discard_an_unknown_video` — 404.
 - [ ] 2.11 `it_should_omit_discarded_videos_from_a_channel_list` — `VideoSearcher` filters `is_skipped`.
 - [ ] 2.12 `it_should_omit_discarded_videos_from_a_playlist_list`.
