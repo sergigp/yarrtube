@@ -73,7 +73,11 @@ WORKDIR /app
 
 # /config holds yarrtube's state (SQLite database, channel avatars and log
 # files), so a single mount persists everything across container recreation.
+# XDG_CACHE_HOME points yt-dlp's cache (YouTube player data) there too: with
+# PUID set, the daemon's user has no home directory, so yt-dlp's default
+# ~/.cache is unwritable and every cache write fails with a traceback.
 ENV YARRTUBE_DB_PATH=/config/yarrtube.db \
+    XDG_CACHE_HOME=/config/cache \
     YARRTUBE_AVATARS_PATH=/config/avatars \
     YARRTUBE_LOGS_PATH=/config/logs
 
