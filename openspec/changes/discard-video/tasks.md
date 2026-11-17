@@ -32,7 +32,7 @@
 - [x] 2.19 `download_video_task::it_should_settle_without_downloading_a_discarded_video` — `is_settled` includes Discarded.
 - [x] 2.20 `upgrade_quality_task::it_should_record_nothing_on_a_video_discarded_during_the_upgrade`.
 - [x] 2.21 `reconcile_channel_task::it_should_keep_a_discarded_video_discarded_on_resync`.
-- [ ] 2.22 `reconcile_channel_task::it_should_request_one_more_upload_per_skipped_video`.
+- [x] 2.22 `reconcile_channel_task::it_should_request_one_more_upload_per_skipped_video`.
 - [ ] 2.23 `reconcile_channel_task::it_should_not_count_skipped_videos_toward_the_limit` — `within_limit`.
 - [ ] 2.24 `reconcile_channel_task::it_should_evict_uploads_past_the_limit_th_unskipped_one`.
 - [ ] 2.25 Web "discards a retrying video after confirming" — `DiscardVideoButton` + `ConfirmDialog` + `canDiscard`; `POST /api/videos/{id}/discard`, video gone from the refetched list.

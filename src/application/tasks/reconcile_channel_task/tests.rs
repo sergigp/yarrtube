@@ -2503,6 +2503,71 @@ fn it_should_schedule_the_sync_of_a_video_added_by_the_pass() {
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
 /// that do build the reconciler inline. Events go to `db`'s outbox table.
+#[test]
+fn it_should_request_one_more_upload_per_skipped_video() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    let unavailable = Video::create(
+        YoutubeVideoId::new("yt_unavailable").unwrap(),
+        "Members only",
+        fixed_timestamp(),
+    )
+    .mark_unavailable(fixed_timestamp());
+    let discarded = Video::create(
+        YoutubeVideoId::new("yt_discarded").unwrap(),
+        "Too long",
+        fixed_timestamp(),
+    )
+    .discard(fixed_timestamp())
+    .unwrap();
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &unavailable,
+        0,
+    );
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &discarded,
+        1,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("yt_unavailable", "Members only", 0),
+            listed_video("yt_discarded", "Too long", 1),
+            listed_video("yt2", "Two", 2),
+            listed_video("yt3", "Three", 3),
+            listed_video("yt4", "Four", 4),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        stored_youtube_ids(&video_repository),
+        vec!["yt2", "yt3", "yt_discarded", "yt_unavailable"]
+    );
+}
+
 fn channel_video_reconciler(
     db: &TestDatabase,
     channel_repository: Arc<SqliteChannelRepository>,
@@ -2828,4 +2893,17 @@ fn pass_lines(logs: &[String]) -> Vec<&str> {
 
 fn run(task: &ReconcileChannelTask, queued: &Task) -> Result<TaskOutcome, String> {
     task.handle(queued).map_err(|e| e.to_string())
+}
+
+/// The YouTube ids of every stored video, sorted, for tests about which
+/// uploads a pass keeps (new videos get random ids).
+fn stored_youtube_ids(video_repository: &SqliteVideoRepository) -> Vec<String> {
+    let mut ids: Vec<String> = video_repository
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|video| video.youtube_id.as_str().to_string())
+        .collect();
+    ids.sort();
+    ids
 }
