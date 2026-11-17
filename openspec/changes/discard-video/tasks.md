@@ -43,7 +43,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `SqliteVideoRepository::it_should_round_trip_a_discarded_video` — `DISCARDED` decodes to discarded, Pending, no attempts, no file.
+- [x] 3.1 `SqliteVideoRepository::it_should_round_trip_a_discarded_video` — `DISCARDED` decodes to discarded, Pending, no attempts, no file.
 
 ## 4. Verification
 

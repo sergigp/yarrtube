@@ -1201,6 +1201,26 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_a_discarded_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let discarded = video("Discarded", now)
+            .mark_downloaded(
+                Quality::Mid,
+                "Season 1/S01E001 - Discarded.mp4",
+                Some("Season 1/S01E001 - Discarded.jpg".to_string()),
+                Some(223),
+                now,
+            )
+            .discard(now)
+            .unwrap();
+
+        repo.insert(&discarded).unwrap();
+
+        assert_eq!(repo.find(&discarded.id).unwrap(), Some(discarded));
+    }
+
+    #[test]
     fn it_should_round_trip_every_download_state() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
