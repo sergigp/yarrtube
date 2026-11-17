@@ -216,9 +216,12 @@ fn protected_entries(videos: &[Video]) -> HashSet<String> {
         .collect()
 }
 
+/// The episode base names of numbered videos, whose files may land before
+/// they are recorded; a Discarded video's never will.
 fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
     videos
         .iter()
+        .filter(|v| !v.download.is_discarded())
         .filter_map(|v| {
             v.episode_number
                 .map(|number| EpisodePaths::new(&number, &v.title).stem())

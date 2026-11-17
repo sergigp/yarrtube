@@ -2671,6 +2671,55 @@ fn it_should_evict_uploads_past_the_limit_th_unskipped_one() {
     assert_eq!(stored_youtube_ids(&video_repository), vec!["ytA", "ytB"]);
 }
 
+#[test]
+fn it_should_delete_the_files_left_by_a_discarded_video() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+        "Season 2023".to_string(),
+        "Season 2023/S2023E111401 - My Video.jpg".to_string(),
+    ]));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let video = Video {
+        episode_number: Some(recovered_episode()),
+        ..my_video()
+    }
+    .discard(fixed_timestamp())
+    .unwrap();
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &video,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("yt1", "My Video", 0),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        video_file_repository.clone(),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        *video_file_repository.deleted_calls.lock().unwrap(),
+        vec![(
+            PathBuf::from("/videos/creators/somechannel"),
+            "Season 2023/S2023E111401 - My Video.jpg".to_string()
+        )]
+    );
+}
+
 fn channel_video_reconciler(
     db: &TestDatabase,
     channel_repository: Arc<SqliteChannelRepository>,
