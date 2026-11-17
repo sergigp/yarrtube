@@ -2568,6 +2568,54 @@ fn it_should_request_one_more_upload_per_skipped_video() {
     );
 }
 
+#[test]
+fn it_should_not_count_skipped_videos_toward_the_limit() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(3).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    let unavailable = Video::create(YoutubeVideoId::new("ytB").unwrap(), "B", fixed_timestamp())
+        .mark_unavailable(fixed_timestamp());
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &unavailable,
+        1,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+            listed_video("ytC", "C", 2),
+            listed_video("ytD", "D", 3),
+            listed_video("ytE", "E", 4),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        stored_youtube_ids(&video_repository),
+        vec!["ytA", "ytB", "ytC", "ytD"]
+    );
+}
+
 fn channel_video_reconciler(
     db: &TestDatabase,
     channel_repository: Arc<SqliteChannelRepository>,
