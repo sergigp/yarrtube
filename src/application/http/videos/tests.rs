@@ -7303,6 +7303,39 @@ async fn it_should_cancel_every_pending_task_of_a_discarded_video() {
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
+#[tokio::test]
+async fn it_should_discard_a_failed_video() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_download_failed("HTTP Error 503", fixed_timestamp() - Duration::days(1));
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                discarded: true,
+                ..Download::pending()
+            },
+            ..video.clone()
+        })
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,

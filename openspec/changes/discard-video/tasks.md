@@ -13,7 +13,7 @@
 
 - [x] 2.1 `it_should_discard_a_retrying_video` — download Discarded, attempts and failure cleared, its pending download task removed.
 - [x] 2.2 `it_should_cancel_every_pending_task_of_a_discarded_video` — every pending task of the video deleted.
-- [ ] 2.3 `it_should_discard_a_failed_video` — a Failed download can be discarded.
+- [x] 2.3 `it_should_discard_a_failed_video` — a Failed download can be discarded.
 - [ ] 2.4 `it_should_discard_a_downloaded_video_and_clear_its_files` — recorded file, thumbnail and subtitle filenames cleared.
 - [ ] 2.5 `it_should_publish_video_discarded_for_a_downloaded_video` — `VideoDiscarded` with the owner's output dir and the filenames read before the discard.
 - [ ] 2.6 `it_should_publish_nothing_when_discarding_a_video_never_downloaded`.
