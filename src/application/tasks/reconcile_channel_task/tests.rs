@@ -2731,6 +2731,79 @@ fn it_should_delete_the_files_left_by_a_discarded_video() {
     );
 }
 
+#[test]
+fn it_should_not_re_add_a_discarded_video_after_its_eviction() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let original = Channel {
+        video_limit: VideoLimit::new(2).unwrap(),
+        ..channel("@somechannel")
+    };
+    channel_repository.insert(&original).unwrap();
+    let discarded = Video::create(YoutubeVideoId::new("ytC").unwrap(), "C", fixed_timestamp())
+        .discard(fixed_timestamp())
+        .unwrap();
+    [
+        Video::create(YoutubeVideoId::new("ytA").unwrap(), "A", fixed_timestamp()),
+        Video::create(YoutubeVideoId::new("ytB").unwrap(), "B", fixed_timestamp()),
+        discarded.clone(),
+    ]
+    .iter()
+    .zip(0..)
+    .for_each(|(video, position)| {
+        save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            video,
+            position,
+        );
+    });
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository.clone(),
+        video_repository.clone(),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+            listed_video("ytC", "C", 2),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+    run(&task, &task_for("@somechannel")).unwrap();
+    channel_repository
+        .update(&original.with_video_limit(VideoLimit::new(3).unwrap()))
+        .unwrap();
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(stored_youtube_ids(&video_repository), vec!["ytA", "ytB"]);
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoRemovedFromChannel(VideoRemovedFromChannel {
+                channel_id: "@somechannel".to_string(),
+                video_id: discarded.id.as_str().to_string(),
+                title: "C".to_string(),
+                filename: None,
+                thumbnail_filename: None,
+                subtitle_filename: None,
+                was_downloaded: false,
+            })
+        )]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones

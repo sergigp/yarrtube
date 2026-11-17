@@ -233,7 +233,8 @@ impl ChannelVideoReconciler {
 
     /// Brings the stored membership in line with the channel's current
     /// `video_limit` most recent uploads, Unavailable and Discarded ones not
-    /// counting toward the limit: adds newly seen videos, refreshes
+    /// counting toward the limit: adds newly seen videos (never a Discarded
+    /// one removed earlier, which the channel remembers), refreshes
     /// the title and position of known ones, and removes stored videos no
     /// longer among them (removed on YouTube or aged past the limit). A
     /// failed listing either leaves membership untouched for this pass, the
@@ -268,6 +269,9 @@ impl ChannelVideoReconciler {
             |upload| skipped_ids.contains(upload.youtube_id.as_str()),
             channel.video_limit.value() as usize,
         );
+        let remembered = self
+            .discarded_video_repository
+            .list(&ShowKey::Channel(channel.id.clone()))?;
         let now = self.clock.now();
 
         // Keyed by YouTube id; a video added below joins it, so a video
@@ -286,6 +290,9 @@ impl ChannelVideoReconciler {
             match known_videos.get(&current.youtube_id) {
                 None => {
                     let youtube_id = YoutubeVideoId::new(&current.youtube_id)?;
+                    if remembered.contains(&youtube_id) {
+                        continue;
+                    }
                     let video = self.add_video(channel, youtube_id, current, now)?;
                     known_videos.insert(current.youtube_id.clone(), video);
                     added += 1;
@@ -417,7 +424,7 @@ impl ChannelVideoReconciler {
 
     /// Deletes every stored video whose YouTube id is not in
     /// `current_youtube_ids` and announces its removal, which is what
-    /// cleans up its files.
+    /// cleans up its files. A Discarded one is remembered first.
     fn remove_videos_not_in(
         &self,
         channel: &Channel,
@@ -434,6 +441,7 @@ impl ChannelVideoReconciler {
                     youtube_id = %video.youtube_id,
                     "removing video from channel (no longer among its most recent uploads)"
                 );
+                self.remember_if_discarded(channel, video)?;
                 self.channel_video_repository.delete(&video.id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
@@ -455,6 +463,19 @@ impl ChannelVideoReconciler {
                     ))?;
                 Ok(removed + 1)
             })
+    }
+
+    /// Remembers a Discarded video being removed, so the channel never adds
+    /// it back.
+    fn remember_if_discarded(&self, channel: &Channel, video: &Video) -> anyhow::Result<()> {
+        if !video.download.is_discarded() {
+            return Ok(());
+        }
+        self.discarded_video_repository.record(
+            &ShowKey::Channel(channel.id.clone()),
+            &video.youtube_id,
+            self.clock.now(),
+        )
     }
 
     /// What the database says the channel's folder should contain.
