@@ -7267,6 +7267,42 @@ async fn it_should_discard_a_retrying_video() {
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
+#[tokio::test]
+async fn it_should_cancel_every_pending_task_of_a_discarded_video() {
+    let db = TestDatabase::new();
+    let task_repository =
+        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    SqliteVideoRepository::new(db.database())
+        .insert(&video)
+        .unwrap();
+    let video_id = video.id.as_str().to_string();
+    task_repository
+        .schedule(
+            &Task::FetchThumbnail {
+                video_id: video_id.clone(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    task_repository
+        .schedule(&Task::DownloadVideo { video_id }, fixed_timestamp())
+        .unwrap();
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
