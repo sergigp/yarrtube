@@ -258,6 +258,26 @@ fn it_should_publish_video_file_deleted_after_deleting_a_video_file() {
     );
 }
 
+#[test]
+fn it_should_publish_nothing_when_no_file_was_recorded() {
+    let db = TestDatabase::new();
+    let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
+        Arc::new(FakeVideoFileRepository::new(Ok(true))),
+        event_publisher(&db),
+        "/videos",
+    ));
+
+    let result = run(&task, &task_for(None, None));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(epoch())))
+            .list_eligible()
+            .unwrap(),
+        vec![]
+    );
+}
+
 fn task_for(filename: Option<&str>, thumbnail_filename: Option<&str>) -> Task {
     Task::DeleteVideoFile {
         filename: filename.map(str::to_string),

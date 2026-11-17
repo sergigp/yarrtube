@@ -45,7 +45,8 @@ pub trait VideoFileDeleterApi: Send + Sync {
     /// removed as one unit, a legacy flat video's file and thumbnail
     /// individually. No-ops (without erroring) for any entry it has no
     /// recorded filename for, or no matching entry is found, so the task is
-    /// safe to retry.
+    /// safe to retry. Publishes `VideoFileDeleted` when a media file was
+    /// recorded, so Plex drops the episode.
     fn delete_video_file(
         &self,
         filename: Option<String>,
@@ -84,10 +85,14 @@ impl VideoFileDeleterApi for VideoFileDeleter {
         subtitle_filename: Option<String>,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
+        let had_file = filename.is_some();
         self.delete_video_entry(filename, output_dir)?;
         self.delete_sidecar_entry(thumbnail_filename, "thumbnail", output_dir)?;
         self.delete_sidecar_entry(subtitle_filename, "subtitle", output_dir)?;
-        self.publish_file_deleted(output_dir)
+        if had_file {
+            self.publish_file_deleted(output_dir)?;
+        }
+        Ok(())
     }
 
     fn delete_playlist_video_files(
