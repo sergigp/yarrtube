@@ -58,7 +58,7 @@ If you run a Docker Compose stack, add:
 services:
   yarrtube:
     container_name: yarrtube
-    mem_limit: 1g
+    mem_limit: 256m
     image: ghcr.io/sergigp/yarrtube:latest
     restart: always
     ports:
@@ -73,12 +73,12 @@ services:
       - /path/on/host/videos:/videos
 ```
 
-If you cap the container's memory (`mem_limit`), leave room for `ffmpeg`:
-writing the final MP4 holds an index of every frame in memory, about
-45 MB per hour of video (around 60 MB at 60 fps). A container killed
-for memory fails long downloads (several hours) in their last step, with
-`Postprocessing: ... moving the moov atom` as the reason. 1 GB covers videos
-up to about 10 hours.
+`mem_limit: 256m` is enough for everyday videos, but not for very long
+ones (livestream re-uploads of several hours): writing the final MP4 makes
+`ffmpeg` hold an index of every frame in memory, about 45 MB per hour of
+video. Such a download is killed in its last step and fails with
+`Postprocessing: ... moving the moov atom` as the reason. Raise the limit
+only if you want those videos.
 
 ## Configuration
 
