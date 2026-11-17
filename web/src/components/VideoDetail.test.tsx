@@ -365,6 +365,23 @@ describe('VideoDetail', () => {
     expect(screen.queryByRole('button', { name: "Don't download" })).not.toBeInTheDocument()
   })
 
+  it('tells the user when discarding fails and leaves the video as it was', async () => {
+    const video = aVideo({ id: 'abc', title: 'My Video', status: 'FAILED', filename: null })
+    mockApi({
+      'GET /api/playlists/PL1/videos': [video],
+      'POST /api/videos/abc/discard': { status: 500, error: 'database is locked' },
+    })
+    renderWithProviders(<PlaylistVideoDetail />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: "Don't download" }))
+    await user.click(screen.getByRole('button', { name: 'Discard video' }))
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent(/database is locked/)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('heading', { name: 'My Video' })).toBeInTheDocument()
+  })
+
   it('marks the selected video watched from the detail pane', async () => {
     const markWatched = vi.fn(() => null)
     mockApi({ 'POST /api/videos/abc/watched': markWatched })

@@ -39,7 +39,7 @@
 - [x] 2.26 Web "warns that a downloaded video's files will be deleted".
 - [x] 2.27 Web "sends nothing when the confirmation is cancelled".
 - [x] 2.28 Web "offers no Don't download for a downloading video".
-- [ ] 2.29 Web "tells the user when discarding fails".
+- [x] 2.29 Web "tells the user when discarding fails".
 
 ## 3. Infrastructure adapters (TDD)
 
