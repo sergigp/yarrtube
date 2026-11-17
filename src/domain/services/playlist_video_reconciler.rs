@@ -233,7 +233,8 @@ impl PlaylistVideoReconciler {
     }
 
     /// Brings the stored membership in line with YouTube's playlist items:
-    /// adds newly seen videos, refreshes the title and position of known
+    /// adds newly seen videos (never a Discarded one removed earlier, which
+    /// the playlist remembers), refreshes the title and position of known
     /// ones, and removes stored videos no longer in the playlist. A failed
     /// listing either leaves membership untouched for this pass, the
     /// filesystem steps still running from the stored rows, or fails the
@@ -253,6 +254,9 @@ impl PlaylistVideoReconciler {
             });
         };
         let stored_videos = self.list_stored_videos(playlist)?;
+        let remembered = self
+            .discarded_video_repository
+            .list(&ShowKey::Playlist(playlist.id.clone()))?;
         let now = self.clock.now();
 
         // Keyed by YouTube id; a video added below joins it, so a video
@@ -272,6 +276,9 @@ impl PlaylistVideoReconciler {
             match known_videos.get(&current.youtube_id) {
                 None => {
                     let youtube_id = YoutubeVideoId::new(&current.youtube_id)?;
+                    if remembered.contains(&youtube_id) {
+                        continue;
+                    }
                     let (numbered, video) = self.add_video(numbering, youtube_id, current, now)?;
                     numbering = numbered;
                     known_videos.insert(current.youtube_id.clone(), video);
@@ -413,7 +420,7 @@ impl PlaylistVideoReconciler {
 
     /// Deletes every stored video whose YouTube id is not in
     /// `current_youtube_ids` and announces its removal, which is what
-    /// cleans up its files.
+    /// cleans up its files. A Discarded one is remembered first.
     fn remove_videos_not_in(
         &self,
         playlist: &Playlist,
@@ -430,6 +437,7 @@ impl PlaylistVideoReconciler {
                     youtube_id = %video.youtube_id,
                     "removing video from playlist (no longer on YouTube)"
                 );
+                self.remember_if_discarded(playlist, video)?;
                 self.playlist_video_repository.delete(&video.id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
@@ -451,6 +459,19 @@ impl PlaylistVideoReconciler {
                     ))?;
                 Ok(removed + 1)
             })
+    }
+
+    /// Remembers a Discarded video being removed, so the playlist never adds
+    /// it back.
+    fn remember_if_discarded(&self, playlist: &Playlist, video: &Video) -> anyhow::Result<()> {
+        if !video.download.is_discarded() {
+            return Ok(());
+        }
+        self.discarded_video_repository.record(
+            &ShowKey::Playlist(playlist.id.clone()),
+            &video.youtube_id,
+            self.clock.now(),
+        )
     }
 
     /// The listed items by playlist position, so new videos are numbered in
