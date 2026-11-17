@@ -44,7 +44,9 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
 };
 
-use crate::infrastructure::repositories::sqlite_discarded_video_repository::SqliteDiscardedVideoRepository;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::{
+    DiscardedVideoRepository, SqliteDiscardedVideoRepository,
+};
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
@@ -2802,6 +2804,48 @@ fn it_should_not_re_add_a_discarded_video_after_its_eviction() {
             })
         )]
     );
+}
+
+#[test]
+fn it_should_not_count_a_remembered_discarded_upload_toward_the_limit() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let discarded_video_repository = SqliteDiscardedVideoRepository::new(db.database());
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    discarded_video_repository
+        .record(
+            &ShowKey::Channel(handle("@somechannel")),
+            &YoutubeVideoId::new("ytB").unwrap(),
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+            listed_video("ytC", "C", 2),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(stored_youtube_ids(&video_repository), vec!["ytA", "ytC"]);
 }
 
 /// Builds a reconciler around the repositories and fakes a test seeds,

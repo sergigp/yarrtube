@@ -61,7 +61,7 @@
 - [x] 5.2 `SqliteDiscardedVideoRepository::it_should_list_the_recorded_ids_per_source`.
 - [x] 5.3 `SqliteDiscardedVideoRepository::it_should_record_an_id_once`.
 - [x] 5.4 `reconcile_channel_task::it_should_not_re_add_a_discarded_video_after_its_eviction` — record on eviction, skip remembered ids when adding.
-- [ ] 5.5 `reconcile_channel_task::it_should_not_count_a_remembered_discarded_upload_toward_the_limit` — remembered ids join `skipped_ids`.
+- [x] 5.5 `reconcile_channel_task::it_should_not_count_a_remembered_discarded_upload_toward_the_limit` — remembered ids join `skipped_ids`.
 - [ ] 5.6 `reconcile_playlist_task::it_should_not_re_add_a_discarded_video_returning_to_the_playlist`.
 - [ ] 5.7 `it_should_forget_the_discarded_videos_of_a_deleted_channel` and `..._playlist`.
 - [ ] 5.8 Re-run `scripts/run-tests.sh --lint --rust`; all suites pass.

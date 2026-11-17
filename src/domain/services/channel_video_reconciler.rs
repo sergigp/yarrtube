@@ -246,10 +246,15 @@ impl ChannelVideoReconciler {
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<MembershipChanges> {
         let stored_videos = self.list_stored_videos(channel)?;
+        let remembered = self
+            .discarded_video_repository
+            .list(&ShowKey::Channel(channel.id.clone()))?;
         let skipped_ids: HashSet<&str> = stored_videos
             .iter()
             .filter(|(_, video)| video.is_skipped())
-            .map(|(_, video)| video.youtube_id.as_str())
+            .map(|(_, video)| &video.youtube_id)
+            .chain(&remembered)
+            .map(YoutubeVideoId::as_str)
             .collect();
         let listing_started = self.clock.now();
         let listing = self.list_current_videos(
@@ -269,9 +274,6 @@ impl ChannelVideoReconciler {
             |upload| skipped_ids.contains(upload.youtube_id.as_str()),
             channel.video_limit.value() as usize,
         );
-        let remembered = self
-            .discarded_video_repository
-            .list(&ShowKey::Channel(channel.id.clone()))?;
         let now = self.clock.now();
 
         // Keyed by YouTube id; a video added below joins it, so a video
@@ -321,7 +323,8 @@ impl ChannelVideoReconciler {
     /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
     /// videos"), either `None` (logged) or the error, per
     /// `on_listing_failure`. One more upload is asked for per `skipped`
-    /// stored video, which doesn't count toward the limit.
+    /// video (stored and skipped, or remembered as discarded), which doesn't
+    /// count toward the limit.
     fn list_current_videos(
         &self,
         channel: &Channel,
