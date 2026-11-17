@@ -45,7 +45,9 @@ use crate::infrastructure::repositories::sqlite_channel_repository::{
 use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
 };
-use crate::infrastructure::repositories::sqlite_discarded_video_repository::SqliteDiscardedVideoRepository;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::{
+    DiscardedVideoRepository, SqliteDiscardedVideoRepository,
+};
 use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
     PlaylistVideoRepository, SqlitePlaylistVideoRepository,
@@ -91,6 +93,7 @@ use crate::infrastructure::shared::system_clock::FixedClock;
 
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 const AVATAR_URL: &str = "https://yt3.ggpht.com/avatar.jpg";
@@ -1284,6 +1287,48 @@ async fn it_should_delete_the_summaries_of_a_deleted_channel() {
     assert_eq!(response, Ok(StatusCode::NO_CONTENT));
     assert_eq!(video_repository.list().unwrap(), vec![]);
     assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
+}
+
+#[tokio::test]
+async fn it_should_forget_the_discarded_videos_of_a_deleted_channel() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let discarded_video_repository = Arc::new(SqliteDiscardedVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    discarded_video_repository
+        .record(
+            &ShowKey::Channel(handle("@somechannel")),
+            &YoutubeVideoId::new("yt1").unwrap(),
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let channel_deleter = ChannelDeleter::new(
+        channel_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(FakeChannelAvatarRepository::default()),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+        discarded_video_repository.clone(),
+    );
+
+    let response = delete(channel_deleter, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Channel(handle("@somechannel")))
+            .unwrap(),
+        HashSet::new()
+    );
 }
 
 #[tokio::test]

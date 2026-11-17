@@ -75,6 +75,7 @@ impl PlaylistDeleterApi for PlaylistDeleter {
         let _guard = self.lock(&id)?;
         let playlist = self.find_playlist(&id)?;
         self.delete_playlist_videos(&id)?;
+        self.forget_discarded_videos(&id)?;
         self.remove_pending_reconciles(&id)?;
         self.delete_playlist(&id)?;
         self.publish_playlist_deleted(&id, &playlist)?;
@@ -130,6 +131,14 @@ impl PlaylistDeleter {
         }
         self.playlist_video_repository
             .delete_all_for_playlist(id)
+            .map_err(DeletePlaylistError::Repository)
+    }
+
+    /// Forgets the playlist's remembered discarded videos, so a playlist tracked
+    /// again starts fresh.
+    fn forget_discarded_videos(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
+        self.discarded_video_repository
+            .delete_all(&ShowKey::Playlist(id.clone()))
             .map_err(DeletePlaylistError::Repository)
     }
 

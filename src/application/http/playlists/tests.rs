@@ -44,7 +44,9 @@ use crate::infrastructure::repositories::sqlite_channel_repository::{
 use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
 };
-use crate::infrastructure::repositories::sqlite_discarded_video_repository::SqliteDiscardedVideoRepository;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::{
+    DiscardedVideoRepository, SqliteDiscardedVideoRepository,
+};
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
 };
@@ -93,6 +95,7 @@ use crate::infrastructure::shared::system_clock::FixedClock;
 
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 const DEFAULT_PATH: &str = "music/chill";
@@ -1433,6 +1436,49 @@ async fn it_should_delete_the_summaries_of_a_deleted_playlist() {
     assert_eq!(response, Ok(StatusCode::NO_CONTENT));
     assert_eq!(video_repository.list().unwrap(), vec![]);
     assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
+}
+
+#[tokio::test]
+async fn it_should_forget_the_discarded_videos_of_a_deleted_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let discarded_video_repository = Arc::new(SqliteDiscardedVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    discarded_video_repository
+        .record(
+            &ShowKey::Playlist(playlist_id("PL1")),
+            &YoutubeVideoId::new("vid1").unwrap(),
+            fixed_timestamp(),
+        )
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+        discarded_video_repository.clone(),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Playlist(playlist_id("PL1")))
+            .unwrap(),
+        HashSet::new()
+    );
 }
 
 #[tokio::test]
