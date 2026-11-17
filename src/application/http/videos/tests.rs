@@ -7448,6 +7448,35 @@ async fn it_should_publish_nothing_when_discarding_a_video_never_downloaded() {
     );
 }
 
+#[tokio::test]
+async fn it_should_leave_a_discarded_video_unchanged_when_discarded_again() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp() - Duration::days(1),
+    )
+    .discard(fixed_timestamp() - Duration::days(1))
+    .unwrap();
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![]
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
