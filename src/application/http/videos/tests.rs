@@ -7221,9 +7221,11 @@ async fn it_should_return_not_found_when_rerunning_an_unknown_video() {
 #[tokio::test]
 async fn it_should_discard_a_retrying_video() {
     let db = TestDatabase::new();
-    let video_repository = SqliteVideoRepository::new(db.database());
-    let task_repository =
-        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),
         "My Video",
@@ -7243,7 +7245,11 @@ async fn it_should_discard_a_retrying_video() {
         .unwrap();
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7270,16 +7276,17 @@ async fn it_should_discard_a_retrying_video() {
 #[tokio::test]
 async fn it_should_cancel_every_pending_task_of_a_discarded_video() {
     let db = TestDatabase::new();
-    let task_repository =
-        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),
         "My Video",
         fixed_timestamp(),
     );
-    SqliteVideoRepository::new(db.database())
-        .insert(&video)
-        .unwrap();
+    video_repository.insert(&video).unwrap();
     let video_id = video.id.as_str().to_string();
     task_repository
         .schedule(
@@ -7294,7 +7301,11 @@ async fn it_should_cancel_every_pending_task_of_a_discarded_video() {
         .unwrap();
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7306,7 +7317,11 @@ async fn it_should_cancel_every_pending_task_of_a_discarded_video() {
 #[tokio::test]
 async fn it_should_discard_a_failed_video() {
     let db = TestDatabase::new();
-    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),
         "My Video",
@@ -7316,7 +7331,11 @@ async fn it_should_discard_a_failed_video() {
     video_repository.insert(&video).unwrap();
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7339,13 +7358,21 @@ async fn it_should_discard_a_failed_video() {
 #[tokio::test]
 async fn it_should_discard_a_downloaded_video_and_clear_its_files() {
     let db = TestDatabase::new();
-    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = downloaded_video("vid1", "My Video", Some("My Video.jpg"), 0)
         .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp());
     video_repository.insert(&video).unwrap();
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7374,15 +7401,20 @@ async fn it_should_discard_a_downloaded_video_and_clear_its_files() {
 }
 
 #[tokio::test]
-async fn it_should_publish_video_discarded_for_a_downloaded_video() {
+async fn it_should_announce_the_files_of_a_discarded_video() {
     let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
     SqliteChannelRepository::new(db.database())
         .insert(&channel("@somechannel", None))
         .unwrap();
     let video = downloaded_video("vid1", "My Video", Some("My Video.jpg"), 0)
         .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp());
     save_channel_video(
-        &SqliteVideoRepository::new(db.database()),
+        video_repository.as_ref(),
         &SqliteChannelVideoRepository::new(db.database()),
         "@somechannel",
         &video,
@@ -7390,7 +7422,11 @@ async fn it_should_publish_video_discarded_for_a_downloaded_video() {
     );
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7414,8 +7450,13 @@ async fn it_should_publish_video_discarded_for_a_downloaded_video() {
 }
 
 #[tokio::test]
-async fn it_should_publish_nothing_when_discarding_a_video_never_downloaded() {
+async fn it_should_skip_the_files_event_if_the_video_never_downloaded() {
     let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
     SqliteChannelRepository::new(db.database())
         .insert(&channel("@somechannel", None))
         .unwrap();
@@ -7426,7 +7467,7 @@ async fn it_should_publish_nothing_when_discarding_a_video_never_downloaded() {
     )
     .mark_errored("HTTP Error 503", fixed_timestamp());
     save_channel_video(
-        &SqliteVideoRepository::new(db.database()),
+        video_repository.as_ref(),
         &SqliteChannelVideoRepository::new(db.database()),
         "@somechannel",
         &video,
@@ -7434,7 +7475,11 @@ async fn it_should_publish_nothing_when_discarding_a_video_never_downloaded() {
     );
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7449,9 +7494,13 @@ async fn it_should_publish_nothing_when_discarding_a_video_never_downloaded() {
 }
 
 #[tokio::test]
-async fn it_should_leave_a_discarded_video_unchanged_when_discarded_again() {
+async fn it_should_ignore_discarding_a_discarded_video() {
     let db = TestDatabase::new();
-    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),
         "My Video",
@@ -7462,7 +7511,11 @@ async fn it_should_leave_a_discarded_video_unchanged_when_discarded_again() {
     video_repository.insert(&video).unwrap();
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7478,11 +7531,13 @@ async fn it_should_leave_a_discarded_video_unchanged_when_discarded_again() {
 }
 
 #[tokio::test]
-async fn it_should_refuse_to_discard_a_video_being_downloaded() {
+async fn it_should_fail_to_discard_a_video_being_downloaded() {
     let db = TestDatabase::new();
-    let video_repository = SqliteVideoRepository::new(db.database());
-    let task_repository =
-        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),
         "My Video",
@@ -7496,7 +7551,11 @@ async fn it_should_refuse_to_discard_a_video_being_downloaded() {
     task_repository.schedule(&sync, fixed_timestamp()).unwrap();
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7516,9 +7575,13 @@ async fn it_should_refuse_to_discard_a_video_being_downloaded() {
 }
 
 #[tokio::test]
-async fn it_should_refuse_to_discard_an_unavailable_video() {
+async fn it_should_fail_to_discard_an_unavailable_video() {
     let db = TestDatabase::new();
-    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = new_video(
         YoutubeVideoId::new("vid1").unwrap(),
         "My Video",
@@ -7528,7 +7591,11 @@ async fn it_should_refuse_to_discard_an_unavailable_video() {
     video_repository.insert(&video).unwrap();
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7546,8 +7613,21 @@ async fn it_should_refuse_to_discard_an_unavailable_video() {
 #[tokio::test]
 async fn it_should_fail_to_discard_an_unknown_video() {
     let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
 
-    let response = discard_video(State(video_discarder(&db)), Path("rec1".to_string())).await;
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path("rec1".to_string()),
+    )
+    .await;
 
     assert_eq!(
         response,
@@ -7716,8 +7796,13 @@ async fn it_should_keep_a_discarded_download_on_retry() {
 }
 
 #[tokio::test]
-async fn it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_downloaded() {
+async fn it_should_announce_the_thumbnail_of_a_discarded_video_never_downloaded() {
     let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
     SqliteChannelRepository::new(db.database())
         .insert(&channel("@somechannel", None))
         .unwrap();
@@ -7734,7 +7819,7 @@ async fn it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_do
         .mark_errored("HTTP Error 503", fixed_timestamp())
     };
     save_channel_video(
-        &SqliteVideoRepository::new(db.database()),
+        video_repository.as_ref(),
         &SqliteChannelVideoRepository::new(db.database()),
         "@somechannel",
         &video,
@@ -7742,7 +7827,11 @@ async fn it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_do
     );
 
     let response = discard_video(
-        State(video_discarder(&db)),
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
         Path(video.id.as_str().to_string()),
     )
     .await;
@@ -7824,14 +7913,18 @@ async fn set_category_with(
     .map(|Json(body)| body)
 }
 
-/// A video discarder over every SQLite repository `db` opens, at
-/// `fixed_timestamp()`.
-fn video_discarder(db: &TestDatabase) -> VideoDiscarder {
+/// A video discarder over the video and task repositories a test asserts on;
+/// the remaining ports are SQLite ones of `db`, at `fixed_timestamp()`.
+fn video_discarder(
+    db: &TestDatabase,
+    video_repository: Arc<dyn VideoRepository>,
+    task_repository: Arc<dyn TaskRepository>,
+) -> VideoDiscarder {
     let clock = Arc::new(FixedClock(fixed_timestamp()));
     VideoDiscarder::new(
-        Arc::new(SqliteVideoRepository::new(db.database())),
+        video_repository,
         Arc::new(video_owner_finder(&|| db.database())),
-        Arc::new(SqliteTaskRepository::new(db.database(), clock.clone())),
+        task_repository,
         Arc::new(SqliteEventPublisher::new(db.database(), clock.clone())),
         clock,
     )

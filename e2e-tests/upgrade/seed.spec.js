@@ -17,6 +17,8 @@ test('the released image builds up a library to upgrade', async ({ request }) =>
       quality: 'low',
       exclude_from_home: false,
       reconcile_interval_minutes: RECONCILE_INTERVAL_MINUTES,
+      summaries_enabled: false,
+      categorization_enabled: false,
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()

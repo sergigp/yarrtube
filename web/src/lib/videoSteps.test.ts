@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { VideoStatus } from '@/api/types'
 import { aStep, someSteps } from '@/test/helpers'
-import { canRetry, failingStepLines, statusLabel } from './videoSteps'
+import { canDiscard, canRetry, failingStepLines, statusLabel } from './videoSteps'
 
 const NOW = new Date('2026-11-10T10:00:00Z')
 
@@ -105,5 +105,29 @@ describe('canRetry', () => {
         someSteps({ summary: aStep({ status: 'FAILED' }) }),
       ].map(canRetry),
     ).toEqual([false, false, true, true])
+  })
+})
+
+describe('canDiscard', () => {
+  it('is true for every status but downloading, unavailable and discarded', () => {
+    const statuses: VideoStatus[] = [
+      'PENDING',
+      'RETRYING',
+      'FAILED',
+      'DOWNLOADED',
+      'IN_PROGRESS',
+      'UNAVAILABLE',
+      'DISCARDED',
+    ]
+
+    expect(statuses.map(canDiscard)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ])
   })
 })

@@ -179,28 +179,32 @@ impl VideoFileDeleter {
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::DateTime;
     use std::path::PathBuf;
 
-    fn deleter(repo: FakeVideoFileRepository) -> (VideoFileDeleter, Arc<FakeVideoFileRepository>) {
+    fn deleter(
+        db: &TestDatabase,
+        repo: FakeVideoFileRepository,
+    ) -> (VideoFileDeleter, Arc<FakeVideoFileRepository>) {
         let repo = Arc::new(repo);
+        let clock = Arc::new(FixedClock(DateTime::UNIX_EPOCH));
         (
-            VideoFileDeleter::new(repo.clone(), Arc::new(NoEventPublisher), "/videos"),
+            VideoFileDeleter::new(
+                repo.clone(),
+                Arc::new(SqliteEventPublisher::new(db.database(), clock)),
+                "/videos",
+            ),
             repo,
         )
     }
 
-    /// These tests only cover what reaches the disk.
-    struct NoEventPublisher;
-
-    impl EventPublisher for NoEventPublisher {
-        fn publish(&self, _event: &crate::domain::event::DomainEvent) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
     #[test]
     fn it_should_delete_the_whole_folder_once_per_recorded_path_for_a_new_style_video() {
-        let (deleter, repo) = deleter(FakeVideoFileRepository::default());
+        let db = TestDatabase::new();
+        let (deleter, repo) = deleter(&db, FakeVideoFileRepository::default());
 
         deleter
             .delete_video_file(
@@ -223,7 +227,8 @@ mod tests {
 
     #[test]
     fn it_should_delete_the_two_named_files_individually_for_a_legacy_flat_video() {
-        let (deleter, repo) = deleter(FakeVideoFileRepository::default());
+        let db = TestDatabase::new();
+        let (deleter, repo) = deleter(&db, FakeVideoFileRepository::default());
 
         deleter
             .delete_video_file(
@@ -252,7 +257,8 @@ mod tests {
 
     #[test]
     fn it_should_no_op_when_no_filename_or_thumbnail_is_recorded() {
-        let (deleter, repo) = deleter(FakeVideoFileRepository::default());
+        let db = TestDatabase::new();
+        let (deleter, repo) = deleter(&db, FakeVideoFileRepository::default());
 
         deleter
             .delete_video_file(None, None, None, Path::new("/videos/playlist"))

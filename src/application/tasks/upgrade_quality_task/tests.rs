@@ -963,7 +963,7 @@ fn it_should_skip_the_upgrade_if_the_video_was_reset_meanwhile() {
 }
 
 #[test]
-fn it_should_record_nothing_on_a_video_discarded_during_the_upgrade() {
+fn it_should_skip_the_upgrade_if_the_video_was_discarded_meanwhile() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));

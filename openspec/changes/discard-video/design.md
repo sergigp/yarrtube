@@ -11,6 +11,7 @@ Key decisions (one line each, so they aren't "fixed" later):
 - **Recorded filenames are cleared on discard**: the filesystem reconcile protects every recorded filename regardless of status, so clearing them makes it sweep any file a late step leaves behind. The deletion itself still runs at once through `VideoDiscarded` → `DeleteVideoFile`, built from the video as read before the discard.
 - **No discard while In Progress (409)**: a running yt-dlp can't be cancelled. The `VideoUpdater` transition runs on the stored version, so a download starting between read and write makes the discard decline (→ 409).
 - **Video first, tasks second**: the video is marked Discarded before pending tasks are deleted, so a task that starts in between finds it settled.
+- **A discarded video is remembered by its source**: when a reconcile removes a Discarded video (evicted from a channel's window, or gone from its playlist) it first records `(ShowKey, youtube_id)` in `discarded_videos`; a later reconcile never adds a remembered id back and a channel's window counts it as skipped. Recorded on removal, not on discard: while the row exists it carries the flag. Deleted with its source, so a source deleted and tracked again starts fresh. Never pruned: each remembered id widens a channel's listing by one, acceptable since discards are rare and manual.
 - **`VideoFileDeleted` is published by `VideoFileDeleter`** after any video's files are deleted, so Plex is rescanned for evictions too, not only discards.
 
 ## Diagrams
@@ -360,6 +361,23 @@ fn list_current_videos(&self, channel: &Channel, skipped: u32, on_listing_failur
 ```
 
 ```rust
+// src/domain/video/discarded_video_repository.rs — the discarded videos removed from their source
+pub trait DiscardedVideoRepository: Send + Sync {
+    /// Idempotent.
+    fn record(&self, source: &ShowKey, youtube_id: &YoutubeVideoId, now: DateTime<Utc>) -> anyhow::Result<()>;
+    fn list(&self, source: &ShowKey) -> anyhow::Result<HashSet<YoutubeVideoId>>;
+    fn delete_all(&self, source: &ShowKey) -> anyhow::Result<()>;
+}
+// src/infrastructure/repositories/sqlite_discarded_video_repository.rs
+pub struct SqliteDiscardedVideoRepository { database: Database }
+// migrations/0034_discarded_videos.sql
+// CREATE TABLE discarded_videos (source_kind TEXT NOT NULL, source_id TEXT NOT NULL, youtube_id TEXT NOT NULL,
+//   created_at TEXT NOT NULL, UNIQUE (source_kind, source_id, youtube_id));
+// ChannelVideoReconciler, PlaylistVideoReconciler, ChannelDeleter, PlaylistDeleter: new field
+//   discarded_video_repository: Arc<dyn DiscardedVideoRepository>, passed to `new`
+```
+
+```rust
 // src/application/subscribers/delete_video_file_on_video_discarded.rs
 pub struct DeleteVideoFileOnVideoDiscarded { task_repository: Arc<dyn TaskRepository>, clock: Arc<dyn Clock> }
 // src/application/subscribers/scan_plex_folder_on_video_file_deleted.rs (registered only with Plex configured)
@@ -405,7 +423,9 @@ export function DiscardVideoButton(props: { videoId: string; title: string; down
 
 **Sweep** — `InternalVideoReconciler` → `numbered_episode_paths(videos)` skips Discarded videos, so files under their episode base name are swept once unrecorded.
 
-**Channel limit** — `ChannelVideoReconciler::sync_membership_with_youtube`: `list_stored_videos(channel)` → `skipped = stored.filter(|(_, v)| v.is_skipped()).count()` → `list_current_videos(channel, skipped, ..)` → `channel_videos_repository.list_current_videos(&channel.id, limit + skipped)` → `video_window::within_limit(listing, |u| skipped_ids.contains(&u.youtube_id), limit)` → add / refresh / `remove_videos_not_in(window ids)`.
+**Channel limit** — `ChannelVideoReconciler::sync_membership_with_youtube`: `list_stored_videos(channel)` → `skipped_ids = stored.filter(|(_, v)| v.is_skipped()) ∪ discarded_video_repository.list(&ShowKey::Channel(id))` → `list_current_videos(channel, skipped_ids.len(), ..)` → `channel_videos_repository.list_current_videos(&channel.id, limit + skipped)` → `video_window::within_limit(listing, |u| skipped_ids.contains(&u.youtube_id), limit)` → add (never a remembered id) / refresh / `remove_videos_not_in(window ids)`.
+
+**Remembered discards** — `ChannelVideoReconciler::remove_videos_not_in` / `PlaylistVideoReconciler::remove_videos_not_in`: for a `video.download.is_discarded()` → `discarded_video_repository.record(&source, &video.youtube_id, now)` before the row deletes. `PlaylistVideoReconciler` reads `discarded_video_repository.list(&ShowKey::Playlist(id))` and adds no listed item whose id is in it. `ChannelDeleter::delete` / `PlaylistDeleter::delete` → `discarded_video_repository.delete_all(&source)` with the source's video rows.
 
 **Web** — `VideoDetail` → `DiscardVideoButton` (when `canDiscard(video.status)`) → `ConfirmDialog` ("… This can't be undone." + "Its files will be deleted." when downloaded) → `useDiscardVideo()(id)` → `discardVideo` → invalidate → video gone from the list; failure → `window.alert`.
 
@@ -455,7 +475,17 @@ Thumbnail of a video discarded before its download:
 31. `delete_video_file_on_video_discarded::it_should_schedule_the_deletion_of_a_discarded_thumbnail` — `DeleteVideoFile` with `filename: None` and the thumbnail.
 32. `reconcile_channel_task::it_should_delete_the_files_left_by_a_discarded_video` — a numbered Discarded video's unrecorded `.jpg` under its episode base name is swept.
 
+A discarded video remembered by its source:
+34. `reconcile_channel_task::it_should_not_re_add_a_discarded_video_after_its_eviction` — limit 2, Discarded C evicted, then limit 3 → C not stored, nothing published for it.
+35. `reconcile_channel_task::it_should_not_count_a_remembered_discarded_upload_toward_the_limit` — limit 2, uploads A B C with B remembered → requests 3, A and C kept.
+36. `reconcile_playlist_task::it_should_not_re_add_a_discarded_video_returning_to_the_playlist` — Discarded B leaves the playlist, then returns → not stored.
+37. `it_should_forget_the_discarded_videos_of_a_deleted_channel` / `..._playlist` (deleter tests) — nothing remembered for the source after its deletion.
+
 ### 2. Infrastructure tests
 
 `SqliteVideoRepository`:
 33. `it_should_round_trip_a_discarded_video` — `DISCARDED` decodes to discarded, Pending, no attempts, no file.
+
+`SqliteDiscardedVideoRepository`:
+38. `it_should_list_the_recorded_ids_per_source` — a channel's and a playlist's ids don't mix; `delete_all` clears one source only.
+39. `it_should_record_an_id_once` — recording twice lists it once.

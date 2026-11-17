@@ -293,12 +293,15 @@ impl Video {
     }
 
     /// Whether a thumbnail fetch can still be worth attempting for this
-    /// video: never for an Unavailable download, nor a Retrying or Failed
-    /// one, whose next download writes its own.
+    /// video: never for an Unavailable or Discarded download, nor a Retrying
+    /// or Failed one, whose next download writes its own.
     pub fn is_thumbnail_fetchable(&self) -> bool {
         !matches!(
             self.download.status(),
-            VideoStatus::Unavailable | VideoStatus::Retrying | VideoStatus::Failed
+            VideoStatus::Unavailable
+                | VideoStatus::Discarded
+                | VideoStatus::Retrying
+                | VideoStatus::Failed
         )
     }
 
@@ -850,6 +853,16 @@ mod tests {
         .map(|filename| downloaded_at(filename).is_subtitle_fetchable());
 
         assert_eq!(fetchable, [true, false, false]);
+    }
+
+    #[test]
+    fn it_should_not_be_thumbnail_fetchable_if_discarded() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let discarded = video().discard(now).unwrap();
+
+        assert!(video().is_thumbnail_fetchable());
+        assert!(!discarded.is_thumbnail_fetchable());
     }
 
     #[test]

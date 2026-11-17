@@ -73,3 +73,18 @@ No step SHALL be attempted for a Discarded video: a video sync SHALL schedule no
 #### Scenario: Channel resync
 - **WHEN** a channel reconcile finds a Discarded video still among the channel's uploads, under a new title
 - **THEN** the video's title is updated and it stays Discarded with no download scheduled
+
+### Requirement: A Discarded Video Stays Discarded After Leaving Its Source
+When a reconcile removes a Discarded video from its source (evicted from a channel's window, or no longer in a YouTube-linked playlist), the source SHALL remember the video's YouTube id. A later reconcile of that source SHALL NOT store a remembered video again, and a channel SHALL count a remembered upload as skipped (see `channel-video-sync`). Deleting the source SHALL forget its remembered videos.
+
+#### Scenario: Channel window reaches back to an evicted discarded video
+- **WHEN** a channel with `video_limit` 2 evicts its Discarded upload C, and a later reconcile runs after the limit is raised to 3
+- **THEN** C is not stored again, no `VideoAddedToChannel` is published for it, and it doesn't count toward the limit
+
+#### Scenario: Discarded video re-added to a playlist
+- **WHEN** a Discarded video leaves a YouTube-linked playlist, is removed by a reconcile, and is later added back to the playlist on YouTube
+- **THEN** the next reconcile doesn't store it again and publishes no `VideoAddedToPlaylist` for it
+
+#### Scenario: Source deleted and tracked again
+- **WHEN** a channel with a remembered discarded video is deleted and then tracked again
+- **THEN** the video is treated as any new upload

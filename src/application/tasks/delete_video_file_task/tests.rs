@@ -227,7 +227,7 @@ fn it_should_delete_a_legacy_per_video_folder() {
 }
 
 #[test]
-fn it_should_publish_video_file_deleted_after_deleting_a_video_file() {
+fn it_should_announce_the_deletion_of_a_video_file() {
     let db = TestDatabase::new();
     let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
         Arc::new(FakeVideoFileRepository::new(Ok(true))),

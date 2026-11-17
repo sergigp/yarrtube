@@ -240,9 +240,18 @@ impl ChannelVideoReconciler {
         channel: &Channel,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<MembershipChanges> {
-        let skipped = self.count_skipped_videos(channel)?;
+        let stored_videos = self.list_stored_videos(channel)?;
+        let skipped_ids: HashSet<&str> = stored_videos
+            .iter()
+            .filter(|(_, video)| video.is_skipped())
+            .map(|(_, video)| video.youtube_id.as_str())
+            .collect();
         let listing_started = self.clock.now();
-        let listing = self.list_current_videos(channel, skipped, on_listing_failure)?;
+        let listing = self.list_current_videos(
+            channel,
+            u32::try_from(skipped_ids.len())?,
+            on_listing_failure,
+        )?;
         let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
         let Some(listing) = listing else {
             return Ok(MembershipChanges {
@@ -250,12 +259,6 @@ impl ChannelVideoReconciler {
                 ..MembershipChanges::default()
             });
         };
-        let stored_videos = self.list_stored_videos(channel)?;
-        let skipped_ids: HashSet<&str> = stored_videos
-            .iter()
-            .filter(|(_, video)| video.is_skipped())
-            .map(|(_, video)| video.youtube_id.as_str())
-            .collect();
         let current_videos = video_window::within_limit(
             listing,
             |upload| skipped_ids.contains(upload.youtube_id.as_str()),
@@ -301,17 +304,6 @@ impl ChannelVideoReconciler {
             removed,
             listing_seconds,
         })
-    }
-
-    /// How many of the channel's stored videos are Unavailable or
-    /// Discarded: they don't count toward its video limit.
-    fn count_skipped_videos(&self, channel: &Channel) -> anyhow::Result<u32> {
-        let skipped = self
-            .list_stored_videos(channel)?
-            .iter()
-            .filter(|(_, video)| video.is_skipped())
-            .count();
-        Ok(u32::try_from(skipped)?)
     }
 
     /// The channel's current most recent uploads. When they can't be listed

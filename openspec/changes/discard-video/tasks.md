@@ -54,3 +54,14 @@
 - [x] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a channel via the HTTP API and wait for one video to download. With the Playwright MCP browser: discard a Pending/Retrying video (confirm) and a Downloaded one; assert the confirmation texts, that both leave the channel list, that `GET /api/tasks` shows no pending task for them and a completed `delete_video_file` for the downloaded one, and that its files are gone from the fresh videos dir; screenshot the dialog. Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.3 Manual (human): on the NAS after deploy, discard the Control de Misión livestream (video `461e8684-45d5-454b-acc1-3261fdb8159a`, YouTube `QaK1s0RObH0`) once it isn't downloading; confirm no further download attempt over the next day, the channel gains a video to fill its limit on the next reconcile, and a discarded downloaded episode disappears from Plex.
 - [x] 4.4 Re-run `scripts/run-tests.sh --lint --web --rust` after 2.30–2.32; all suites pass.
+
+## 5. Remembered discards (TDD)
+
+- [ ] 5.1 Skeleton: `DiscardedVideoRepository` port, `SqliteDiscardedVideoRepository` + `migrations/0034_discarded_videos.sql`, injected into `ChannelVideoReconciler`, `PlaylistVideoReconciler`, `ChannelDeleter`, `PlaylistDeleter` (serve.rs and test support); `cargo build` passes.
+- [ ] 5.2 `SqliteDiscardedVideoRepository::it_should_list_the_recorded_ids_per_source`.
+- [ ] 5.3 `SqliteDiscardedVideoRepository::it_should_record_an_id_once`.
+- [ ] 5.4 `reconcile_channel_task::it_should_not_re_add_a_discarded_video_after_its_eviction` — record on eviction, skip remembered ids when adding.
+- [ ] 5.5 `reconcile_channel_task::it_should_not_count_a_remembered_discarded_upload_toward_the_limit` — remembered ids join `skipped_ids`.
+- [ ] 5.6 `reconcile_playlist_task::it_should_not_re_add_a_discarded_video_returning_to_the_playlist`.
+- [ ] 5.7 `it_should_forget_the_discarded_videos_of_a_deleted_channel` and `..._playlist`.
+- [ ] 5.8 Re-run `scripts/run-tests.sh --lint --rust`; all suites pass.

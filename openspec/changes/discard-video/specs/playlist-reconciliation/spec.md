@@ -2,6 +2,59 @@
 
 ## MODIFIED Requirements
 
+### Requirement: New Video Persistence (YouTube-Linked Playlists)
+The system SHALL store each video found in a YouTube-linked playlist that is
+not already stored for that playlist and not remembered as discarded by it
+(see `video-discard`), with a status of PENDING and its
+current position in the source YouTube playlist, and publish a
+`VideoAddedToPlaylist` event for it. The reconcile pass SHALL NOT fetch the
+video's thumbnail itself. The thumbnail is fetched by a separately scheduled
+task in reaction to the video's addition (see `video-thumbnails`), so
+persisting a new video and publishing its event SHALL NOT wait on any
+thumbnail fetch.
+
+#### Scenario: Playlist contains a video not yet stored
+- **WHEN** a reconcile pass for a YouTube-linked playlist finds a video in the playlist that has no existing stored record for that playlist
+- **THEN** the system stores it with status PENDING and its current playlist position, and publishes a `VideoAddedToPlaylist` event, without fetching its thumbnail during the pass
+
+#### Scenario: Playlist contains a video already stored
+- **WHEN** a reconcile pass for a YouTube-linked playlist finds a video that already has a stored record for that playlist
+- **THEN** the system leaves that record's status unchanged and does not publish another `VideoAddedToPlaylist` event
+
+#### Scenario: Thumbnail fetch fails for a newly discovered video
+- **WHEN** a reconcile pass stores a newly discovered video and that video's later, separately scheduled thumbnail fetch fails
+- **THEN** the video was still stored and its `VideoAddedToPlaylist` event still published, and every other newly discovered video in the same pass was persisted regardless
+
+#### Scenario: Many new videos found in one pass
+- **WHEN** a reconcile pass for a newly created YouTube-linked playlist finds many videos not yet stored
+- **THEN** the pass persists all of them and publishes their `VideoAddedToPlaylist` events without spending time fetching any of their thumbnails, so their downloads can be scheduled promptly
+
+#### Scenario: Playlist contains a remembered discarded video
+- **WHEN** a reconcile pass for a YouTube-linked playlist finds a video the playlist remembers as discarded
+- **THEN** the system doesn't store it and publishes no `VideoAddedToPlaylist` event for it
+
+### Requirement: Removed Video Cleanup (YouTube-Linked Playlists)
+The system SHALL delete a stored video's record when a reconcile pass for a
+YouTube-linked playlist finds that it is no longer present in the source
+YouTube playlist, SHALL remember a removed Discarded video's YouTube id for
+the playlist before deleting its record, SHALL log each such deletion, and
+SHALL publish a
+`VideoRemovedFromPlaylist` event carrying that video's title, its recorded
+filename (if any), and whether it had been downloaded.
+
+#### Scenario: Previously stored video no longer in the YouTube playlist
+- **WHEN** a reconcile pass finds that a video previously stored for a YouTube-linked playlist is no longer a member of that playlist on YouTube
+- **THEN** the system deletes its stored record and logs the deletion
+
+#### Scenario: Deletion publishes a VideoDeleted event
+- **WHEN** a reconcile pass deletes a stored video's record because it is no longer in the source YouTube playlist
+- **THEN** the system publishes a `VideoRemovedFromPlaylist` event containing the playlist ID, the video ID, the video's title, its recorded filename (if any), and whether the video had been downloaded
+
+#### Scenario: Removing a discarded video remembers it
+- **WHEN** a reconcile pass deletes the record of a video whose download is Discarded because it is no longer in the source YouTube playlist
+- **THEN** the playlist remembers its YouTube id, then its stored record is deleted
+
+
 ### Requirement: Filesystem Reconciliation Against Recorded Downloads
 The system SHALL, for every playlist regardless of kind, compare the files
 present in that playlist's show directory (recursively through its season

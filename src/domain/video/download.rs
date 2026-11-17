@@ -74,9 +74,9 @@ impl Download {
     }
 
     /// Whether a download should run at `now`: started, Pending, or Retrying
-    /// with its next attempt due.
+    /// with its next attempt due; never while discarded.
     pub fn is_due(&self, now: DateTime<Utc>) -> bool {
-        self.started || self.state.is_due(now)
+        !self.discarded && (self.started || self.state.is_due(now))
     }
 
     /// When a Retrying download's next attempt is due; none while started.
@@ -182,6 +182,16 @@ mod tests {
         let download = retrying_download(now).start();
 
         assert!(download.is_due(now));
+    }
+
+    #[test]
+    fn it_should_not_be_due_if_discarded() {
+        let now = fixed_timestamp();
+
+        let due = [Download::pending(), Download::pending().discard()]
+            .map(|download| download.is_due(now));
+
+        assert_eq!(due, [true, false]);
     }
 
     #[test]

@@ -2499,10 +2499,6 @@ fn it_should_schedule_the_sync_of_a_video_added_by_the_pass() {
     );
 }
 
-/// Builds a reconciler around the repositories and fakes a test seeds,
-/// configures or asserts; the remaining ports (YouTube metadata, video
-/// metadata, thumbnails) are ones these tests don't observe — the ones
-/// that do build the reconciler inline. Events go to `db`'s outbox table.
 #[test]
 fn it_should_request_one_more_upload_per_skipped_video() {
     let db = TestDatabase::new();
@@ -2617,7 +2613,7 @@ fn it_should_not_count_skipped_videos_toward_the_limit() {
 }
 
 #[test]
-fn it_should_evict_uploads_past_the_limit_th_unskipped_one() {
+fn it_should_evict_uploads_past_the_limit_not_counting_skipped_ones() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2720,6 +2716,10 @@ fn it_should_delete_the_files_left_by_a_discarded_video() {
     );
 }
 
+/// Builds a reconciler around the repositories and fakes a test seeds,
+/// configures or asserts; the remaining ports (YouTube metadata, video
+/// metadata, thumbnails) are ones these tests don't observe — the ones
+/// that do build the reconciler inline. Events go to `db`'s outbox table.
 fn channel_video_reconciler(
     db: &TestDatabase,
     channel_repository: Arc<SqliteChannelRepository>,

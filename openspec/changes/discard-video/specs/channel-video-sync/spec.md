@@ -6,8 +6,9 @@
 The system SHALL discover a channel's current videos by invoking `yt-dlp`
 against that channel's videos listing, requesting only its `video_limit`
 most recent uploads plus one more for each of the channel's stored videos
-whose download is Unavailable or Discarded (skipped videos don't count
-toward the limit), and parsing each discovered video's ID and title from
+whose download is Unavailable or Discarded and each discarded upload the
+channel remembers (skipped videos don't count toward the limit; see
+`video-discard`), and parsing each discovered video's ID and title from
 structured (JSON) output rather than delimited text, so that a video title
 containing arbitrary characters (including a `|` or other delimiter-like
 character) cannot corrupt discovery of that video or any other.
@@ -28,12 +29,40 @@ character) cannot corrupt discovery of that video or any other.
 - **WHEN** a reconcile pass discovers the videos of a channel with `video_limit` 3 that has one Unavailable and one Discarded stored video
 - **THEN** the system requests at most 5 videos
 
+### Requirement: New Video Persistence (Channels)
+The system SHALL store each video discovered for a channel that is not
+already stored for that channel and not remembered as discarded by it
+(see `video-discard`), with a status of PENDING and its current
+recency position, and publish a `VideoAddedToChannel` event for it. The
+reconcile pass SHALL NOT fetch the video's thumbnail itself. The thumbnail
+is fetched by a separately scheduled task in reaction to the video's
+addition (see `video-thumbnails`), so persisting a new video and publishing
+its event SHALL NOT wait on any thumbnail fetch.
+
+#### Scenario: Channel's most recent uploads include a video not yet stored
+- **WHEN** a reconcile pass for a channel finds a video among its current most-recent uploads that has no existing stored record for that channel
+- **THEN** the system stores it with status PENDING and its current recency position, and publishes a `VideoAddedToChannel` event, without fetching its thumbnail during the pass
+
+#### Scenario: Channel's most recent uploads include a video already stored
+- **WHEN** a reconcile pass for a channel finds a video that already has a stored record for that channel
+- **THEN** the system leaves that record's status unchanged and does not publish another `VideoAddedToChannel` event
+
+#### Scenario: Thumbnail fetch fails for a newly discovered video
+- **WHEN** a reconcile pass stores a newly discovered video and that video's later, separately scheduled thumbnail fetch fails
+- **THEN** the video was still stored and its `VideoAddedToChannel` event still published, and every other newly discovered video in the same pass was persisted regardless
+
+#### Scenario: Channel's most recent uploads include a remembered discarded video
+- **WHEN** a reconcile pass for a channel finds among its current most-recent uploads a video the channel remembers as discarded
+- **THEN** the system doesn't store it and publishes no `VideoAddedToChannel` event for it
+
 ### Requirement: Aged-Out Video Eviction (Channels)
 The system SHALL delete a stored video's record when a reconcile pass for a
 channel finds that it is no longer among the channel's current most recent uploads up to and
 including the `video_limit`-th one whose download is not Unavailable or
-Discarded — whether because it was deleted/unlisted on YouTube or because
-newer uploads have pushed it past that position — SHALL log
+Discarded and that the channel doesn't remember as discarded — whether
+because it was deleted/unlisted on YouTube or because newer uploads have
+pushed it past that position — SHALL remember an evicted Discarded video's
+YouTube id for the channel before deleting its record, SHALL log
 each such eviction, and SHALL publish a `VideoRemovedFromChannel` event
 carrying that video's title, its recorded filename (if any), and whether it
 had been downloaded.
@@ -49,6 +78,10 @@ had been downloaded.
 #### Scenario: A skipped video doesn't take a slot
 - **WHEN** a reconcile pass for a channel with `video_limit` 3 lists uploads A, B, C, D (most recent first) and B is stored as Unavailable
 - **THEN** A, B, C and D are all kept, so the channel has 3 videos that aren't skipped
+
+#### Scenario: Evicting a discarded video remembers it
+- **WHEN** a reconcile pass for a channel evicts a stored video whose download is Discarded
+- **THEN** the channel remembers its YouTube id, then its stored record is deleted
 
 #### Scenario: Window ends at the limit-th unskipped video
 - **WHEN** a reconcile pass for a channel with `video_limit` 2 lists uploads A, B, C (most recent first), none skipped, and C was stored
