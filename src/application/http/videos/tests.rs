@@ -7555,6 +7555,63 @@ async fn it_should_fail_to_discard_an_unknown_video() {
     );
 }
 
+#[tokio::test]
+async fn it_should_omit_discarded_videos_from_a_channel_list() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let kept = new_video(
+        YoutubeVideoId::new("vid_kept").unwrap(),
+        "Kept",
+        fixed_timestamp(),
+    );
+    let discarded = new_video(
+        YoutubeVideoId::new("vid_discarded").unwrap(),
+        "Discarded",
+        fixed_timestamp(),
+    )
+    .discard(fixed_timestamp())
+    .unwrap();
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &kept,
+        0,
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &discarded,
+        1,
+    );
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_video_response("vid_kept", "Kept")])
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,

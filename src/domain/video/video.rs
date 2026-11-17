@@ -154,11 +154,13 @@ impl Video {
         })
     }
 
-    #[allow(dead_code)] // walking skeleton
     /// Unavailable or Discarded: hidden from lists and outside a channel's
     /// video limit.
     pub fn is_skipped(&self) -> bool {
-        false
+        matches!(
+            self.download.status(),
+            VideoStatus::Unavailable | VideoStatus::Discarded
+        )
     }
 
     /// Every Retrying or Failed step back to Pending with no failed

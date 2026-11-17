@@ -21,7 +21,7 @@
 - [x] 2.8 `it_should_refuse_to_discard_a_video_being_downloaded` — 409, video and tasks unchanged.
 - [x] 2.9 `it_should_refuse_to_discard_an_unavailable_video` — 409.
 - [x] 2.10 `it_should_fail_to_discard_an_unknown_video` — 404.
-- [ ] 2.11 `it_should_omit_discarded_videos_from_a_channel_list` — `VideoSearcher` filters `is_skipped`.
+- [x] 2.11 `it_should_omit_discarded_videos_from_a_channel_list` — `VideoSearcher` filters `is_skipped`.
 - [ ] 2.12 `it_should_omit_discarded_videos_from_a_playlist_list`.
 - [ ] 2.13 `it_should_keep_a_discarded_download_on_retry` — `Download::retry` keeps it discarded; no download scheduled.
 - [ ] 2.14 `delete_video_file_on_video_discarded::it_should_schedule_the_deletion_of_the_discarded_video_files` — `DeleteVideoFile` pending now.

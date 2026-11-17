@@ -5,7 +5,7 @@ use crate::domain::preferences::Preferences;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
     CategoryVideoView, HomeCategorySection, HomeLimits, HomeVideoView, HomeVideos, ListVideosError,
-    SourcedVideo, Video, VideoSearchText, VideoSource, VideoStatus, VideoView, YoutubeVideoId,
+    SourcedVideo, Video, VideoSearchText, VideoSource, VideoView, YoutubeVideoId,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -126,7 +126,7 @@ impl VideoSearcherApi for VideoSearcher {
         playlist_videos
             .iter()
             .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
-            .filter(|video| !is_unavailable(video))
+            .filter(|video| !is_skipped(video))
             .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
@@ -150,7 +150,7 @@ impl VideoSearcherApi for VideoSearcher {
         channel_videos
             .iter()
             .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
-            .filter(|video| !is_unavailable(video))
+            .filter(|video| !is_skipped(video))
             .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
@@ -226,12 +226,12 @@ impl VideoSearcherApi for VideoSearcher {
     }
 }
 
-/// Whether a looked-up video's download is Unavailable, so the video-list
+/// Whether a looked-up video is Unavailable or Discarded, so the video-list
 /// read paths can omit it (see the `video-listing` capability). An `Err` is
-/// never excluded,
-/// so a lookup failure still propagates rather than being silently dropped.
-fn is_unavailable(video: &anyhow::Result<Video>) -> bool {
-    matches!(video, Ok(video) if video.download.status() == VideoStatus::Unavailable)
+/// never excluded, so a lookup failure still propagates rather than being
+/// silently dropped.
+fn is_skipped(video: &anyhow::Result<Video>) -> bool {
+    matches!(video, Ok(video) if video.is_skipped())
 }
 
 impl VideoSearcher {
