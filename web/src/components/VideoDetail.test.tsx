@@ -282,6 +282,37 @@ describe('VideoDetail', () => {
     expect(screen.getByRole('button', { name: 'Retry now' })).toBeEnabled()
   })
 
+  it('discards a retrying video after confirming', async () => {
+    const retrying = aVideo({
+      id: 'abc',
+      title: 'My Video',
+      status: 'RETRYING',
+      filename: null,
+      steps: someSteps({ download: aStep({ status: 'RETRYING', failed_attempts: 2 }) }),
+    })
+    let stored: Video[] = [retrying]
+    const discard = vi.fn(() => {
+      stored = []
+      return null
+    })
+    mockApi({
+      'GET /api/playlists/PL1/videos': () => stored,
+      'POST /api/videos/abc/discard': discard,
+    })
+    renderWithProviders(<PlaylistVideoDetail />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: "Don't download" }))
+    const dialog = screen.getByRole('dialog', { name: 'Don\'t download "My Video"?' })
+    expect(dialog).toHaveTextContent("It will never be downloaded. This can't be undone.")
+    await user.click(within(dialog).getByRole('button', { name: 'Discard video' }))
+
+    expect(discard).toHaveBeenCalledOnce()
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'My Video' })).not.toBeInTheDocument(),
+    )
+  })
+
   it('marks the selected video watched from the detail pane', async () => {
     const markWatched = vi.fn(() => null)
     mockApi({ 'POST /api/videos/abc/watched': markWatched })

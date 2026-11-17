@@ -35,7 +35,7 @@
 - [x] 2.22 `reconcile_channel_task::it_should_request_one_more_upload_per_skipped_video`.
 - [x] 2.23 `reconcile_channel_task::it_should_not_count_skipped_videos_toward_the_limit` — `within_limit`.
 - [x] 2.24 `reconcile_channel_task::it_should_evict_uploads_past_the_limit_th_unskipped_one`.
-- [ ] 2.25 Web "discards a retrying video after confirming" — `DiscardVideoButton` + `ConfirmDialog` + `canDiscard`; `POST /api/videos/{id}/discard`, video gone from the refetched list.
+- [x] 2.25 Web "discards a retrying video after confirming" — `DiscardVideoButton` + `ConfirmDialog` + `canDiscard`; `POST /api/videos/{id}/discard`, video gone from the refetched list.
 - [ ] 2.26 Web "warns that a downloaded video's files will be deleted".
 - [ ] 2.27 Web "sends nothing when the confirmation is cancelled".
 - [ ] 2.28 Web "offers no Don't download for a downloading video".

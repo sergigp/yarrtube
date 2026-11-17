@@ -77,7 +77,9 @@ export function canRetry(steps: VideoSteps): boolean {
   return Object.values(steps).some((step) => step.status === 'RETRYING' || step.status === 'FAILED')
 }
 
+const DISCARDABLE: VideoStatus[] = ['PENDING', 'RETRYING', 'FAILED', 'DOWNLOADED']
+
 /** Whether the video can be discarded: not downloading, unavailable or already discarded. */
-export function canDiscard(_status: VideoStatus): boolean {
-  return false
+export function canDiscard(status: VideoStatus): boolean {
+  return DISCARDABLE.includes(status)
 }

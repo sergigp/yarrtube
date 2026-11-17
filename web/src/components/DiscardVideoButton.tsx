@@ -1,3 +1,9 @@
+import { useState } from 'react'
+import { Ban } from 'lucide-react'
+import { useDiscardVideo } from '@/api/queries'
+import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from './ConfirmDialog'
+
 interface DiscardVideoButtonProps {
   videoId: string
   /** Names the video in the confirmation. */
@@ -10,6 +16,25 @@ interface DiscardVideoButtonProps {
  * The video detail pane's "Don't download" button: after a confirmation
  * that it can't be undone, discards the video for good.
  */
-export function DiscardVideoButton(_props: DiscardVideoButtonProps) {
-  return null
+export function DiscardVideoButton({ videoId, title }: DiscardVideoButtonProps) {
+  const discardVideo = useDiscardVideo()
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <>
+      <Button variant="outline" size="sm" className="mb-2" onClick={() => setConfirming(true)}>
+        <Ban />
+        Don't download
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Don't download "${title}"?`}
+        description="It will never be downloaded. This can't be undone."
+        confirmLabel="Discard video"
+        pendingLabel="Discarding…"
+        onConfirm={() => discardVideo(videoId)}
+      />
+    </>
+  )
 }
