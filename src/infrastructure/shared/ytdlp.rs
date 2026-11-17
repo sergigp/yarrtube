@@ -857,30 +857,79 @@ fn is_bare_video_unavailable(reason: &str) -> bool {
 /// indented continuation lines `yt-dlp` wraps it onto — so warnings it now
 /// prints (the download invocation no longer passes `--no-warnings`) never
 /// pollute the reason or the permanent-unavailability classification that
-/// reads it. Non-warning text, including an unprefixed error line, is kept.
+/// reads it. A warning carrying a Python traceback (e.g. `Writing cache to
+/// '...' failed: Traceback ...`) is dropped whole, its unindented exception
+/// line included, so a harmless cache write failure is never reported as the
+/// reason. Non-warning text, including an unprefixed error line, is kept.
 /// Trimmed, and `None` when nothing meaningful remains.
 fn reason_excluding_warnings(stderr: &str) -> Option<String> {
-    let mut in_warning_block = false;
+    let mut block = WarningBlock::None;
     let text = stderr
         .lines()
         .filter(|line| {
-            if line.trim_start().starts_with("WARNING:") {
-                in_warning_block = true;
-                return false;
-            }
-            // An indented line right after a warning is that warning wrapped
-            // onto another line; drop it too. Any other line ends the block.
-            if in_warning_block && line.starts_with([' ', '\t']) {
-                return false;
-            }
-            in_warning_block = false;
-            true
+            let (next, keep) = block.next(line);
+            block = next;
+            keep
         })
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
         .to_string();
     (!text.is_empty()).then_some(text)
+}
+
+const TRACEBACK_HEADER: &str = "Traceback (most recent call last):";
+
+/// Where a stderr line sits relative to a `WARNING:` block, for
+/// `reason_excluding_warnings`.
+#[derive(Clone, Copy)]
+enum WarningBlock {
+    /// Not in a warning: the line is kept.
+    None,
+    /// In a plain warning: indented lines are its wrapped continuation.
+    Plain,
+    /// In a warning's traceback: indented frames up to the unindented
+    /// exception line that ends it.
+    Traceback,
+    /// Right after a traceback's exception line: blank lines and Python's
+    /// chained-exception separators still belong to the warning.
+    AfterTraceback,
+}
+
+impl WarningBlock {
+    /// The state after `line`, and whether `line` is kept.
+    fn next(self, line: &str) -> (Self, bool) {
+        let trimmed = line.trim();
+        if trimmed.starts_with("WARNING:") {
+            let block = if trimmed.ends_with(TRACEBACK_HEADER) {
+                Self::Traceback
+            } else {
+                Self::Plain
+            };
+            return (block, false);
+        }
+        let indented = line.starts_with([' ', '\t']);
+        match self {
+            Self::Plain if indented => (Self::Plain, false),
+            Self::Traceback if indented || trimmed.is_empty() || trimmed == TRACEBACK_HEADER => {
+                (Self::Traceback, false)
+            }
+            Self::Traceback => (Self::AfterTraceback, false),
+            Self::AfterTraceback if trimmed.is_empty() => (Self::AfterTraceback, false),
+            Self::AfterTraceback
+                if trimmed == TRACEBACK_HEADER || is_chained_exception_separator(trimmed) =>
+            {
+                (Self::Traceback, false)
+            }
+            _ => (Self::None, true),
+        }
+    }
+}
+
+/// The line Python prints between the tracebacks of chained exceptions.
+fn is_chained_exception_separator(line: &str) -> bool {
+    line.starts_with("During handling of the above exception")
+        || line.starts_with("The above exception was the direct cause")
 }
 
 fn not_found_message(ytdlp_path: &Path) -> String {
@@ -2726,6 +2775,68 @@ mod tests {
             reason_excluding_warnings(stderr),
             Some("ERROR: [youtube] abc123: This video is not available".to_string())
         );
+    }
+
+    const CACHE_WRITE_WARNING: &str = "WARNING: Writing cache to '/home/yarrtube/.cache/yt-dlp/youtube-nsig/abc.json' failed: Traceback (most recent call last):\n  File \"yt_dlp/cache.py\", line 41, in store\n    os.makedirs(os.path.dirname(fn), exist_ok=True)\n  File \"<frozen os>\", line 217, in makedirs\nPermissionError: [Errno 13] Permission denied: '/home/yarrtube'\n\n";
+
+    #[test]
+    fn it_should_exclude_a_cache_write_warning_traceback_from_the_recorded_reason() {
+        let stderr = format!(
+            "{CACHE_WRITE_WARNING}{CACHE_WRITE_WARNING}ERROR: Postprocessing: Conversion failed!\n"
+        );
+
+        assert_eq!(
+            reason_excluding_warnings(&stderr),
+            Some("ERROR: Postprocessing: Conversion failed!".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_exclude_a_chained_traceback_from_the_recorded_reason() {
+        let stderr = "WARNING: Writing cache to '/x.json' failed: Traceback (most recent call last):\n  File \"a.py\", line 1, in f\nFileNotFoundError: /x\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"b.py\", line 2, in g\nPermissionError: [Errno 13] Permission denied: '/home/yarrtube'\n\nERROR: [youtube] abc123: This video is not available\n";
+
+        assert_eq!(
+            reason_excluding_warnings(stderr),
+            Some("ERROR: [youtube] abc123: This video is not available".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_keep_an_unindented_line_after_a_plain_warning_in_the_recorded_reason() {
+        let stderr = "WARNING: [youtube] abc123: something odd\nPermissionError: [Errno 13] Permission denied: '/videos'\n";
+
+        assert_eq!(
+            reason_excluding_warnings(stderr),
+            Some("PermissionError: [Errno 13] Permission denied: '/videos'".to_string())
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_not_report_a_cache_write_failure_as_the_reason_of_a_failed_download() {
+        let script_path = fake_ytdlp_writing_stderr(
+            "ytdlp-download-cache-warning-failure",
+            &format!("{CACHE_WRITE_WARNING}ERROR: Postprocessing: Conversion failed!\n"),
+            1,
+        );
+        let output_dir = test_support::unique_temp_dir("ytdlp-download-cache-warning-out");
+
+        let result = download_video(
+            &script_path,
+            "https://example.com/video",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                failure: DownloadFailure::new("ERROR: Postprocessing: Conversion failed!"),
+                sabr_notice: None,
+            }
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
     #[test]
