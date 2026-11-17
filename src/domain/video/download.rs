@@ -53,7 +53,6 @@ impl Download {
     }
 
     /// Whether the user discarded it.
-    #[allow(dead_code)] // walking skeleton
     pub fn is_discarded(&self) -> bool {
         self.discarded
     }

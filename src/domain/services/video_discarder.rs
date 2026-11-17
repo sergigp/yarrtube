@@ -2,7 +2,7 @@ use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
-use crate::domain::video::{DiscardVideoError, Video, VideoDiscarded, VideoId};
+use crate::domain::video::{DiscardVideoError, Video, VideoDiscarded, VideoId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
@@ -49,17 +49,44 @@ pub trait VideoDiscarderApi: Send + Sync {
 
 impl VideoDiscarderApi for VideoDiscarder {
     fn discard(&self, video_id: &VideoId) -> Result<(), DiscardVideoError> {
-        let before = self.find_video(video_id)?;
-        let now = self.clock.now();
-        self.video_updater
-            .update(video_id, |video| video.discard(now))
-            .map_err(DiscardVideoError::Repository)?;
+        let Some(before) = self.find_video(video_id)? else {
+            return Ok(());
+        };
+        if before.download.is_discarded() {
+            return Ok(());
+        }
+        Self::ensure_discardable(&before)?;
+        self.discard_stored(video_id)?;
         self.delete_pending_tasks(video_id)?;
-        before.map_or(Ok(()), |video| self.publish_discarded(&video))
+        self.publish_discarded(&before)
     }
 }
 
 impl VideoDiscarder {
+    fn ensure_discardable(video: &Video) -> Result<(), DiscardVideoError> {
+        if video.download.is_discardable() {
+            Ok(())
+        } else {
+            Err(DiscardVideoError::NotDiscardable(
+                video.id.clone(),
+                video.download.status(),
+            ))
+        }
+    }
+
+    /// The stored video discarded. Declined only when its download started
+    /// since it was read, the one way a discardable video stops being so.
+    fn discard_stored(&self, video_id: &VideoId) -> Result<(), DiscardVideoError> {
+        let now = self.clock.now();
+        self.video_updater
+            .update(video_id, |video| video.discard(now))
+            .map_err(DiscardVideoError::Repository)?
+            .map(|_| ())
+            .ok_or_else(|| {
+                DiscardVideoError::NotDiscardable(video_id.clone(), VideoStatus::InProgress)
+            })
+    }
+
     fn find_video(&self, video_id: &VideoId) -> Result<Option<Video>, DiscardVideoError> {
         self.video_repository
             .find(video_id)
