@@ -16,7 +16,7 @@
 - [x] 2.3 `it_should_discard_a_failed_video` — a Failed download can be discarded.
 - [x] 2.4 `it_should_discard_a_downloaded_video_and_clear_its_files` — recorded file, thumbnail and subtitle filenames cleared.
 - [x] 2.5 `it_should_publish_video_discarded_for_a_downloaded_video` — `VideoDiscarded` with the owner's output dir and the filenames read before the discard.
-- [ ] 2.6 `it_should_publish_nothing_when_discarding_a_video_never_downloaded`.
+- [x] 2.6 `it_should_publish_nothing_when_discarding_a_video_never_downloaded`.
 - [ ] 2.7 `it_should_leave_a_discarded_video_unchanged_when_discarded_again` — 204, nothing written or published.
 - [ ] 2.8 `it_should_refuse_to_discard_a_video_being_downloaded` — 409, video and tasks unchanged.
 - [ ] 2.9 `it_should_refuse_to_discard_an_unavailable_video` — 409.

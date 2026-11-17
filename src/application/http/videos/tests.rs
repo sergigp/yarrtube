@@ -7413,6 +7413,41 @@ async fn it_should_publish_video_discarded_for_a_downloaded_video() {
     );
 }
 
+#[tokio::test]
+async fn it_should_publish_nothing_when_discarding_a_video_never_downloaded() {
+    let db = TestDatabase::new();
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_errored("HTTP Error 503", fixed_timestamp());
+    save_channel_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![]
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
