@@ -26,7 +26,7 @@
 - [x] 2.13 `it_should_keep_a_discarded_download_on_retry` — `Download::retry` keeps it discarded; no download scheduled.
 - [x] 2.14 `delete_video_file_on_video_discarded::it_should_schedule_the_deletion_of_the_discarded_video_files` — `DeleteVideoFile` pending now.
 - [x] 2.15 `scan_plex_folder_on_video_file_deleted::it_should_scan_the_show_folder_after_a_deletion`.
-- [ ] 2.16 `delete_video_file_task::it_should_publish_video_file_deleted_after_deleting_a_video_file`.
+- [x] 2.16 `delete_video_file_task::it_should_publish_video_file_deleted_after_deleting_a_video_file`.
 - [ ] 2.17 `delete_video_file_task::it_should_publish_nothing_when_no_file_was_recorded`.
 - [ ] 2.18 `sync_video_task::it_should_schedule_nothing_for_a_discarded_video` — `VideoSyncPlan` empty, thumbnail not fetchable.
 - [ ] 2.19 `download_video_task::it_should_settle_without_downloading_a_discarded_video` — `is_settled` includes Discarded.

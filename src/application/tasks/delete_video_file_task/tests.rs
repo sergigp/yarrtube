@@ -1,7 +1,12 @@
 use super::*;
+use crate::domain::event::{DomainEvent, ScheduledEvent};
+use crate::domain::video::VideoFileDeleted;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::{
     EventPublisher, SqliteEventPublisher,
+};
+use crate::infrastructure::shared::domain_events::event_repository::{
+    EventRepository, SqliteEventRepository,
 };
 use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 use crate::infrastructure::shared::system_clock::FixedClock;
@@ -221,6 +226,38 @@ fn it_should_delete_a_legacy_per_video_folder() {
     );
 }
 
+#[test]
+fn it_should_publish_video_file_deleted_after_deleting_a_video_file() {
+    let db = TestDatabase::new();
+    let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
+        Arc::new(FakeVideoFileRepository::new(Ok(true))),
+        event_publisher(&db),
+        "/videos",
+    ));
+
+    let result = run(&task, &task_for(Some("My Video.mp4"), None));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    let event = DomainEvent::VideoFileDeleted(VideoFileDeleted {
+        output_dir: "/videos/my-playlist".to_string(),
+    });
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(epoch())))
+            .list_eligible()
+            .unwrap(),
+        vec![ScheduledEvent {
+            id: 1,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            run_at: epoch(),
+            created_at: epoch(),
+            updated_at: epoch(),
+            last_error: None,
+        }]
+    );
+}
+
 fn task_for(filename: Option<&str>, thumbnail_filename: Option<&str>) -> Task {
     Task::DeleteVideoFile {
         filename: filename.map(str::to_string),
@@ -242,6 +279,10 @@ fn run(task: &DeleteVideoFileTask, queued: &Task) -> Result<TaskOutcome, String>
 fn event_publisher(db: &TestDatabase) -> Arc<dyn EventPublisher> {
     Arc::new(SqliteEventPublisher::new(
         db.database(),
-        Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
+        Arc::new(FixedClock(epoch())),
     ))
+}
+
+fn epoch() -> DateTime<Utc> {
+    DateTime::<Utc>::from_timestamp(0, 0).unwrap()
 }

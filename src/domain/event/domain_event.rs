@@ -13,7 +13,6 @@ use serde_json::Value;
 /// Envelope over every aggregate's events, the unit the event publisher
 /// persists and subscribers are routed by.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // walking skeleton: removed once the discard flow publishes them
 pub enum DomainEvent {
     PlaylistCreated(PlaylistCreated),
     PlaylistDeleted(PlaylistDeleted),

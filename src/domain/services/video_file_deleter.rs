@@ -1,6 +1,9 @@
 use crate::domain::channel::ChannelHandle;
+use crate::domain::event::DomainEvent;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::video::{is_episode_path, nfo_path_for, owning_entry, resolve_output_dir};
+use crate::domain::video::{
+    VideoFileDeleted, is_episode_path, nfo_path_for, owning_entry, resolve_output_dir,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::path::Path;
@@ -12,7 +15,6 @@ use tracing::{debug, info};
 #[derive(Clone)]
 pub struct VideoFileDeleter {
     video_file_repository: Arc<dyn VideoFileRepository>,
-    #[allow(dead_code)]
     event_publisher: Arc<dyn EventPublisher>,
     videos_path: String,
 }
@@ -84,7 +86,8 @@ impl VideoFileDeleterApi for VideoFileDeleter {
     ) -> anyhow::Result<()> {
         self.delete_video_entry(filename, output_dir)?;
         self.delete_sidecar_entry(thumbnail_filename, "thumbnail", output_dir)?;
-        self.delete_sidecar_entry(subtitle_filename, "subtitle", output_dir)
+        self.delete_sidecar_entry(subtitle_filename, "subtitle", output_dir)?;
+        self.publish_file_deleted(output_dir)
     }
 
     fn delete_playlist_video_files(
@@ -113,6 +116,15 @@ impl VideoFileDeleterApi for VideoFileDeleter {
 }
 
 impl VideoFileDeleter {
+    /// `VideoFileDeleted` for the show folder `output_dir`, so Plex drops
+    /// the episode.
+    fn publish_file_deleted(&self, output_dir: &Path) -> anyhow::Result<()> {
+        self.event_publisher
+            .publish(&DomainEvent::VideoFileDeleted(VideoFileDeleted {
+                output_dir: output_dir.to_string_lossy().to_string(),
+            }))
+    }
+
     /// An episode's media file and the NFO next to it, or a legacy video's
     /// whole folder or flat file.
     fn delete_video_entry(
