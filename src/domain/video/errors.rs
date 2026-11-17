@@ -94,7 +94,6 @@ impl fmt::Display for ReadSubtitlesError {
 impl std::error::Error for ReadSubtitlesError {}
 
 #[derive(Debug)]
-#[allow(dead_code)] // walking skeleton
 pub enum DiscardVideoError {
     VideoNotFound(VideoId),
     NotDiscardable(VideoId, VideoStatus),

@@ -49,9 +49,7 @@ pub trait VideoDiscarderApi: Send + Sync {
 
 impl VideoDiscarderApi for VideoDiscarder {
     fn discard(&self, video_id: &VideoId) -> Result<(), DiscardVideoError> {
-        let Some(before) = self.find_video(video_id)? else {
-            return Ok(());
-        };
+        let before = self.find_video(video_id)?;
         if before.download.is_discarded() {
             return Ok(());
         }
@@ -87,10 +85,11 @@ impl VideoDiscarder {
             })
     }
 
-    fn find_video(&self, video_id: &VideoId) -> Result<Option<Video>, DiscardVideoError> {
+    fn find_video(&self, video_id: &VideoId) -> Result<Video, DiscardVideoError> {
         self.video_repository
             .find(video_id)
-            .map_err(DiscardVideoError::Repository)
+            .map_err(DiscardVideoError::Repository)?
+            .ok_or_else(|| DiscardVideoError::VideoNotFound(video_id.clone()))
     }
 
     /// Every task of the video still waiting in the queue.

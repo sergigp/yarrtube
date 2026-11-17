@@ -7543,6 +7543,18 @@ async fn it_should_refuse_to_discard_an_unavailable_video() {
     assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
 }
 
+#[tokio::test]
+async fn it_should_fail_to_discard_an_unknown_video() {
+    let db = TestDatabase::new();
+
+    let response = discard_video(State(video_discarder(&db)), Path("rec1".to_string())).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found"))
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
