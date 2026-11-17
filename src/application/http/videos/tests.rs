@@ -13,7 +13,7 @@ use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
     Chapters, Download, DownloadedQuality, EpisodeNumber, RetryAttempts, StepState, StepStatus,
-    Subtitles, Thumbnail, Video, VideoChapter, VideoId, WatchState, YoutubeVideoId,
+    Subtitles, Thumbnail, Video, VideoChapter, VideoDiscarded, VideoId, WatchState, YoutubeVideoId,
 };
 use crate::domain::video_category::VideoCategories;
 use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -7373,6 +7373,46 @@ async fn it_should_discard_a_downloaded_video_and_clear_its_files() {
     );
 }
 
+#[tokio::test]
+async fn it_should_publish_video_discarded_for_a_downloaded_video() {
+    let db = TestDatabase::new();
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let video = downloaded_video("vid1", "My Video", Some("My Video.jpg"), 0)
+        .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp());
+    save_channel_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoDiscarded(VideoDiscarded {
+                video_id: video.id.as_str().to_string(),
+                output_dir: "/videos/creators/somechannel".to_string(),
+                filename: "My Video.mp4".to_string(),
+                thumbnail_filename: Some("My Video.jpg".to_string()),
+                subtitle_filename: Some("My Video.en.srt".to_string()),
+            })
+        )]
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
@@ -7503,6 +7543,19 @@ fn pending_task(id: i64, task: &Task) -> ScheduledTask {
         id,
         task: task.clone(),
         status: TaskStatus::Pending,
+        retries: 0,
+        run_at: fixed_timestamp(),
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        last_error: None,
+    }
+}
+
+fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+    ScheduledEvent {
+        id,
+        event_type: event.event_type().to_string(),
+        payload: event.payload().to_string(),
         retries: 0,
         run_at: fixed_timestamp(),
         created_at: fixed_timestamp(),
