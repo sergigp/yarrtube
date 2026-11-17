@@ -41,7 +41,8 @@ impl DiscardedVideoRepository for SqliteDiscardedVideoRepository {
         let conn = self.db.write()?;
         conn.execute(
             "INSERT INTO discarded_videos (source_kind, source_id, youtube_id, created_at)
-             VALUES (?1, ?2, ?3, ?4)",
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (source_kind, source_id, youtube_id) DO NOTHING",
             params![source_kind, source_id, youtube_id.as_str(), now.to_rfc3339()],
         )
         .inspect_err(|e| {
@@ -131,6 +132,26 @@ mod tests {
                 [ids(&["yt1", "yt2"]), ids(&["yt3"])],
                 [ids(&[]), ids(&["yt3"])]
             )
+        );
+    }
+
+    #[test]
+    fn it_should_record_an_id_once() {
+        let db = TestDatabase::new();
+        let repository = SqliteDiscardedVideoRepository::new(db.database());
+        let source = channel("@somechannel");
+        repository
+            .record(&source, &youtube_id("yt1"), now())
+            .unwrap();
+
+        let result = repository.record(&source, &youtube_id("yt1"), now());
+
+        assert_eq!(
+            (
+                result.map_err(|e| e.to_string()),
+                repository.list(&source).unwrap()
+            ),
+            (Ok(()), ids(&["yt1"]))
         );
     }
 
