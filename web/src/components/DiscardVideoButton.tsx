@@ -16,7 +16,7 @@ interface DiscardVideoButtonProps {
  * The video detail pane's "Don't download" button: after a confirmation
  * that it can't be undone, discards the video for good.
  */
-export function DiscardVideoButton({ videoId, title }: DiscardVideoButtonProps) {
+export function DiscardVideoButton({ videoId, title, downloaded }: DiscardVideoButtonProps) {
   const discardVideo = useDiscardVideo()
   const [confirming, setConfirming] = useState(false)
 
@@ -30,7 +30,11 @@ export function DiscardVideoButton({ videoId, title }: DiscardVideoButtonProps) 
         open={confirming}
         onOpenChange={setConfirming}
         title={`Don't download "${title}"?`}
-        description="It will never be downloaded. This can't be undone."
+        description={
+          downloaded
+            ? "Its files will be deleted and it will never be downloaded again. This can't be undone."
+            : "It will never be downloaded. This can't be undone."
+        }
         confirmLabel="Discard video"
         pendingLabel="Discarding…"
         onConfirm={() => discardVideo(videoId)}

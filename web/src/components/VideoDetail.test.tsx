@@ -313,6 +313,24 @@ describe('VideoDetail', () => {
     )
   })
 
+  it("warns that a downloaded video's files will be deleted", async () => {
+    const video = aVideo({ title: 'My Video', status: 'DOWNLOADED' })
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    await userEvent.setup().click(screen.getByRole('button', { name: "Don't download" }))
+
+    expect(screen.getByRole('dialog', { name: 'Don\'t download "My Video"?' })).toHaveTextContent(
+      "Its files will be deleted and it will never be downloaded again. This can't be undone.",
+    )
+  })
+
   it('marks the selected video watched from the detail pane', async () => {
     const markWatched = vi.fn(() => null)
     mockApi({ 'POST /api/videos/abc/watched': markWatched })
