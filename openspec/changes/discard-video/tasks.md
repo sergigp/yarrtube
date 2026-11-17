@@ -38,7 +38,7 @@
 - [x] 2.25 Web "discards a retrying video after confirming" — `DiscardVideoButton` + `ConfirmDialog` + `canDiscard`; `POST /api/videos/{id}/discard`, video gone from the refetched list.
 - [x] 2.26 Web "warns that a downloaded video's files will be deleted".
 - [x] 2.27 Web "sends nothing when the confirmation is cancelled".
-- [ ] 2.28 Web "offers no Don't download for a downloading video".
+- [x] 2.28 Web "offers no Don't download for a downloading video".
 - [ ] 2.29 Web "tells the user when discarding fails".
 
 ## 3. Infrastructure adapters (TDD)

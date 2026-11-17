@@ -350,6 +350,21 @@ describe('VideoDetail', () => {
     expect(screen.getByRole('heading', { name: 'My Video' })).toBeInTheDocument()
   })
 
+  it("offers no Don't download for a downloading video", () => {
+    const video = aVideo({ status: 'IN_PROGRESS', filename: null })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: "Don't download" })).not.toBeInTheDocument()
+  })
+
   it('marks the selected video watched from the detail pane', async () => {
     const markWatched = vi.fn(() => null)
     mockApi({ 'POST /api/videos/abc/watched': markWatched })
