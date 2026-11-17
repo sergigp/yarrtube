@@ -2,34 +2,37 @@
 
 ## Why
 
-A tracked channel re-uploaded a 10.4 h, 10.5 GB livestream that can never download under the container's 256m `mem_limit` (ffmpeg OOMs writing the final MP4), and raising memory is not an option. The app has no way to stop it: the download retries 10 min, 1 h, 6 h, then daily up to 11 attempts, pulling the full 10.5 GB each time. The only end state that stops retries, Unavailable, is set by yt-dlp's verdict, is final and hides the video from every list.
+A tracked channel re-uploaded a 10.4 h, 10.5 GB livestream that can never download under the container's 256m `mem_limit` (ffmpeg OOMs writing the final MP4), and raising memory is not an option. The app has no way to stop it: the download retries 10 min, 1 h, 6 h, then daily up to 11 attempts, pulling the full 10.5 GB each time. The user also has no way to get rid of a downloaded video they don't want. And a video that can't be had (Unavailable, e.g. members-only) still takes one of a channel's `video_limit` slots, so a channel limited to 3 shows only 2.
 
 ## What Changes
 
-- New download status **Discarded** (`DISCARDED`): the user chose not to download the video. Distinct from Unavailable: it is a user choice, stays listed, and can be undone.
-- `POST /api/videos/{id}/discard` (204): discards a video whose download is Pending, Retrying or Failed. Its failed attempts and failure are cleared and every pending task of the video is cancelled. A video already Discarded answers 204 unchanged; one In Progress, Downloaded or Unavailable answers 409; an unknown one 404.
-- `DELETE /api/videos/{id}/discard` (204): undoes it. The download becomes Pending with no failed attempts and the video is synced now, so its download is scheduled. A video not Discarded answers 204 unchanged; an unknown one 404.
-- A Discarded video is never attempted again by any step: a video sync schedules nothing for it, a download task that runs for it does nothing, no thumbnail is fetched. Channel and playlist resyncs keep its status. Retrying the video leaves its download Discarded.
-- Web UI: the video detail pane shows a "Don't download" button next to "Retry now" for a Pending, Retrying or Failed video, and for a Discarded one the status "Discarded" with a "Download anyway" button that undoes it. Lists mark a Discarded video with its own indicator. "Retry now" is not shown for a Discarded video.
-- Out of scope: discarding a Downloaded video (deleting its file), discarding while In Progress (the running attempt can't be cancelled), a per-source max-duration filter, auto-detecting OOM failures, and a Discarded video that ages out of a channel's limit and is later seen again (it comes back as a new Pending video, as today).
+- New download status **Discarded**: the user chose never to download the video. Irreversible, and hidden from every list like Unavailable.
+- `POST /api/videos/{id}/discard` (204) discards a video whose download is Pending, Retrying, Failed or Downloaded: every pending task of the video is cancelled and it is never attempted again by any step, sync, reconcile or retry. In Progress and Unavailable answer 409, an already Discarded video 204 unchanged, an unknown one 404. No undo.
+- Discarding a Downloaded video deletes its files (media, NFO, thumbnail, subtitles) through the existing delete-video-file task, then asks Plex to scan its show folder.
+- Plex is asked to scan a show folder after any video's files are deleted, so a video evicted from a channel or playlist also leaves Plex at once (today it lingers until Plex's own scan).
+- Unavailable and Discarded videos no longer count toward a channel's `video_limit`: the reconcile asks for more uploads so the channel keeps `video_limit` videos that aren't skipped.
+- Web UI: a "Don't download" button in the video detail pane, for any video not In Progress, behind a confirmation that says it can't be undone (and, for a downloaded video, that its files are deleted). On confirm the video leaves the list.
+- Out of scope: a per-source max-duration filter, auto-detecting OOM failures, discarding while In Progress (a running yt-dlp can't be cancelled).
 
 ## Capabilities
 
 ### New Capabilities
-- `video-discard`: discarding a video so it is never downloaded, and undoing it (API, effect on tasks, syncs and other steps).
+- `video-discard`: discarding a video so it is never downloaded, cancelling its work and deleting its files.
 
 ### Modified Capabilities
-- `video-listing`: download status and `download` step may be `DISCARDED`.
+- `video-listing`: playlist and channel lists omit Discarded videos as well as Unavailable ones.
 - `video-retries`: retrying a video leaves a Discarded download unchanged.
-- `web-ui`: video detail status reads "Discarded"; "Don't download" / "Download anyway" controls; "Retry now" hidden for a Discarded video.
+- `channel-video-sync`: Unavailable and Discarded videos don't count toward `video_limit` in discovery and eviction.
+- `plex-library-scan`: show folder scanned after a video's files are deleted.
+- `web-ui`: "Don't download" control with confirmation in the video detail pane.
 
 ## Impact
 
-- Domain: `VideoStatus` (new `Discarded`), `Download` (discarded flag + transitions), `Video` (discard / undo, thumbnail rule), `VideoSyncPlan` (nothing for a Discarded video), `VideoDownloader::is_settled`, new `VideoDiscarder` service and errors.
-- Application: two routes and handlers under `/videos/{id}/discard`; `DISCARDED` in the video DTOs.
-- Infrastructure: `SqliteVideoRepository` encodes/decodes `DISCARDED` in the existing `videos.status` column (no migration, the column has no CHECK); `TaskRepository::delete_pending_for_video` reused.
-- Web: `api/types.ts` (`DISCARDED`), `api/client.ts` + `api/queries.ts` (discard / undo), `VideoDetail`, new `DiscardVideoButton`, `lib/videoSteps.ts`, `VideoListPane` indicator, `test/helpers.tsx` fixtures.
-- No API breaking changes; clients that switch on status get one new value.
+- Domain: `VideoStatus::Discarded`, `Download`/`Video` discard transitions, `VideoSyncPlan` (nothing for Discarded), `VideoDownloader::is_settled`, new `VideoDiscarder` + `DiscardVideoError`, `VideoDiscarded` and `VideoFileDeleted` events, `VideoFileDeleter` publishing `VideoFileDeleted`, `VideoSearcher` hiding Discarded, `ChannelVideoReconciler` skipped-aware window.
+- Application: `POST /videos/{id}/discard` handler; subscribers `DeleteVideoFileOnVideoDiscarded`, `ScanPlexFolderOnVideoFileDeleted` (registered only with Plex configured).
+- Infrastructure: `SqliteVideoRepository` encodes/decodes `DISCARDED` in `videos.status` (no migration: no CHECK); `TaskRepository::delete_pending_for_video` reused.
+- Web: `api/types.ts`, `api/client.ts`, `api/queries.ts`, `VideoDetail`, new `DiscardVideoButton` using `ConfirmDialog`, `lib/videoSteps.ts`.
+- Behaviour change for existing users: channels with Unavailable videos gain videos up to their limit on the next reconcile.
 
 ```mermaid
 ---
@@ -42,33 +45,32 @@ flowchart LR
   subgraph Web
     VD[VideoDetail]:::changed
     DB[DiscardVideoButton]:::new
-    VLP[VideoListPane]:::changed
-    API[api client/queries/types]:::changed
   end
   subgraph Application
     H[http videos handlers]:::changed
-    DTO[videos dto]:::changed
-    SVT[sync_video_task]
-    DVT[download_video_task]
+    SUB[DeleteVideoFileOnVideoDiscarded / ScanPlexFolderOnVideoFileDeleted]:::new
+    DVF[delete_video_file_task]
+    RCT[reconcile_channel_task]
   end
   subgraph Domain
     VDS[VideoDiscarder]:::new
     V[Video / Download / VideoStatus]:::changed
-    VSP[VideoSyncPlan]:::changed
-    VDL[VideoDownloader]:::changed
-    VR[VideoRetrier]
+    VSP[VideoSyncPlan / VideoDownloader]:::changed
+    VFD[VideoFileDeleter]:::changed
+    VS[VideoSearcher]:::changed
+    CVR[ChannelVideoReconciler]:::changed
   end
   subgraph Infrastructure
     SVR[SqliteVideoRepository]:::changed
     TR[SqliteTaskRepository]
   end
-  VD --> DB --> API --> H --> VDS
-  VLP --> API
-  H --> DTO
-  VDS --> V
+  VD --> DB --> H --> VDS --> V
   VDS --> TR
-  VDS --> SVR
-  SVT --> VSP --> V
-  DVT --> VDL --> V
-  VR --> V
+  VDS -. VideoDiscarded .-> SUB
+  SUB --> DVF --> VFD
+  VFD -. VideoFileDeleted .-> SUB
+  RCT --> CVR
+  H --> VS
+  V --> SVR
+  VSP --> V
 ```

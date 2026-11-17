@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Lets the user stop a video from ever being downloaded (e.g. one too big for the container to download), keep seeing it as a deliberate choice, and undo that choice.
+Lets the user stop a video from ever being downloaded (e.g. one too big for the container to download) or get rid of a downloaded one: it is never attempted again, its files are deleted and it is hidden everywhere. Irreversible.
 
 ## ADDED Requirements
 
 ### Requirement: Discard A Video
-The system SHALL let a client discard a video (`POST /api/videos/{id}/discard`, answering 204) whose download is Pending, Retrying or Failed. Its download SHALL become Discarded with no failed attempts and no failure reason, and every task of the video pending in the queue SHALL be removed. Discarding a Discarded video SHALL answer 204 and change nothing.
+The system SHALL let a client discard a video (`POST /api/videos/{id}/discard`, answering 204) whose download is Pending, Retrying, Failed or Downloaded. Its download SHALL become Discarded with no failed attempts, no failure reason and no recorded file, thumbnail or subtitle file, and every task of the video pending in the queue SHALL be removed. Discarding a Discarded video SHALL answer 204 and change nothing.
 
 #### Scenario: Discard a retrying download
 - **WHEN** a client discards a video whose download is Retrying with 3 failed attempts and a download task pending in 6 hours
@@ -25,16 +25,23 @@ The system SHALL let a client discard a video (`POST /api/videos/{id}/discard`, 
 - **WHEN** a client discards a video whose download is already Discarded
 - **THEN** the request answers 204 and the video is unchanged
 
-### Requirement: Only An Undownloaded Video Can Be Discarded
-Discarding a video whose download is In Progress, Downloaded or Unavailable SHALL answer 409 and change nothing. Discarding an unknown video SHALL answer 404.
+### Requirement: Discarding A Downloaded Video Deletes Its Files
+Discarding a Downloaded video SHALL delete its media file, the NFO next to it, its thumbnail and its subtitle file from its show folder, the same way a video evicted from its source is deleted, and SHALL keep the show files and season folder. Discarding a video that has no recorded file SHALL delete nothing.
+
+#### Scenario: Discard a downloaded episode
+- **WHEN** a client discards a Downloaded channel video recorded as `Season 2026/S2026E031501 - Title.mp4` with its thumbnail and subtitles
+- **THEN** a file deletion of the video is scheduled to run now and, once it ran, `S2026E031501 - Title.mp4`, `.nfo`, `.jpg` and its subtitle file are gone from the channel's `Season 2026` folder
+
+#### Scenario: Discard a video never downloaded
+- **WHEN** a client discards a video whose download is Retrying
+- **THEN** no file deletion is scheduled
+
+### Requirement: Only A Video Not Being Downloaded Can Be Discarded
+Discarding a video whose download is In Progress or Unavailable SHALL answer 409 and change nothing. Discarding an unknown video SHALL answer 404.
 
 #### Scenario: Download in progress
 - **WHEN** a client discards a video whose download is In Progress
 - **THEN** the request answers 409 and the video and its tasks are unchanged
-
-#### Scenario: Already downloaded
-- **WHEN** a client discards a Downloaded video
-- **THEN** the request answers 409 and its file is kept
 
 #### Scenario: Unavailable
 - **WHEN** a client discards a video whose download is Unavailable
@@ -45,7 +52,7 @@ Discarding a video whose download is In Progress, Downloaded or Unavailable SHAL
 - **THEN** the request answers 404
 
 ### Requirement: A Discarded Video Is Never Attempted
-No step SHALL be attempted for a video whose download is Discarded: a video sync SHALL schedule nothing for it, and a download task that runs for it SHALL download nothing and complete without being re-queued. A channel or playlist reconcile that still finds the video SHALL keep its download Discarded.
+No step SHALL be attempted for a Discarded video: a video sync SHALL schedule nothing for it, and a download, subtitle, chapters, quality, summary or categorization task that runs for it SHALL do nothing and complete without being re-queued. A step that was already running when the video was discarded SHALL record nothing on it when it finishes. A channel or playlist reconcile that still finds the video SHALL keep it Discarded.
 
 #### Scenario: Video sync
 - **WHEN** a video sync runs for a Discarded video with no thumbnail
@@ -55,21 +62,10 @@ No step SHALL be attempted for a video whose download is Discarded: a video sync
 - **WHEN** a download task runs for a Discarded video
 - **THEN** nothing is downloaded, the video stays Discarded and the task completes without being re-queued
 
+#### Scenario: Quality upgrade finishing after the discard
+- **WHEN** a quality upgrade of a Downloaded video is running, the video is discarded, and the upgrade then places a better file
+- **THEN** the video stays Discarded with no recorded file
+
 #### Scenario: Channel resync
 - **WHEN** a channel reconcile finds a Discarded video still among the channel's uploads, under a new title
-- **THEN** the video's title is updated and its download stays Discarded with no download scheduled
-
-### Requirement: Undo A Discard
-The system SHALL let a client undo a discard (`DELETE /api/videos/{id}/discard`, answering 204). A Discarded download SHALL become Pending with no failed attempts and the video SHALL be synced now, so its download is scheduled. Undoing for a video that isn't Discarded SHALL answer 204 and change nothing. Undoing for an unknown video SHALL answer 404.
-
-#### Scenario: Undo
-- **WHEN** a client undoes the discard of a Discarded video
-- **THEN** the request answers 204, its download is Pending with no failed attempts and a sync of the video is scheduled to run now
-
-#### Scenario: Nothing to undo
-- **WHEN** a client undoes the discard of a Downloaded video
-- **THEN** the request answers 204 and the video is unchanged and no task is scheduled
-
-#### Scenario: Unknown video
-- **WHEN** a client undoes the discard of a video id that doesn't exist
-- **THEN** the request answers 404
+- **THEN** the video's title is updated and it stays Discarded with no download scheduled

@@ -2,21 +2,60 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Listed Videos Include Their Steps
-The system SHALL include, for each video in the responses that list the videos of a playlist, a channel or a category, its download status and a `steps` object with an entry for each of `download`, `thumbnail`, `subtitles`, `chapters`, `quality`, `summary` and `categorization`. Each entry SHALL hold the step's status (`PENDING`, `RETRYING`, `DONE`, `UNAVAILABLE` or `FAILED`; the download also `IN_PROGRESS` and `DISCARDED`), its consecutive failed attempts, when its next attempt is due (only while Retrying) and its last failure reason (only while Retrying or Failed, and only where one is recorded). The download status SHALL be one of `PENDING`, `IN_PROGRESS`, `DOWNLOADED`, `RETRYING`, `FAILED`, `UNAVAILABLE` and `DISCARDED`; `ERRORED_RETRYING`, `ERRORED` and `EXCLUDED` SHALL no longer be returned.
+### Requirement: List Videos For A Playlist
+The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist except those whose download is Unavailable (excluded) or Discarded (see `video-discard`), including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds. The returned videos SHALL be ordered by their current position in the source YouTube playlist.
 
-#### Scenario: Retrying video is listed
-- **WHEN** a client lists the videos of a playlist with a video whose first download attempt failed at 10:00 with "HTTP Error 503"
-- **THEN** that video's status is `RETRYING` and its `download` step is `RETRYING` with 1 failed attempt, next attempt at 10:10 and failure "HTTP Error 503"
+#### Scenario: Playlist has videos
+- **WHEN** a client requests the videos of a tracked playlist that has one or more recorded videos
+- **THEN** the daemon responds with HTTP status 200 and a list containing each of those videos
 
-#### Scenario: Failed video is listed
-- **WHEN** a client lists a video whose download gave up after 11 attempts
-- **THEN** that video's status is `FAILED` and its `download` step is `FAILED` with 11 failed attempts, its last failure reason and no next attempt
+#### Scenario: Playlist has no videos
+- **WHEN** a client requests the videos of a tracked playlist that has no recorded videos
+- **THEN** the daemon responds with HTTP status 200 and an empty list
 
-#### Scenario: Downloaded video with a failed summary
-- **WHEN** a client lists a downloaded video whose subtitles are Done and whose summary gave up
-- **THEN** its status is `DOWNLOADED`, its `download` and `subtitles` steps are `DONE` and its `summary` step is `FAILED`
+#### Scenario: Playlist does not exist
+- **WHEN** a client requests the videos of a playlist ID that is not currently tracked
+- **THEN** the daemon responds with HTTP status 400 and does not return a list
 
-#### Scenario: Discarded video is listed
-- **WHEN** a client lists the videos of a channel with a video the user discarded
-- **THEN** that video is listed with status `DISCARDED` and its `download` step is `DISCARDED` with no failed attempts, no next attempt and no failure
+#### Scenario: YouTube-linked playlist's videos are ordered by playlist position
+- **WHEN** a client requests the videos of a YouTube-linked playlist
+- **THEN** the daemon returns them ordered by their position in the source YouTube playlist, matching the order they appear in on YouTube
+
+#### Scenario: Playlist videos include their watch state
+- **WHEN** a client requests the videos of a tracked playlist that has a watched video and a partly watched video
+- **THEN** each returned video reports whether it has been watched and its saved playback position
+
+#### Scenario: Excluded videos are omitted
+- **WHEN** a client requests the videos of a tracked playlist that has an excluded video alongside other videos
+- **THEN** the returned list contains the other videos and does not contain the excluded one
+
+#### Scenario: Discarded videos are omitted
+- **WHEN** a client requests the videos of a tracked playlist that has a Discarded video alongside other videos
+- **THEN** the returned list contains the other videos and does not contain the Discarded one
+
+### Requirement: List Videos For A Channel
+The system SHALL provide an HTTP endpoint that, given a tracked channel's handle, returns every video recorded for that channel except those whose download is Unavailable (excluded) or Discarded (see `video-discard`), including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds, ordered by recency (most recently uploaded first).
+
+#### Scenario: Channel has videos
+- **WHEN** a client requests the videos of a tracked channel that has one or more recorded videos
+- **THEN** the daemon responds with HTTP status 200 and a list containing each of those videos, ordered most recent first
+
+#### Scenario: Channel has no videos
+- **WHEN** a client requests the videos of a tracked channel that has no recorded videos
+- **THEN** the daemon responds with HTTP status 200 and an empty list
+
+#### Scenario: Channel does not exist
+- **WHEN** a client requests the videos of a channel handle that is not currently tracked
+- **THEN** the daemon responds with HTTP status 400 and does not return a list
+
+#### Scenario: Channel videos include their watch state
+- **WHEN** a client requests the videos of a tracked channel that has a watched video and a partly watched video
+- **THEN** each returned video reports whether it has been watched and its saved playback position
+
+#### Scenario: Excluded videos are omitted
+- **WHEN** a client requests the videos of a tracked channel that has an excluded video alongside other videos
+- **THEN** the returned list contains the other videos and does not contain the excluded one
+
+#### Scenario: Discarded videos are omitted
+- **WHEN** a client requests the videos of a tracked channel that has a Discarded video alongside other videos
+- **THEN** the returned list contains the other videos and does not contain the Discarded one
