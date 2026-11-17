@@ -30,7 +30,7 @@
 - [x] 2.17 `delete_video_file_task::it_should_publish_nothing_when_no_file_was_recorded`.
 - [x] 2.18 `sync_video_task::it_should_schedule_nothing_for_a_discarded_video` — `VideoSyncPlan` empty, thumbnail not fetchable.
 - [x] 2.19 `download_video_task::it_should_settle_without_downloading_a_discarded_video` — `is_settled` includes Discarded.
-- [ ] 2.20 `upgrade_quality_task::it_should_record_nothing_on_a_video_discarded_during_the_upgrade`.
+- [x] 2.20 `upgrade_quality_task::it_should_record_nothing_on_a_video_discarded_during_the_upgrade`.
 - [ ] 2.21 `reconcile_channel_task::it_should_keep_a_discarded_video_discarded_on_resync`.
 - [ ] 2.22 `reconcile_channel_task::it_should_request_one_more_upload_per_skipped_video`.
 - [ ] 2.23 `reconcile_channel_task::it_should_not_count_skipped_videos_toward_the_limit` — `within_limit`.
