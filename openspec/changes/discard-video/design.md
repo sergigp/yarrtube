@@ -6,6 +6,8 @@ Key decisions (one line each, so they aren't "fixed" later):
 - **Distinct `Discarded`, not `Unavailable`**: Unavailable is yt-dlp's verdict and can be cleared by nothing; Discarded is the user's, and Downloaded videos can be discarded. Both are "skipped": hidden from lists and outside a channel's limit (`Video::is_skipped`).
 - **Discarded is a flag on `Download`, like `started`**, over a Pending state with no attempts: the `StepStatus` vocabulary shared by every step stays unchanged. Stored as `videos.status = 'DISCARDED'`; no migration (no CHECK on the column).
 - **Irreversible**: no undo transition or endpoint.
+- **Every recorded file is deleted on discard**, not only a Downloaded video's: a not-yet-downloaded video may have a fetched thumbnail. `VideoDiscarded.filename` is optional; Plex is rescanned only when a media file was deleted.
+- **The filesystem reconcile doesn't protect a Discarded video's episode files**: it protects a numbered video's episode base name while its download is pending, which a Discarded one never completes.
 - **Recorded filenames are cleared on discard**: the filesystem reconcile protects every recorded filename regardless of status, so clearing them makes it sweep any file a late step leaves behind. The deletion itself still runs at once through `VideoDiscarded` → `DeleteVideoFile`, built from the video as read before the discard.
 - **No discard while In Progress (409)**: a running yt-dlp can't be cancelled. The `VideoUpdater` transition runs on the stored version, so a download starting between read and write makes the discard decline (→ 409).
 - **Video first, tasks second**: the video is marked Discarded before pending tasks are deleted, so a task that starts in between finds it settled.
@@ -175,7 +177,7 @@ sequenceDiagram
       D-->>H: Err(NotDiscardable) → 409
     else discarded
       D->>T: delete_pending_for_video(&id)
-      opt before had a file and owner found
+      opt before had a media or thumbnail file and owner found
         D->>E: publish(VideoDiscarded{id, output_dir, filenames})
       end
       D-->>H: Ok(()) → 204
@@ -291,11 +293,12 @@ pub enum DiscardVideoError { VideoNotFound(VideoId), NotDiscardable(VideoId, Vid
 
 ```rust
 // src/domain/video/events.rs
-/// A video was discarded with a recorded file in its owner's `output_dir`.
+/// A video was discarded with a recorded file (media or thumbnail) in its
+/// owner's `output_dir`.
 pub struct VideoDiscarded {
     pub video_id: String,
     pub output_dir: String,
-    pub filename: String,
+    pub filename: Option<String>,
     pub thumbnail_filename: Option<String>,
     pub subtitle_filename: Option<String>,
 }
@@ -391,14 +394,16 @@ export function DiscardVideoButton(props: { videoId: string; title: string; down
    2. `video_owner_finder.find(&before)` → `Option<VideoOwner>`
    3. `video_updater.update(&id, |v| v.discard(now))` → `None`: re-find for `NotDiscardable(id, status)`
    4. `task_repository.delete_pending_for_video(&id)`
-   5. `before.download.filename()` and owner → `event_publisher.publish(VideoDiscarded { video_id, output_dir: owner.target.output_dir, filename, thumbnail_filename, subtitle_filename })`
+   5. `before.download.filename()` or `before.thumbnail.filename`, and owner → `event_publisher.publish(VideoDiscarded { video_id, output_dir: owner.target.output_dir, filename, thumbnail_filename, subtitle_filename })`
 3. Map: `VideoNotFound` → 404, `NotDiscardable` → 409, `Repository` → 500; ok → 204.
 
-**Files** — `DeleteVideoFileOnVideoDiscarded::handle(payload)` → `task_repository.schedule(&Task::DeleteVideoFile { filename: Some(..), thumbnail_filename, subtitle_filename, output_dir }, now)` → `DeleteVideoFileTask` → `VideoFileDeleter::delete_video_file(..)` → `event_publisher.publish(VideoFileDeleted { output_dir })` when a filename was given → `ScanPlexFolderOnVideoFileDeleted::handle` → `PlexFolderScanner::scan_folder(Path::new(&output_dir))`.
+**Files** — `DeleteVideoFileOnVideoDiscarded::handle(payload)` → `task_repository.schedule(&Task::DeleteVideoFile { filename, thumbnail_filename, subtitle_filename, output_dir }, now)` → `DeleteVideoFileTask` → `VideoFileDeleter::delete_video_file(..)` → `event_publisher.publish(VideoFileDeleted { output_dir })` when a filename was given → `ScanPlexFolderOnVideoFileDeleted::handle` → `PlexFolderScanner::scan_folder(Path::new(&output_dir))`.
 
 **Never attempted** — `SyncVideoTask` → `VideoSyncPlan::for_video` → `[]` when discarded. `DownloadVideoTask` → `VideoDownloader::download` → `is_settled` → settled. Subtitles/chapters/quality/summary/categorization: their fetchable checks require Downloaded. `QualityUpgrader` record transition declines on a Discarded video. `VideoRetrier::retry` → `Download::retry` keeps it discarded.
 
 **Lists** — `VideoSearcher::list_for_playlist` / `list_for_channel` → `.filter(|v| !is_skipped(v))`. Home, search and categories already list only Downloaded.
+
+**Sweep** — `InternalVideoReconciler` → `numbered_episode_paths(videos)` skips Discarded videos, so files under their episode base name are swept once unrecorded.
 
 **Channel limit** — `ChannelVideoReconciler::sync_membership_with_youtube`: `list_stored_videos(channel)` → `skipped = stored.filter(|(_, v)| v.is_skipped()).count()` → `list_current_videos(channel, skipped, ..)` → `channel_videos_repository.list_current_videos(&channel.id, limit + skipped)` → `video_window::within_limit(listing, |u| skipped_ids.contains(&u.youtube_id), limit)` → add / refresh / `remove_videos_not_in(window ids)`.
 
@@ -445,7 +450,12 @@ Web — Vitest + `mockApi`, `VideoDetail.test.tsx`:
 28. "offers no Don't download for a downloading video".
 29. "tells the user when discarding fails".
 
+Thumbnail of a video discarded before its download:
+30. `it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_downloaded` (HTTP) — `VideoDiscarded` with `filename: None` and the thumbnail.
+31. `delete_video_file_on_video_discarded::it_should_schedule_the_deletion_of_a_discarded_thumbnail` — `DeleteVideoFile` with `filename: None` and the thumbnail.
+32. `reconcile_channel_task::it_should_delete_the_files_left_by_a_discarded_video` — a numbered Discarded video's unrecorded `.jpg` under its episode base name is swept.
+
 ### 2. Infrastructure tests
 
 `SqliteVideoRepository`:
-30. `it_should_round_trip_a_discarded_video` — `DISCARDED` decodes to discarded, Pending, no attempts, no file.
+33. `it_should_round_trip_a_discarded_video` — `DISCARDED` decodes to discarded, Pending, no attempts, no file.

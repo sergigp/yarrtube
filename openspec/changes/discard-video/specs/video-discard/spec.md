@@ -25,15 +25,19 @@ The system SHALL let a client discard a video (`POST /api/videos/{id}/discard`, 
 - **WHEN** a client discards a video whose download is already Discarded
 - **THEN** the request answers 204 and the video is unchanged
 
-### Requirement: Discarding A Downloaded Video Deletes Its Files
-Discarding a Downloaded video SHALL delete its media file, the NFO next to it, its thumbnail and its subtitle file from its show folder, the same way a video evicted from its source is deleted, and SHALL keep the show files and season folder. Discarding a video that has no recorded file SHALL delete nothing.
+### Requirement: Discarding A Video Deletes Its Files
+Discarding a video SHALL delete every file it has recorded from its show folder: a Downloaded video's media file, the NFO next to it, its thumbnail and its subtitle file; a video not downloaded yet, its fetched thumbnail. Files are deleted the same way as for a video evicted from its source, keeping the show files and season folder. Discarding a video with no recorded file SHALL delete nothing.
 
 #### Scenario: Discard a downloaded episode
 - **WHEN** a client discards a Downloaded channel video recorded as `Season 2026/S2026E031501 - Title.mp4` with its thumbnail and subtitles
 - **THEN** a file deletion of the video is scheduled to run now and, once it ran, `S2026E031501 - Title.mp4`, `.nfo`, `.jpg` and its subtitle file are gone from the channel's `Season 2026` folder
 
-#### Scenario: Discard a video never downloaded
-- **WHEN** a client discards a video whose download is Retrying
+#### Scenario: Discard a video never downloaded with its thumbnail
+- **WHEN** a client discards a video whose download is Retrying and whose thumbnail was fetched as `Season 2026/S2026E031601 - Title.jpg`
+- **THEN** a file deletion of the video is scheduled to run now and, once it ran, that thumbnail is gone
+
+#### Scenario: Discard a video with no file
+- **WHEN** a client discards a video whose download is Retrying and that has no thumbnail
 - **THEN** no file deletion is scheduled
 
 ### Requirement: Only A Video Not Being Downloaded Can Be Discarded

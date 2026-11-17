@@ -40,6 +40,9 @@
 - [x] 2.27 Web "sends nothing when the confirmation is cancelled".
 - [x] 2.28 Web "offers no Don't download for a downloading video".
 - [x] 2.29 Web "tells the user when discarding fails".
+- [ ] 2.30 `it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_downloaded` — `VideoDiscarded.filename` becomes optional; published when a media or thumbnail file is recorded.
+- [ ] 2.31 `delete_video_file_on_video_discarded::it_should_schedule_the_deletion_of_a_discarded_thumbnail` — the subscriber passes the optional filename through.
+- [ ] 2.32 `reconcile_channel_task::it_should_delete_the_files_left_by_a_discarded_video` — `InternalVideoReconciler` no longer protects a Discarded video's episode base name.
 
 ## 3. Infrastructure adapters (TDD)
 
@@ -50,3 +53,4 @@
 - [x] 4.1 Run `scripts/run-tests.sh --lint --web --rust`; all suites pass.
 - [x] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a channel via the HTTP API and wait for one video to download. With the Playwright MCP browser: discard a Pending/Retrying video (confirm) and a Downloaded one; assert the confirmation texts, that both leave the channel list, that `GET /api/tasks` shows no pending task for them and a completed `delete_video_file` for the downloaded one, and that its files are gone from the fresh videos dir; screenshot the dialog. Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.3 Manual (human): on the NAS after deploy, discard the Control de Misión livestream (video `461e8684-45d5-454b-acc1-3261fdb8159a`, YouTube `QaK1s0RObH0`) once it isn't downloading; confirm no further download attempt over the next day, the channel gains a video to fill its limit on the next reconcile, and a discarded downloaded episode disappears from Plex.
+- [ ] 4.4 Re-run `scripts/run-tests.sh --lint --web --rust` after 2.30–2.32; all suites pass.
