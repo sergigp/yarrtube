@@ -343,6 +343,55 @@ fn it_should_refresh_existing_videos() {
 }
 
 #[test]
+fn it_should_keep_a_discarded_video_discarded_on_resync() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let existing = Video::create(
+        YoutubeVideoId::new("yt1").unwrap(),
+        "Original",
+        fixed_timestamp(),
+    )
+    .discard(fixed_timestamp())
+    .unwrap();
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &existing,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("yt1", "Renamed", 2),
+        ])),
+        task_repository.clone(),
+        video_file_repository.clone(),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            title: "Renamed".to_string(),
+            ..existing
+        }]
+    );
+}
+
+#[test]
 fn it_should_keep_the_yes_verdict_categories_of_an_uncategorized_channel() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
