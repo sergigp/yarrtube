@@ -28,7 +28,7 @@
 - [x] 2.15 `scan_plex_folder_on_video_file_deleted::it_should_scan_the_show_folder_after_a_deletion`.
 - [x] 2.16 `delete_video_file_task::it_should_publish_video_file_deleted_after_deleting_a_video_file`.
 - [x] 2.17 `delete_video_file_task::it_should_publish_nothing_when_no_file_was_recorded`.
-- [ ] 2.18 `sync_video_task::it_should_schedule_nothing_for_a_discarded_video` — `VideoSyncPlan` empty, thumbnail not fetchable.
+- [x] 2.18 `sync_video_task::it_should_schedule_nothing_for_a_discarded_video` — `VideoSyncPlan` empty, thumbnail not fetchable.
 - [ ] 2.19 `download_video_task::it_should_settle_without_downloading_a_discarded_video` — `is_settled` includes Discarded.
 - [ ] 2.20 `upgrade_quality_task::it_should_record_nothing_on_a_video_discarded_during_the_upgrade`.
 - [ ] 2.21 `reconcile_channel_task::it_should_keep_a_discarded_video_discarded_on_resync`.
