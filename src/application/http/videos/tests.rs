@@ -7665,6 +7665,56 @@ async fn it_should_omit_discarded_videos_from_a_playlist_list() {
     );
 }
 
+#[tokio::test]
+async fn it_should_keep_a_discarded_download_on_retry() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository =
+        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video = Video {
+        thumbnail: Thumbnail {
+            state: StepState::pending().give_up(fixed_timestamp()),
+            filename: None,
+        },
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .discard(fixed_timestamp())
+        .unwrap()
+    };
+    video_repository.insert(&video).unwrap();
+
+    let response = retry_video(
+        State(video_retrier(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            thumbnail: Thumbnail {
+                state: StepState::pending(),
+                filename: None,
+            },
+            ..video.clone()
+        })
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: video.id.as_str().to_string()
+            }
+        )]
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
