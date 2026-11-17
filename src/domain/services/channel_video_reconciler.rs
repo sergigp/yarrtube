@@ -228,7 +228,8 @@ impl ChannelVideoReconciler {
     }
 
     /// Brings the stored membership in line with the channel's current
-    /// `video_limit` most recent uploads: adds newly seen videos, refreshes
+    /// `video_limit` most recent uploads, Unavailable and Discarded ones not
+    /// counting toward the limit: adds newly seen videos, refreshes
     /// the title and position of known ones, and removes stored videos no
     /// longer among them (removed on YouTube or aged past the limit). A
     /// failed listing either leaves membership untouched for this pass, the
@@ -250,8 +251,16 @@ impl ChannelVideoReconciler {
             });
         };
         let stored_videos = self.list_stored_videos(channel)?;
-        let current_videos =
-            video_window::within_limit(listing, |_| false, channel.video_limit.value() as usize);
+        let skipped_ids: HashSet<&str> = stored_videos
+            .iter()
+            .filter(|(_, video)| video.is_skipped())
+            .map(|(_, video)| video.youtube_id.as_str())
+            .collect();
+        let current_videos = video_window::within_limit(
+            listing,
+            |upload| skipped_ids.contains(upload.youtube_id.as_str()),
+            channel.video_limit.value() as usize,
+        );
         let now = self.clock.now();
 
         // Keyed by YouTube id; a video added below joins it, so a video
