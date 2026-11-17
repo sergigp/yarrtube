@@ -40,7 +40,7 @@
 - [x] 2.27 Web "sends nothing when the confirmation is cancelled".
 - [x] 2.28 Web "offers no Don't download for a downloading video".
 - [x] 2.29 Web "tells the user when discarding fails".
-- [ ] 2.30 `it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_downloaded` — `VideoDiscarded.filename` becomes optional; published when a media or thumbnail file is recorded.
+- [x] 2.30 `it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_downloaded` — `VideoDiscarded.filename` becomes optional; published when a media or thumbnail file is recorded.
 - [ ] 2.31 `delete_video_file_on_video_discarded::it_should_schedule_the_deletion_of_a_discarded_thumbnail` — the subscriber passes the optional filename through.
 - [ ] 2.32 `reconcile_channel_task::it_should_delete_the_files_left_by_a_discarded_video` — `InternalVideoReconciler` no longer protects a Discarded video's episode base name.
 

@@ -7405,7 +7405,7 @@ async fn it_should_publish_video_discarded_for_a_downloaded_video() {
             DomainEvent::VideoDiscarded(VideoDiscarded {
                 video_id: video.id.as_str().to_string(),
                 output_dir: "/videos/creators/somechannel".to_string(),
-                filename: "My Video.mp4".to_string(),
+                filename: Some("My Video.mp4".to_string()),
                 thumbnail_filename: Some("My Video.jpg".to_string()),
                 subtitle_filename: Some("My Video.en.srt".to_string()),
             })
@@ -7711,6 +7711,56 @@ async fn it_should_keep_a_discarded_download_on_retry() {
             &Task::SyncVideo {
                 video_id: video.id.as_str().to_string()
             }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_publish_video_discarded_for_the_thumbnail_of_a_video_never_downloaded() {
+    let db = TestDatabase::new();
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let video = Video {
+        thumbnail: Thumbnail {
+            state: StepState::pending().succeed(),
+            filename: Some("Season 2026/S2026E031601 - My Video.jpg".to_string()),
+        },
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+    };
+    save_channel_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+
+    let response = discard_video(
+        State(video_discarder(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoDiscarded(VideoDiscarded {
+                video_id: video.id.as_str().to_string(),
+                output_dir: "/videos/creators/somechannel".to_string(),
+                filename: None,
+                thumbnail_filename: Some("Season 2026/S2026E031601 - My Video.jpg".to_string()),
+                subtitle_filename: None,
+            })
         )]
     );
 }

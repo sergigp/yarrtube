@@ -100,7 +100,8 @@ impl VideoDiscarder {
     }
 
     /// `VideoDiscarded` for `video` as read before the discard, when it had a
-    /// recorded file and its owner (where its files live) is found.
+    /// recorded media or thumbnail file and its owner (where its files live)
+    /// is found.
     fn publish_discarded(&self, video: &Video) -> Result<(), DiscardVideoError> {
         let Some(event) = self.discarded_event(video)? else {
             return Ok(());
@@ -111,9 +112,11 @@ impl VideoDiscarder {
     }
 
     fn discarded_event(&self, video: &Video) -> Result<Option<VideoDiscarded>, DiscardVideoError> {
-        let Some(filename) = video.download.filename() else {
+        let filename = video.download.filename().map(str::to_string);
+        let thumbnail_filename = video.thumbnail.filename.clone();
+        if filename.is_none() && thumbnail_filename.is_none() {
             return Ok(None);
-        };
+        }
         let owner = self
             .video_owner_finder
             .find(video)
@@ -121,8 +124,8 @@ impl VideoDiscarder {
         Ok(owner.map(|owner| VideoDiscarded {
             video_id: video.id.as_str().to_string(),
             output_dir: owner.target.output_dir.to_string_lossy().to_string(),
-            filename: filename.to_string(),
-            thumbnail_filename: video.thumbnail.filename.clone(),
+            filename,
+            thumbnail_filename,
             subtitle_filename: video.subtitles.filename.clone(),
         }))
     }
