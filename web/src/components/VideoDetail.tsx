@@ -12,8 +12,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Badge } from '@/components/ui/badge'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { storageLocation } from '@/lib/storageLocation'
-import { canRetry, failingStepLines, statusLabel } from '@/lib/videoSteps'
+import { canDiscard, canRetry, failingStepLines, statusLabel } from '@/lib/videoSteps'
 import { RetryVideoButton } from './RetryVideoButton'
+import { DiscardVideoButton } from './DiscardVideoButton'
 
 /** Where the video comes from, as its meta line links it. */
 export interface VideoDetailSource {
@@ -98,6 +99,13 @@ export function VideoDetail({
         )}
         <FailingSteps video={video} />
         {canRetry(video.steps) && <RetryVideoButton videoId={video.id} title={video.title} />}
+        {canDiscard(video.status) && (
+          <DiscardVideoButton
+            videoId={video.id}
+            title={video.title}
+            downloaded={video.status === 'DOWNLOADED'}
+          />
+        )}
         <p className="text-xs break-words text-muted-foreground">{location}</p>
       </div>
     </div>

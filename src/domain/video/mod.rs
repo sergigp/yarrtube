@@ -65,9 +65,12 @@ pub use downloaded_video::DownloadedVideo;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
 pub use errors::{
-    ListVideosError, ReadSubtitlesError, RetryVideoError, StaleVideo, UpdateWatchStateError,
+    DiscardVideoError, ListVideosError, ReadSubtitlesError, RetryVideoError, StaleVideo,
+    UpdateWatchStateError,
 };
-pub use events::{VideoDownloaded, VideoSubtitlesFetched, VideoSummaryGenerated};
+pub use events::{
+    VideoDiscarded, VideoDownloaded, VideoFileDeleted, VideoSubtitlesFetched, VideoSummaryGenerated,
+};
 pub use fetched_thumbnail::FetchedThumbnail;
 pub use home_category_section::HomeCategorySection;
 pub use home_limits::HomeLimits;

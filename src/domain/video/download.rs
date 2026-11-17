@@ -12,6 +12,9 @@ pub struct Download {
     pub state: StepState,
     /// In Progress: running on top of a Pending or Retrying state.
     pub started: bool,
+    /// Discarded by the user, for good (see the `video-discard`
+    /// capability): never attempted again.
+    pub discarded: bool,
     /// Why the last attempt failed; kept while started, cleared on success,
     /// unavailable and retry.
     pub failure: Option<String>,
@@ -25,6 +28,7 @@ impl Download {
         Self {
             state: StepState::pending(),
             started: false,
+            discarded: false,
             failure: None,
             file: None,
         }
@@ -43,6 +47,19 @@ impl Download {
             StepStatus::Done => VideoStatus::Downloaded,
             StepStatus::Unavailable => VideoStatus::Unavailable,
         }
+    }
+
+    /// Whether the user discarded it.
+    #[allow(dead_code)] // walking skeleton
+    pub fn is_discarded(&self) -> bool {
+        false
+    }
+
+    #[allow(dead_code)] // walking skeleton
+    /// Whether it can be discarded: Pending, Retrying, Failed or
+    /// Downloaded, not started nor already discarded.
+    pub fn is_discardable(&self) -> bool {
+        false
     }
 
     pub fn is_downloaded(&self) -> bool {
@@ -91,6 +108,7 @@ impl Download {
         Self {
             state: self.state.succeed(),
             started: false,
+            discarded: self.discarded,
             failure: None,
             file: Some(file),
         }
@@ -127,6 +145,13 @@ impl Download {
             failure: None,
             ..self
         }
+    }
+
+    #[allow(dead_code)] // walking skeleton
+    /// Discarded for good: Pending with no attempts, no failure and no
+    /// file.
+    pub fn discard(self) -> Self {
+        self
     }
 
     /// The file recorded as `file` (a relocation or quality upgrade), state

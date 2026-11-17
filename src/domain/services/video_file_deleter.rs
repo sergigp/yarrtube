@@ -2,6 +2,7 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::video::{is_episode_path, nfo_path_for, owning_entry, resolve_output_dir};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
+use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -11,16 +12,20 @@ use tracing::{debug, info};
 #[derive(Clone)]
 pub struct VideoFileDeleter {
     video_file_repository: Arc<dyn VideoFileRepository>,
+    #[allow(dead_code)]
+    event_publisher: Arc<dyn EventPublisher>,
     videos_path: String,
 }
 
 impl VideoFileDeleter {
     pub fn new(
         video_file_repository: Arc<dyn VideoFileRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
         videos_path: impl Into<String>,
     ) -> Self {
         Self {
             video_file_repository,
+            event_publisher,
             videos_path: videos_path.into(),
         }
     }
@@ -161,7 +166,19 @@ mod tests {
 
     fn deleter(repo: FakeVideoFileRepository) -> (VideoFileDeleter, Arc<FakeVideoFileRepository>) {
         let repo = Arc::new(repo);
-        (VideoFileDeleter::new(repo.clone(), "/videos"), repo)
+        (
+            VideoFileDeleter::new(repo.clone(), Arc::new(NoEventPublisher), "/videos"),
+            repo,
+        )
+    }
+
+    /// These tests only cover what reaches the disk.
+    struct NoEventPublisher;
+
+    impl EventPublisher for NoEventPublisher {
+        fn publish(&self, _event: &crate::domain::event::DomainEvent) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     #[test]

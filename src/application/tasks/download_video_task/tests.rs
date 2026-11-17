@@ -1699,6 +1699,7 @@ fn it_should_download_a_retrying_video_once_due() {
             download: Download {
                 state: StepState::pending().succeed(),
                 started: false,
+                discarded: false,
                 failure: None,
                 file: Some(DownloadedFile {
                     filename: "Season 2026/S2026E031501 - My Video.mp4".to_string(),

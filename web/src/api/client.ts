@@ -391,6 +391,14 @@ export async function retryVideo(videoId: string): Promise<void> {
   })
 }
 
+/** Discards a video for good: never downloaded again, its files deleted. */
+export async function discardVideo(videoId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(videoId)}/discard`, {
+    method: 'POST',
+    label: `discard video ${videoId}`,
+  })
+}
+
 /** Brings the pending tasks among `ids` forward so they run now. */
 export async function runTasksNow(ids: number[]): Promise<void> {
   await send('/tasks/run-now', {

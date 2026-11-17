@@ -19,6 +19,7 @@ const STATUS_MESSAGES: Record<Exclude<VideoStatus, 'DOWNLOADED' | 'IN_PROGRESS'>
   RETRYING: 'This video failed to download and will be retried.',
   FAILED: 'This video failed to download.',
   UNAVAILABLE: 'This video is unavailable on YouTube.',
+  DISCARDED: 'You chose not to download this video.',
 }
 
 function VideoStatusIndicator({ status }: { status: VideoStatus }) {

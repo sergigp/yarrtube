@@ -132,6 +132,21 @@ impl Video {
         }
     }
 
+    #[allow(dead_code)] // walking skeleton
+    /// Discards the video for good (see the `video-discard` capability):
+    /// `None` unless its download is discardable; else its download
+    /// Discarded and its thumbnail and subtitle filenames cleared.
+    pub fn discard(self, _now: DateTime<Utc>) -> Option<Self> {
+        None
+    }
+
+    #[allow(dead_code)] // walking skeleton
+    /// Unavailable or Discarded: hidden from lists and outside a channel's
+    /// video limit.
+    pub fn is_skipped(&self) -> bool {
+        false
+    }
+
     /// Every Retrying or Failed step back to Pending with no failed
     /// attempts — see the `video-retries` capability. Pending, In Progress,
     /// Done and Unavailable steps are left as they are.
@@ -627,6 +642,7 @@ mod tests {
                         },
                     },
                     started: false,
+                    discarded: false,
                     failure: Some("HTTP Error 503".to_string()),
                     file: None,
                 },

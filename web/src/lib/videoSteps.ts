@@ -7,6 +7,7 @@ const STATUS_LABELS: Record<VideoStatus, string> = {
   RETRYING: 'Retrying',
   FAILED: 'Failed',
   UNAVAILABLE: 'Unavailable',
+  DISCARDED: 'Discarded',
 }
 
 /** The download status as the status indicator reads it. */
@@ -74,4 +75,9 @@ function withFailure(line: string, step: Step): string {
 /** Whether any step is Retrying or Failed, so the video can be retried. */
 export function canRetry(steps: VideoSteps): boolean {
   return Object.values(steps).some((step) => step.status === 'RETRYING' || step.status === 'FAILED')
+}
+
+/** Whether the video can be discarded: not downloading, unavailable or already discarded. */
+export function canDiscard(_status: VideoStatus): boolean {
+  return false
 }

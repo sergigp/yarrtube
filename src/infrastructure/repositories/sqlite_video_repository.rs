@@ -660,6 +660,7 @@ impl SqliteVideoRepository {
             VideoStatus::Failed => StepStatus::Failed,
             VideoStatus::Downloaded => StepStatus::Done,
             VideoStatus::Unavailable => StepStatus::Unavailable,
+            VideoStatus::Discarded => StepStatus::Pending,
         };
         Ok(Download {
             state: StepState {
@@ -670,6 +671,7 @@ impl SqliteVideoRepository {
                 },
             },
             started: status == VideoStatus::InProgress,
+            discarded: false,
             failure,
             file: Self::decode_downloaded_file(filename, quality, duration_seconds)?,
         })

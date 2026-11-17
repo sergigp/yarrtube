@@ -1,5 +1,6 @@
 pub mod delete_channel_files_on_channel_deleted;
 pub mod delete_playlist_files_on_playlist_deleted;
+pub mod delete_video_file_on_video_discarded;
 pub mod delete_video_file_on_video_removed_from_channel;
 pub mod delete_video_file_on_video_removed_from_playlist;
 pub mod reconcile_on_channel_created;
@@ -8,6 +9,7 @@ pub mod remove_channel_from_categories_on_channel_deleted;
 pub mod remove_playlist_from_categories_on_playlist_deleted;
 pub mod scan_plex_folder_on_show_moved;
 pub mod scan_plex_folder_on_video_downloaded;
+pub mod scan_plex_folder_on_video_file_deleted;
 pub mod scan_plex_folder_on_video_subtitles_fetched;
 pub mod sync_plex_labels_on_video_categories_changed;
 pub mod sync_plex_labels_on_video_downloaded;
@@ -26,7 +28,9 @@ use crate::domain::services::{
     PlexLabelSyncer,
 };
 use crate::domain::show::ShowMoved;
-use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched, VideoSummaryGenerated};
+use crate::domain::video::{
+    VideoDiscarded, VideoDownloaded, VideoFileDeleted, VideoSubtitlesFetched, VideoSummaryGenerated,
+};
 use crate::domain::video_category::VideoCategoriesChanged;
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -35,6 +39,7 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use delete_channel_files_on_channel_deleted::DeleteChannelFilesOnChannelDeleted;
 use delete_playlist_files_on_playlist_deleted::DeletePlaylistFilesOnPlaylistDeleted;
+use delete_video_file_on_video_discarded::DeleteVideoFileOnVideoDiscarded;
 use delete_video_file_on_video_removed_from_channel::DeleteVideoFileOnVideoRemovedFromChannel;
 use delete_video_file_on_video_removed_from_playlist::DeleteVideoFileOnVideoRemovedFromPlaylist;
 use reconcile_on_channel_created::ReconcileOnChannelCreated;
@@ -43,6 +48,7 @@ use remove_channel_from_categories_on_channel_deleted::RemoveChannelFromCategori
 use remove_playlist_from_categories_on_playlist_deleted::RemovePlaylistFromCategoriesOnPlaylistDeleted;
 use scan_plex_folder_on_show_moved::ScanPlexFolderOnShowMoved;
 use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
+use scan_plex_folder_on_video_file_deleted::ScanPlexFolderOnVideoFileDeleted;
 use scan_plex_folder_on_video_subtitles_fetched::ScanPlexFolderOnVideoSubtitlesFetched;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -137,6 +143,13 @@ pub fn registry(
         ))],
     );
     registry.insert(
+        VideoDiscarded::EVENT_TYPE.to_string(),
+        vec![Arc::new(DeleteVideoFileOnVideoDiscarded::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
+    registry.insert(
         PlaylistDeleted::EVENT_TYPE.to_string(),
         vec![
             Arc::new(DeletePlaylistFilesOnPlaylistDeleted::new(
@@ -173,6 +186,12 @@ pub fn registry(
             .push(Arc::new(ScanPlexFolderOnVideoSubtitlesFetched::new(
                 scanner.clone(),
             )));
+        registry.insert(
+            VideoFileDeleted::EVENT_TYPE.to_string(),
+            vec![Arc::new(ScanPlexFolderOnVideoFileDeleted::new(
+                scanner.clone(),
+            ))],
+        );
         registry.insert(
             ShowMoved::EVENT_TYPE.to_string(),
             vec![Arc::new(ScanPlexFolderOnShowMoved::new(scanner))],

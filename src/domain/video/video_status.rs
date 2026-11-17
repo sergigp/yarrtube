@@ -11,6 +11,9 @@ pub enum VideoStatus {
     Retrying,
     Failed,
     Unavailable,
+    /// The user chose never to download it — see the `video-discard`
+    /// capability.
+    Discarded,
 }
 
 impl VideoStatus {
@@ -22,6 +25,7 @@ impl VideoStatus {
             Self::Retrying => "RETRYING",
             Self::Failed => "FAILED",
             Self::Unavailable => "UNAVAILABLE",
+            Self::Discarded => "DISCARDED",
         }
     }
 
@@ -33,6 +37,7 @@ impl VideoStatus {
             "RETRYING" => Ok(Self::Retrying),
             "FAILED" => Ok(Self::Failed),
             "UNAVAILABLE" => Ok(Self::Unavailable),
+            "DISCARDED" => Ok(Self::Discarded),
             other => Err(VideoError(format!("unknown video status '{other}'"))),
         }
     }

@@ -1,3 +1,4 @@
+use crate::domain::channel::video_window;
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
@@ -239,15 +240,17 @@ impl ChannelVideoReconciler {
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<MembershipChanges> {
         let listing_started = self.clock.now();
-        let listing = self.list_current_videos(channel, on_listing_failure)?;
+        let listing = self.list_current_videos(channel, 0, on_listing_failure)?;
         let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
-        let Some(current_videos) = listing else {
+        let Some(listing) = listing else {
             return Ok(MembershipChanges {
                 listing_seconds,
                 ..MembershipChanges::default()
             });
         };
         let stored_videos = self.list_stored_videos(channel)?;
+        let current_videos =
+            video_window::within_limit(listing, |_| false, channel.video_limit.value() as usize);
         let now = self.clock.now();
 
         // Keyed by YouTube id; a video added below joins it, so a video
@@ -293,15 +296,17 @@ impl ChannelVideoReconciler {
     /// The channel's current most recent uploads. When they can't be listed
     /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
     /// videos"), either `None` (logged) or the error, per
-    /// `on_listing_failure`.
+    /// `on_listing_failure`. One more upload is asked for per `skipped`
+    /// stored video, which doesn't count toward the limit.
     fn list_current_videos(
         &self,
         channel: &Channel,
+        skipped: u32,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<Option<Vec<ChannelVideoListing>>> {
         match (
             self.channel_videos_repository
-                .list_current_videos(&channel.id, channel.video_limit.value()),
+                .list_current_videos(&channel.id, channel.video_limit.value() + skipped),
             on_listing_failure,
         ) {
             (Ok(videos), _) => Ok(Some(videos)),

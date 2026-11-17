@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every type and signature from design.md's Types & Signatures, wired end-to-end with trivial bodies (no `todo!()`):
+- [x] 1.1 Create every type and signature from design.md's Types & Signatures, wired end-to-end with trivial bodies (no `todo!()`):
   - Domain: `VideoStatus::Discarded` ("DISCARDED"), `Download.discarded` + `is_discarded` / `is_discardable` / `discard` (return `false` / `self`), `Video::discard` (returns `None`) / `is_skipped` (returns `false`), `DiscardVideoError`, `VideoDiscarded` and `VideoFileDeleted` events, `VideoDiscarder` + `VideoDiscarderApi` (returns `Ok(())`) exported from `domain::services`, `VideoFileDeleter::new` taking an `EventPublisher` (not publishing yet), `video_window::within_limit` (returns `uploads` unchanged), `ChannelVideoReconciler::list_current_videos` taking `skipped` (passed as 0).
   - Application: `discard_video` handler (204) routed at `POST /videos/{id}/discard`, `AppState.video_discarder` built in `serve.rs` and the HTTP test support; subscribers `DeleteVideoFileOnVideoDiscarded` and `ScanPlexFolderOnVideoFileDeleted` (return `Ok(())`) registered in `serve.rs` (the Plex one only with Plex configured).
   - Infrastructure: `SqliteVideoRepository` parsing `DISCARDED`.
