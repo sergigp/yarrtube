@@ -550,6 +550,7 @@ fn api_services(
             infrastructure.video_categories_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
             infrastructure.show_locks.clone(),
+            infrastructure.discarded_video_repository.clone(),
         ),
         playlist_previewer: PlaylistPreviewer::new(
             infrastructure.youtube_playlist_repository.clone(),
@@ -611,6 +612,7 @@ fn api_services(
             infrastructure.video_categories_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
             infrastructure.show_locks.clone(),
+            infrastructure.discarded_video_repository.clone(),
         ),
         channel_previewer: ChannelPreviewer::new(infrastructure.youtube_channel_repository.clone()),
         channel_updater: ChannelUpdater::new(
@@ -909,6 +911,7 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         infrastructure.show_locks.clone(),
         infrastructure.video_categories_repository.clone(),
         infrastructure.video_category_verdict_repository.clone(),
+        infrastructure.discarded_video_repository.clone(),
     )
 }
 
@@ -933,6 +936,7 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         infrastructure.show_locks.clone(),
         infrastructure.video_categories_repository.clone(),
         infrastructure.video_category_verdict_repository.clone(),
+        infrastructure.discarded_video_repository.clone(),
     )
 }
 

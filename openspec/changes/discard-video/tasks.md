@@ -57,7 +57,7 @@
 
 ## 5. Remembered discards (TDD)
 
-- [ ] 5.1 Skeleton: `DiscardedVideoRepository` port, `SqliteDiscardedVideoRepository` + `migrations/0034_discarded_videos.sql`, injected into `ChannelVideoReconciler`, `PlaylistVideoReconciler`, `ChannelDeleter`, `PlaylistDeleter` (serve.rs and test support); `cargo build` passes.
+- [x] 5.1 Skeleton: `DiscardedVideoRepository` port, `SqliteDiscardedVideoRepository` + `migrations/0034_discarded_videos.sql`, injected into `ChannelVideoReconciler`, `PlaylistVideoReconciler`, `ChannelDeleter`, `PlaylistDeleter` (serve.rs and test support); `cargo build` passes.
 - [ ] 5.2 `SqliteDiscardedVideoRepository::it_should_list_the_recorded_ids_per_source`.
 - [ ] 5.3 `SqliteDiscardedVideoRepository::it_should_record_an_id_once`.
 - [ ] 5.4 `reconcile_channel_task::it_should_not_re_add_a_discarded_video_after_its_eviction` — record on eviction, skip remembered ids when adding.

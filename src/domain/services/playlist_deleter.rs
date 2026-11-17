@@ -5,6 +5,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::DeletePlaylistError;
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -31,6 +32,7 @@ pub struct PlaylistDeleter {
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     show_locks: Arc<ShowLocks>,
+    discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
 }
 
 impl PlaylistDeleter {
@@ -46,6 +48,7 @@ impl PlaylistDeleter {
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
         show_locks: Arc<ShowLocks>,
+        discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
     ) -> Self {
         Self {
             repository,
@@ -58,6 +61,7 @@ impl PlaylistDeleter {
             video_categories_repository,
             video_category_verdict_repository,
             show_locks,
+            discarded_video_repository,
         }
     }
 }

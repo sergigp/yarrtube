@@ -49,6 +49,7 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
 
+    use crate::infrastructure::repositories::sqlite_discarded_video_repository::SqliteDiscardedVideoRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         PlaylistRepository, SqlitePlaylistRepository,
     };
@@ -156,6 +157,7 @@ mod tests {
             Arc::new(ShowLocks::default()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -228,6 +230,7 @@ mod tests {
             Arc::new(ShowLocks::default()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -285,6 +288,7 @@ mod tests {
             Arc::new(ShowLocks::default()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -358,6 +362,7 @@ mod tests {
             Arc::new(ShowLocks::default()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
         )
     }
 
@@ -401,6 +406,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(
                 unused_connection(),
             )),
+            Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
         ))
     }
 

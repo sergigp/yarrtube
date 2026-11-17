@@ -12,6 +12,7 @@ pub mod sqlite_category_playlist_repository;
 pub mod sqlite_category_repository;
 pub mod sqlite_channel_repository;
 pub mod sqlite_channel_video_repository;
+pub mod sqlite_discarded_video_repository;
 pub mod sqlite_episode_labels_repository;
 pub mod sqlite_episode_watch_repository;
 pub mod sqlite_playlist_repository;

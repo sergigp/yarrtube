@@ -14,6 +14,7 @@ use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -54,6 +55,7 @@ pub struct ChannelVideoReconciler {
     show_locks: Arc<ShowLocks>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
 }
 
 impl ChannelVideoReconciler {
@@ -74,6 +76,7 @@ impl ChannelVideoReconciler {
         show_locks: Arc<ShowLocks>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
     ) -> Self {
         Self {
             channel_repository,
@@ -92,6 +95,7 @@ impl ChannelVideoReconciler {
             show_locks,
             video_categories_repository,
             video_category_verdict_repository,
+            discarded_video_repository,
         }
     }
 }

@@ -11,6 +11,7 @@ use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, YoutubeVideoId};
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -51,6 +52,7 @@ pub struct PlaylistVideoReconciler {
     show_locks: Arc<ShowLocks>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
 }
 
 impl PlaylistVideoReconciler {
@@ -70,6 +72,7 @@ impl PlaylistVideoReconciler {
         show_locks: Arc<ShowLocks>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -87,6 +90,7 @@ impl PlaylistVideoReconciler {
             show_locks,
             video_categories_repository,
             video_category_verdict_repository,
+            discarded_video_repository,
         }
     }
 }

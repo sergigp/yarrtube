@@ -44,6 +44,7 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
 };
 
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::SqliteDiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
@@ -476,6 +477,7 @@ fn it_should_keep_the_yes_verdict_categories_of_an_uncategorized_channel() {
         Arc::new(ShowLocks::default()),
         video_categories_repository.clone(),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -558,6 +560,7 @@ fn it_should_delete_the_categories_of_a_removed_video() {
         Arc::new(ShowLocks::default()),
         video_categories_repository.clone(),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -701,6 +704,7 @@ fn it_should_delete_the_transcript_of_a_removed_video() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -782,6 +786,7 @@ fn it_should_delete_the_summary_of_a_video_removed_from_the_channel() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -854,6 +859,7 @@ fn it_should_delete_a_removed_videos_verdicts() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         verdict_repository.clone(),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -1377,6 +1383,7 @@ fn it_should_rewrite_missing_show_files_on_a_recurring_reconcile() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -1448,6 +1455,7 @@ fn it_should_wait_for_a_move_before_reconciling() {
         show_locks.clone(),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = std::thread::scope(|scope| {
@@ -1531,6 +1539,7 @@ fn it_should_restore_a_missing_channel_avatar() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -1610,6 +1619,7 @@ fn it_should_keep_a_stored_channel_avatar() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -1682,6 +1692,7 @@ fn it_should_record_a_restored_avatar_for_a_channel_without_one() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -1763,6 +1774,7 @@ fn it_should_keep_settings_changed_while_restoring_a_channel_avatar() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -1845,6 +1857,7 @@ fn it_should_sync_the_channel_even_if_its_avatar_cannot_be_restored() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -1948,6 +1961,7 @@ fn it_should_sync_the_channel_even_if_its_show_files_cannot_be_written() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -2266,6 +2280,7 @@ fn it_should_not_fetch_thumbnails_when_adding_new_videos() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("@somechannel"));
@@ -2762,6 +2777,7 @@ fn channel_video_reconciler(
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     )
 }
 
@@ -2810,6 +2826,7 @@ fn any_task() -> ReconcileChannelTask {
         Arc::new(SqliteVideoCategoryVerdictRepository::new(
             unused_connection(),
         )),
+        Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
     ))
 }
 

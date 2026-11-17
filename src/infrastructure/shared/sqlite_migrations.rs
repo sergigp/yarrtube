@@ -49,6 +49,7 @@ const EPISODE_WATCH_SQL: &str = include_str!("../../../migrations/0031_episode_w
 const PLEX_SETTINGS_SQL: &str = include_str!("../../../migrations/0032_plex_settings.sql");
 const SOURCE_LAST_SYNCED_AT_SQL: &str =
     include_str!("../../../migrations/0033_source_last_synced_at.sql");
+const DISCARDED_VIDEOS_SQL: &str = include_str!("../../../migrations/0034_discarded_videos.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(migrations())
@@ -96,6 +97,7 @@ fn migrations() -> Vec<M<'static>> {
         M::up(EPISODE_WATCH_SQL),
         M::up(PLEX_SETTINGS_SQL),
         M::up(SOURCE_LAST_SYNCED_AT_SQL),
+        M::up(DISCARDED_VIDEOS_SQL),
     ]
 }
 
@@ -159,6 +161,7 @@ mod tests {
                 "category_playlists",
                 "channel_videos",
                 "channels",
+                "discarded_videos",
                 "domain_events_dead_letter",
                 "episode_labels",
                 "episode_watch",

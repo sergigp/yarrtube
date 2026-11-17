@@ -6,6 +6,7 @@ use crate::domain::task::Task;
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -31,6 +32,7 @@ pub struct ChannelDeleter {
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
     show_locks: Arc<ShowLocks>,
+    discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
 }
 
 impl ChannelDeleter {
@@ -47,6 +49,7 @@ impl ChannelDeleter {
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
         show_locks: Arc<ShowLocks>,
+        discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
     ) -> Self {
         Self {
             repository,
@@ -60,6 +63,7 @@ impl ChannelDeleter {
             video_categories_repository,
             video_category_verdict_repository,
             show_locks,
+            discarded_video_repository,
         }
     }
 }
