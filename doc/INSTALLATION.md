@@ -25,8 +25,8 @@ docker run -d \
 - `-v /path/on/host/videos:/videos` is where downloaded videos will show up
   on your host — point it at your media library.
 - `-v /path/on/host/config:/config` holds yarrtube's state: the SQLite
-  database (your tracked playlists and channels), channel avatars and the
-  [log files](#logs). Always
+  database (your tracked playlists and channels), channel avatars, the
+  [log files](#logs) and `yt-dlp`'s cache (`/config/cache`). Always
   mount it — otherwise everything you've tracked is lost whenever the
   container is recreated, including on every [update](#updating).
 - `PUID`/`PGID` are the numeric user/group ID the daemon runs as and that
@@ -72,6 +72,13 @@ services:
       - /path/on/host/config:/config
       - /path/on/host/videos:/videos
 ```
+
+`mem_limit: 256m` is enough for everyday videos, but not for very long
+ones (livestream re-uploads of several hours): writing the final MP4 makes
+`ffmpeg` hold an index of every frame in memory, about 45 MB per hour of
+video. Such a download is killed in its last step and fails with
+`Postprocessing: ... moving the moov atom` as the reason. Raise the limit
+only if you want those videos.
 
 ## Configuration
 
