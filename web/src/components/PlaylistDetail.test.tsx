@@ -57,7 +57,7 @@ describe('PlaylistDetail', () => {
           ],
           'GET /api/playlists/PL1/videos': [
             aVideo({ title: 'Pawns', episode: 1, watched: true }),
-            aVideo({ title: 'Knights', episode: 2, position_seconds: 30 }),
+            aVideo({ title: 'Knights', episode: 2, position_seconds: 30, in_progress: true }),
             aVideo({ title: 'Bishops', episode: 3, published_at: '2026-11-13T12:00:00Z' }),
           ],
         },

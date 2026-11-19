@@ -57,13 +57,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_should_count_a_position_as_started_only_past_30_seconds() {
+    fn it_should_count_a_position_as_started_only_past_30_seconds_if_duration_unknown() {
         let started: Vec<bool> = [0, 30, 31]
             .into_iter()
             .map(|seconds| PlaybackPosition::new(seconds).unwrap().is_started(None))
             .collect();
 
         assert_eq!(started, vec![false, false, true]);
+    }
+
+    #[test]
+    fn it_should_count_a_position_as_started_from_20_percent_of_the_duration() {
+        let started: Vec<bool> = [479, 480]
+            .into_iter()
+            .map(|seconds| {
+                PlaybackPosition::new(seconds)
+                    .unwrap()
+                    .is_started(Some(2400))
+            })
+            .collect();
+
+        assert_eq!(started, vec![false, true]);
+    }
+
+    #[test]
+    fn it_should_count_a_position_as_started_from_10_minutes_of_a_long_video() {
+        let started: Vec<bool> = [599, 600]
+            .into_iter()
+            .map(|seconds| {
+                PlaybackPosition::new(seconds)
+                    .unwrap()
+                    .is_started(Some(7200))
+            })
+            .collect();
+
+        assert_eq!(started, vec![false, true]);
+    }
+
+    #[test]
+    fn it_should_not_count_a_position_as_started_within_30_seconds_of_a_short_video() {
+        let started: Vec<bool> = [25, 30, 31]
+            .into_iter()
+            .map(|seconds| PlaybackPosition::new(seconds).unwrap().is_started(Some(60)))
+            .collect();
+
+        assert_eq!(started, vec![false, false, true]);
+    }
+
+    #[test]
+    fn it_should_treat_a_zero_duration_as_unknown() {
+        assert!(PlaybackPosition::new(31).unwrap().is_started(Some(0)));
     }
 
     #[test]

@@ -53,9 +53,9 @@ function isUnwatched(video: WatchableVideo): boolean {
   return isDownloaded(video) && !video.watched
 }
 
-/** Started but not finished: a subset of unwatched. */
+/** Started (past the server's started threshold) but not finished: a subset of unwatched. */
 export function isInProgress(video: WatchableVideo): boolean {
-  return isUnwatched(video) && video.position_seconds > 0
+  return isUnwatched(video) && video.in_progress
 }
 
 export function matchesWatchFilter(video: WatchableVideo, filter: WatchFilter): boolean {

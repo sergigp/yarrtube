@@ -20,7 +20,7 @@
 - [x] 2.12 `it_should_push_a_position_past_20_percent`: local 40-min at 480s → Plex position 480
 - [x] 2.13 `it_should_not_pull_a_plex_position_under_20_percent`: 40-min episode offset 300s → video stays unwatched at 0
 - [x] 2.14 `it_should_count_a_rewatch_in_plex_under_20_percent_as_still_watched`: watched 40-min episode offset 420s → stays watched; remove `is_short_rewatch`
-- [ ] 2.15 `sourceVideos.test.ts` — `isInProgress` follows `in_progress`, not `position_seconds > 0`; update `playback_position.rs` unit tests for the duration-aware rule
+- [x] 2.15 `sourceVideos.test.ts` — `isInProgress` follows `in_progress`, not `position_seconds > 0`; update `playback_position.rs` unit tests for the duration-aware rule
 
 ## 3. Infrastructure adapters (TDD)
 

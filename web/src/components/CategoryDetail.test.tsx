@@ -167,6 +167,7 @@ describe('CategoryDetail', () => {
           source: hikaru,
           published_at: '2026-01-01T00:00:00Z',
           position_seconds: 30,
+          in_progress: true,
         }),
         aHomeVideo({ title: 'Seen', source: hikaru, watched: true }),
       ],
