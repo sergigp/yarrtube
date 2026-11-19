@@ -11,7 +11,7 @@ use crate::domain::services::{
 use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, YoutubeVideoId};
+use crate::domain::video::{DiscardedVideo, Video, VideoId, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
@@ -248,7 +248,10 @@ impl ChannelVideoReconciler {
         let stored_videos = self.list_stored_videos(channel)?;
         let remembered = self
             .discarded_video_repository
-            .list(&ShowKey::Channel(channel.id.clone()))?;
+            .list(&ShowKey::Channel(channel.id.clone()))?
+            .into_iter()
+            .map(|discarded| discarded.youtube_id)
+            .collect::<HashSet<_>>();
         let skipped_ids: HashSet<&str> = stored_videos
             .iter()
             .filter(|(_, video)| video.is_skipped())
@@ -471,14 +474,20 @@ impl ChannelVideoReconciler {
     /// Remembers a Discarded video being removed, so the channel never adds
     /// it back.
     fn remember_if_discarded(&self, channel: &Channel, video: &Video) -> anyhow::Result<()> {
-        if !video.download.is_discarded() {
+        // Re-read: the video may have been discarded since the pass read it.
+        let discarded = video.download.is_discarded()
+            || self
+                .video_repository
+                .find(&video.id)?
+                .is_some_and(|stored| stored.download.is_discarded());
+        if !discarded {
             return Ok(());
         }
-        self.discarded_video_repository.record(
-            &ShowKey::Channel(channel.id.clone()),
-            &video.youtube_id,
+        self.discarded_video_repository.record(&DiscardedVideo::new(
+            ShowKey::Channel(channel.id.clone()),
+            video.youtube_id.clone(),
             self.clock.now(),
-        )
+        ))
     }
 
     /// What the database says the channel's folder should contain.

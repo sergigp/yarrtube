@@ -23,6 +23,7 @@ use crate::domain::services::ShowFileWriter;
 
 use crate::domain::show::{ShowKey, ShowMoved};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+use crate::domain::video::DiscardedVideo;
 use crate::domain::video::YoutubeVideoId;
 use crate::domain::video::{PlaybackPosition, Video};
 use crate::domain::video_category::{
@@ -93,7 +94,6 @@ use crate::infrastructure::shared::system_clock::FixedClock;
 
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 const AVATAR_URL: &str = "https://yt3.ggpht.com/avatar.jpg";
@@ -1296,11 +1296,11 @@ async fn it_should_forget_the_discarded_videos_of_a_deleted_channel() {
     let discarded_video_repository = Arc::new(SqliteDiscardedVideoRepository::new(db.database()));
     channel_repository.insert(&channel("@somechannel")).unwrap();
     discarded_video_repository
-        .record(
-            &ShowKey::Channel(handle("@somechannel")),
-            &YoutubeVideoId::new("yt1").unwrap(),
+        .record(&DiscardedVideo::new(
+            ShowKey::Channel(handle("@somechannel")),
+            YoutubeVideoId::new("yt1").unwrap(),
             fixed_timestamp(),
-        )
+        ))
         .unwrap();
     let channel_deleter = ChannelDeleter::new(
         channel_repository.clone(),
@@ -1327,7 +1327,7 @@ async fn it_should_forget_the_discarded_videos_of_a_deleted_channel() {
         discarded_video_repository
             .list(&ShowKey::Channel(handle("@somechannel")))
             .unwrap(),
-        HashSet::new()
+        vec![]
     );
 }
 

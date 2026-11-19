@@ -65,3 +65,6 @@
 - [x] 5.6 `reconcile_playlist_task::it_should_not_re_add_a_discarded_video_returning_to_the_playlist`.
 - [x] 5.7 `it_should_forget_the_discarded_videos_of_a_deleted_channel` and `..._playlist`.
 - [x] 5.8 Re-run `scripts/run-tests.sh --lint --rust`; all suites pass.
+- [x] 5.9 `reconcile_channel_task::it_should_remember_a_video_discarded_during_the_listing_that_evicts_it` — re-read the stored video before remembering it.
+- [x] 5.10 Introduce `DiscardedVideo`: `DiscardedVideoRepository::record` takes it and `list` returns it; callers read `youtube_id`; tests 38–39 assert on entities.
+- [x] 5.11 Re-run `scripts/run-tests.sh --lint --rust`; all suites pass.

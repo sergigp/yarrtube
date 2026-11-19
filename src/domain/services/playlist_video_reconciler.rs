@@ -10,7 +10,7 @@ use crate::domain::services::{
 use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, YoutubeVideoId};
+use crate::domain::video::{DiscardedVideo, Video, VideoId, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
@@ -256,7 +256,10 @@ impl PlaylistVideoReconciler {
         let stored_videos = self.list_stored_videos(playlist)?;
         let remembered = self
             .discarded_video_repository
-            .list(&ShowKey::Playlist(playlist.id.clone()))?;
+            .list(&ShowKey::Playlist(playlist.id.clone()))?
+            .into_iter()
+            .map(|discarded| discarded.youtube_id)
+            .collect::<HashSet<_>>();
         let now = self.clock.now();
 
         // Keyed by YouTube id; a video added below joins it, so a video
@@ -464,14 +467,20 @@ impl PlaylistVideoReconciler {
     /// Remembers a Discarded video being removed, so the playlist never adds
     /// it back.
     fn remember_if_discarded(&self, playlist: &Playlist, video: &Video) -> anyhow::Result<()> {
-        if !video.download.is_discarded() {
+        // Re-read: the video may have been discarded since the pass read it.
+        let discarded = video.download.is_discarded()
+            || self
+                .video_repository
+                .find(&video.id)?
+                .is_some_and(|stored| stored.download.is_discarded());
+        if !discarded {
             return Ok(());
         }
-        self.discarded_video_repository.record(
-            &ShowKey::Playlist(playlist.id.clone()),
-            &video.youtube_id,
+        self.discarded_video_repository.record(&DiscardedVideo::new(
+            ShowKey::Playlist(playlist.id.clone()),
+            video.youtube_id.clone(),
             self.clock.now(),
-        )
+        ))
     }
 
     /// The listed items by playlist position, so new videos are numbered in

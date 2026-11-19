@@ -20,6 +20,7 @@ use crate::domain::services::ShowFileWriter;
 
 use crate::domain::show::{ShowKey, ShowMoved};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+use crate::domain::video::DiscardedVideo;
 use crate::domain::video::PlaylistEpisodeNumber;
 use crate::domain::video::Video;
 use crate::domain::video::VideoDownloaded;
@@ -95,7 +96,6 @@ use crate::infrastructure::shared::system_clock::FixedClock;
 
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 const DEFAULT_PATH: &str = "music/chill";
@@ -1447,11 +1447,11 @@ async fn it_should_forget_the_discarded_videos_of_a_deleted_playlist() {
         .insert(&playlist("PL1", DEFAULT_PATH))
         .unwrap();
     discarded_video_repository
-        .record(
-            &ShowKey::Playlist(playlist_id("PL1")),
-            &YoutubeVideoId::new("vid1").unwrap(),
+        .record(&DiscardedVideo::new(
+            ShowKey::Playlist(playlist_id("PL1")),
+            YoutubeVideoId::new("vid1").unwrap(),
             fixed_timestamp(),
-        )
+        ))
         .unwrap();
     let playlist_deleter = PlaylistDeleter::new(
         playlist_repository.clone(),
@@ -1477,7 +1477,7 @@ async fn it_should_forget_the_discarded_videos_of_a_deleted_playlist() {
         discarded_video_repository
             .list(&ShowKey::Playlist(playlist_id("PL1")))
             .unwrap(),
-        HashSet::new()
+        vec![]
     );
 }
 

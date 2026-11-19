@@ -1,22 +1,16 @@
 use crate::domain::show::ShowKey;
-use crate::domain::video::YoutubeVideoId;
+use crate::domain::video::{DiscardedVideo, YoutubeVideoId};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::params;
-use std::collections::HashSet;
 
 /// The Discarded videos a reconcile removed from their source, remembered so
 /// the source never adds them back.
 pub trait DiscardedVideoRepository: Send + Sync {
     /// Idempotent.
-    fn record(
-        &self,
-        source: &ShowKey,
-        youtube_id: &YoutubeVideoId,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<()>;
-    fn list(&self, source: &ShowKey) -> anyhow::Result<HashSet<YoutubeVideoId>>;
+    fn record(&self, discarded: &DiscardedVideo) -> anyhow::Result<()>;
+    fn list(&self, source: &ShowKey) -> anyhow::Result<Vec<DiscardedVideo>>;
     fn delete_all(&self, source: &ShowKey) -> anyhow::Result<()>;
 }
 
@@ -31,19 +25,20 @@ impl SqliteDiscardedVideoRepository {
 }
 
 impl DiscardedVideoRepository for SqliteDiscardedVideoRepository {
-    fn record(
-        &self,
-        source: &ShowKey,
-        youtube_id: &YoutubeVideoId,
-        now: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
-        let (source_kind, source_id) = Self::source_columns(source);
+    fn record(&self, discarded: &DiscardedVideo) -> anyhow::Result<()> {
+        let (source_kind, source_id) = Self::source_columns(&discarded.source);
+        let youtube_id = &discarded.youtube_id;
         let conn = self.db.write()?;
         conn.execute(
             "INSERT INTO discarded_videos (source_kind, source_id, youtube_id, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT (source_kind, source_id, youtube_id) DO NOTHING",
-            params![source_kind, source_id, youtube_id.as_str(), now.to_rfc3339()],
+            params![
+                source_kind,
+                source_id,
+                youtube_id.as_str(),
+                discarded.created_at.to_rfc3339()
+            ],
         )
         .inspect_err(|e| {
             tracing::error!(source_kind, source_id, youtube_id = %youtube_id, error = %e, "failed to record discarded video")
@@ -52,16 +47,17 @@ impl DiscardedVideoRepository for SqliteDiscardedVideoRepository {
         Ok(())
     }
 
-    fn list(&self, source: &ShowKey) -> anyhow::Result<HashSet<YoutubeVideoId>> {
+    fn list(&self, source: &ShowKey) -> anyhow::Result<Vec<DiscardedVideo>> {
         let (source_kind, source_id) = Self::source_columns(source);
         let conn = self.db.read()?;
-        let youtube_ids = conn
+        let rows = conn
             .prepare(
-                "SELECT youtube_id FROM discarded_videos WHERE source_kind = ?1 AND source_id = ?2",
+                "SELECT youtube_id, created_at FROM discarded_videos
+                 WHERE source_kind = ?1 AND source_id = ?2 ORDER BY youtube_id",
             )
             .and_then(|mut stmt| {
                 stmt.query_map(params![source_kind, source_id], |row| {
-                    row.get::<_, String>(0)
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                 })?
                 .collect::<Result<Vec<_>, _>>()
             })
@@ -69,9 +65,14 @@ impl DiscardedVideoRepository for SqliteDiscardedVideoRepository {
                 tracing::error!(source_kind, source_id, error = %e, "failed to list discarded videos")
             })
             .context("failed to list discarded videos")?;
-        youtube_ids
-            .into_iter()
-            .map(|id| YoutubeVideoId::new(id).map_err(anyhow::Error::from))
+        rows.into_iter()
+            .map(|(youtube_id, created_at)| {
+                Ok(DiscardedVideo::new(
+                    source.clone(),
+                    YoutubeVideoId::new(youtube_id)?,
+                    DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc),
+                ))
+            })
             .collect()
     }
 
@@ -112,26 +113,23 @@ mod tests {
         let db = TestDatabase::new();
         let repository = SqliteDiscardedVideoRepository::new(db.database());
         let (channel, playlist) = (channel("@somechannel"), playlist("PL1"));
-        repository
-            .record(&channel, &youtube_id("yt1"), now())
-            .unwrap();
-        repository
-            .record(&channel, &youtube_id("yt2"), now())
-            .unwrap();
-        repository
-            .record(&playlist, &youtube_id("yt3"), now())
-            .unwrap();
+        let recorded = [
+            discarded(&channel, "yt1"),
+            discarded(&channel, "yt2"),
+            discarded(&playlist, "yt3"),
+        ];
+        recorded
+            .iter()
+            .for_each(|discarded| repository.record(discarded).unwrap());
 
         let listed = [&channel, &playlist].map(|source| repository.list(source).unwrap());
         repository.delete_all(&channel).unwrap();
         let after_delete = [&channel, &playlist].map(|source| repository.list(source).unwrap());
 
+        let [yt1, yt2, yt3] = recorded;
         assert_eq!(
             (listed, after_delete),
-            (
-                [ids(&["yt1", "yt2"]), ids(&["yt3"])],
-                [ids(&[]), ids(&["yt3"])]
-            )
+            ([vec![yt1, yt2], vec![yt3.clone()]], [vec![], vec![yt3]])
         );
     }
 
@@ -140,18 +138,16 @@ mod tests {
         let db = TestDatabase::new();
         let repository = SqliteDiscardedVideoRepository::new(db.database());
         let source = channel("@somechannel");
-        repository
-            .record(&source, &youtube_id("yt1"), now())
-            .unwrap();
+        repository.record(&discarded(&source, "yt1")).unwrap();
 
-        let result = repository.record(&source, &youtube_id("yt1"), now());
+        let result = repository.record(&discarded(&source, "yt1"));
 
         assert_eq!(
             (
                 result.map_err(|e| e.to_string()),
                 repository.list(&source).unwrap()
             ),
-            (Ok(()), ids(&["yt1"]))
+            (Ok(()), vec![discarded(&source, "yt1")])
         );
     }
 
@@ -163,12 +159,12 @@ mod tests {
         ShowKey::Playlist(PlaylistId::new(id).unwrap())
     }
 
-    fn youtube_id(id: &str) -> YoutubeVideoId {
-        YoutubeVideoId::new(id).unwrap()
-    }
-
-    fn ids(ids: &[&str]) -> HashSet<YoutubeVideoId> {
-        ids.iter().map(|id| youtube_id(id)).collect()
+    fn discarded(source: &ShowKey, youtube_id: &str) -> DiscardedVideo {
+        DiscardedVideo::new(
+            source.clone(),
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            now(),
+        )
     }
 
     fn now() -> DateTime<Utc> {
