@@ -8,6 +8,10 @@ const STARTED_MIN_SECONDS: i64 = 30;
 /// to count as started.
 const STARTED_MIN_SHARE_PERCENT: i64 = 20;
 
+/// How far into a video of known duration playback counts as started
+/// whatever its share, so a long video is not held back for long.
+const STARTED_ENOUGH_SECONDS: i64 = 600;
+
 /// How far into a video playback got, in whole seconds from the start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PlaybackPosition(i64);
@@ -38,7 +42,13 @@ impl PlaybackPosition {
         self.0 > STARTED_MIN_SECONDS
             && duration_seconds
                 .filter(|duration| *duration > 0)
-                .is_none_or(|duration| self.0 * 100 >= duration * STARTED_MIN_SHARE_PERCENT)
+                .is_none_or(|duration| self.reaches_started_share_of(duration))
+    }
+
+    /// At least 20% of `duration_seconds`, or 10 minutes.
+    fn reaches_started_share_of(&self, duration_seconds: i64) -> bool {
+        self.0 * 100 >= duration_seconds * STARTED_MIN_SHARE_PERCENT
+            || self.0 >= STARTED_ENOUGH_SECONDS
     }
 }
 
