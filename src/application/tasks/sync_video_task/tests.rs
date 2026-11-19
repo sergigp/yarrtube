@@ -3044,6 +3044,24 @@ fn it_should_not_schedule_a_categorization_that_failed_recently() {
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
 }
 
+#[test]
+fn it_should_schedule_nothing_for_a_discarded_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = my_video().discard(fixed_timestamp()).unwrap();
+    seed_channel_video(&db, &video_repository, &video);
+    let task = sync_task(&db, video_repository, task_repository.clone());
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Unchanged));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
 /// A sync task for a video whose file `DOWNLOADED_FILENAME` is on disk.
 fn sync_task_of_downloaded_video(
     db: &TestDatabase,

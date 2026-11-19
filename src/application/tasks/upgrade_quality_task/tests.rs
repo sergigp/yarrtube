@@ -963,6 +963,73 @@ fn it_should_skip_the_upgrade_if_the_video_was_reset_meanwhile() {
 }
 
 #[test]
+fn it_should_skip_the_upgrade_if_the_video_was_discarded_meanwhile() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let event_repository = SqliteEventRepository::new(db.database(), Arc::new(FixedClock(now())));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    let video = sd_video();
+    video_repository.insert(&video).unwrap();
+    let discarded = video.clone().discard(now()).unwrap();
+    let video_downloader_repository = Arc::new({
+        let video_repository = video_repository.clone();
+        let discarded = discarded.clone();
+        FakeVideoDownloaderRepository::succeeding_with(DownloadedVideo {
+            height: Some(1080),
+            ..staged_download()
+        })
+        .with_quality_probe(Ok(QualityProbe {
+            degraded: false,
+            height: Some(1080),
+            published_at: Some(published_yesterday()),
+        }))
+        .with_on_download(move || video_repository.update(&discarded).unwrap())
+    });
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            now(),
+        ))
+        .unwrap();
+    let task = UpgradeQualityTask::new(Arc::new(QualityUpgrader::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        video_downloader_repository,
+        video_file_repository.clone(),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        )),
+        Arc::new(FixedClock(now())),
+        Arc::new(StagingArea::new(video_file_repository.clone(), "/videos")),
+    )));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            ..discarded
+        }]
+    );
+    assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
 fn it_should_skip_the_upgrade_if_the_video_was_redownloaded_meanwhile() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

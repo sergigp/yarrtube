@@ -12,6 +12,9 @@ pub struct Download {
     pub state: StepState,
     /// In Progress: running on top of a Pending or Retrying state.
     pub started: bool,
+    /// Discarded by the user, for good (see the `video-discard`
+    /// capability): never attempted again.
+    pub discarded: bool,
     /// Why the last attempt failed; kept while started, cleared on success,
     /// unavailable and retry.
     pub failure: Option<String>,
@@ -25,6 +28,7 @@ impl Download {
         Self {
             state: StepState::pending(),
             started: false,
+            discarded: false,
             failure: None,
             file: None,
         }
@@ -33,6 +37,9 @@ impl Download {
     /// The download's lifecycle status: In Progress while started, else its
     /// step's status (Done is Downloaded).
     pub fn status(&self) -> VideoStatus {
+        if self.discarded {
+            return VideoStatus::Discarded;
+        }
         if self.started {
             return VideoStatus::InProgress;
         }
@@ -45,14 +52,31 @@ impl Download {
         }
     }
 
+    /// Whether the user discarded it.
+    pub fn is_discarded(&self) -> bool {
+        self.discarded
+    }
+
+    /// Whether it can be discarded: Pending, Retrying, Failed or
+    /// Downloaded, not started nor already discarded.
+    pub fn is_discardable(&self) -> bool {
+        matches!(
+            self.status(),
+            VideoStatus::Pending
+                | VideoStatus::Retrying
+                | VideoStatus::Failed
+                | VideoStatus::Downloaded
+        )
+    }
+
     pub fn is_downloaded(&self) -> bool {
         self.status() == VideoStatus::Downloaded
     }
 
     /// Whether a download should run at `now`: started, Pending, or Retrying
-    /// with its next attempt due.
+    /// with its next attempt due; never while discarded.
     pub fn is_due(&self, now: DateTime<Utc>) -> bool {
-        self.started || self.state.is_due(now)
+        !self.discarded && (self.started || self.state.is_due(now))
     }
 
     /// When a Retrying download's next attempt is due; none while started.
@@ -91,6 +115,7 @@ impl Download {
         Self {
             state: self.state.succeed(),
             started: false,
+            discarded: self.discarded,
             failure: None,
             file: Some(file),
         }
@@ -129,6 +154,15 @@ impl Download {
         }
     }
 
+    /// Discarded for good: Pending with no attempts, no failure and no
+    /// file.
+    pub fn discard(self) -> Self {
+        Self {
+            discarded: true,
+            ..Self::pending()
+        }
+    }
+
     /// The file recorded as `file` (a relocation or quality upgrade), state
     /// unchanged.
     pub fn with_file(self, file: Option<DownloadedFile>) -> Self {
@@ -148,6 +182,16 @@ mod tests {
         let download = retrying_download(now).start();
 
         assert!(download.is_due(now));
+    }
+
+    #[test]
+    fn it_should_not_be_due_if_discarded() {
+        let now = fixed_timestamp();
+
+        let due = [Download::pending(), Download::pending().discard()]
+            .map(|download| download.is_due(now));
+
+        assert_eq!(due, [true, false]);
     }
 
     #[test]

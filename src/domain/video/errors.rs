@@ -1,7 +1,7 @@
 use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::video::VideoId;
+use crate::domain::video::{VideoId, VideoStatus};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +92,29 @@ impl fmt::Display for ReadSubtitlesError {
 }
 
 impl std::error::Error for ReadSubtitlesError {}
+
+#[derive(Debug)]
+pub enum DiscardVideoError {
+    VideoNotFound(VideoId),
+    NotDiscardable(VideoId, VideoStatus),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for DiscardVideoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::VideoNotFound(id) => write!(f, "video {id} not found"),
+            Self::NotDiscardable(id, status) => write!(
+                f,
+                "video {id} can't be discarded while {}",
+                status.as_str().to_lowercase().replace('_', " ")
+            ),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for DiscardVideoError {}
 
 #[derive(Debug)]
 pub enum RetryVideoError {

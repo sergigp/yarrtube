@@ -660,6 +660,7 @@ impl SqliteVideoRepository {
             VideoStatus::Failed => StepStatus::Failed,
             VideoStatus::Downloaded => StepStatus::Done,
             VideoStatus::Unavailable => StepStatus::Unavailable,
+            VideoStatus::Discarded => StepStatus::Pending,
         };
         Ok(Download {
             state: StepState {
@@ -670,6 +671,7 @@ impl SqliteVideoRepository {
                 },
             },
             started: status == VideoStatus::InProgress,
+            discarded: status == VideoStatus::Discarded,
             failure,
             file: Self::decode_downloaded_file(filename, quality, duration_seconds)?,
         })
@@ -1196,6 +1198,26 @@ mod tests {
             .for_each(|video| repo.insert(video).unwrap());
 
         assert_eq!(repo.list().unwrap(), vec![unchecked, without, with]);
+    }
+
+    #[test]
+    fn it_should_round_trip_a_discarded_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let discarded = video("Discarded", now)
+            .mark_downloaded(
+                Quality::Mid,
+                "Season 1/S01E001 - Discarded.mp4",
+                Some("Season 1/S01E001 - Discarded.jpg".to_string()),
+                Some(223),
+                now,
+            )
+            .discard(now)
+            .unwrap();
+
+        repo.insert(&discarded).unwrap();
+
+        assert_eq!(repo.find(&discarded.id).unwrap(), Some(discarded));
     }
 
     #[test]

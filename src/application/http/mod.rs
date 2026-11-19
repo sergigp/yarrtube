@@ -21,7 +21,7 @@ use crate::domain::services::{
     PlaylistUpdater, PlaylistVideoReconciler, PlaylistViewSearcher, PlexStatusSearcher,
     PlexSyncRequester, PreferencesSearcher, PreferencesUpdater, ShowMover, SubtitleReader,
     TaskRunNowRequester, TaskViewSearcher, VideoCategoryChoiceSearcher, VideoCategoryEditor,
-    VideoRetrier, VideoSearcher, VideoWatchStateUpdater,
+    VideoDiscarder, VideoRetrier, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
@@ -73,6 +73,7 @@ pub struct ApiServices {
     pub video_category_choice_searcher: VideoCategoryChoiceSearcher,
     pub video_category_editor: VideoCategoryEditor,
     pub video_retrier: VideoRetrier,
+    pub video_discarder: VideoDiscarder,
     pub plex_status_searcher: PlexStatusSearcher,
     pub plex_sync_requester: PlexSyncRequester,
 }
@@ -111,6 +112,7 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route("/videos/{id}/progress", post(videos::record_video_progress))
         .route("/videos/{id}/watched", post(videos::mark_video_watched))
         .route("/videos/{id}/retry", post(videos::retry_video))
+        .route("/videos/{id}/discard", post(videos::discard_video))
         .route(
             "/videos/{id}/subtitles.vtt",
             get(videos::get_video_subtitles),

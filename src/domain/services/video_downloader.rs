@@ -491,11 +491,14 @@ impl VideoDownloader {
     }
 
     /// Whether the video's download has nothing left to do: Downloaded,
-    /// Failed or Unavailable.
+    /// Failed, Unavailable or Discarded.
     fn is_settled(video: &Video) -> bool {
         matches!(
             video.download.status(),
-            VideoStatus::Downloaded | VideoStatus::Failed | VideoStatus::Unavailable
+            VideoStatus::Downloaded
+                | VideoStatus::Failed
+                | VideoStatus::Unavailable
+                | VideoStatus::Discarded
         )
     }
 

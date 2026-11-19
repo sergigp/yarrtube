@@ -10,7 +10,8 @@ use chrono::{DateTime, Utc};
 /// `video-summaries`), and a categorization while `categorization_wanted`
 /// (see `video-categorization`). The thumbnail comes first so its task gets
 /// the lower id and runs before the download holds the video's key. A step
-/// already queued or running is left to `TaskRepository`'s dedupe.
+/// already queued or running is left to `TaskRepository`'s dedupe. A
+/// Discarded video needs nothing (see the `video-discard` capability).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoSyncPlan {
     pub steps: Vec<VideoSyncStep>,
@@ -23,6 +24,9 @@ impl VideoSyncPlan {
         categorization_wanted: bool,
         now: DateTime<Utc>,
     ) -> Self {
+        if video.download.is_discarded() {
+            return Self { steps: Vec::new() };
+        }
         let steps = [
             (VideoSyncStep::FetchThumbnail, video.is_thumbnail_due(now)),
             (VideoSyncStep::Download, video.download.is_due(now)),

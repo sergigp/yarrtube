@@ -47,3 +47,29 @@ pub struct VideoSummaryGenerated {
 impl VideoSummaryGenerated {
     pub const EVENT_TYPE: &str = "video_summary_generated";
 }
+
+/// A video with a recorded media or thumbnail file was discarded (see the
+/// `video-discard` capability): its files in its owner's `output_dir` are to
+/// be deleted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VideoDiscarded {
+    pub video_id: String,
+    pub output_dir: String,
+    pub filename: Option<String>,
+    pub thumbnail_filename: Option<String>,
+    pub subtitle_filename: Option<String>,
+}
+
+impl VideoDiscarded {
+    pub const EVENT_TYPE: &str = "video_discarded";
+}
+
+/// A video's files were deleted from its show folder `output_dir`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VideoFileDeleted {
+    pub output_dir: String,
+}
+
+impl VideoFileDeleted {
+    pub const EVENT_TYPE: &str = "video_file_deleted";
+}

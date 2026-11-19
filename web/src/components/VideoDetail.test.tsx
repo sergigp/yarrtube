@@ -282,6 +282,106 @@ describe('VideoDetail', () => {
     expect(screen.getByRole('button', { name: 'Retry now' })).toBeEnabled()
   })
 
+  it('discards a retrying video after confirming', async () => {
+    const retrying = aVideo({
+      id: 'abc',
+      title: 'My Video',
+      status: 'RETRYING',
+      filename: null,
+      steps: someSteps({ download: aStep({ status: 'RETRYING', failed_attempts: 2 }) }),
+    })
+    let stored: Video[] = [retrying]
+    const discard = vi.fn(() => {
+      stored = []
+      return null
+    })
+    mockApi({
+      'GET /api/playlists/PL1/videos': () => stored,
+      'POST /api/videos/abc/discard': discard,
+    })
+    renderWithProviders(<PlaylistVideoDetail />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: "Don't download" }))
+    const dialog = screen.getByRole('dialog', { name: 'Don\'t download "My Video"?' })
+    expect(dialog).toHaveTextContent("It will never be downloaded. This can't be undone.")
+    await user.click(within(dialog).getByRole('button', { name: 'Discard video' }))
+
+    expect(discard).toHaveBeenCalledOnce()
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'My Video' })).not.toBeInTheDocument(),
+    )
+  })
+
+  it("warns that a downloaded video's files will be deleted", async () => {
+    const video = aVideo({ title: 'My Video', status: 'DOWNLOADED' })
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    await userEvent.setup().click(screen.getByRole('button', { name: "Don't download" }))
+
+    expect(screen.getByRole('dialog', { name: 'Don\'t download "My Video"?' })).toHaveTextContent(
+      "Its files will be deleted and it will never be downloaded again. This can't be undone.",
+    )
+  })
+
+  it('sends nothing when the confirmation is cancelled', async () => {
+    const video = aVideo({ title: 'My Video', status: 'PENDING', filename: null })
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: "Don't download" }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My Video' })).toBeInTheDocument()
+  })
+
+  it("offers no Don't download for a downloading video", () => {
+    const video = aVideo({ status: 'IN_PROGRESS', filename: null })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: "Don't download" })).not.toBeInTheDocument()
+  })
+
+  it('tells the user when discarding fails and leaves the video as it was', async () => {
+    const video = aVideo({ id: 'abc', title: 'My Video', status: 'FAILED', filename: null })
+    mockApi({
+      'GET /api/playlists/PL1/videos': [video],
+      'POST /api/videos/abc/discard': { status: 500, error: 'database is locked' },
+    })
+    renderWithProviders(<PlaylistVideoDetail />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: "Don't download" }))
+    await user.click(screen.getByRole('button', { name: 'Discard video' }))
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent(/database is locked/)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('heading', { name: 'My Video' })).toBeInTheDocument()
+  })
+
   it('marks the selected video watched from the detail pane', async () => {
     const markWatched = vi.fn(() => null)
     mockApi({ 'POST /api/videos/abc/watched': markWatched })

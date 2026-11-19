@@ -30,6 +30,9 @@ use crate::infrastructure::repositories::sqlite_channel_repository::{
 use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
 };
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::{
+    DiscardedVideoRepository, SqliteDiscardedVideoRepository,
+};
 use crate::infrastructure::repositories::sqlite_episode_labels_repository::{
     EpisodeLabelsRepository, SqliteEpisodeLabelsRepository,
 };
@@ -141,6 +144,7 @@ pub struct InfrastructureContainer {
     pub video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     pub video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     pub video_summary_repository: Arc<dyn VideoSummaryRepository>,
+    pub discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
     pub episode_labels_repository: Arc<dyn EpisodeLabelsRepository>,
     pub episode_watch_repository: Arc<dyn EpisodeWatchRepository>,
     pub plex_sync_run_repository: Arc<dyn PlexSyncRunRepository>,
@@ -206,6 +210,7 @@ impl InfrastructureContainer {
             video_metadata_repository: Arc::new(SqliteVideoMetadataRepository::new(db.clone())),
             video_transcript_repository: Arc::new(SqliteVideoTranscriptRepository::new(db.clone())),
             video_summary_repository: Arc::new(SqliteVideoSummaryRepository::new(db.clone())),
+            discarded_video_repository: Arc::new(SqliteDiscardedVideoRepository::new(db.clone())),
             episode_labels_repository: Arc::new(SqliteEpisodeLabelsRepository::new(db.clone())),
             episode_watch_repository: Arc::new(SqliteEpisodeWatchRepository::new(db.clone())),
             plex_sync_run_repository: Arc::new(SqlitePlexSyncRunRepository::new(db.clone())),

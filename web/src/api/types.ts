@@ -8,9 +8,17 @@ export type VideoStatus =
   | 'RETRYING'
   | 'FAILED'
   | 'UNAVAILABLE'
+  | 'DISCARDED'
 
 /** A video step's status; only the download is ever `IN_PROGRESS`. */
-export type StepStatus = 'PENDING' | 'IN_PROGRESS' | 'RETRYING' | 'DONE' | 'UNAVAILABLE' | 'FAILED'
+export type StepStatus =
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'RETRYING'
+  | 'DONE'
+  | 'UNAVAILABLE'
+  | 'FAILED'
+  | 'DISCARDED'
 
 export type VideoStepName =
   | 'download'

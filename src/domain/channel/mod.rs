@@ -7,6 +7,7 @@ pub mod channel_view;
 pub mod errors;
 pub mod events;
 pub mod video_limit;
+pub mod video_window;
 
 pub use channel::Channel;
 pub use channel_handle::ChannelHandle;

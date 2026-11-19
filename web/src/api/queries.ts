@@ -36,6 +36,7 @@ import {
   setVideoCategory,
   deleteVideoAiVerdicts,
   retryVideo,
+  discardVideo,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
 } from './client'
@@ -562,6 +563,21 @@ export function useRetryVideo(): (videoId: string) => Promise<void> {
   return useCallback(
     async (videoId: string) => {
       await retryVideo(videoId)
+      await invalidateLibraryAndHome()
+    },
+    [invalidateLibraryAndHome],
+  )
+}
+
+/**
+ * Returns a function that discards a video for good, then refetches the
+ * library (its video lists included) and the home videos.
+ */
+export function useDiscardVideo(): (videoId: string) => Promise<void> {
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  return useCallback(
+    async (videoId: string) => {
+      await discardVideo(videoId)
       await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],

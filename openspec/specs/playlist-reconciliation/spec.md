@@ -105,7 +105,8 @@ treat it like any other member.
 
 ### Requirement: New Video Persistence (YouTube-Linked Playlists)
 The system SHALL store each video found in a YouTube-linked playlist that is
-not already stored for that playlist, with a status of PENDING and its
+not already stored for that playlist and not remembered as discarded by it
+(see `video-discard`), with a status of PENDING and its
 current position in the source YouTube playlist, and publish a
 `VideoAddedToPlaylist` event for it. The reconcile pass SHALL NOT fetch the
 video's thumbnail itself. The thumbnail is fetched by a separately scheduled
@@ -129,6 +130,10 @@ thumbnail fetch.
 - **WHEN** a reconcile pass for a newly created YouTube-linked playlist finds many videos not yet stored
 - **THEN** the pass persists all of them and publishes their `VideoAddedToPlaylist` events without spending time fetching any of their thumbnails, so their downloads can be scheduled promptly
 
+#### Scenario: Playlist contains a remembered discarded video
+- **WHEN** a reconcile pass for a YouTube-linked playlist finds a video the playlist remembers as discarded
+- **THEN** the system doesn't store it and publishes no `VideoAddedToPlaylist` event for it
+
 ### Requirement: Video Position Tracking (YouTube-Linked Playlists)
 The system SHALL update a stored video's recorded position to match its
 current position in the source YouTube playlist on every reconcile pass,
@@ -147,7 +152,9 @@ reconciled.
 ### Requirement: Removed Video Cleanup (YouTube-Linked Playlists)
 The system SHALL delete a stored video's record when a reconcile pass for a
 YouTube-linked playlist finds that it is no longer present in the source
-YouTube playlist, SHALL log each such deletion, and SHALL publish a
+YouTube playlist, SHALL remember a removed Discarded video's YouTube id for
+the playlist before deleting its record, SHALL log each such deletion, and
+SHALL publish a
 `VideoRemovedFromPlaylist` event carrying that video's title, its recorded
 filename (if any), and whether it had been downloaded.
 
@@ -158,6 +165,10 @@ filename (if any), and whether it had been downloaded.
 #### Scenario: Deletion publishes a VideoDeleted event
 - **WHEN** a reconcile pass deletes a stored video's record because it is no longer in the source YouTube playlist
 - **THEN** the system publishes a `VideoRemovedFromPlaylist` event containing the playlist ID, the video ID, the video's title, its recorded filename (if any), and whether the video had been downloaded
+
+#### Scenario: Removing a discarded video remembers it
+- **WHEN** a reconcile pass deletes the record of a video whose download is Discarded because it is no longer in the source YouTube playlist
+- **THEN** the playlist remembers its YouTube id, then its stored record is deleted
 
 ### Requirement: Reconcile Skipped For a Deleted Playlist
 The system SHALL NOT contact YouTube, persist any videos, sweep the
@@ -179,7 +190,7 @@ pass has been synced is deleted. It SHALL
 treat as protected, and never sweep: the show files (`tvshow.nfo`,
 `poster.jpg`), season folders themselves, every recorded filename, thumbnail filename and subtitle filename of any video regardless of status, the NFO sharing a
 recorded filename's base name, and every media (`.mp4`), thumbnail (`.jpg`) or NFO (`.nfo`) file under the
-episode base name of a video whose episode number is recorded but whose download or thumbnail
+episode base name of a video whose episode number is recorded, that is not Discarded, but whose download or thumbnail
 fetch has not completed yet, because such files are only recorded once the
 download or fetch completes. Legacy per-video folders and flat files
 recorded on a video SHALL be protected the same way. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded. A file with any other extension under an episode base name, such as a stale `.mkv` or `.webm`, is not protected.
@@ -235,6 +246,10 @@ recorded on a video SHALL be protected the same way. Every file whose name start
 #### Scenario: A subtitle file placed but not yet recorded
 - **WHEN** a reconcile pass finds `<base name>.en.srt`, where `<base name>` is a Downloaded video's recorded filename without its extension, and that video's subtitle state is Missing
 - **THEN** the system does not treat that file as orphaned and does not delete it, even if the video's title has changed since its download
+
+#### Scenario: Files left by a Discarded video
+- **WHEN** a reconcile pass finds the thumbnail `Season 1/S01E004 - Title.jpg` of a Discarded video whose episode number is recorded and whose filenames are cleared
+- **THEN** the system deletes that file
 
 ### Requirement: Reconcile Preserves Concurrent Download Progress
 A reconcile pass refreshing a stored video's title or position SHALL change

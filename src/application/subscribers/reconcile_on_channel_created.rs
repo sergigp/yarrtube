@@ -53,7 +53,7 @@ mod tests {
         ChannelRepository, SqliteChannelRepository,
     };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
-
+    use crate::infrastructure::repositories::sqlite_discarded_video_repository::SqliteDiscardedVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -161,6 +161,7 @@ mod tests {
             Arc::new(ShowLocks::default()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
         ));
 
         let result = handle(&subscriber, r#"{"channel_id": "@somechannel"}"#);
@@ -229,6 +230,7 @@ mod tests {
             Arc::new(ShowLocks::default()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
         ));
 
         let result = handle(&subscriber, r#"{"channel_id": "@somechannel"}"#);
@@ -307,6 +309,7 @@ mod tests {
             Arc::new(ShowLocks::default()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
             Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+            Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
         )
     }
 
@@ -355,6 +358,7 @@ mod tests {
             Arc::new(SqliteVideoCategoryVerdictRepository::new(
                 unused_connection(),
             )),
+            Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
         ))
     }
 

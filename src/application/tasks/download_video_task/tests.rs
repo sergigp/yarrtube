@@ -1699,6 +1699,7 @@ fn it_should_download_a_retrying_video_once_due() {
             download: Download {
                 state: StepState::pending().succeed(),
                 started: false,
+                discarded: false,
                 failure: None,
                 file: Some(DownloadedFile {
                     filename: "Season 2026/S2026E031501 - My Video.mp4".to_string(),
@@ -2386,6 +2387,41 @@ fn it_should_skip_the_download_of_an_excluded_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = my_video().mark_unavailable(fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+    let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+    SqliteChannelRepository::new(db.database())
+        .insert(&my_channel())
+        .unwrap();
+    SqliteChannelVideoRepository::new(db.database())
+        .save(&ChannelVideo::create(
+            my_channel_id(),
+            video.id.clone(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let task = DownloadVideoTask::new(video_downloader(
+        &db,
+        Path::new("/videos"),
+        video_repository.clone(),
+        downloader.clone(),
+        Arc::new(FakeVideoFileRepository::default()),
+        Arc::new(FakeYoutubeMetadataRepository::default()),
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+    ));
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.list().unwrap(), vec![video]);
+    assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_settle_without_downloading_a_discarded_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = my_video().discard(fixed_timestamp()).unwrap();
     video_repository.insert(&video).unwrap();
     let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
     SqliteChannelRepository::new(db.database())

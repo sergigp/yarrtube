@@ -1,7 +1,13 @@
 use crate::domain::channel::ChannelHandle;
 #[cfg(test)]
+use crate::domain::video::VideoId;
+#[cfg(test)]
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
+#[cfg(test)]
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::ytdlp;
+#[cfg(test)]
+use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 #[cfg(test)]
 use std::sync::Arc;
@@ -66,6 +72,9 @@ pub struct FakeChannelVideosRepository {
     /// Deletes the listed channel from this repository, as if a user deleted
     /// it while the reconcile was running.
     pub(crate) deletes_from: Option<Arc<dyn ChannelRepository>>,
+    /// Discards this video in this repository, as if a user discarded it
+    /// while the reconcile was running.
+    pub(crate) discards: Option<(Arc<dyn VideoRepository>, VideoId, DateTime<Utc>)>,
 }
 
 #[cfg(test)]
@@ -74,7 +83,7 @@ impl FakeChannelVideosRepository {
         Self {
             videos: std::sync::Mutex::new(videos),
             fails: std::sync::Mutex::new(false),
-            deletes_from: None,
+            ..Self::default()
         }
     }
 
@@ -82,7 +91,7 @@ impl FakeChannelVideosRepository {
         Self {
             videos: std::sync::Mutex::new(Vec::new()),
             fails: std::sync::Mutex::new(true),
-            deletes_from: None,
+            ..Self::default()
         }
     }
 
@@ -90,6 +99,18 @@ impl FakeChannelVideosRepository {
         Self {
             deletes_from: Some(repository),
             ..Self::default()
+        }
+    }
+
+    pub fn discarding_during_the_listing(
+        videos: Vec<ChannelVideoListing>,
+        repository: Arc<dyn VideoRepository>,
+        id: VideoId,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            discards: Some((repository, id, now)),
+            ..Self::with_videos(videos)
         }
     }
 }
@@ -103,6 +124,11 @@ impl ChannelVideosRepository for FakeChannelVideosRepository {
     ) -> anyhow::Result<Vec<ChannelVideoListing>> {
         if let Some(repository) = &self.deletes_from {
             repository.delete(channel_id)?;
+        }
+        if let Some((repository, id, now)) = &self.discards
+            && let Some(discarded) = repository.find(id)?.and_then(|video| video.discard(*now))
+        {
+            repository.update(&discarded)?;
         }
         if *self.fails.lock().unwrap() {
             anyhow::bail!("yt-dlp failed to list channel videos");

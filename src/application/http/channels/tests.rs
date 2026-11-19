@@ -23,6 +23,7 @@ use crate::domain::services::ShowFileWriter;
 
 use crate::domain::show::{ShowKey, ShowMoved};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+use crate::domain::video::DiscardedVideo;
 use crate::domain::video::YoutubeVideoId;
 use crate::domain::video::{PlaybackPosition, Video};
 use crate::domain::video_category::{
@@ -44,6 +45,9 @@ use crate::infrastructure::repositories::sqlite_channel_repository::{
 };
 use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::{
+    DiscardedVideoRepository, SqliteDiscardedVideoRepository,
 };
 use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
@@ -1000,6 +1004,7 @@ async fn it_should_delete_a_channel() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1048,6 +1053,7 @@ async fn it_should_remove_the_pending_reconcile_of_a_deleted_channel() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1103,6 +1109,7 @@ async fn it_should_remove_every_pending_reconcile_of_a_deleted_channel() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1162,6 +1169,7 @@ async fn it_should_delete_only_the_deleted_channel_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1219,6 +1227,7 @@ async fn it_should_delete_the_transcripts_of_the_deleted_channel_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1270,6 +1279,7 @@ async fn it_should_delete_the_summaries_of_a_deleted_channel() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1277,6 +1287,48 @@ async fn it_should_delete_the_summaries_of_a_deleted_channel() {
     assert_eq!(response, Ok(StatusCode::NO_CONTENT));
     assert_eq!(video_repository.list().unwrap(), vec![]);
     assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
+}
+
+#[tokio::test]
+async fn it_should_forget_the_discarded_videos_of_a_deleted_channel() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let discarded_video_repository = Arc::new(SqliteDiscardedVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    discarded_video_repository
+        .record(&DiscardedVideo::new(
+            ShowKey::Channel(handle("@somechannel")),
+            YoutubeVideoId::new("yt1").unwrap(),
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let channel_deleter = ChannelDeleter::new(
+        channel_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(FakeChannelAvatarRepository::default()),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+        discarded_video_repository.clone(),
+    );
+
+    let response = delete(channel_deleter, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Channel(handle("@somechannel")))
+            .unwrap(),
+        vec![]
+    );
 }
 
 #[tokio::test]
@@ -1315,6 +1367,7 @@ async fn it_should_delete_the_categories_of_a_deleted_channel_videos() {
         video_categories_repository.clone(),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1369,6 +1422,7 @@ async fn it_should_delete_the_verdicts_of_a_deleted_channels_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         verdict_repository.clone(),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1432,6 +1486,7 @@ async fn it_should_remove_the_pending_tasks_of_a_deleted_channels_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1489,6 +1544,7 @@ async fn it_should_keep_the_pending_tasks_of_another_channels_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1543,6 +1599,7 @@ async fn it_should_fail_to_delete_a_channel_while_it_is_being_synced() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         show_locks.clone(),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
     let _reconciling = show_locks.lock(ShowKey::Channel(handle("@somechannel")));
 
@@ -1594,6 +1651,7 @@ async fn it_should_delete_a_channel_while_another_source_is_being_synced() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         show_locks.clone(),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
     let _reconciling = show_locks.lock(ShowKey::Channel(handle("@otherchannel")));
 
@@ -1632,6 +1690,7 @@ async fn it_should_delete_the_channel_avatar() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@somechannel").await;
@@ -1669,6 +1728,7 @@ async fn it_should_fail_to_delete_a_missing_channel() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(channel_deleter, "@missing").await;
@@ -3661,6 +3721,7 @@ fn any_channel_deleter() -> ChannelDeleter {
             unused_connection(),
         )),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
     )
 }
 
@@ -3717,6 +3778,7 @@ fn channel_video_reconciler(
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     )
 }
 
@@ -3758,6 +3820,7 @@ fn any_channel_video_reconciler() -> ChannelVideoReconciler {
         Arc::new(SqliteVideoCategoryVerdictRepository::new(
             unused_connection(),
         )),
+        Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
     )
 }
 

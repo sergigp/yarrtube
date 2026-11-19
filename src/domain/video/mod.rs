@@ -2,6 +2,7 @@ pub mod category_video_view;
 pub mod channel_episode_number;
 pub mod chapters;
 pub mod chapters_probe;
+pub mod discarded_video;
 pub mod download;
 pub mod download_attempt;
 pub mod download_failure;
@@ -56,6 +57,7 @@ pub use category_video_view::CategoryVideoView;
 pub use channel_episode_number::ChannelEpisodeNumber;
 pub use chapters::Chapters;
 pub use chapters_probe::ChaptersProbe;
+pub use discarded_video::DiscardedVideo;
 pub use download::Download;
 pub use download_attempt::DownloadAttempt;
 pub use download_failure::DownloadFailure;
@@ -65,9 +67,12 @@ pub use downloaded_video::DownloadedVideo;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
 pub use errors::{
-    ListVideosError, ReadSubtitlesError, RetryVideoError, StaleVideo, UpdateWatchStateError,
+    DiscardVideoError, ListVideosError, ReadSubtitlesError, RetryVideoError, StaleVideo,
+    UpdateWatchStateError,
 };
-pub use events::{VideoDownloaded, VideoSubtitlesFetched, VideoSummaryGenerated};
+pub use events::{
+    VideoDiscarded, VideoDownloaded, VideoFileDeleted, VideoSubtitlesFetched, VideoSummaryGenerated,
+};
 pub use fetched_thumbnail::FetchedThumbnail;
 pub use home_category_section::HomeCategorySection;
 pub use home_limits::HomeLimits;

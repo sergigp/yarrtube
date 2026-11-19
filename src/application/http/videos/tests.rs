@@ -13,7 +13,7 @@ use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
     Chapters, Download, DownloadedQuality, EpisodeNumber, RetryAttempts, StepState, StepStatus,
-    Subtitles, Thumbnail, Video, VideoChapter, VideoId, WatchState, YoutubeVideoId,
+    Subtitles, Thumbnail, Video, VideoChapter, VideoDiscarded, VideoId, WatchState, YoutubeVideoId,
 };
 use crate::domain::video_category::VideoCategories;
 use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -7218,6 +7218,642 @@ async fn it_should_return_not_found_when_rerunning_an_unknown_video() {
     );
 }
 
+#[tokio::test]
+async fn it_should_discard_a_retrying_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_errored("HTTP Error 503", fixed_timestamp())
+    .mark_errored("HTTP Error 503", fixed_timestamp())
+    .mark_errored("HTTP Error 503", fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+    task_repository
+        .schedule(
+            &Task::DownloadVideo {
+                video_id: video.id.as_str().to_string(),
+            },
+            fixed_timestamp() + Duration::hours(6),
+        )
+        .unwrap();
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                state: StepState::pending(),
+                started: false,
+                discarded: true,
+                failure: None,
+                file: None,
+            },
+            ..video.clone()
+        })
+    );
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_cancel_every_pending_task_of_a_discarded_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    video_repository.insert(&video).unwrap();
+    let video_id = video.id.as_str().to_string();
+    task_repository
+        .schedule(
+            &Task::FetchThumbnail {
+                video_id: video_id.clone(),
+            },
+            fixed_timestamp(),
+        )
+        .unwrap();
+    task_repository
+        .schedule(&Task::DownloadVideo { video_id }, fixed_timestamp())
+        .unwrap();
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn it_should_discard_a_failed_video() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_download_failed("HTTP Error 503", fixed_timestamp() - Duration::days(1));
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                discarded: true,
+                ..Download::pending()
+            },
+            ..video.clone()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_discard_a_downloaded_video_and_clear_its_files() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = downloaded_video("vid1", "My Video", Some("My Video.jpg"), 0)
+        .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                discarded: true,
+                ..Download::pending()
+            },
+            thumbnail: Thumbnail {
+                filename: None,
+                ..video.thumbnail.clone()
+            },
+            subtitles: Subtitles {
+                filename: None,
+                ..video.subtitles.clone()
+            },
+            ..video.clone()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_announce_the_files_of_a_discarded_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let video = downloaded_video("vid1", "My Video", Some("My Video.jpg"), 0)
+        .mark_subtitles_fetched("My Video.en.srt", fixed_timestamp());
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoDiscarded(VideoDiscarded {
+                video_id: video.id.as_str().to_string(),
+                output_dir: "/videos/creators/somechannel".to_string(),
+                filename: Some("My Video.mp4".to_string()),
+                thumbnail_filename: Some("My Video.jpg".to_string()),
+                subtitle_filename: Some("My Video.en.srt".to_string()),
+            })
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_skip_the_files_event_if_the_video_never_downloaded() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_errored("HTTP Error 503", fixed_timestamp());
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[tokio::test]
+async fn it_should_ignore_discarding_a_discarded_video() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp() - Duration::days(1),
+    )
+    .discard(fixed_timestamp() - Duration::days(1))
+    .unwrap();
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_discard_a_video_being_downloaded() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .start_download(fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+    let sync = Task::SyncVideo {
+        video_id: video.id.as_str().to_string(),
+    };
+    task_repository.schedule(&sync, fixed_timestamp()).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "video rec-vid1 can't be discarded while in progress"
+        ))
+    );
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(1, &sync)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_discard_an_unavailable_video() {
+    let db = TestDatabase::new();
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .mark_unavailable(fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "video rec-vid1 can't be discarded while unavailable"
+        ))
+    );
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
+#[tokio::test]
+async fn it_should_fail_to_discard_an_unknown_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path("rec1".to_string()),
+    )
+    .await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found"))
+    );
+}
+
+#[tokio::test]
+async fn it_should_omit_discarded_videos_from_a_channel_list() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let kept = new_video(
+        YoutubeVideoId::new("vid_kept").unwrap(),
+        "Kept",
+        fixed_timestamp(),
+    );
+    let discarded = new_video(
+        YoutubeVideoId::new("vid_discarded").unwrap(),
+        "Discarded",
+        fixed_timestamp(),
+    )
+    .discard(fixed_timestamp())
+    .unwrap();
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &kept,
+        0,
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &discarded,
+        1,
+    );
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_video_response("vid_kept", "Kept")])
+    );
+}
+
+#[tokio::test]
+async fn it_should_omit_discarded_videos_from_a_playlist_list() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let kept = new_video(
+        YoutubeVideoId::new("vid_kept").unwrap(),
+        "Kept",
+        fixed_timestamp(),
+    );
+    let discarded = new_video(
+        YoutubeVideoId::new("vid_discarded").unwrap(),
+        "Discarded",
+        fixed_timestamp(),
+    )
+    .discard(fixed_timestamp())
+    .unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &kept,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &discarded,
+    );
+    let video_searcher = VideoSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_playlist(video_searcher, "PL1").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![pending_video_response("vid_kept", "Kept")])
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_a_discarded_download_on_retry() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let task_repository =
+        SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    let video = Video {
+        thumbnail: Thumbnail {
+            state: StepState::pending().give_up(fixed_timestamp()),
+            filename: None,
+        },
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .discard(fixed_timestamp())
+        .unwrap()
+    };
+    video_repository.insert(&video).unwrap();
+
+    let response = retry_video(
+        State(video_retrier(&db)),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            version: 1,
+            thumbnail: Thumbnail {
+                state: StepState::pending(),
+                filename: None,
+            },
+            ..video.clone()
+        })
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: video.id.as_str().to_string()
+            }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_announce_the_thumbnail_of_a_discarded_video_never_downloaded() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let video = Video {
+        thumbnail: Thumbnail {
+            state: StepState::pending().succeed(),
+            filename: Some("Season 2026/S2026E031601 - My Video.jpg".to_string()),
+        },
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_errored("HTTP Error 503", fixed_timestamp())
+    };
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(video.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())))
+            .list_eligible()
+            .unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoDiscarded(VideoDiscarded {
+                video_id: video.id.as_str().to_string(),
+                output_dir: "/videos/creators/somechannel".to_string(),
+                filename: None,
+                thumbnail_filename: Some("Season 2026/S2026E031601 - My Video.jpg".to_string()),
+                subtitle_filename: None,
+            })
+        )]
+    );
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
@@ -7275,6 +7911,23 @@ async fn set_category_with(
     )
     .await
     .map(|Json(body)| body)
+}
+
+/// A video discarder over the video and task repositories a test asserts on;
+/// the remaining ports are SQLite ones of `db`, at `fixed_timestamp()`.
+fn video_discarder(
+    db: &TestDatabase,
+    video_repository: Arc<dyn VideoRepository>,
+    task_repository: Arc<dyn TaskRepository>,
+) -> VideoDiscarder {
+    let clock = Arc::new(FixedClock(fixed_timestamp()));
+    VideoDiscarder::new(
+        video_repository,
+        Arc::new(video_owner_finder(&|| db.database())),
+        task_repository,
+        Arc::new(SqliteEventPublisher::new(db.database(), clock.clone())),
+        clock,
+    )
 }
 
 /// A video retrier over every SQLite repository `db` opens, at
@@ -7335,6 +7988,19 @@ fn pending_task(id: i64, task: &Task) -> ScheduledTask {
         id,
         task: task.clone(),
         status: TaskStatus::Pending,
+        retries: 0,
+        run_at: fixed_timestamp(),
+        created_at: fixed_timestamp(),
+        updated_at: fixed_timestamp(),
+        last_error: None,
+    }
+}
+
+fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+    ScheduledEvent {
+        id,
+        event_type: event.event_type().to_string(),
+        payload: event.payload().to_string(),
         retries: 0,
         run_at: fixed_timestamp(),
         created_at: fixed_timestamp(),

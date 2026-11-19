@@ -1,3 +1,4 @@
+use crate::domain::channel::video_window;
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
@@ -10,9 +11,10 @@ use crate::domain::services::{
 use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoId, YoutubeVideoId};
+use crate::domain::video::{DiscardedVideo, Video, VideoId, YoutubeVideoId};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_category_verdict_repository::VideoCategoryVerdictRepository;
@@ -53,6 +55,7 @@ pub struct ChannelVideoReconciler {
     show_locks: Arc<ShowLocks>,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+    discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
 }
 
 impl ChannelVideoReconciler {
@@ -73,6 +76,7 @@ impl ChannelVideoReconciler {
         show_locks: Arc<ShowLocks>,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
         video_category_verdict_repository: Arc<dyn VideoCategoryVerdictRepository>,
+        discarded_video_repository: Arc<dyn DiscardedVideoRepository>,
     ) -> Self {
         Self {
             channel_repository,
@@ -91,6 +95,7 @@ impl ChannelVideoReconciler {
             show_locks,
             video_categories_repository,
             video_category_verdict_repository,
+            discarded_video_repository,
         }
     }
 }
@@ -227,7 +232,9 @@ impl ChannelVideoReconciler {
     }
 
     /// Brings the stored membership in line with the channel's current
-    /// `video_limit` most recent uploads: adds newly seen videos, refreshes
+    /// `video_limit` most recent uploads, Unavailable and Discarded ones not
+    /// counting toward the limit: adds newly seen videos (never a Discarded
+    /// one removed earlier, which the channel remembers), refreshes
     /// the title and position of known ones, and removes stored videos no
     /// longer among them (removed on YouTube or aged past the limit). A
     /// failed listing either leaves membership untouched for this pass, the
@@ -238,16 +245,38 @@ impl ChannelVideoReconciler {
         channel: &Channel,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<MembershipChanges> {
+        let stored_videos = self.list_stored_videos(channel)?;
+        let remembered = self
+            .discarded_video_repository
+            .list(&ShowKey::Channel(channel.id.clone()))?
+            .into_iter()
+            .map(|discarded| discarded.youtube_id)
+            .collect::<HashSet<_>>();
+        let skipped_ids: HashSet<&str> = stored_videos
+            .iter()
+            .filter(|(_, video)| video.is_skipped())
+            .map(|(_, video)| &video.youtube_id)
+            .chain(&remembered)
+            .map(YoutubeVideoId::as_str)
+            .collect();
         let listing_started = self.clock.now();
-        let listing = self.list_current_videos(channel, on_listing_failure)?;
+        let listing = self.list_current_videos(
+            channel,
+            u32::try_from(skipped_ids.len())?,
+            on_listing_failure,
+        )?;
         let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
-        let Some(current_videos) = listing else {
+        let Some(listing) = listing else {
             return Ok(MembershipChanges {
                 listing_seconds,
                 ..MembershipChanges::default()
             });
         };
-        let stored_videos = self.list_stored_videos(channel)?;
+        let current_videos = video_window::within_limit(
+            listing,
+            |upload| skipped_ids.contains(upload.youtube_id.as_str()),
+            channel.video_limit.value() as usize,
+        );
         let now = self.clock.now();
 
         // Keyed by YouTube id; a video added below joins it, so a video
@@ -266,6 +295,9 @@ impl ChannelVideoReconciler {
             match known_videos.get(&current.youtube_id) {
                 None => {
                     let youtube_id = YoutubeVideoId::new(&current.youtube_id)?;
+                    if remembered.contains(&youtube_id) {
+                        continue;
+                    }
                     let video = self.add_video(channel, youtube_id, current, now)?;
                     known_videos.insert(current.youtube_id.clone(), video);
                     added += 1;
@@ -293,15 +325,18 @@ impl ChannelVideoReconciler {
     /// The channel's current most recent uploads. When they can't be listed
     /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
     /// videos"), either `None` (logged) or the error, per
-    /// `on_listing_failure`.
+    /// `on_listing_failure`. One more upload is asked for per `skipped`
+    /// video (stored and skipped, or remembered as discarded), which doesn't
+    /// count toward the limit.
     fn list_current_videos(
         &self,
         channel: &Channel,
+        skipped: u32,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<Option<Vec<ChannelVideoListing>>> {
         match (
             self.channel_videos_repository
-                .list_current_videos(&channel.id, channel.video_limit.value()),
+                .list_current_videos(&channel.id, channel.video_limit.value() + skipped),
             on_listing_failure,
         ) {
             (Ok(videos), _) => Ok(Some(videos)),
@@ -395,7 +430,7 @@ impl ChannelVideoReconciler {
 
     /// Deletes every stored video whose YouTube id is not in
     /// `current_youtube_ids` and announces its removal, which is what
-    /// cleans up its files.
+    /// cleans up its files. A Discarded one is remembered first.
     fn remove_videos_not_in(
         &self,
         channel: &Channel,
@@ -412,6 +447,7 @@ impl ChannelVideoReconciler {
                     youtube_id = %video.youtube_id,
                     "removing video from channel (no longer among its most recent uploads)"
                 );
+                self.remember_if_discarded(channel, video)?;
                 self.channel_video_repository.delete(&video.id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
@@ -433,6 +469,25 @@ impl ChannelVideoReconciler {
                     ))?;
                 Ok(removed + 1)
             })
+    }
+
+    /// Remembers a Discarded video being removed, so the channel never adds
+    /// it back.
+    fn remember_if_discarded(&self, channel: &Channel, video: &Video) -> anyhow::Result<()> {
+        // Re-read: the video may have been discarded since the pass read it.
+        let discarded = video.download.is_discarded()
+            || self
+                .video_repository
+                .find(&video.id)?
+                .is_some_and(|stored| stored.download.is_discarded());
+        if !discarded {
+            return Ok(());
+        }
+        self.discarded_video_repository.record(&DiscardedVideo::new(
+            ShowKey::Channel(channel.id.clone()),
+            video.youtube_id.clone(),
+            self.clock.now(),
+        ))
     }
 
     /// What the database says the channel's folder should contain.

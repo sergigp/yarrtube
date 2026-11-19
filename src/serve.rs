@@ -13,8 +13,8 @@ use crate::domain::services::{
     PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover,
     SubtitleFetcher, SubtitleReader, TaskRunNowRequester, TaskViewSearcher, ThumbnailFetcher,
     VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
-    VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRetrier,
-    VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    VideoDiscarder, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
+    VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -550,6 +550,7 @@ fn api_services(
             infrastructure.video_categories_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
             infrastructure.show_locks.clone(),
+            infrastructure.discarded_video_repository.clone(),
         ),
         playlist_previewer: PlaylistPreviewer::new(
             infrastructure.youtube_playlist_repository.clone(),
@@ -611,6 +612,7 @@ fn api_services(
             infrastructure.video_categories_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
             infrastructure.show_locks.clone(),
+            infrastructure.discarded_video_repository.clone(),
         ),
         channel_previewer: ChannelPreviewer::new(infrastructure.youtube_channel_repository.clone()),
         channel_updater: ChannelUpdater::new(
@@ -668,6 +670,13 @@ fn api_services(
             infrastructure.video_repository.clone(),
             infrastructure.video_category_verdict_repository.clone(),
             infrastructure.task_repository.clone(),
+            infrastructure.clock.clone(),
+        ),
+        video_discarder: VideoDiscarder::new(
+            infrastructure.video_repository.clone(),
+            video_owner_finder(infrastructure),
+            infrastructure.task_repository.clone(),
+            infrastructure.event_publisher.clone(),
             infrastructure.clock.clone(),
         ),
         task_run_now_requester: TaskRunNowRequester::new(
@@ -871,7 +880,11 @@ fn task_handlers(
         video_categorizer(infrastructure),
         video_reconciler(infrastructure),
         infrastructure.video_repository.clone(),
-        VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
+        VideoFileDeleter::new(
+            infrastructure.video_file_repository.clone(),
+            infrastructure.event_publisher.clone(),
+            videos_path(),
+        ),
         infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
         infrastructure.ytdlp_updater.clone(),
@@ -898,6 +911,7 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         infrastructure.show_locks.clone(),
         infrastructure.video_categories_repository.clone(),
         infrastructure.video_category_verdict_repository.clone(),
+        infrastructure.discarded_video_repository.clone(),
     )
 }
 
@@ -922,6 +936,7 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         infrastructure.show_locks.clone(),
         infrastructure.video_categories_repository.clone(),
         infrastructure.video_category_verdict_repository.clone(),
+        infrastructure.discarded_video_repository.clone(),
     )
 }
 
@@ -1578,6 +1593,7 @@ mod tests {
                 ("playlist_deleted", 2),
                 ("video_added_to_channel", 1),
                 ("video_added_to_playlist", 1),
+                ("video_discarded", 1),
                 ("video_downloaded", 1),
                 ("video_removed_from_channel", 1),
                 ("video_removed_from_playlist", 1),
@@ -1602,7 +1618,7 @@ mod tests {
             (Some("http://plex:32400"), Some("token"), None),
         ];
 
-        let scan_subscribers: Vec<(Option<usize>, Option<usize>)> = configurations
+        let scan_subscribers: Vec<(Option<usize>, Option<usize>, Option<usize>)> = configurations
             .into_iter()
             .map(|(url, token, videos_path)| {
                 plex_integration_from(
@@ -1616,18 +1632,20 @@ mod tests {
                 (
                     subscribers.get("video_downloaded").map(Vec::len),
                     subscribers.get("video_subtitles_fetched").map(Vec::len),
+                    subscribers.get("video_file_deleted").map(Vec::len),
                 )
             })
             .collect();
 
-        // Without Plex, each event keeps only the video sync.
+        // Without Plex, each event keeps only the video sync, and a file
+        // deletion has no subscriber.
         assert_eq!(
             scan_subscribers,
             vec![
-                (Some(2), Some(2)),
-                (Some(1), Some(1)),
-                (Some(1), Some(1)),
-                (Some(1), Some(1)),
+                (Some(2), Some(2), Some(1)),
+                (Some(1), Some(1), None),
+                (Some(1), Some(1), None),
+                (Some(1), Some(1), None),
             ]
         );
     }

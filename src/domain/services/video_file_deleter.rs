@@ -1,7 +1,11 @@
 use crate::domain::channel::ChannelHandle;
+use crate::domain::event::DomainEvent;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::video::{is_episode_path, nfo_path_for, owning_entry, resolve_output_dir};
+use crate::domain::video::{
+    VideoFileDeleted, is_episode_path, nfo_path_for, owning_entry, resolve_output_dir,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
+use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -11,16 +15,19 @@ use tracing::{debug, info};
 #[derive(Clone)]
 pub struct VideoFileDeleter {
     video_file_repository: Arc<dyn VideoFileRepository>,
+    event_publisher: Arc<dyn EventPublisher>,
     videos_path: String,
 }
 
 impl VideoFileDeleter {
     pub fn new(
         video_file_repository: Arc<dyn VideoFileRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
         videos_path: impl Into<String>,
     ) -> Self {
         Self {
             video_file_repository,
+            event_publisher,
             videos_path: videos_path.into(),
         }
     }
@@ -38,7 +45,8 @@ pub trait VideoFileDeleterApi: Send + Sync {
     /// removed as one unit, a legacy flat video's file and thumbnail
     /// individually. No-ops (without erroring) for any entry it has no
     /// recorded filename for, or no matching entry is found, so the task is
-    /// safe to retry.
+    /// safe to retry. Publishes `VideoFileDeleted` when a media file was
+    /// recorded, so Plex drops the episode.
     fn delete_video_file(
         &self,
         filename: Option<String>,
@@ -77,9 +85,14 @@ impl VideoFileDeleterApi for VideoFileDeleter {
         subtitle_filename: Option<String>,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
+        let had_file = filename.is_some();
         self.delete_video_entry(filename, output_dir)?;
         self.delete_sidecar_entry(thumbnail_filename, "thumbnail", output_dir)?;
-        self.delete_sidecar_entry(subtitle_filename, "subtitle", output_dir)
+        self.delete_sidecar_entry(subtitle_filename, "subtitle", output_dir)?;
+        if had_file {
+            self.publish_file_deleted(output_dir)?;
+        }
+        Ok(())
     }
 
     fn delete_playlist_video_files(
@@ -108,6 +121,15 @@ impl VideoFileDeleterApi for VideoFileDeleter {
 }
 
 impl VideoFileDeleter {
+    /// `VideoFileDeleted` for the show folder `output_dir`, so Plex drops
+    /// the episode.
+    fn publish_file_deleted(&self, output_dir: &Path) -> anyhow::Result<()> {
+        self.event_publisher
+            .publish(&DomainEvent::VideoFileDeleted(VideoFileDeleted {
+                output_dir: output_dir.to_string_lossy().to_string(),
+            }))
+    }
+
     /// An episode's media file and the NFO next to it, or a legacy video's
     /// whole folder or flat file.
     fn delete_video_entry(
@@ -157,16 +179,32 @@ impl VideoFileDeleter {
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::DateTime;
     use std::path::PathBuf;
 
-    fn deleter(repo: FakeVideoFileRepository) -> (VideoFileDeleter, Arc<FakeVideoFileRepository>) {
+    fn deleter(
+        db: &TestDatabase,
+        repo: FakeVideoFileRepository,
+    ) -> (VideoFileDeleter, Arc<FakeVideoFileRepository>) {
         let repo = Arc::new(repo);
-        (VideoFileDeleter::new(repo.clone(), "/videos"), repo)
+        let clock = Arc::new(FixedClock(DateTime::UNIX_EPOCH));
+        (
+            VideoFileDeleter::new(
+                repo.clone(),
+                Arc::new(SqliteEventPublisher::new(db.database(), clock)),
+                "/videos",
+            ),
+            repo,
+        )
     }
 
     #[test]
     fn it_should_delete_the_whole_folder_once_per_recorded_path_for_a_new_style_video() {
-        let (deleter, repo) = deleter(FakeVideoFileRepository::default());
+        let db = TestDatabase::new();
+        let (deleter, repo) = deleter(&db, FakeVideoFileRepository::default());
 
         deleter
             .delete_video_file(
@@ -189,7 +227,8 @@ mod tests {
 
     #[test]
     fn it_should_delete_the_two_named_files_individually_for_a_legacy_flat_video() {
-        let (deleter, repo) = deleter(FakeVideoFileRepository::default());
+        let db = TestDatabase::new();
+        let (deleter, repo) = deleter(&db, FakeVideoFileRepository::default());
 
         deleter
             .delete_video_file(
@@ -218,7 +257,8 @@ mod tests {
 
     #[test]
     fn it_should_no_op_when_no_filename_or_thumbnail_is_recorded() {
-        let (deleter, repo) = deleter(FakeVideoFileRepository::default());
+        let db = TestDatabase::new();
+        let (deleter, repo) = deleter(&db, FakeVideoFileRepository::default());
 
         deleter
             .delete_video_file(None, None, None, Path::new("/videos/playlist"))

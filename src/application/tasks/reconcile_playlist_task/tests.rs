@@ -35,6 +35,7 @@ use crate::infrastructure::repositories::filesystem_video_file_repository::FakeV
 use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
 
 use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::SqliteDiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
 };
@@ -636,6 +637,7 @@ fn it_should_delete_the_transcript_of_a_removed_video() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -714,6 +716,7 @@ fn it_should_delete_the_summary_of_a_video_removed_from_the_playlist() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -783,6 +786,7 @@ fn it_should_delete_a_removed_playlist_videos_verdicts() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         verdict_repository.clone(),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -906,6 +910,7 @@ fn it_should_delete_the_categories_of_a_removed_video() {
         Arc::new(ShowLocks::default()),
         video_categories_repository.clone(),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -1078,6 +1083,7 @@ fn it_should_keep_the_last_sync_if_listing_fails() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -1236,6 +1242,7 @@ fn it_should_not_schedule_the_next_reconcile_if_playlist_deleted_during_the_pass
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -1305,6 +1312,7 @@ fn it_should_schedule_a_sync_of_every_stored_video() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -1372,6 +1380,7 @@ fn it_should_keep_videos_if_listing_fails() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -1546,6 +1555,7 @@ fn it_should_not_fetch_thumbnails_when_adding_new_videos() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = run(&task, &task_for("PL1"));
@@ -1659,6 +1669,7 @@ fn it_should_wait_for_a_move_before_reconciling() {
         show_locks.clone(),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     ));
 
     let result = std::thread::scope(|scope| {
@@ -1686,6 +1697,60 @@ fn it_should_wait_for_a_move_before_reconciling() {
             .to_string()
         )]
     );
+}
+
+#[test]
+fn it_should_not_re_add_a_discarded_video_returning_to_the_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let kept = playlist_episode("vidA", "A", 1);
+    let discarded = playlist_episode("vidB", "B", 2)
+        .discard(fixed_timestamp())
+        .unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &kept,
+        0,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &discarded,
+        1,
+    );
+    let leaving = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository.clone(),
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        vec![playlist_item("vidA", "A", 0)],
+        task_repository.clone(),
+        video_file_repository.clone(),
+    ));
+    run(&leaving, &task_for("PL1")).unwrap();
+    let returning = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository,
+        vec![playlist_item("vidA", "A", 0), playlist_item("vidB", "B", 1)],
+        task_repository,
+        video_file_repository,
+    ));
+
+    let result = run(&returning, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.list().unwrap(), vec![kept]);
 }
 
 /// Builds a reconciler around the repositories and fakes a test seeds,
@@ -1731,6 +1796,7 @@ fn playlist_video_reconciler(
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     )
 }
 
@@ -1774,6 +1840,7 @@ fn any_task() -> ReconcilePlaylistTask {
         Arc::new(SqliteVideoCategoryVerdictRepository::new(
             unused_connection(),
         )),
+        Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
     ))
 }
 

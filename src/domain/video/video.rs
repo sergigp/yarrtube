@@ -132,6 +132,37 @@ impl Video {
         }
     }
 
+    /// Discards the video for good (see the `video-discard` capability):
+    /// `None` unless its download is discardable; else its download
+    /// Discarded and its thumbnail and subtitle filenames cleared.
+    pub fn discard(self, now: DateTime<Utc>) -> Option<Self> {
+        if !self.download.is_discardable() {
+            return None;
+        }
+        Some(Self {
+            download: self.download.discard(),
+            thumbnail: Thumbnail {
+                filename: None,
+                ..self.thumbnail
+            },
+            subtitles: Subtitles {
+                filename: None,
+                ..self.subtitles
+            },
+            updated_at: now,
+            ..self
+        })
+    }
+
+    /// Unavailable or Discarded: hidden from lists and outside a channel's
+    /// video limit.
+    pub fn is_skipped(&self) -> bool {
+        matches!(
+            self.download.status(),
+            VideoStatus::Unavailable | VideoStatus::Discarded
+        )
+    }
+
     /// Every Retrying or Failed step back to Pending with no failed
     /// attempts — see the `video-retries` capability. Pending, In Progress,
     /// Done and Unavailable steps are left as they are.
@@ -262,12 +293,15 @@ impl Video {
     }
 
     /// Whether a thumbnail fetch can still be worth attempting for this
-    /// video: never for an Unavailable download, nor a Retrying or Failed
-    /// one, whose next download writes its own.
+    /// video: never for an Unavailable or Discarded download, nor a Retrying
+    /// or Failed one, whose next download writes its own.
     pub fn is_thumbnail_fetchable(&self) -> bool {
         !matches!(
             self.download.status(),
-            VideoStatus::Unavailable | VideoStatus::Retrying | VideoStatus::Failed
+            VideoStatus::Unavailable
+                | VideoStatus::Discarded
+                | VideoStatus::Retrying
+                | VideoStatus::Failed
         )
     }
 
@@ -627,6 +661,7 @@ mod tests {
                         },
                     },
                     started: false,
+                    discarded: false,
                     failure: Some("HTTP Error 503".to_string()),
                     file: None,
                 },
@@ -818,6 +853,16 @@ mod tests {
         .map(|filename| downloaded_at(filename).is_subtitle_fetchable());
 
         assert_eq!(fetchable, [true, false, false]);
+    }
+
+    #[test]
+    fn it_should_not_be_thumbnail_fetchable_if_discarded() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let discarded = video().discard(now).unwrap();
+
+        assert!(video().is_thumbnail_fetchable());
+        assert!(!discarded.is_thumbnail_fetchable());
     }
 
     #[test]

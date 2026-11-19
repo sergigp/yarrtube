@@ -20,6 +20,7 @@ use crate::domain::services::ShowFileWriter;
 
 use crate::domain::show::{ShowKey, ShowMoved};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+use crate::domain::video::DiscardedVideo;
 use crate::domain::video::PlaylistEpisodeNumber;
 use crate::domain::video::Video;
 use crate::domain::video::VideoDownloaded;
@@ -43,6 +44,9 @@ use crate::infrastructure::repositories::sqlite_channel_repository::{
 };
 use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_discarded_video_repository::{
+    DiscardedVideoRepository, SqliteDiscardedVideoRepository,
 };
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
@@ -1124,6 +1128,7 @@ async fn it_should_delete_a_playlist() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1179,6 +1184,7 @@ async fn it_should_remove_the_pending_reconcile_of_a_deleted_playlist() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1242,6 +1248,7 @@ async fn it_should_remove_every_pending_reconcile_of_a_deleted_playlist() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1309,6 +1316,7 @@ async fn it_should_delete_only_the_deleted_playlist_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1367,6 +1375,7 @@ async fn it_should_delete_the_transcripts_of_the_deleted_playlist_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1419,6 +1428,7 @@ async fn it_should_delete_the_summaries_of_a_deleted_playlist() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1426,6 +1436,49 @@ async fn it_should_delete_the_summaries_of_a_deleted_playlist() {
     assert_eq!(response, Ok(StatusCode::NO_CONTENT));
     assert_eq!(video_repository.list().unwrap(), vec![]);
     assert_eq!(video_summary_repository.find(&video.id).unwrap(), None);
+}
+
+#[tokio::test]
+async fn it_should_forget_the_discarded_videos_of_a_deleted_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let discarded_video_repository = Arc::new(SqliteDiscardedVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    discarded_video_repository
+        .record(&DiscardedVideo::new(
+            ShowKey::Playlist(playlist_id("PL1")),
+            YoutubeVideoId::new("vid1").unwrap(),
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        event_publisher(&db),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(ShowLocks::default()),
+        discarded_video_repository.clone(),
+    );
+
+    let response = delete(playlist_deleter, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Playlist(playlist_id("PL1")))
+            .unwrap(),
+        vec![]
+    );
 }
 
 #[tokio::test]
@@ -1465,6 +1518,7 @@ async fn it_should_delete_the_categories_of_a_deleted_playlist_videos() {
         video_categories_repository.clone(),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1520,6 +1574,7 @@ async fn it_should_delete_the_verdicts_of_a_deleted_playlists_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         verdict_repository.clone(),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1584,6 +1639,7 @@ async fn it_should_remove_the_pending_tasks_of_a_deleted_playlists_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1642,6 +1698,7 @@ async fn it_should_keep_the_pending_tasks_of_another_playlists_videos() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL1").await;
@@ -1697,6 +1754,7 @@ async fn it_should_fail_to_delete_a_playlist_while_it_is_being_synced() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         show_locks.clone(),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
     let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL1")));
 
@@ -1749,6 +1807,7 @@ async fn it_should_delete_a_playlist_while_another_source_is_being_synced() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         show_locks.clone(),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
     let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL2")));
 
@@ -1781,6 +1840,7 @@ async fn it_should_fail_to_delete_a_missing_playlist() {
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = delete(playlist_deleter, "PL404").await;
@@ -3310,6 +3370,7 @@ async fn it_should_keep_videos_on_reconcile_if_listing_fails() {
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     );
 
     let response = reconcile(playlist_video_reconciler, "PL1").await;
@@ -4576,6 +4637,7 @@ fn any_playlist_deleter() -> PlaylistDeleter {
             unused_connection(),
         )),
         Arc::new(ShowLocks::default()),
+        Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
     )
 }
 
@@ -4631,6 +4693,7 @@ fn playlist_video_reconciler(
         Arc::new(ShowLocks::default()),
         Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
     )
 }
 
@@ -4669,6 +4732,7 @@ fn any_playlist_video_reconciler() -> PlaylistVideoReconciler {
         Arc::new(SqliteVideoCategoryVerdictRepository::new(
             unused_connection(),
         )),
+        Arc::new(SqliteDiscardedVideoRepository::new(unused_connection())),
     )
 }
 
