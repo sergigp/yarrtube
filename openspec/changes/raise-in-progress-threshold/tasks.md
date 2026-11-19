@@ -28,7 +28,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run `scripts/run-tests.sh --lint --web --rust`; all pass
+- [x] 4.1 Run `scripts/run-tests.sh --lint --web --rust`; all pass
 - [ ] 4.2 Manual (agent): `scripts/run-local.sh --port <free port> --fresh-videos`, record progress via the HTTP API on a downloaded video under and over 20% of its duration, check `GET /api/videos/home` continue watching and the source page "In progress" filter in the Playwright browser; stop the server and delete `yarrtube.sqlite3` and the fresh videos dir
 - [ ] 4.3 Manual (human): with Plex configured, stop an episode under 20% and another past 20% in a Plex client; after a watch sync only the second shows under "Continue watching"
 
