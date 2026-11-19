@@ -9,8 +9,8 @@
 - [x] 2.1 `it_should_continue_only_videos_started_past_20_percent_on_home`: 40-min videos at 420s / 480s split between latest and continue watching
 - [x] 2.2 `it_should_continue_a_long_video_played_for_10_minutes_on_home`: 2-hour video at 600s continued
 - [x] 2.3 Keep `it_should_continue_only_videos_started_past_30_seconds_on_home` as the no-duration regression (verify it still passes)
-- [ ] 2.4 `it_should_report_whether_listed_channel_videos_are_in_progress`: 480s → true, 300s → false, watched → false; positions reported as saved
-- [ ] 2.5 `it_should_report_an_old_started_video_in_progress_when_listing_channel_videos`: last played 10 days ago still `in_progress: true`
+- [x] 2.4 `it_should_report_whether_listed_channel_videos_are_in_progress`: 480s → true, 300s → false, watched → false; positions reported as saved
+- [x] 2.5 `it_should_report_an_old_started_video_in_progress_when_listing_channel_videos`: last played 10 days ago still `in_progress: true`
 - [ ] 2.6 `it_should_report_in_progress_on_home_videos`: continue watching entry reports `in_progress: true`
 - [ ] 2.7 `it_should_report_in_progress_on_category_videos`: 40-min category video at 480s reports `in_progress: true`
 - [ ] 2.8 `it_should_save_a_position_under_the_started_threshold`: unwatched 40-min, report 300s → unwatched, position 300

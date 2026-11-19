@@ -1496,6 +1496,125 @@ async fn it_should_include_watch_state_when_listing_channel_videos() {
 }
 
 #[tokio::test]
+async fn it_should_report_whether_listed_channel_videos_are_in_progress() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &forty_minute_video_at("vid_at_8m", "At 8m", 480),
+        0,
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &forty_minute_video_at("vid_at_5m", "At 5m", 300),
+        1,
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &forty_minute_video_at("vid_watched", "Watched", 0).mark_watched(watched_timestamp()),
+        2,
+    );
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            VideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 480,
+                in_progress: true,
+                ..downloaded_video_response("vid_at_8m", "At 8m")
+            },
+            VideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 300,
+                ..downloaded_video_response("vid_at_5m", "At 5m")
+            },
+            VideoResponse {
+                duration_seconds: Some(2400),
+                watched: true,
+                ..downloaded_video_response("vid_watched", "Watched")
+            },
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_report_an_old_started_video_in_progress_when_listing_channel_videos() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let played_ten_days_ago = Video {
+        watch: WatchState {
+            last_played_at: Some(watched_timestamp() - chrono::Duration::days(10)),
+            ..forty_minute_video_at("vid_old", "Old", 480).watch
+        },
+        ..forty_minute_video_at("vid_old", "Old", 480)
+    };
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &played_ten_days_ago,
+        0,
+    );
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![VideoResponse {
+            duration_seconds: Some(2400),
+            position_seconds: 480,
+            in_progress: true,
+            ..downloaded_video_response("vid_old", "Old")
+        }])
+    );
+}
+
+#[tokio::test]
 async fn it_should_list_no_videos_for_an_empty_channel() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -8406,6 +8525,29 @@ fn new_video(youtube_id: YoutubeVideoId, title: &str, now: DateTime<Utc>) -> Vid
     Video {
         id: VideoId::new(format!("rec-{}", youtube_id.as_str())).unwrap(),
         ..Video::create(youtube_id, title, now)
+    }
+}
+
+/// A video downloaded at `fixed_timestamp()`, lasting 40 minutes, unwatched
+/// and saved at `position_seconds`.
+fn forty_minute_video_at(youtube_id: &str, title: &str, position_seconds: i64) -> Video {
+    Video {
+        watch: WatchState {
+            position: PlaybackPosition::new(position_seconds).unwrap(),
+            ..WatchState::unwatched()
+        },
+        ..new_video(
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            title,
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            format!("{title}.mp4"),
+            None,
+            Some(2400),
+            fixed_timestamp(),
+        )
     }
 }
 
