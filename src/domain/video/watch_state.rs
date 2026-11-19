@@ -7,7 +7,6 @@ use chrono::{DateTime, Duration, Utc};
 const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
 
 const WATCHED_THRESHOLD: f64 = 0.9;
-const REWATCH_RESET_THRESHOLD: f64 = 0.1;
 
 /// Whether a video was watched, how far playback got and when it was last
 /// played.
@@ -98,7 +97,8 @@ impl WatchState {
     /// Updates the watch state from how far playback got against
     /// `duration_seconds`, the known duration. An unwatched video becomes
     /// watched at 90%; a watched one becomes unwatched again once a rewatch
-    /// passes 10%, as long as it is still below 90%. With no known duration
+    /// counts as started (see `PlaybackPosition::is_started`), as long as it
+    /// is still below 90%. With no known duration
     /// an unwatched video only keeps the position. Whatever the outcome, the
     /// video counts as played `now`. A report is stale when its playback
     /// began with the video unwatched (`was_watched` false) but the video is
@@ -117,7 +117,7 @@ impl WatchState {
         let progress = duration_seconds.map(|duration| position.seconds() as f64 / duration as f64);
         let updated = match (self.is_watched(), progress) {
             (true, Some(progress))
-                if progress > REWATCH_RESET_THRESHOLD && progress < WATCHED_THRESHOLD =>
+                if position.is_started(duration_seconds) && progress < WATCHED_THRESHOLD =>
             {
                 Self {
                     watched_at: None,

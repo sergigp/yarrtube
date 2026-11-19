@@ -4154,10 +4154,45 @@ async fn it_should_only_record_the_position_if_duration_is_unknown() {
 }
 
 #[tokio::test]
-async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch() {
+async fn it_should_save_a_position_under_the_started_threshold() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-    let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+    let video = video_with_duration("vid1", Some(2400));
+    video_repository.insert(&video).unwrap();
+    let video_watch_state_updater = VideoWatchStateUpdater::new(
+        video_repository.clone(),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+    );
+    let request = progress_request(300);
+
+    let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
+
+    assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            watch: WatchState {
+                watched_at: None,
+                position: PlaybackPosition::new(300).unwrap(),
+                last_played_at: Some(watched_timestamp())
+            },
+            ..video
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_a_watched_video_watched_early_in_a_rewatch() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = video_with_duration("vid1", Some(2400)).mark_watched(fixed_timestamp());
     video_repository.insert(&video).unwrap();
     let video_watch_state_updater = VideoWatchStateUpdater::new(
         video_repository.clone(),
@@ -4171,7 +4206,44 @@ async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch()
     );
     let request = RecordProgressRequest {
         was_watched: Some(true),
-        ..progress_request(11)
+        ..progress_request(420)
+    };
+
+    let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
+
+    assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            watch: WatchState {
+                last_played_at: Some(watched_timestamp()),
+                ..video.watch
+            },
+            ..video
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_mark_a_watched_video_unwatched_once_a_rewatch_counts_as_started() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = video_with_duration("vid1", Some(2400)).mark_watched(fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+    let video_watch_state_updater = VideoWatchStateUpdater::new(
+        video_repository.clone(),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+    );
+    let request = RecordProgressRequest {
+        was_watched: Some(true),
+        ..progress_request(600)
     };
 
     let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
@@ -4183,7 +4255,7 @@ async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch()
             version: 1,
             watch: WatchState {
                 watched_at: None,
-                position: PlaybackPosition::new(11).unwrap(),
+                position: PlaybackPosition::new(600).unwrap(),
                 last_played_at: Some(watched_timestamp())
             },
             ..video

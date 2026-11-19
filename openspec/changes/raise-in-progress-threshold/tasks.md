@@ -13,9 +13,9 @@
 - [x] 2.5 `it_should_report_an_old_started_video_in_progress_when_listing_channel_videos`: last played 10 days ago still `in_progress: true`
 - [x] 2.6 `it_should_report_in_progress_on_home_videos`: continue watching entry reports `in_progress: true` — covered by 2.1, whose continue watching entry asserts `in_progress: true`; no separate test
 - [x] 2.7 `it_should_report_in_progress_on_category_videos`: 40-min category video at 480s reports `in_progress: true`
-- [ ] 2.8 `it_should_save_a_position_under_the_started_threshold`: unwatched 40-min, report 300s → unwatched, position 300
-- [ ] 2.9 `it_should_keep_a_watched_video_watched_early_in_a_rewatch`: watched 40-min, report 420s → stays watched at 0
-- [ ] 2.10 `it_should_mark_a_watched_video_unwatched_once_a_rewatch_counts_as_started` (replaces `…_past_10_percent_of_a_rewatch`; drop `REWATCH_RESET_THRESHOLD`): watched 40-min, report 600s → unwatched at 600
+- [x] 2.8 `it_should_save_a_position_under_the_started_threshold`: unwatched 40-min, report 300s → unwatched, position 300
+- [x] 2.9 `it_should_keep_a_watched_video_watched_early_in_a_rewatch`: watched 40-min, report 420s → stays watched at 0
+- [x] 2.10 `it_should_mark_a_watched_video_unwatched_once_a_rewatch_counts_as_started` (replaces `…_past_10_percent_of_a_rewatch`; drop `REWATCH_RESET_THRESHOLD`): watched 40-min, report 600s → unwatched at 600
 - [ ] 2.11 `it_should_not_push_a_position_under_20_percent`: local 40-min at 300s → no Plex mutation, agreed Unplayed
 - [ ] 2.12 `it_should_push_a_position_past_20_percent`: local 40-min at 480s → Plex position 480
 - [ ] 2.13 `it_should_not_pull_a_plex_position_under_20_percent`: 40-min episode offset 300s → video stays unwatched at 0
