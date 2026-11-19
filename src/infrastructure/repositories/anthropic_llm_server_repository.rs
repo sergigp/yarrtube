@@ -711,12 +711,9 @@ mod tests {
 
     #[test]
     fn it_should_report_a_connect_error_as_unreachable() {
-        let closed = std::net::TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap();
+        // Port 0 can't be connected to, so the connection is always refused.
         let repository = AnthropicLlmServerRepository::new(AnthropicConfig {
-            api_url: format!("http://{closed}"),
+            api_url: "http://127.0.0.1:0".to_string(),
             api_key: AnthropicApiKey::new("sk-ant-test".to_string()),
         });
 
