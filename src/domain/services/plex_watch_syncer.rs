@@ -372,7 +372,7 @@ fn merge_all<'a>(
 
 fn local_side(video: &Video) -> WatchSide {
     WatchSide {
-        progress: video.watch.progress(),
+        progress: video.watch_progress(),
         changed_at: video.watch.changed_at(),
     }
 }

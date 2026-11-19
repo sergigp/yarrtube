@@ -15,7 +15,7 @@ import {
 import type { HomeVideoSource } from '@/api/types'
 
 function video(id: string, overrides: Partial<WatchableVideo> = {}): WatchableVideo {
-  return { id, watched: false, position_seconds: 0, published_at: null, ...overrides }
+  return { id, watched: false, position_seconds: 0, in_progress: false, published_at: null, ...overrides }
 }
 
 function source(kind: HomeVideoSource['kind'], id: string): { source: HomeVideoSource } {

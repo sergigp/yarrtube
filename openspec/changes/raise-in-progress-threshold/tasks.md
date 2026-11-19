@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Add every type and signature from design.md's Types & Signatures: `PlaybackPosition::is_started(duration_seconds)` (body ignores the duration, keeps `> 30s`), `WatchState::progress(duration)` / `is_continuable(duration, now)` (rename of `is_in_progress`), `WatchProgress::is_in_progress`, `Video::watch_progress` / `Video::is_continuable`, `in_progress` on `HomeVideoView`, `VideoResponse`, `HomeVideoResponse`, `CategoryVideoResponse` (wired from `watch_progress().is_in_progress()`), and `in_progress` on the web types, fixture builders and `WatchableVideo`; update callers (`VideoSearcher`, `PlexWatchSyncer`, `PlexWatchState`) and existing test expectations for the new field. Done when `cargo build` and `scripts/run-tests.sh --lint --web --rust` pass
+- [x] 1.1 Add every type and signature from design.md's Types & Signatures: `PlaybackPosition::is_started(duration_seconds)` (body ignores the duration, keeps `> 30s`), `WatchState::progress(duration)` / `is_continuable(duration, now)` (rename of `is_in_progress`), `WatchProgress::is_in_progress`, `Video::watch_progress` / `Video::is_continuable`, `in_progress` on `HomeVideoView`, `VideoResponse`, `HomeVideoResponse`, `CategoryVideoResponse` (wired from `watch_progress().is_in_progress()`), and `in_progress` on the web types, fixture builders and `WatchableVideo`; update callers (`VideoSearcher`, `PlexWatchSyncer`, `PlexWatchState`) and existing test expectations for the new field. Done when `cargo build` and `scripts/run-tests.sh --lint --web --rust` pass
 
 ## 2. Behaviour (TDD)
 

@@ -283,6 +283,17 @@ impl Video {
         self.download.is_downloaded() && !self.watch.is_watched()
     }
 
+    /// `WatchState::progress` against the recorded duration.
+    pub fn watch_progress(&self) -> WatchProgress {
+        self.watch.progress(self.known_duration_seconds(None))
+    }
+
+    /// `WatchState::is_continuable` against the recorded duration.
+    pub fn is_continuable(&self, now: DateTime<Utc>) -> bool {
+        self.watch
+            .is_continuable(self.known_duration_seconds(None), now)
+    }
+
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.
     pub fn is_quick_watch(&self) -> bool {
         !self.watch.is_watched()

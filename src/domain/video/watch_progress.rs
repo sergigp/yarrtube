@@ -7,3 +7,9 @@ pub enum WatchProgress {
     InProgress(PlaybackPosition),
     Watched,
 }
+
+impl WatchProgress {
+    pub fn is_in_progress(&self) -> bool {
+        matches!(self, Self::InProgress(_))
+    }
+}

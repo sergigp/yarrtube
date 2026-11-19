@@ -460,7 +460,7 @@ fn it_should_seed_from_whichever_side_was_played_on_the_first_sync() {
 
     assert_eq!(result, Ok(TaskOutcome::Done));
     assert_eq!(
-        watch_state(&db, &watched_in_plex).progress(),
+        watch_state(&db, &watched_in_plex).progress(None),
         WatchProgress::Watched
     );
     assert_eq!(plex.mutations(), vec!["scrobble:102".to_string()]);

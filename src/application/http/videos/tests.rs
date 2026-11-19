@@ -1131,6 +1131,7 @@ async fn it_should_include_watch_state_when_listing_playlist_videos() {
             },
             VideoResponse {
                 position_seconds: 42,
+                in_progress: true,
                 ..pending_video_response("vid_partly", "Partly")
             },
         ])
@@ -1487,6 +1488,7 @@ async fn it_should_include_watch_state_when_listing_channel_videos() {
             },
             VideoResponse {
                 position_seconds: 42,
+                in_progress: true,
                 ..pending_video_response("vid_partly", "Partly")
             },
         ])
@@ -1741,6 +1743,7 @@ async fn it_should_list_a_started_video_under_continue_watching_only_on_home() {
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid1", "Started", playlist_source())
             }],
             ..empty_home()
@@ -1824,6 +1827,7 @@ async fn it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home
             continue_watching: vec![HomeVideoResponse {
                 duration_seconds: Some(600),
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid1", "Started Short", playlist_source())
             }],
             ..empty_home()
@@ -2853,10 +2857,12 @@ async fn it_should_order_continue_watching_by_last_played_first_on_home() {
             continue_watching: vec![
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid_latest", "Played Latest", playlist_source())
                 },
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid_earlier", "Played Earlier", playlist_source())
                 },
             ],
@@ -2915,10 +2921,12 @@ async fn it_should_continue_only_videos_played_within_a_week_on_home() {
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid_week_ago", "A Week Ago", playlist_source())
             }],
             latest: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid_over_a_week_ago", "Over A Week Ago", playlist_source())
             }],
             ..empty_home()
@@ -2966,6 +2974,7 @@ async fn it_should_continue_only_videos_started_past_30_seconds_on_home() {
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 31,
+                in_progress: true,
                 ..home_video_response("vid_at_31", "At 31s", playlist_source())
             }],
             latest: vec![HomeVideoResponse {
@@ -3038,6 +3047,7 @@ async fn it_should_not_continue_watched_or_never_played_videos_on_home() {
                 },
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid_never_played", "Never Played", playlist_source())
                 },
             ],
@@ -3097,6 +3107,7 @@ async fn it_should_list_a_continue_watching_video_once_from_the_channel_on_home(
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid_shared", "Shared", channel_source(None))
             }],
             ..empty_home()
@@ -4938,6 +4949,7 @@ async fn it_should_not_repeat_a_continue_watching_video_in_category_sections_on_
             continue_watching: vec![in_categories(
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid1", "Started", channel_source(None))
                 },
                 &[&chess]
@@ -5142,6 +5154,7 @@ async fn it_should_not_count_continue_watching_videos_when_ranking_category_sect
             continue_watching: (3..5)
                 .map(|i| HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..category_card(&chess, "@chess", i)
                 })
                 .collect(),
@@ -5903,6 +5916,7 @@ async fn it_should_leave_out_continue_watching_if_turned_off() {
         Ok(HomeResponse {
             quick_watches: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 duration_seconds: Some(600),
                 ..home_video_response("vid1", "Started", playlist_source())
             }],
@@ -8227,6 +8241,7 @@ fn numbered_started_videos(numbers: impl Iterator<Item = i64>) -> Vec<HomeVideoR
     numbers
         .map(|i| HomeVideoResponse {
             position_seconds: 120,
+            in_progress: true,
             ..home_video_response(&format!("vid{i}"), &format!("Video {i}"), playlist_source())
         })
         .collect()
@@ -8312,6 +8327,7 @@ fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         updated_at: fixed_timestamp(),
         watched: false,
         position_seconds: 0,
+        in_progress: false,
         synced_at: None,
         published_at: None,
         channel_name: None,
@@ -8368,6 +8384,7 @@ fn home_video_response(
         duration_seconds: None,
         watched: false,
         position_seconds: 0,
+        in_progress: false,
         published_at: None,
         source,
         category_ids: vec![],
@@ -8395,6 +8412,7 @@ fn category_video_response(
         updated_at: created_at,
         watched: false,
         position_seconds: 0,
+        in_progress: false,
         synced_at: Some(created_at),
         published_at: None,
         channel_name: None,

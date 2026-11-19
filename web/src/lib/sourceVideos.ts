@@ -5,6 +5,7 @@ export interface WatchableVideo {
   id: string
   watched: boolean
   position_seconds: number
+  in_progress: boolean
   published_at: string | null
   /** Absent for a category's video, which is always downloaded. */
   status?: VideoStatus
@@ -218,6 +219,7 @@ export function asHomeVideo(video: Video, source: HomeVideoSource): HomeVideo {
     duration_seconds: video.duration_seconds,
     watched: video.watched,
     position_seconds: video.position_seconds,
+    in_progress: video.in_progress,
     published_at: video.published_at,
     source,
     category_ids: [],

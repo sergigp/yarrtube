@@ -180,6 +180,7 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
     updated_at: '2026-01-01T00:00:00Z',
     watched: false,
     position_seconds: 0,
+    in_progress: false,
     synced_at: null,
     published_at: null,
     channel_name: null,
@@ -225,6 +226,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
     duration_seconds: 120,
     watched: false,
     position_seconds: 0,
+    in_progress: false,
     published_at: null,
     source: {
       kind: 'playlist',

@@ -32,20 +32,25 @@ impl WatchState {
         self.watched_at.is_some()
     }
 
-    /// Unwatched, position over 30s and last played within the past 7 days
-    /// of `now`: worth offering to continue watching.
-    pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {
+    /// Unwatched, position started against `duration_seconds` (see
+    /// `PlaybackPosition::is_started`) and last played within the past 7
+    /// days of `now`: worth offering to continue watching.
+    pub fn is_continuable(&self, duration_seconds: Option<i64>, now: DateTime<Utc>) -> bool {
         !self.is_watched()
-            && self.position.is_started()
+            && self.position.is_started(duration_seconds)
             && self
                 .last_played_at
                 .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
     }
 
-    /// Watched ⇒ watched; position over 30s ⇒ in progress; else unplayed:
-    /// a video only sampled is not worth resuming.
-    pub fn progress(&self) -> WatchProgress {
-        match (self.is_watched(), self.position.is_started()) {
+    /// Watched ⇒ watched; position started against `duration_seconds` ⇒
+    /// in progress; else unplayed: a video only sampled is not worth
+    /// resuming.
+    pub fn progress(&self, duration_seconds: Option<i64>) -> WatchProgress {
+        match (
+            self.is_watched(),
+            self.position.is_started(duration_seconds),
+        ) {
             (true, _) => WatchProgress::Watched,
             (false, true) => WatchProgress::InProgress(self.position),
             (false, false) => WatchProgress::Unplayed,

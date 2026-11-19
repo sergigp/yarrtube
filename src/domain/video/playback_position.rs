@@ -27,8 +27,10 @@ impl PlaybackPosition {
         self.0
     }
 
-    /// Past the first 30 seconds: started, not just opened or sampled.
-    pub fn is_started(&self) -> bool {
+    /// Past the first 30 seconds and, with a known positive
+    /// `duration_seconds`, at least 20% of it or 10 minutes: started, not
+    /// just opened or sampled.
+    pub fn is_started(&self, _duration_seconds: Option<i64>) -> bool {
         self.0 > STARTED_MIN_SECONDS
     }
 }
@@ -41,7 +43,7 @@ mod tests {
     fn it_should_count_a_position_as_started_only_past_30_seconds() {
         let started: Vec<bool> = [0, 30, 31]
             .into_iter()
-            .map(|seconds| PlaybackPosition::new(seconds).unwrap().is_started())
+            .map(|seconds| PlaybackPosition::new(seconds).unwrap().is_started(None))
             .collect();
 
         assert_eq!(started, vec![false, false, true]);

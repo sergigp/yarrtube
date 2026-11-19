@@ -40,7 +40,7 @@ impl PlexWatchState {
         self.view_offset_ms
             .filter(|offset_ms| !self.is_short_rewatch(*offset_ms))
             .and_then(|offset_ms| PlaybackPosition::new(offset_ms / 1000).ok())
-            .filter(PlaybackPosition::is_started)
+            .filter(|position| position.is_started(None))
     }
 
     /// Watched, and played again only up to 10% of its duration.
