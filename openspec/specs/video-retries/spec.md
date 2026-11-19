@@ -133,7 +133,7 @@ A step SHALL become Failed after its 11th consecutive failed attempt (about 7 da
 - **THEN** its categorization is Failed with one failed attempt, the video has a `failed` verdict for "Tech", and no categorization of it is scheduled again
 
 ### Requirement: Retry A Video
-The system SHALL let a client retry a video (`POST /api/videos/{id}/retry`, answering 204). Retrying SHALL make every Retrying or Failed step of the video Pending with no failed attempts, delete the video's `failed` verdicts, and leave Pending, In Progress, Done and Unavailable steps and any data already obtained unchanged. The system SHALL then sync the video, so each step it needs is scheduled to run now, and a step whose retry was queued for later is moved to now. Retrying a video with nothing Retrying or Failed SHALL change nothing but still sync it. Retrying an unknown video SHALL answer 404.
+The system SHALL let a client retry a video (`POST /api/videos/{id}/retry`, answering 204). Retrying SHALL make every Retrying or Failed step of the video Pending with no failed attempts, delete the video's `failed` verdicts, and leave Pending, In Progress, Done and Unavailable steps, a Discarded download (see `video-discard`) and any data already obtained unchanged. The system SHALL then sync the video, so each step it needs is scheduled to run now, and a step whose retry was queued for later is moved to now. Retrying a video with nothing Retrying or Failed SHALL change nothing but still sync it. Retrying an unknown video SHALL answer 404.
 
 #### Scenario: Retry a failed download
 - **WHEN** a client retries a video whose download is Failed with 11 failed attempts
@@ -154,3 +154,7 @@ The system SHALL let a client retry a video (`POST /api/videos/{id}/retry`, answ
 #### Scenario: Unknown video
 - **WHEN** a client retries a video id that doesn't exist
 - **THEN** the request answers 404
+
+#### Scenario: Discarded download is kept
+- **WHEN** a client retries a video whose download is Discarded and whose thumbnail is Failed
+- **THEN** its download stays Discarded, its thumbnail is Pending, and no download of it is scheduled

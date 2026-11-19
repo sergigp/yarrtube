@@ -7,7 +7,7 @@ Provides an HTTP endpoint to list the videos belonging to a single tracked playl
 ## Requirements
 
 ### Requirement: List Videos For A Playlist
-The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist except those that are excluded, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds. The returned videos SHALL be ordered by their current position in the source YouTube playlist.
+The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist except those whose download is Unavailable (excluded) or Discarded (see `video-discard`), including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds. The returned videos SHALL be ordered by their current position in the source YouTube playlist.
 
 #### Scenario: Playlist has videos
 - **WHEN** a client requests the videos of a tracked playlist that has one or more recorded videos
@@ -33,8 +33,12 @@ The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, r
 - **WHEN** a client requests the videos of a tracked playlist that has an excluded video alongside other videos
 - **THEN** the returned list contains the other videos and does not contain the excluded one
 
+#### Scenario: Discarded videos are omitted
+- **WHEN** a client requests the videos of a tracked playlist that has a Discarded video alongside other videos
+- **THEN** the returned list contains the other videos and does not contain the Discarded one
+
 ### Requirement: List Videos For A Channel
-The system SHALL provide an HTTP endpoint that, given a tracked channel's handle, returns every video recorded for that channel except those that are excluded, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds, ordered by recency (most recently uploaded first).
+The system SHALL provide an HTTP endpoint that, given a tracked channel's handle, returns every video recorded for that channel except those whose download is Unavailable (excluded) or Discarded (see `video-discard`), including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds, ordered by recency (most recently uploaded first).
 
 #### Scenario: Channel has videos
 - **WHEN** a client requests the videos of a tracked channel that has one or more recorded videos
@@ -55,6 +59,10 @@ The system SHALL provide an HTTP endpoint that, given a tracked channel's handle
 #### Scenario: Excluded videos are omitted
 - **WHEN** a client requests the videos of a tracked channel that has an excluded video alongside other videos
 - **THEN** the returned list contains the other videos and does not contain the excluded one
+
+#### Scenario: Discarded videos are omitted
+- **WHEN** a client requests the videos of a tracked channel that has a Discarded video alongside other videos
+- **THEN** the returned list contains the other videos and does not contain the Discarded one
 
 ### Requirement: Listed Videos Include Sync Time
 The system SHALL include each video's recorded sync time in the responses that list the videos of a playlist and of a channel, and SHALL report it as absent for a video that has none.

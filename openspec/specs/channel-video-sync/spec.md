@@ -13,14 +13,17 @@ cleaned up automatically.
 ### Requirement: Channel Video Discovery Via yt-dlp
 The system SHALL discover a channel's current videos by invoking `yt-dlp`
 against that channel's videos listing, requesting only its `video_limit`
-most recent uploads, and parsing each discovered video's ID and title from
+most recent uploads plus one more for each of the channel's stored videos
+whose download is Unavailable or Discarded and each discarded upload the
+channel remembers (skipped videos don't count toward the limit; see
+`video-discard`), and parsing each discovered video's ID and title from
 structured (JSON) output rather than delimited text, so that a video title
 containing arbitrary characters (including a `|` or other delimiter-like
 character) cannot corrupt discovery of that video or any other.
 
 #### Scenario: Channel has more uploads than its video limit
 - **WHEN** a reconcile pass discovers a channel's videos
-- **THEN** the system requests and receives at most `video_limit` videos, ordered most recent first
+- **THEN** the system requests and receives at most `video_limit` videos plus the number of the channel's skipped videos, ordered most recent first
 
 #### Scenario: A discovered video's title contains a delimiter-like character
 - **WHEN** a reconcile pass discovers a video whose title contains a `|` character (or other text that would corrupt a delimited-text parse)
@@ -29,6 +32,10 @@ character) cannot corrupt discovery of that video or any other.
 #### Scenario: yt-dlp fails to list a channel's videos
 - **WHEN** a recurring or on-demand reconcile pass's attempt to discover a channel's current videos fails (e.g. the channel is private, terminated, or `yt-dlp` errors)
 - **THEN** the system does not alter any of that channel's stored videos, logs the failure, and does not treat it as a fatal error for the reconcile pass
+
+#### Scenario: Skipped videos widen the request
+- **WHEN** a reconcile pass discovers the videos of a channel with `video_limit` 3 that has one Unavailable and one Discarded stored video
+- **THEN** the system requests at most 5 videos
 
 ### Requirement: Not Yet Watchable Videos Are Not Discovered (Channels)
 The system SHALL leave out of a channel's discovered videos any entry that
@@ -105,7 +112,8 @@ The system SHALL schedule the next reconcile of a channel after every reconcile 
 
 ### Requirement: New Video Persistence (Channels)
 The system SHALL store each video discovered for a channel that is not
-already stored for that channel, with a status of PENDING and its current
+already stored for that channel and not remembered as discarded by it
+(see `video-discard`), with a status of PENDING and its current
 recency position, and publish a `VideoAddedToChannel` event for it. The
 reconcile pass SHALL NOT fetch the video's thumbnail itself. The thumbnail
 is fetched by a separately scheduled task in reaction to the video's
@@ -124,6 +132,10 @@ its event SHALL NOT wait on any thumbnail fetch.
 - **WHEN** a reconcile pass stores a newly discovered video and that video's later, separately scheduled thumbnail fetch fails
 - **THEN** the video was still stored and its `VideoAddedToChannel` event still published, and every other newly discovered video in the same pass was persisted regardless
 
+#### Scenario: Channel's most recent uploads include a remembered discarded video
+- **WHEN** a reconcile pass for a channel finds among its current most-recent uploads a video the channel remembers as discarded
+- **THEN** the system doesn't store it and publishes no `VideoAddedToChannel` event for it
+
 ### Requirement: Video Position Tracking (Channels)
 The system SHALL update a stored video's recorded position to match its
 current recency rank among the channel's most recent uploads on every
@@ -140,9 +152,12 @@ channel is reconciled.
 
 ### Requirement: Aged-Out Video Eviction (Channels)
 The system SHALL delete a stored video's record when a reconcile pass for a
-channel finds that it is no longer among the channel's current `video_limit`
-most recent uploads — whether because it was deleted/unlisted on YouTube or
-because newer uploads have pushed it past position `video_limit` — SHALL log
+channel finds that it is no longer among the channel's current most recent uploads up to and
+including the `video_limit`-th one whose download is not Unavailable or
+Discarded and that the channel doesn't remember as discarded — whether
+because it was deleted/unlisted on YouTube or because newer uploads have
+pushed it past that position — SHALL remember an evicted Discarded video's
+YouTube id for the channel before deleting its record, SHALL log
 each such eviction, and SHALL publish a `VideoRemovedFromChannel` event
 carrying that video's title, its recorded filename (if any), and whether it
 had been downloaded.
@@ -154,6 +169,18 @@ had been downloaded.
 #### Scenario: Eviction publishes a VideoRemovedFromChannel event
 - **WHEN** a reconcile pass evicts a stored video's record for a channel
 - **THEN** the system publishes a `VideoRemovedFromChannel` event containing the channel's handle, the video ID, the video's title, its recorded filename (if any), and whether the video had been downloaded
+
+#### Scenario: A skipped video doesn't take a slot
+- **WHEN** a reconcile pass for a channel with `video_limit` 3 lists uploads A, B, C, D (most recent first) and B is stored as Unavailable
+- **THEN** A, B, C and D are all kept, so the channel has 3 videos that aren't skipped
+
+#### Scenario: Evicting a discarded video remembers it
+- **WHEN** a reconcile pass for a channel evicts a stored video whose download is Discarded
+- **THEN** the channel remembers its YouTube id, then its stored record is deleted
+
+#### Scenario: Window ends at the limit-th unskipped video
+- **WHEN** a reconcile pass for a channel with `video_limit` 2 lists uploads A, B, C (most recent first), none skipped, and C was stored
+- **THEN** C is evicted
 
 ### Requirement: Reconcile Skipped For a Deleted Channel
 The system SHALL NOT invoke `yt-dlp`, persist any videos, or schedule a
@@ -193,7 +220,7 @@ video sync (see `video-sync`), and every file left unaccounted for once every
 video of the pass has been synced is deleted,
 with the same protected set: show files, season folders, every recorded filename, thumbnail filename and subtitle filename of any video regardless of status, the NFO
 sharing a recorded filename's base name, every media (`.mp4`), thumbnail (`.jpg`) or NFO (`.nfo`) file under the
-episode base name of a video whose number is recorded but whose download or
+episode base name of a video whose number is recorded, that is not Discarded, but whose download or
 thumbnail fetch has not completed yet, and legacy per-video folders or flat files
 recorded on a video. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded. A file with any other extension under an episode base name, such as a stale `.mkv` or `.webm`, is not protected.
 
@@ -240,6 +267,10 @@ recorded on a video. Every file whose name starts with the base name of a Downlo
 #### Scenario: A subtitle file placed but not yet recorded
 - **WHEN** a reconcile pass finds `<base name>.en.srt`, where `<base name>` is a Downloaded video's recorded filename without its extension, and that video's subtitle state is Missing
 - **THEN** the system does not treat that file as orphaned and does not delete it, even if the video's title has changed since its download
+
+#### Scenario: Files left by a Discarded video
+- **WHEN** a reconcile pass finds the thumbnail `Season 2026/S2026E031601 - Title.jpg` of a Discarded video whose episode number is recorded and whose filenames are cleared
+- **THEN** the system deletes that file
 
 ### Requirement: Reconcile Preserves Concurrent Download Progress (Channels)
 A channel reconcile pass refreshing a stored video's title or position
