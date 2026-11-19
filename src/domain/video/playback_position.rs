@@ -4,6 +4,10 @@ use crate::domain::shared::ValidationError;
 /// started rather than just opened.
 const STARTED_MIN_SECONDS: i64 = 30;
 
+/// The share of a video's known duration, in percent, playback must reach
+/// to count as started.
+const STARTED_MIN_SHARE_PERCENT: i64 = 20;
+
 /// How far into a video playback got, in whole seconds from the start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PlaybackPosition(i64);
@@ -30,8 +34,11 @@ impl PlaybackPosition {
     /// Past the first 30 seconds and, with a known positive
     /// `duration_seconds`, at least 20% of it or 10 minutes: started, not
     /// just opened or sampled.
-    pub fn is_started(&self, _duration_seconds: Option<i64>) -> bool {
+    pub fn is_started(&self, duration_seconds: Option<i64>) -> bool {
         self.0 > STARTED_MIN_SECONDS
+            && duration_seconds
+                .filter(|duration| *duration > 0)
+                .is_none_or(|duration| self.0 * 100 >= duration * STARTED_MIN_SHARE_PERCENT)
     }
 }
 

@@ -2987,6 +2987,60 @@ async fn it_should_continue_only_videos_started_past_30_seconds_on_home() {
 }
 
 #[tokio::test]
+async fn it_should_continue_only_videos_started_past_20_percent_on_home() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &started_video("vid_at_7m", "At 7m", 420, watched_timestamp()).lasting(Some(2400)),
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &started_video("vid_at_8m", "At 8m", 480, watched_timestamp()).lasting(Some(2400)),
+    );
+    let video_searcher = VideoSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = home(video_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(HomeResponse {
+            continue_watching: vec![HomeVideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 480,
+                in_progress: true,
+                ..home_video_response("vid_at_8m", "At 8m", playlist_source())
+            }],
+            latest: vec![HomeVideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 420,
+                ..home_video_response("vid_at_7m", "At 7m", playlist_source())
+            }],
+            ..empty_home()
+        })
+    );
+}
+
+#[tokio::test]
 async fn it_should_not_continue_watched_or_never_played_videos_on_home() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
