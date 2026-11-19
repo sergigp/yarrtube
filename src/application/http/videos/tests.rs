@@ -321,6 +321,44 @@ async fn it_should_include_the_video_id_when_listing_category_videos() {
 }
 
 #[tokio::test]
+async fn it_should_report_in_progress_on_category_videos() {
+    let db = TestDatabase::new();
+    let video = Video {
+        watch: WatchState {
+            position: PlaybackPosition::new(480).unwrap(),
+            ..WatchState::unwatched()
+        },
+        ..downloaded_video("vid1", "My Video", None, 10).lasting(Some(2400))
+    };
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    save_channel_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+    let chess = save_category_of(&db, &[channel_member("@somechannel")]);
+
+    let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![CategoryVideoResponse {
+            duration_seconds: Some(2400),
+            position_seconds: 480,
+            in_progress: true,
+            ..category_video_in(
+                category_video_response("vid1", "My Video", 10, channel_source(None)),
+                &[&chess]
+            )
+        }])
+    );
+}
+
+#[tokio::test]
 async fn it_should_include_the_summary_when_listing_category_videos() {
     let db = TestDatabase::new();
     let video = downloaded_video("vid1", "My Video", None, 10);
