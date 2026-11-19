@@ -156,7 +156,13 @@ fn it_should_pull_a_playback_position() {
         FakePlexLibraryRepository::default()
             .with_location("19", "/plex/videos/creators")
             .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
-            .with_episode_watch("101", plex_in_progress(215_540, an_hour_ago())),
+            .with_episode_watch(
+                "101",
+                PlexWatchState {
+                    duration_ms: Some(900_000),
+                    ..plex_in_progress(215_540, an_hour_ago())
+                },
+            ),
     );
     let video = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
     let task = SyncPlexWatchStateTask::new(syncer(
@@ -1018,6 +1024,141 @@ fn it_should_not_pull_a_plex_position_of_30_seconds_or_less() {
 
     assert_eq!(result, Ok(TaskOutcome::Done));
     assert_eq!(watch_state(&db, &video), WatchState::unwatched());
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+}
+
+#[test]
+fn it_should_not_push_a_position_under_20_percent() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_video(
+        &db,
+        Video {
+            watch: in_progress(300, an_hour_ago()),
+            ..downloaded_video("yt1", "S2023E1114 - One.mp4").lasting(Some(2400))
+        },
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(&video, "101", WatchProgress::Unplayed)]
+    );
+}
+
+#[test]
+fn it_should_push_a_position_past_20_percent() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+    );
+    let video = seed_video(
+        &db,
+        Video {
+            watch: in_progress(480, an_hour_ago()),
+            ..downloaded_video("yt1", "S2023E1114 - One.mp4").lasting(Some(2400))
+        },
+    );
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(plex.mutations(), vec!["progress:101:480000".to_string()]);
+    assert_eq!(
+        episode_watch_repository.list().unwrap(),
+        vec![agreed(
+            &video,
+            "101",
+            WatchProgress::InProgress(position(480))
+        )]
+    );
+}
+
+#[test]
+fn it_should_not_pull_a_plex_position_under_20_percent() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch("101", plex_in_progress(300_000, an_hour_ago())),
+    );
+    let video = seed_video(&db, downloaded_video("yt1", "S2023E1114 - One.mp4"));
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(watch_state(&db, &video), WatchState::unwatched());
+    assert_eq!(plex.mutations(), Vec::<String>::new());
+}
+
+#[test]
+fn it_should_count_a_rewatch_in_plex_under_20_percent_as_still_watched() {
+    let db = TestDatabase::new();
+    let episode_watch_repository = Arc::new(SqliteEpisodeWatchRepository::new(db.database()));
+    let plex = Arc::new(
+        FakePlexLibraryRepository::default()
+            .with_location("19", "/plex/videos/creators")
+            .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+            .with_episode_watch(
+                "101",
+                PlexWatchState {
+                    view_count: 1,
+                    ..plex_in_progress(420_000, an_hour_ago())
+                },
+            ),
+    );
+    let video = seed_video(
+        &db,
+        downloaded_video("yt1", "S2023E1114 - One.mp4").mark_watched(two_hours_ago()),
+    );
+    episode_watch_repository
+        .save_many(&[agreed(&video, "101", WatchProgress::Watched)])
+        .unwrap();
+    let task = SyncPlexWatchStateTask::new(syncer(
+        &db,
+        plex.clone(),
+        episode_watch_repository.clone(),
+        task_repository(&db),
+    ));
+
+    let result = run(&task);
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        watch_state(&db, &video),
+        WatchState::unwatched().mark_watched(two_hours_ago())
+    );
     assert_eq!(plex.mutations(), Vec::<String>::new());
 }
 

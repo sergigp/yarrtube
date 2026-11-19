@@ -16,10 +16,10 @@
 - [x] 2.8 `it_should_save_a_position_under_the_started_threshold`: unwatched 40-min, report 300s → unwatched, position 300
 - [x] 2.9 `it_should_keep_a_watched_video_watched_early_in_a_rewatch`: watched 40-min, report 420s → stays watched at 0
 - [x] 2.10 `it_should_mark_a_watched_video_unwatched_once_a_rewatch_counts_as_started` (replaces `…_past_10_percent_of_a_rewatch`; drop `REWATCH_RESET_THRESHOLD`): watched 40-min, report 600s → unwatched at 600
-- [ ] 2.11 `it_should_not_push_a_position_under_20_percent`: local 40-min at 300s → no Plex mutation, agreed Unplayed
-- [ ] 2.12 `it_should_push_a_position_past_20_percent`: local 40-min at 480s → Plex position 480
-- [ ] 2.13 `it_should_not_pull_a_plex_position_under_20_percent`: 40-min episode offset 300s → video stays unwatched at 0
-- [ ] 2.14 `it_should_count_a_rewatch_in_plex_under_20_percent_as_still_watched`: watched 40-min episode offset 420s → stays watched; remove `is_short_rewatch`
+- [x] 2.11 `it_should_not_push_a_position_under_20_percent`: local 40-min at 300s → no Plex mutation, agreed Unplayed
+- [x] 2.12 `it_should_push_a_position_past_20_percent`: local 40-min at 480s → Plex position 480
+- [x] 2.13 `it_should_not_pull_a_plex_position_under_20_percent`: 40-min episode offset 300s → video stays unwatched at 0
+- [x] 2.14 `it_should_count_a_rewatch_in_plex_under_20_percent_as_still_watched`: watched 40-min episode offset 420s → stays watched; remove `is_short_rewatch`
 - [ ] 2.15 `sourceVideos.test.ts` — `isInProgress` follows `in_progress`, not `position_seconds > 0`; update `playback_position.rs` unit tests for the duration-aware rule
 
 ## 3. Infrastructure adapters (TDD)

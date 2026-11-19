@@ -22,10 +22,9 @@ impl PlexWatchState {
         }
     }
 
-    /// An offset over 30s counts (in progress, floored to seconds) unless the episode
-    /// is watched and the offset is at or below 10% of its duration (a
-    /// rewatch just started); else viewed at least once ⇒ watched; else
-    /// unplayed.
+    /// A started offset (see `PlaybackPosition::is_started`, against the
+    /// episode's duration) counts as in progress, floored to seconds; else
+    /// viewed at least once ⇒ watched; else unplayed.
     pub fn progress(&self) -> WatchProgress {
         match (self.resume_position(), self.view_count) {
             (Some(position), _) => WatchProgress::InProgress(position),
@@ -34,20 +33,14 @@ impl PlexWatchState {
         }
     }
 
-    /// The offset in whole seconds, when started (past 30s) and not a rewatch
-    /// that just started.
+    /// The offset in whole seconds, when started against the duration.
     fn resume_position(&self) -> Option<PlaybackPosition> {
         self.view_offset_ms
-            .filter(|offset_ms| !self.is_short_rewatch(*offset_ms))
             .and_then(|offset_ms| PlaybackPosition::new(offset_ms / 1000).ok())
-            .filter(|position| position.is_started(None))
+            .filter(|position| position.is_started(self.duration_seconds()))
     }
 
-    /// Watched, and played again only up to 10% of its duration.
-    fn is_short_rewatch(&self, offset_ms: i64) -> bool {
-        self.view_count > 0
-            && self
-                .duration_ms
-                .is_some_and(|duration_ms| offset_ms * 10 <= duration_ms)
+    fn duration_seconds(&self) -> Option<i64> {
+        self.duration_ms.map(|duration_ms| duration_ms / 1000)
     }
 }
