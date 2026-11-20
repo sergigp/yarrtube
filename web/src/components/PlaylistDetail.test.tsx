@@ -455,6 +455,27 @@ describe('PlaylistDetail', () => {
     expect(await screen.findByText('Restored Video')).toBeInTheDocument()
   })
 
+  it('sends nothing when the restore is cancelled', async () => {
+    const { fetchMock } = renderPlaylist(
+      {
+        'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
+        'GET /api/playlists/PL1/videos': [],
+      },
+      '/playlists/PL1',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Restore discarded videos' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Restore discarded videos of "The Playlist"?',
+    })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toEqual([])
+  })
+
   it('excludes the playlist from home from its page header menu', async () => {
     let playlist = aPlaylist({ id: 'PL1', name: 'The Playlist' })
     const update = vi.fn(() => {
