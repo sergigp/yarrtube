@@ -162,9 +162,8 @@ impl Video {
     }
 
     /// Download Unavailable: outside a channel's video limit.
-    #[expect(dead_code, reason = "skeleton: driven by the channel limit tests")]
     pub fn is_unavailable(&self) -> bool {
-        false
+        self.download.status() == VideoStatus::Unavailable
     }
 
     /// Unavailable or Discarded: hidden from lists and outside a channel's

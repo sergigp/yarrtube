@@ -271,7 +271,7 @@ impl ChannelVideoReconciler {
             .collect::<HashSet<_>>();
         let skipped_ids: HashSet<&str> = stored_videos
             .iter()
-            .filter(|(_, video)| video.is_skipped())
+            .filter(|(_, video)| video.is_unavailable())
             .map(|(_, video)| &video.youtube_id)
             .chain(&remembered)
             .map(YoutubeVideoId::as_str)
