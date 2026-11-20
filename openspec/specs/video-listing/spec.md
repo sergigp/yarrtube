@@ -92,7 +92,7 @@ The system SHALL provide an HTTP endpoint that returns, in one response, the dow
 A playlist excluded from home SHALL NOT be the source of any video in any section. A video it tracks SHALL still appear when another source that is not excluded tracks it, through that source.
 
 "Continue watching" SHALL hold up to 6 videos the user has started and not finished recently:
-- each is unwatched, with a saved playback position greater than 30 seconds, and was last played within the past 7 days
+- each is unwatched, with a saved playback position that counts as started (see `watch-state`'s "Started Playback Position"), and was last played within the past 7 days
 - ordered by last played time, most recent first
 
 "Quick watches" SHALL hold up to 6 short videos:
@@ -110,7 +110,7 @@ Only the videos a section shows SHALL be left out of the sections after it.
 Each returned video SHALL include:
 - its ID and title
 - its thumbnail filename and duration in seconds, when present
-- whether it has been watched, and its saved playback position in seconds
+- whether it has been watched, its saved playback position in seconds, and whether it is in progress
 - the source that tracks it: kind (`playlist` or `channel`), identifier, display name, storage path, and, for a channel source, that channel's avatar filename when present
 
 #### Scenario: Each video in its own section
@@ -148,6 +148,22 @@ Each returned video SHALL include:
 #### Scenario: A barely started video is not continued
 - **WHEN** an unwatched video's saved position is 30 seconds or less
 - **THEN** it does not appear under "Continue watching"
+
+#### Scenario: A video sampled for a small share is not continued
+- **WHEN** an unwatched 40-minute video played within the past 7 days has a saved position of 7 minutes (under 20%)
+- **THEN** it does not appear under "Continue watching", and appears under "Latest videos" instead
+
+#### Scenario: A video played for 20% is continued
+- **WHEN** an unwatched 40-minute video played within the past 7 days has a saved position of 8 minutes
+- **THEN** it appears under "Continue watching"
+
+#### Scenario: A long video played for 10 minutes is continued
+- **WHEN** an unwatched 2-hour video played within the past 7 days has a saved position of 10 minutes
+- **THEN** it appears under "Continue watching"
+
+#### Scenario: A video with no known duration is continued past 30 seconds
+- **WHEN** an unwatched video with no recorded duration, played within the past 7 days, has a saved position of 31 seconds
+- **THEN** it appears under "Continue watching"
 
 #### Scenario: A watched or never played video is not continued
 - **WHEN** a video is watched, or has no last played time
@@ -187,7 +203,7 @@ Each returned video SHALL include:
 
 #### Scenario: Card fields
 - **WHEN** a video is returned in any section
-- **THEN** it includes its ID, title, thumbnail filename and duration when present, whether it has been watched, its saved playback position, and its source's kind, identifier, name and storage path
+- **THEN** it includes its ID, title, thumbnail filename and duration when present, whether it has been watched, its saved playback position, whether it is in progress, and its source's kind, identifier, name and storage path
 
 #### Scenario: Channel source includes the channel's avatar filename
 - **WHEN** a returned video's source is a channel that has a recorded avatar filename
@@ -445,3 +461,22 @@ The system SHALL include each video's episode number in the responses that list 
 #### Scenario: Video without an episode
 - **WHEN** a client lists the videos of a playlist or channel holding a video with no episode number assigned
 - **THEN** that video's entry reports its episode number as absent
+
+### Requirement: Listed Videos Report In Progress
+Every response that lists videos (the videos of a playlist, of a channel, of a category, and the home sections) SHALL include, for each video, whether it is in progress: unwatched, with a saved playback position that counts as started (see `watch-state`'s "Started Playback Position"). Unlike "Continue watching", it SHALL NOT depend on when the video was last played. The saved playback position SHALL still be reported as recorded, whether or not it counts as started.
+
+#### Scenario: A video played for 20% is in progress
+- **WHEN** a client lists the videos of a source with an unwatched 40-minute video saved at 8 minutes
+- **THEN** that video's entry reports it in progress, with a saved position of 480 seconds
+
+#### Scenario: A video played for under 20% is not in progress
+- **WHEN** a client lists the videos of a source with an unwatched 40-minute video saved at 5 minutes
+- **THEN** that video's entry reports it not in progress, with a saved position of 300 seconds
+
+#### Scenario: A watched video is not in progress
+- **WHEN** a client lists the videos of a source with a watched video
+- **THEN** that video's entry reports it not in progress
+
+#### Scenario: Not played for over a week is still in progress
+- **WHEN** a client lists the videos of a source with an unwatched 40-minute video saved at 8 minutes and last played 10 days ago
+- **THEN** that video's entry reports it in progress
