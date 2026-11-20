@@ -132,7 +132,7 @@ impl Video {
         }
     }
 
-    /// Discards the video for good (see the `video-discard` capability):
+    /// Discards the video (see the `video-discard` capability):
     /// `None` unless its download is discardable; else its download
     /// Discarded and its thumbnail and subtitle filenames cleared.
     pub fn discard(self, now: DateTime<Utc>) -> Option<Self> {
