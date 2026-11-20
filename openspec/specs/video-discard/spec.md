@@ -1,7 +1,7 @@
 # video-discard Specification
 
 ## Purpose
-Lets the user stop a video from ever being downloaded (e.g. one too big for the container to download) or get rid of a downloaded one: it is never attempted again, its files are deleted and it is hidden everywhere. Irreversible.
+Lets the user stop a video from ever being downloaded (e.g. one too big for the container to download) or get rid of a downloaded one: it is never attempted again, its files are deleted and it is hidden everywhere. A source can restore its discarded videos, which are then downloaded again while still in the source.
 
 ## Requirements
 
