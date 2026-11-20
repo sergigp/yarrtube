@@ -2518,7 +2518,7 @@ fn it_should_schedule_the_sync_of_a_video_added_by_the_pass() {
 }
 
 #[test]
-fn it_should_request_one_more_upload_per_skipped_video() {
+fn it_should_request_one_more_upload_per_unavailable_video() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
