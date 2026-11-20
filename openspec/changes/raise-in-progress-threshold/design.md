@@ -219,3 +219,13 @@ Behaviour tests:
 15. `isInProgress uses the in_progress flag` (`web/src/lib/sourceVideos.test.ts`): unwatched video with position > 0 and `in_progress: false` is not in progress; with `in_progress: true` it is.
 
 Infrastructure tests: none (no adapter changes).
+
+## Decisions
+
+- **Each Plex sync side judges "started" against its own duration.** yarrtube's side uses the
+  video's recorded duration (or the 30-second rule when none is recorded); the Plex side uses
+  the episode's `duration_ms / 1000`. When the two disagree across the threshold (no recorded
+  duration, or a stop on the exact 20% boundary second with durations differing by ≥1s), a
+  pushed position reads back as unplayed from Plex and the next sync resets yarrtube's position
+  to 0. Accepted: rare, limited to positions just past the threshold, and Plex keeps its own
+  resume offset. Not worth threading one shared duration through `PlexWatchState::progress`.
