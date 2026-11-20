@@ -15,7 +15,7 @@ import {
 import type { HomeVideoSource } from '@/api/types'
 
 function video(id: string, overrides: Partial<WatchableVideo> = {}): WatchableVideo {
-  return { id, watched: false, position_seconds: 0, published_at: null, ...overrides }
+  return { id, watched: false, position_seconds: 0, in_progress: false, published_at: null, ...overrides }
 }
 
 function source(kind: HomeVideoSource['kind'], id: string): { source: HomeVideoSource } {
@@ -80,7 +80,7 @@ describe('newestUnwatched', () => {
 describe('watch filters', () => {
   const videos = [
     video('fresh'),
-    video('started', { position_seconds: 10 }),
+    video('started', { position_seconds: 10, in_progress: true }),
     video('watched', { watched: true, position_seconds: 10 }),
   ]
 
@@ -117,6 +117,13 @@ describe('watch filters', () => {
       in_progress: 0,
       watched: 0,
     })
+  })
+
+  it('follows the server in progress flag, not the saved position', () => {
+    expect([
+      isInProgress(video('sampled', { position_seconds: 120, in_progress: false })),
+      isInProgress(video('started', { position_seconds: 120, in_progress: true })),
+    ]).toEqual([false, true])
   })
 
   it('treats a watched video with a saved position as not in progress', () => {

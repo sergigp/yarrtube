@@ -15,6 +15,8 @@ pub struct HomeVideoView {
     pub duration_seconds: Option<i64>,
     pub watched: bool,
     pub position_seconds: i64,
+    /// Unwatched with a started position (see `Video::watch_progress`).
+    pub in_progress: bool,
     /// When YouTube published the video, unknown without its metadata.
     pub published_at: Option<DateTime<Utc>>,
     pub source: VideoSource,
@@ -28,6 +30,7 @@ impl From<SourcedVideo> for HomeVideoView {
         Self {
             watched: video.watch.is_watched(),
             position_seconds: video.watch.position.seconds(),
+            in_progress: video.watch_progress().is_in_progress(),
             id: video.id,
             youtube_id: video.youtube_id,
             title: video.title,

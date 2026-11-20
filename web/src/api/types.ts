@@ -113,6 +113,8 @@ export interface Video {
   updated_at: string
   watched: boolean
   position_seconds: number
+  /** Unwatched with a saved position past the started threshold (see `watch-state`). */
+  in_progress: boolean
   synced_at: string | null
   published_at: string | null
   channel_name: string | null
@@ -151,6 +153,8 @@ export interface HomeVideo {
   duration_seconds: number | null
   watched: boolean
   position_seconds: number
+  /** Unwatched with a saved position past the started threshold (see `watch-state`). */
+  in_progress: boolean
   /** When YouTube published the video (RFC 3339), `null` when unknown. */
   published_at: string | null
   source: HomeVideoSource

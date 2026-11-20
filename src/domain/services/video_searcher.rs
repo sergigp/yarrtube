@@ -465,7 +465,7 @@ impl VideoSearcher {
         Ok(videos)
     }
 
-    /// In progress videos of `videos` (see `Video::is_in_progress`), last
+    /// Continuable videos of `videos` (see `Video::is_continuable`), last
     /// played first, once per YouTube video, up to `limit`.
     fn continue_watching_in(
         videos: &[SourcedVideo],
@@ -474,7 +474,7 @@ impl VideoSearcher {
     ) -> Vec<SourcedVideo> {
         Self::pick_once(
             videos,
-            |video| video.watch.is_in_progress(now),
+            |video| video.is_continuable(now),
             |video| video.watch.last_played_at,
             limit,
         )

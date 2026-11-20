@@ -321,6 +321,44 @@ async fn it_should_include_the_video_id_when_listing_category_videos() {
 }
 
 #[tokio::test]
+async fn it_should_report_in_progress_on_category_videos() {
+    let db = TestDatabase::new();
+    let video = Video {
+        watch: WatchState {
+            position: PlaybackPosition::new(480).unwrap(),
+            ..WatchState::unwatched()
+        },
+        ..downloaded_video("vid1", "My Video", None, 10).lasting(Some(2400))
+    };
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    save_channel_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &video,
+        0,
+    );
+    let chess = save_category_of(&db, &[channel_member("@somechannel")]);
+
+    let response = list_for_category(home_video_searcher(&db), chess.id.as_str()).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![CategoryVideoResponse {
+            duration_seconds: Some(2400),
+            position_seconds: 480,
+            in_progress: true,
+            ..category_video_in(
+                category_video_response("vid1", "My Video", 10, channel_source(None)),
+                &[&chess]
+            )
+        }])
+    );
+}
+
+#[tokio::test]
 async fn it_should_include_the_summary_when_listing_category_videos() {
     let db = TestDatabase::new();
     let video = downloaded_video("vid1", "My Video", None, 10);
@@ -1131,6 +1169,7 @@ async fn it_should_include_watch_state_when_listing_playlist_videos() {
             },
             VideoResponse {
                 position_seconds: 42,
+                in_progress: true,
                 ..pending_video_response("vid_partly", "Partly")
             },
         ])
@@ -1487,9 +1526,129 @@ async fn it_should_include_watch_state_when_listing_channel_videos() {
             },
             VideoResponse {
                 position_seconds: 42,
+                in_progress: true,
                 ..pending_video_response("vid_partly", "Partly")
             },
         ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_report_whether_listed_channel_videos_are_in_progress() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &forty_minute_video_at("vid_at_8m", "At 8m", 480),
+        0,
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &forty_minute_video_at("vid_at_5m", "At 5m", 300),
+        1,
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &forty_minute_video_at("vid_watched", "Watched", 0).mark_watched(watched_timestamp()),
+        2,
+    );
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            VideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 480,
+                in_progress: true,
+                ..downloaded_video_response("vid_at_8m", "At 8m")
+            },
+            VideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 300,
+                ..downloaded_video_response("vid_at_5m", "At 5m")
+            },
+            VideoResponse {
+                duration_seconds: Some(2400),
+                watched: true,
+                ..downloaded_video_response("vid_watched", "Watched")
+            },
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_report_an_old_started_video_in_progress_when_listing_channel_videos() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let played_ten_days_ago = Video {
+        watch: WatchState {
+            last_played_at: Some(watched_timestamp() - chrono::Duration::days(10)),
+            ..forty_minute_video_at("vid_old", "Old", 480).watch
+        },
+        ..forty_minute_video_at("vid_old", "Old", 480)
+    };
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &played_ten_days_ago,
+        0,
+    );
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![VideoResponse {
+            duration_seconds: Some(2400),
+            position_seconds: 480,
+            in_progress: true,
+            ..downloaded_video_response("vid_old", "Old")
+        }])
     );
 }
 
@@ -1741,6 +1900,7 @@ async fn it_should_list_a_started_video_under_continue_watching_only_on_home() {
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid1", "Started", playlist_source())
             }],
             ..empty_home()
@@ -1824,6 +1984,7 @@ async fn it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home
             continue_watching: vec![HomeVideoResponse {
                 duration_seconds: Some(600),
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid1", "Started Short", playlist_source())
             }],
             ..empty_home()
@@ -2853,10 +3014,12 @@ async fn it_should_order_continue_watching_by_last_played_first_on_home() {
             continue_watching: vec![
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid_latest", "Played Latest", playlist_source())
                 },
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid_earlier", "Played Earlier", playlist_source())
                 },
             ],
@@ -2915,10 +3078,12 @@ async fn it_should_continue_only_videos_played_within_a_week_on_home() {
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid_week_ago", "A Week Ago", playlist_source())
             }],
             latest: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid_over_a_week_ago", "Over A Week Ago", playlist_source())
             }],
             ..empty_home()
@@ -2966,11 +3131,109 @@ async fn it_should_continue_only_videos_started_past_30_seconds_on_home() {
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 31,
+                in_progress: true,
                 ..home_video_response("vid_at_31", "At 31s", playlist_source())
             }],
             latest: vec![HomeVideoResponse {
                 position_seconds: 30,
                 ..home_video_response("vid_at_30", "At 30s", playlist_source())
+            }],
+            ..empty_home()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_continue_only_videos_started_past_20_percent_on_home() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &started_video("vid_at_7m", "At 7m", 420, watched_timestamp()).lasting(Some(2400)),
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &started_video("vid_at_8m", "At 8m", 480, watched_timestamp()).lasting(Some(2400)),
+    );
+    let video_searcher = VideoSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = home(video_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(HomeResponse {
+            continue_watching: vec![HomeVideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 480,
+                in_progress: true,
+                ..home_video_response("vid_at_8m", "At 8m", playlist_source())
+            }],
+            latest: vec![HomeVideoResponse {
+                duration_seconds: Some(2400),
+                position_seconds: 420,
+                ..home_video_response("vid_at_7m", "At 7m", playlist_source())
+            }],
+            ..empty_home()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_continue_a_long_video_played_for_10_minutes_on_home() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        "PL1",
+        &started_video("vid_long", "Long", 600, watched_timestamp()).lasting(Some(7200)),
+    );
+    let video_searcher = VideoSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = home(video_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(HomeResponse {
+            continue_watching: vec![HomeVideoResponse {
+                duration_seconds: Some(7200),
+                position_seconds: 600,
+                in_progress: true,
+                ..home_video_response("vid_long", "Long", playlist_source())
             }],
             ..empty_home()
         })
@@ -3038,6 +3301,7 @@ async fn it_should_not_continue_watched_or_never_played_videos_on_home() {
                 },
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid_never_played", "Never Played", playlist_source())
                 },
             ],
@@ -3097,6 +3361,7 @@ async fn it_should_list_a_continue_watching_video_once_from_the_channel_on_home(
         Ok(HomeResponse {
             continue_watching: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 ..home_video_response("vid_shared", "Shared", channel_source(None))
             }],
             ..empty_home()
@@ -3889,10 +4154,45 @@ async fn it_should_only_record_the_position_if_duration_is_unknown() {
 }
 
 #[tokio::test]
-async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch() {
+async fn it_should_save_a_position_under_the_started_threshold() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-    let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+    let video = video_with_duration("vid1", Some(2400));
+    video_repository.insert(&video).unwrap();
+    let video_watch_state_updater = VideoWatchStateUpdater::new(
+        video_repository.clone(),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+    );
+    let request = progress_request(300);
+
+    let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
+
+    assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            watch: WatchState {
+                watched_at: None,
+                position: PlaybackPosition::new(300).unwrap(),
+                last_played_at: Some(watched_timestamp())
+            },
+            ..video
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_a_watched_video_watched_early_in_a_rewatch() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = video_with_duration("vid1", Some(2400)).mark_watched(fixed_timestamp());
     video_repository.insert(&video).unwrap();
     let video_watch_state_updater = VideoWatchStateUpdater::new(
         video_repository.clone(),
@@ -3906,7 +4206,44 @@ async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch()
     );
     let request = RecordProgressRequest {
         was_watched: Some(true),
-        ..progress_request(11)
+        ..progress_request(420)
+    };
+
+    let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
+
+    assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            watch: WatchState {
+                last_played_at: Some(watched_timestamp()),
+                ..video.watch
+            },
+            ..video
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_mark_a_watched_video_unwatched_once_a_rewatch_counts_as_started() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = video_with_duration("vid1", Some(2400)).mark_watched(fixed_timestamp());
+    video_repository.insert(&video).unwrap();
+    let video_watch_state_updater = VideoWatchStateUpdater::new(
+        video_repository.clone(),
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Arc::new(FixedClock(watched_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+    );
+    let request = RecordProgressRequest {
+        was_watched: Some(true),
+        ..progress_request(600)
     };
 
     let response = record_progress(video_watch_state_updater, "rec-vid1", request).await;
@@ -3918,7 +4255,7 @@ async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch()
             version: 1,
             watch: WatchState {
                 watched_at: None,
-                position: PlaybackPosition::new(11).unwrap(),
+                position: PlaybackPosition::new(600).unwrap(),
                 last_played_at: Some(watched_timestamp())
             },
             ..video
@@ -4938,6 +5275,7 @@ async fn it_should_not_repeat_a_continue_watching_video_in_category_sections_on_
             continue_watching: vec![in_categories(
                 HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..home_video_response("vid1", "Started", channel_source(None))
                 },
                 &[&chess]
@@ -5142,6 +5480,7 @@ async fn it_should_not_count_continue_watching_videos_when_ranking_category_sect
             continue_watching: (3..5)
                 .map(|i| HomeVideoResponse {
                     position_seconds: 120,
+                    in_progress: true,
                     ..category_card(&chess, "@chess", i)
                 })
                 .collect(),
@@ -5903,6 +6242,7 @@ async fn it_should_leave_out_continue_watching_if_turned_off() {
         Ok(HomeResponse {
             quick_watches: vec![HomeVideoResponse {
                 position_seconds: 120,
+                in_progress: true,
                 duration_seconds: Some(600),
                 ..home_video_response("vid1", "Started", playlist_source())
             }],
@@ -8227,6 +8567,7 @@ fn numbered_started_videos(numbers: impl Iterator<Item = i64>) -> Vec<HomeVideoR
     numbers
         .map(|i| HomeVideoResponse {
             position_seconds: 120,
+            in_progress: true,
             ..home_video_response(&format!("vid{i}"), &format!("Video {i}"), playlist_source())
         })
         .collect()
@@ -8297,6 +8638,29 @@ fn new_video(youtube_id: YoutubeVideoId, title: &str, now: DateTime<Utc>) -> Vid
     }
 }
 
+/// A video downloaded at `fixed_timestamp()`, lasting 40 minutes, unwatched
+/// and saved at `position_seconds`.
+fn forty_minute_video_at(youtube_id: &str, title: &str, position_seconds: i64) -> Video {
+    Video {
+        watch: WatchState {
+            position: PlaybackPosition::new(position_seconds).unwrap(),
+            ..WatchState::unwatched()
+        },
+        ..new_video(
+            YoutubeVideoId::new(youtube_id).unwrap(),
+            title,
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            format!("{title}.mp4"),
+            None,
+            Some(2400),
+            fixed_timestamp(),
+        )
+    }
+}
+
 fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
     VideoResponse {
         id: format!("rec-{youtube_id}"),
@@ -8312,6 +8676,7 @@ fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         updated_at: fixed_timestamp(),
         watched: false,
         position_seconds: 0,
+        in_progress: false,
         synced_at: None,
         published_at: None,
         channel_name: None,
@@ -8368,6 +8733,7 @@ fn home_video_response(
         duration_seconds: None,
         watched: false,
         position_seconds: 0,
+        in_progress: false,
         published_at: None,
         source,
         category_ids: vec![],
@@ -8395,6 +8761,7 @@ fn category_video_response(
         updated_at: created_at,
         watched: false,
         position_seconds: 0,
+        in_progress: false,
         synced_at: Some(created_at),
         published_at: None,
         channel_name: None,
