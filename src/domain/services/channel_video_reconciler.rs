@@ -162,7 +162,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
     fn restore_discarded(&self, id: ChannelHandle) -> Result<(), RestoreDiscardedVideosError> {
         let _guard = self.lock(&id);
         let Some(channel) = self.find_channel(&id)? else {
-            return Ok(());
+            return Err(RestoreDiscardedVideosError::ChannelNotFound(id));
         };
 
         self.discarded_video_repository

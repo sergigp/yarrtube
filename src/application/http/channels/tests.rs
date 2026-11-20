@@ -3379,6 +3379,32 @@ async fn it_should_restore_discarded_channel_videos_when_listing_fails() {
 }
 
 #[tokio::test]
+async fn it_should_fail_to_restore_the_discarded_videos_of_an_unknown_channel() {
+    let db = TestDatabase::new();
+    let reconciler = channel_video_reconciler(
+        &db,
+        Arc::new(SqliteChannelRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Vec::new(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+    );
+
+    let response = restore(reconciler, "@missing").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "channel @missing not found"
+        ))
+    );
+}
+
+#[tokio::test]
 async fn it_should_mark_every_downloaded_channel_video_watched() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

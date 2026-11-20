@@ -135,7 +135,6 @@ impl std::error::Error for RetryVideoError {}
 
 #[derive(Debug)]
 pub enum RestoreDiscardedVideosError {
-    #[expect(dead_code, reason = "skeleton: driven by the unknown channel test")]
     ChannelNotFound(ChannelHandle),
     #[expect(dead_code, reason = "skeleton: driven by the unknown playlist test")]
     PlaylistNotFound(PlaylistId),
