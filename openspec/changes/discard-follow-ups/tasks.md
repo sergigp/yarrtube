@@ -45,7 +45,7 @@
 ## 4. Verification
 
 - [x] 4.1 `scripts/run-tests.sh --lint --web --rust`.
-- [ ] 4.2 Update `e2e-tests/tests/discardVideo.spec.js` for the "Discard" label and confirmation copy, then run `scripts/run-tests.sh --e2e`.
+- [x] 4.2 Update `e2e-tests/tests/discardVideo.spec.js` for the "Discard" label and confirmation copy, then run `scripts/run-tests.sh --e2e`.
 - [ ] 4.3 Manual (agent). Start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a channel via the HTTP API, then use the Playwright MCP browser to check:
   - Discarding a row from its "⋮" menu removes it from the list.
   - Discarding a home card removes it from home.

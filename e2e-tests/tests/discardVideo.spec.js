@@ -12,7 +12,7 @@ function episodeMedia(showPath) {
   return existsSync(season) ? readdirSync(season).filter((name) => name.endsWith('.mp4')) : []
 }
 
-test("Don't download discards a downloaded video: gone from the list and from disk", async ({ page }) => {
+test('Discard removes a downloaded video from the list and disk, and restoring brings it back', async ({ page }) => {
   const playlist = await addPlaylist(page.request, PLAYLIST)
   const videosUrl = `/api/playlists/${encodeURIComponent(playlist.id)}/videos`
   expect(episodeMedia(playlist.path)).toHaveLength(playlist.videos.length)
@@ -22,13 +22,17 @@ test("Don't download discards a downloaded video: gone from the list and from di
   const main = page.locator('main')
   const title = await main.getByRole('heading', { level: 3 }).first().textContent()
 
-  await main.getByRole('button', { name: "Don't download" }).click()
+  await main.getByRole('button', { name: 'Discard', exact: true }).click()
   const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog'))
-  await expect(dialog.getByText("Its files will be deleted and it will never be downloaded again. This can't be undone.")).toBeVisible()
+  await expect(
+    dialog.getByText(
+      "Its files will be deleted and it won't be downloaded. You can restore it from its channel's or playlist's menu.",
+    ),
+  ).toBeVisible()
   const discarded = page.waitForResponse(
     (response) => response.request().method() === 'POST' && response.url().endsWith('/discard'),
   )
-  await dialog.getByRole('button', { name: 'Discard video' }).click()
+  await dialog.getByRole('button', { name: 'Discard', exact: true }).click()
   expect((await discarded).ok()).toBe(true)
 
   await expect
@@ -41,4 +45,23 @@ test("Don't download discards a downloaded video: gone from the list and from di
   await expect
     .poll(() => episodeMedia(playlist.path).length, { message: 'its episode deleted from disk', timeout: 30_000 })
     .toBe(playlist.videos.length - 1)
+
+  await page.getByRole('button', { name: /^More actions for / }).click()
+  await page.getByRole('menuitem', { name: 'Restore discarded videos' }).click()
+  const restoreDialog = page.getByRole('dialog')
+  const restored = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().endsWith('/discarded/restore'),
+  )
+  await restoreDialog.getByRole('button', { name: 'Restore' }).click()
+  expect((await restored).status()).toBe(204)
+
+  await expect
+    .poll(async () => (await (await page.request.get(videosUrl)).json()).map((video) => video.title), {
+      message: 'the restored video listed again',
+      timeout: 10_000,
+    })
+    .toContain(title)
+  await expect
+    .poll(() => episodeMedia(playlist.path).length, { message: 'its episode downloaded again', timeout: 30_000 })
+    .toBe(playlist.videos.length)
 })
