@@ -87,7 +87,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
       (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
     )
     await video.evaluate((el) => {
-      el.currentTime = el.duration / 2
+      el.currentTime = el.duration * 0.75
       el.pause()
     })
     expect((await progressReported).status()).toBe(200)
@@ -129,8 +129,9 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
 
   await test.step('rewatching it marks it unwatched again', async () => {
     // The meta line's "Watched" turns back into a "Mark watched" button once a
-    // rewatch passes 10% (halfway stays below the 90% that marks it watched),
-    // and the channel's badge comes back, without a reload.
+    // rewatch counts as started (past 30s and 20% of the video; 75% of the
+    // ~61s sample is ~46s, below the 90% that marks it watched), and the
+    // channel's badge comes back, without a reload.
     const main = page.locator('main')
     await expect(main.getByRole('button', { name: 'Mark watched', exact: true })).toHaveCount(0)
     const progressReported = page.waitForResponse(
@@ -140,7 +141,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     // pausing an already paused video reports nothing.
     await page.locator('video').evaluate(async (el) => {
       el.muted = true
-      el.currentTime = el.duration / 2
+      el.currentTime = el.duration * 0.75
       await el.play()
       el.pause()
     })
