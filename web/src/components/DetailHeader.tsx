@@ -444,7 +444,12 @@ export function DetailHeader({
           description="Discarded videos still in this playlist, or among this channel's most recent uploads, will be downloaded again."
           confirmLabel="Restore"
           pendingLabel="Restoring…"
-          onConfirm={onRestoreDiscarded}
+          onConfirm={() =>
+            alertOnFailure(
+              onRestoreDiscarded,
+              `Failed to restore the discarded videos of "${name}"`,
+            )
+          }
         />
       )}
       {onMarkWatched && (
