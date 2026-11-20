@@ -24,6 +24,7 @@ use crate::domain::services::ShowFileWriter;
 use crate::domain::show::{ShowKey, ShowMoved};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::DiscardedVideo;
+use crate::domain::video::Download;
 use crate::domain::video::YoutubeVideoId;
 use crate::domain::video::{PlaybackPosition, Video};
 use crate::domain::video_category::{
@@ -3136,6 +3137,56 @@ async fn it_should_fail_to_reconcile_if_invalid_handle_provided() {
 /// repositories sit on an unmigrated in-memory database, so a request that
 /// wrongly got through would fail loudly instead of passing.
 #[tokio::test]
+async fn it_should_restore_a_stored_discarded_channel_video() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let discarded = save_discarded_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        "ytB",
+        0,
+    );
+    let reconciler = channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        vec![listed_video("ytB", "Video ytB", 0)],
+        task_repository.clone(),
+    );
+
+    let response = restore(reconciler, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            download: Download::pending(),
+            ..discarded.clone()
+        }]
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: discarded.id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        )]
+    );
+}
+
+#[tokio::test]
 async fn it_should_mark_every_downloaded_channel_video_watched() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -4082,6 +4133,34 @@ fn save_downloaded_channel_video(
     video
 }
 
+/// Saves a discarded video and its channel membership, returning the
+/// video as stored.
+fn save_discarded_channel_video(
+    video_repository: &dyn VideoRepository,
+    channel_video_repository: &dyn ChannelVideoRepository,
+    channel_handle: &str,
+    youtube_id: &str,
+    position: i64,
+) -> Video {
+    let video = Video::create(
+        YoutubeVideoId::new(youtube_id).unwrap(),
+        format!("Video {youtube_id}"),
+        fixed_timestamp(),
+    )
+    .discard(fixed_timestamp())
+    .unwrap();
+    video_repository.insert(&video).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo::create(
+            handle(channel_handle),
+            video.id.clone(),
+            position,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    video
+}
+
 fn downloaded_video(youtube_id: &str) -> Video {
     Video::create(
         YoutubeVideoId::new(youtube_id).unwrap(),
@@ -4297,4 +4376,11 @@ async fn reconcile(
     channel_handle: &str,
 ) -> Result<StatusCode, ApiError> {
     reconcile_channel(State(reconciler), Path(channel_handle.to_string())).await
+}
+
+async fn restore(
+    reconciler: ChannelVideoReconciler,
+    channel_handle: &str,
+) -> Result<StatusCode, ApiError> {
+    restore_discarded_channel_videos(State(reconciler), Path(channel_handle.to_string())).await
 }

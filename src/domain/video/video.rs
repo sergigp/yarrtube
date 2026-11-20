@@ -156,9 +156,15 @@ impl Video {
 
     /// `None` unless its download is Discarded; else its download restored
     /// (Pending).
-    #[expect(dead_code, reason = "skeleton: driven by the restore tests")]
-    pub fn restore(self, _now: DateTime<Utc>) -> Option<Self> {
-        None
+    pub fn restore(self, now: DateTime<Utc>) -> Option<Self> {
+        if !self.download.is_discarded() {
+            return None;
+        }
+        Some(Self {
+            download: self.download.restore(),
+            updated_at: now,
+            ..self
+        })
     }
 
     /// Download Unavailable: outside a channel's video limit.

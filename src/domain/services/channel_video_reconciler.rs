@@ -159,9 +159,14 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
         self.reconcile_channel(channel, ListingFailure::SkipMembership)
     }
 
-    fn restore_discarded(&self, _id: ChannelHandle) -> Result<(), RestoreDiscardedVideosError> {
-        self.restore_stored_discarded(&[])?;
-        Ok(())
+    fn restore_discarded(&self, id: ChannelHandle) -> Result<(), RestoreDiscardedVideosError> {
+        let _guard = self.lock(&id);
+        let Some(channel) = self.find_channel(&id)? else {
+            return Ok(());
+        };
+
+        self.restore_stored_discarded(&self.list_stored_videos(&channel)?)?;
+        Ok(self.reconcile_channel(channel, ListingFailure::SkipMembership)?)
     }
 }
 
@@ -169,8 +174,17 @@ impl ChannelVideoReconciler {
     /// Waits for a move of the channel to finish, so the pass reads the
     /// channel, and works in its folder, only once it has moved.
     /// Puts every stored Discarded video back to Pending.
-    fn restore_stored_discarded(&self, _stored: &[(ChannelVideo, Video)]) -> anyhow::Result<()> {
-        Ok(())
+    fn restore_stored_discarded(&self, stored: &[(ChannelVideo, Video)]) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        stored
+            .iter()
+            .map(|(_, video)| video)
+            .filter(|video| video.download.is_discarded())
+            .try_for_each(|video| {
+                self.video_updater
+                    .update(&video.id, |video| video.restore(now))
+                    .map(|_| ())
+            })
     }
 
     fn lock(&self, id: &ChannelHandle) -> ShowLockGuard<'_> {
