@@ -8,6 +8,7 @@ import {
   useChannelVideos,
   useDeleteSource,
   useLibraryAction,
+  useRestoreDiscardedVideos,
 } from '@/api/queries'
 import {
   reconcileChannel,
@@ -39,6 +40,7 @@ export function ChannelDetail() {
   const { data: channels, error: channelsError } = useChannels()
   const refreshing = useLibraryAction()
   const deleteSource = useDeleteSource()
+  const restoreDiscardedVideos = useRestoreDiscardedVideos()
   const saveChannelSettings = useSaveChannelSettings()
   const [editing, setEditing] = useState(false)
   const categoriesShown = useCategoriesShown()
@@ -110,6 +112,7 @@ export function ChannelDetail() {
               }
             : undefined
         }
+        onRestoreDiscarded={() => restoreDiscardedVideos({ kind: 'channel', id })}
         onDelete={refreshing(async () => {
           await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
           navigate('/')
