@@ -23,7 +23,7 @@
 - [x] 2.8 `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_channel`: `ChannelNotFound` → 404.
 - [x] 2.9 `it_should_restore_a_stored_discarded_playlist_video`.
 - [x] 2.10 `it_should_re_add_a_remembered_video_back_in_the_playlist`.
-- [ ] 2.11 `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_playlist`: `PlaylistNotFound` → 404.
+- [x] 2.11 `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_playlist`: `PlaylistNotFound` → 404.
 - [ ] 2.12 Vitest `VideoDetail` "says a discarded video can be restored": the button and dialog become "Discard", the copy mentions restoring, and existing "Don't download" tests are renamed.
 - [ ] 2.13 Vitest `VideoListPane` "discards a row's video from its menu after confirming": "Discard…" item plus `DiscardVideoDialog` in `VideoActionsMenu`; `VideoListPane` passes `discard` when `canDiscard`.
 - [ ] 2.14 Vitest `VideoListPane` "offers no Discard… for a downloading row".

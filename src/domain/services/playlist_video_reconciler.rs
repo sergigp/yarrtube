@@ -158,7 +158,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
     fn restore_discarded(&self, id: PlaylistId) -> Result<(), RestoreDiscardedVideosError> {
         let _guard = self.lock(&id);
         let Some(playlist) = self.find_playlist(&id)? else {
-            return Ok(());
+            return Err(RestoreDiscardedVideosError::PlaylistNotFound(id));
         };
 
         self.discarded_video_repository

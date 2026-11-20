@@ -3552,6 +3552,29 @@ async fn it_should_re_add_a_remembered_video_back_in_the_playlist() {
 }
 
 #[tokio::test]
+async fn it_should_fail_to_restore_the_discarded_videos_of_an_unknown_playlist() {
+    let db = TestDatabase::new();
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Vec::new(),
+        task_repository(&db),
+    );
+
+    let response = restore(playlist_video_reconciler, "PL404").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "playlist PL404 not found"
+        ))
+    );
+}
+
+#[tokio::test]
 async fn it_should_mark_every_downloaded_playlist_video_watched() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
