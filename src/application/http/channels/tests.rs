@@ -3245,6 +3245,62 @@ async fn it_should_re_add_a_remembered_channel_video_still_among_its_uploads() {
 }
 
 #[tokio::test]
+async fn it_should_forget_a_remembered_channel_video_past_the_limit() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let discarded_video_repository = SqliteDiscardedVideoRepository::new(db.database());
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    discarded_video_repository
+        .record(&DiscardedVideo::new(
+            ShowKey::Channel(handle("@somechannel")),
+            YoutubeVideoId::new("ytD").unwrap(),
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let reconciler = channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+            listed_video("ytC", "C", 2),
+            listed_video("ytD", "D", 3),
+        ],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+    );
+
+    let response = restore(reconciler, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Channel(handle("@somechannel")))
+            .unwrap(),
+        vec![]
+    );
+    assert_eq!(
+        video_repository
+            .list()
+            .unwrap()
+            .into_iter()
+            .map(|video| video.youtube_id.as_str().to_string())
+            .collect::<Vec<_>>(),
+        vec!["ytA", "ytB"]
+    );
+}
+
+#[tokio::test]
 async fn it_should_mark_every_downloaded_channel_video_watched() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
