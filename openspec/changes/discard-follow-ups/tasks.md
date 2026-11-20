@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every type and signature from design.md's Types & Signatures, wired end-to-end, bodies trivial:
+- [x] 1.1 Create every type and signature from design.md's Types & Signatures, wired end-to-end, bodies trivial:
   - `Download::restore` and `Video::restore` return `self` / `None`; `Video::is_unavailable` returns `false`.
   - `RestoreDiscardedVideosError` with `Display`, `Error` and `From<anyhow::Error>`.
   - `restore_discarded` on `ChannelVideoReconcilerApi` and `PlaylistVideoReconcilerApi`, returning `Ok(())`, with private `restore_stored_discarded` stubs.

@@ -11,7 +11,9 @@ use crate::domain::services::{
 use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{DiscardedVideo, Video, VideoId, YoutubeVideoId};
+use crate::domain::video::{
+    DiscardedVideo, RestoreDiscardedVideosError, Video, VideoId, YoutubeVideoId,
+};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
@@ -120,6 +122,11 @@ pub trait ChannelVideoReconcilerApi: Send + Sync {
     /// touching the recurring reconcile schedule. No-ops entirely if the
     /// channel no longer exists.
     fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
+
+    /// Forgets the channel's remembered discarded videos, puts its stored
+    /// Discarded ones back to Pending, then runs one pass like
+    /// `force_reconcile`, under the channel's lock.
+    fn restore_discarded(&self, id: ChannelHandle) -> Result<(), RestoreDiscardedVideosError>;
 }
 
 impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
@@ -151,11 +158,21 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
 
         self.reconcile_channel(channel, ListingFailure::SkipMembership)
     }
+
+    fn restore_discarded(&self, _id: ChannelHandle) -> Result<(), RestoreDiscardedVideosError> {
+        self.restore_stored_discarded(&[])?;
+        Ok(())
+    }
 }
 
 impl ChannelVideoReconciler {
     /// Waits for a move of the channel to finish, so the pass reads the
     /// channel, and works in its folder, only once it has moved.
+    /// Puts every stored Discarded video back to Pending.
+    fn restore_stored_discarded(&self, _stored: &[(ChannelVideo, Video)]) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     fn lock(&self, id: &ChannelHandle) -> ShowLockGuard<'_> {
         self.show_locks.lock(ShowKey::Channel(id.clone()))
     }

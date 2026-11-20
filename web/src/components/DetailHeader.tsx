@@ -227,6 +227,8 @@ interface DetailHeaderProps {
    * categories otherwise.
    */
   aiCategorization?: { enabled: boolean; onDeleteAiVerdicts: () => Promise<void> }
+  /** Channels and playlists: restores the source's discarded videos; categories have none. */
+  onRestoreDiscarded?: () => Promise<void>
   onDelete: () => Promise<void>
   deleteDescription: string
 }

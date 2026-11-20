@@ -163,6 +163,13 @@ impl Download {
         }
     }
 
+    /// Pending with no attempts, no failure and no file when discarded;
+    /// unchanged otherwise.
+    #[expect(dead_code, reason = "skeleton: driven by the restore tests")]
+    pub fn restore(self) -> Self {
+        self
+    }
+
     /// The file recorded as `file` (a relocation or quality upgrade), state
     /// unchanged.
     pub fn with_file(self, file: Option<DownloadedFile>) -> Self {

@@ -10,7 +10,9 @@ use crate::domain::services::{
 use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{DiscardedVideo, Video, VideoId, YoutubeVideoId};
+use crate::domain::video::{
+    DiscardedVideo, RestoreDiscardedVideosError, Video, VideoId, YoutubeVideoId,
+};
 use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
@@ -118,6 +120,9 @@ pub trait PlaylistVideoReconcilerApi: Send + Sync {
     /// means triggering it repeatedly never queues extra tasks. No-ops
     /// entirely if the playlist no longer exists.
     fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()>;
+
+    /// As `ChannelVideoReconcilerApi::restore_discarded`, for a playlist.
+    fn restore_discarded(&self, id: PlaylistId) -> Result<(), RestoreDiscardedVideosError>;
 }
 
 impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
@@ -149,11 +154,21 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
 
         self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)
     }
+
+    fn restore_discarded(&self, _id: PlaylistId) -> Result<(), RestoreDiscardedVideosError> {
+        self.restore_stored_discarded(&[])?;
+        Ok(())
+    }
 }
 
 impl PlaylistVideoReconciler {
     /// Waits for a move of the playlist to finish, so the pass reads the
     /// playlist, and works in its folder, only once it has moved.
+    /// Puts every stored Discarded video back to Pending.
+    fn restore_stored_discarded(&self, _stored: &[(PlaylistVideo, Video)]) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     fn lock(&self, id: &PlaylistId) -> ShowLockGuard<'_> {
         self.show_locks.lock(ShowKey::Playlist(id.clone()))
     }

@@ -3,7 +3,9 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::{ApiError, move_show_error};
 use super::validation::{MISSING_CATEGORIZATION, MISSING_QUALITY, MISSING_SUMMARIES, required};
-use super::videos::{edit_video_categories_error, update_watch_state_error};
+use super::videos::{
+    edit_video_categories_error, restore_discarded_videos_error, update_watch_state_error,
+};
 use crate::domain::category::CategoryMember;
 use crate::domain::channel::{
     ChannelHandle, ChannelSettingsChange, CreateChannelError, DeleteChannelError,
@@ -190,6 +192,19 @@ pub async fn reconcile_channel(
     run_blocking(move || channel_video_reconciler.force_reconcile(id))
         .await?
         .map_err(ApiError::internal)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn restore_discarded_channel_videos(
+    State(channel_video_reconciler): State<ChannelVideoReconciler>,
+    Path(handle): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = ChannelHandle::new(handle)?;
+
+    run_blocking(move || channel_video_reconciler.restore_discarded(id))
+        .await?
+        .map_err(restore_discarded_videos_error)?;
 
     Ok(StatusCode::NO_CONTENT)
 }

@@ -26,6 +26,8 @@ interface VideoActionsMenuProps {
   markable: boolean
   /** The playlist the card is sourced from, offered for exclusion from home. */
   excludablePlaylist?: { id: string; name: string }
+  /** Offers "Discard…"; `downloaded` says whether discarding deletes its files. */
+  discard?: { downloaded: boolean }
   className?: string
 }
 

@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Ban } from 'lucide-react'
-import { useDiscardVideo } from '@/api/queries'
 import { Button } from '@/components/ui/button'
-import { ConfirmDialog } from './ConfirmDialog'
+import { DiscardVideoDialog } from './DiscardVideoDialog'
 
 interface DiscardVideoButtonProps {
   videoId: string
@@ -17,7 +16,6 @@ interface DiscardVideoButtonProps {
  * that it can't be undone, discards the video for good.
  */
 export function DiscardVideoButton({ videoId, title, downloaded }: DiscardVideoButtonProps) {
-  const discardVideo = useDiscardVideo()
   const [confirming, setConfirming] = useState(false)
 
   return (
@@ -26,18 +24,12 @@ export function DiscardVideoButton({ videoId, title, downloaded }: DiscardVideoB
         <Ban />
         Don't download
       </Button>
-      <ConfirmDialog
+      <DiscardVideoDialog
+        videoId={videoId}
+        title={title}
+        downloaded={downloaded}
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Don't download "${title}"?`}
-        description={
-          downloaded
-            ? "Its files will be deleted and it will never be downloaded again. This can't be undone."
-            : "It will never be downloaded. This can't be undone."
-        }
-        confirmLabel="Discard video"
-        pendingLabel="Discarding…"
-        onConfirm={() => discardVideo(videoId)}
       />
     </>
   )

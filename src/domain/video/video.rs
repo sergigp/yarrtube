@@ -154,6 +154,19 @@ impl Video {
         })
     }
 
+    /// `None` unless its download is Discarded; else its download restored
+    /// (Pending).
+    #[expect(dead_code, reason = "skeleton: driven by the restore tests")]
+    pub fn restore(self, _now: DateTime<Utc>) -> Option<Self> {
+        None
+    }
+
+    /// Download Unavailable: outside a channel's video limit.
+    #[expect(dead_code, reason = "skeleton: driven by the channel limit tests")]
+    pub fn is_unavailable(&self) -> bool {
+        false
+    }
+
     /// Unavailable or Discarded: hidden from lists and outside a channel's
     /// video limit.
     pub fn is_skipped(&self) -> bool {
