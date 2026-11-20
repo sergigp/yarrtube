@@ -33,7 +33,7 @@
 - [x] 2.18 Vitest `TasksView` "says the discard failed".
 - [x] 2.19 Vitest `TasksView` "offers no Discard on a failing subtitle fetch".
 - [x] 2.20 Vitest `ChannelDetail` "restores the channel's discarded videos after confirming": `DetailHeader` item and `ConfirmDialog`; `ChannelDetail` passes `onRestoreDiscarded`.
-- [ ] 2.21 Vitest `PlaylistDetail` "restores the playlist's discarded videos after confirming".
+- [x] 2.21 Vitest `PlaylistDetail` "restores the playlist's discarded videos after confirming".
 - [ ] 2.22 Vitest `PlaylistDetail` "sends nothing when the restore is cancelled".
 - [ ] 2.23 Vitest `ChannelDetail` "tells the user when restoring fails".
 - [ ] 2.24 Vitest `CategoryDetail` "offers no Restore discarded videos".
