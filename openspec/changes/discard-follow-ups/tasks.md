@@ -25,7 +25,7 @@
 - [x] 2.10 `it_should_re_add_a_remembered_video_back_in_the_playlist`.
 - [x] 2.11 `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_playlist`: `PlaylistNotFound` → 404.
 - [x] 2.12 Vitest `VideoDetail` "says a discarded video can be restored": the button and dialog become "Discard", the copy mentions restoring, and existing "Don't download" tests are renamed.
-- [ ] 2.13 Vitest `VideoListPane` "discards a row's video from its menu after confirming": "Discard…" item plus `DiscardVideoDialog` in `VideoActionsMenu`; `VideoListPane` passes `discard` when `canDiscard`.
+- [x] 2.13 Vitest `VideoListPane` "discards a row's video from its menu after confirming": "Discard…" item plus `DiscardVideoDialog` in `VideoActionsMenu`; `VideoListPane` passes `discard` when `canDiscard`.
 - [ ] 2.14 Vitest `VideoListPane` "offers no Discard… for a downloading row".
 - [ ] 2.15 Vitest `VideoGrid` "discards a card's video after warning its files will be deleted": `VideoGrid` passes `discard={{ downloaded: true }}`.
 - [ ] 2.16 Vitest `VideoGrid` "sends nothing when the discard is cancelled".

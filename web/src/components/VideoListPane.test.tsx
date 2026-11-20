@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { VideoListPane } from './VideoListPane'
-import { aVideo, mockApi, renderWithProviders } from '@/test/helpers'
+import { useChannelVideos } from '@/api/queries'
+import { aVideo, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
 import type { Video } from '@/api/types'
 
 function renderPane(videos: Video[] | undefined) {
@@ -17,6 +19,27 @@ function renderPane(videos: Video[] | undefined) {
       onSelect={() => {}}
     />,
   )
+}
+
+/** The queue of channel "chan", fetched like a detail view does, with `selected` selected. */
+function ChannelQueue({ selected }: { selected: string }) {
+  const { data, error } = useChannelVideos('chan')
+  return (
+    <VideoListPane
+      noun="channel"
+      basePathOf={() => 'channels/chan'}
+      sourceNameOf={() => 'My Channel'}
+      videos={data}
+      error={error}
+      selectedVideoId={selected}
+      onSelect={() => {}}
+    />
+  )
+}
+
+function renderQueue(routes: Routes, selected: string) {
+  mockApi(routes)
+  renderWithProviders(<ChannelQueue selected={selected} />)
 }
 
 describe('VideoListPane', () => {
@@ -65,5 +88,37 @@ describe('VideoListPane', () => {
     expect(status).toHaveTextContent('Loading…')
     expect(status.closest('[aria-busy="true"]')).not.toBeNull()
     expect(screen.queryByText('Loading videos…')).not.toBeInTheDocument()
+  })
+
+  it("discards a row's video from its menu after confirming", async () => {
+    const retrying = aVideo({ id: 'v1', title: 'First Video', status: 'RETRYING', filename: null })
+    const selected = aVideo({ id: 'v2', title: 'Second Video' })
+    let stored: Video[] = [retrying, selected]
+    const discard = vi.fn(() => {
+      stored = [selected]
+      return null
+    })
+    renderQueue(
+      {
+        'GET /api/channels/chan/videos': () => stored,
+        'POST /api/videos/v1/discard': discard,
+      },
+      'v2',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for First Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Discard…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "First Video"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
+
+    expect(discard).toHaveBeenCalledOnce()
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^(?!Actions).*First Video/ })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: /^(?!Actions).*Second Video/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
   })
 })
