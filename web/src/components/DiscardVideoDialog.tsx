@@ -1,4 +1,5 @@
 import { useDiscardVideo } from '@/api/queries'
+import { errorMessage } from '@/lib/errorMessage'
 import { ConfirmDialog } from './ConfirmDialog'
 
 interface DiscardVideoDialogProps {
@@ -11,6 +12,11 @@ interface DiscardVideoDialogProps {
   onOpenChange: (open: boolean) => void
   /** Called after a successful discard. */
   onDiscarded?: () => void
+  /**
+   * When set, a failed discard closes the dialog and is reported here
+   * instead of inside the dialog.
+   */
+  onFailed?: (message: string) => void
 }
 
 /** The confirmation that discards a video once accepted. */
@@ -21,6 +27,7 @@ export function DiscardVideoDialog({
   open,
   onOpenChange,
   onDiscarded,
+  onFailed,
 }: DiscardVideoDialogProps) {
   const discardVideo = useDiscardVideo()
 
@@ -37,7 +44,14 @@ export function DiscardVideoDialog({
       confirmLabel="Discard"
       pendingLabel="Discarding…"
       onConfirm={async () => {
-        await discardVideo(videoId)
+        try {
+          await discardVideo(videoId)
+        } catch (err) {
+          if (!onFailed) throw err
+          onOpenChange(false)
+          onFailed(errorMessage(err))
+          return
+        }
         onDiscarded?.()
       }}
     />

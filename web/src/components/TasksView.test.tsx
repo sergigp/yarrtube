@@ -308,6 +308,24 @@ describe('TasksView', () => {
     )
   })
 
+  it('says the discard failed', async () => {
+    const user = userEvent.setup()
+    mockApi({
+      'GET /api/tasks': aProdLikeQueue(),
+      'POST /api/videos/rec1/discard': { status: 500, error: 'db locked' },
+    })
+    renderWithProviders(<TasksView />)
+    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
+
+    await user.click(within(card).getByRole('button', { name: 'Discard' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "My Apps"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
+
+    expect(await within(card).findByText('Discard failed: db locked')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Discard' })).toBeEnabled()
+  })
+
   it('says when running a task now fails, and lets it be tried again', async () => {
     const user = userEvent.setup()
     const fetchMock = mockApi({

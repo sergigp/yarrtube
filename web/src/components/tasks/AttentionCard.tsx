@@ -99,7 +99,7 @@ function RetryButton({ videoId, describedBy }: { videoId: string; describedBy: s
   )
 }
 
-/** Discard for the card's failing download, after a confirmation. */
+/** Discard for the card's failing download, after a confirmation; says when it fails. */
 function DiscardButton({
   videoId,
   title,
@@ -110,6 +110,7 @@ function DiscardButton({
   describedBy: string
 }) {
   const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   return (
     <>
       <Button
@@ -117,16 +118,21 @@ function DiscardButton({
         size="sm"
         className={TASK_BUTTON_SIZE}
         aria-describedby={describedBy}
-        onClick={() => setConfirming(true)}
+        onClick={() => {
+          setError(null)
+          setConfirming(true)
+        }}
       >
         Discard
       </Button>
+      {error && <span className="text-xs text-destructive">Discard failed: {error}</span>}
       <DiscardVideoDialog
         videoId={videoId}
         title={title}
         downloaded={false}
         open={confirming}
         onOpenChange={setConfirming}
+        onFailed={setError}
       />
     </>
   )
