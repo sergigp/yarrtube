@@ -40,7 +40,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 None: the change adds or changes no adapter (see design.md Test Plan §2). Mark done once confirmed during implementation.
+- [x] 3.1 None: the change adds or changes no adapter (see design.md Test Plan §2). Mark done once confirmed during implementation.
 
 ## 4. Verification
 
