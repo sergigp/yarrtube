@@ -142,6 +142,7 @@ export function VideoGrid({
                   title={video.title}
                   sourceName={video.source.name}
                   markable={!video.watched}
+                  discard={{ downloaded: true }}
                   excludablePlaylist={
                     video.source.kind === 'playlist'
                       ? { id: video.source.id, name: video.source.name }
