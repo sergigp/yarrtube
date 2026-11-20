@@ -31,7 +31,7 @@
 - [x] 2.16 Vitest `VideoGrid` "sends nothing when the discard is cancelled".
 - [x] 2.17 Vitest `TasksView` "discards a failing download after confirming": `DiscardButton` on a `download_video` `AttentionCard`; `useDiscardVideo` also invalidates tasks.
 - [x] 2.18 Vitest `TasksView` "says the discard failed".
-- [ ] 2.19 Vitest `TasksView` "offers no Discard on a failing subtitle fetch".
+- [x] 2.19 Vitest `TasksView` "offers no Discard on a failing subtitle fetch".
 - [ ] 2.20 Vitest `ChannelDetail` "restores the channel's discarded videos after confirming": `DetailHeader` item and `ConfirmDialog`; `ChannelDetail` passes `onRestoreDiscarded`.
 - [ ] 2.21 Vitest `PlaylistDetail` "restores the playlist's discarded videos after confirming".
 - [ ] 2.22 Vitest `PlaylistDetail` "sends nothing when the restore is cancelled".

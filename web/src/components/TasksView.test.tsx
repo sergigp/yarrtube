@@ -326,6 +326,25 @@ describe('TasksView', () => {
     expect(within(card).getByRole('button', { name: 'Discard' })).toBeEnabled()
   })
 
+  it('offers no Discard on a failing subtitle fetch', async () => {
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 9,
+          task_type: 'fetch_subtitles',
+          run_at: inMinutes(5),
+          last_error: 'HTTP Error 429: Too Many Requests',
+          payload: { video_id: 'rec1', video_title: 'My Apps', channel_name: 'Starter Story Build' },
+        }),
+      ],
+    })
+    renderWithProviders(<TasksView />)
+    const attention = await screen.findByRole('region', { name: 'Needs attention' })
+
+    expect(within(attention).getByRole('button', { name: 'Retry now' })).toBeInTheDocument()
+    expect(within(attention).queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument()
+  })
+
   it('says when running a task now fails, and lets it be tried again', async () => {
     const user = userEvent.setup()
     const fetchMock = mockApi({
