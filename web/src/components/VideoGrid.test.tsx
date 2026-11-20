@@ -310,4 +310,22 @@ describe('VideoGrid', () => {
       ),
     )
   })
+
+  it('sends nothing when the discard is cancelled', async () => {
+    const fetchMock = mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ id: 'vid1', title: 'Fresh Video' })]} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Fresh Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Discard…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "Fresh Video"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/videos/vid1/discard',
+      expect.anything(),
+    )
+    expect(card('Fresh Video')).toBeInTheDocument()
+  })
 })

@@ -28,7 +28,7 @@
 - [x] 2.13 Vitest `VideoListPane` "discards a row's video from its menu after confirming": "Discard…" item plus `DiscardVideoDialog` in `VideoActionsMenu`; `VideoListPane` passes `discard` when `canDiscard`.
 - [x] 2.14 Vitest `VideoListPane` "offers no Discard… for a downloading row".
 - [x] 2.15 Vitest `VideoGrid` "discards a card's video after warning its files will be deleted": `VideoGrid` passes `discard={{ downloaded: true }}`.
-- [ ] 2.16 Vitest `VideoGrid` "sends nothing when the discard is cancelled".
+- [x] 2.16 Vitest `VideoGrid` "sends nothing when the discard is cancelled".
 - [ ] 2.17 Vitest `TasksView` "discards a failing download after confirming": `DiscardButton` on a `download_video` `AttentionCard`; `useDiscardVideo` also invalidates tasks.
 - [ ] 2.18 Vitest `TasksView` "says the discard failed".
 - [ ] 2.19 Vitest `TasksView` "offers no Discard on a failing subtitle fetch".
