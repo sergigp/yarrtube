@@ -166,8 +166,7 @@ impl Video {
         self.download.status() == VideoStatus::Unavailable
     }
 
-    /// Unavailable or Discarded: hidden from lists and outside a channel's
-    /// video limit.
+    /// Unavailable or Discarded: hidden from lists.
     pub fn is_skipped(&self) -> bool {
         matches!(
             self.download.status(),

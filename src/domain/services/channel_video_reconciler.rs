@@ -249,9 +249,10 @@ impl ChannelVideoReconciler {
     }
 
     /// Brings the stored membership in line with the channel's current
-    /// `video_limit` most recent uploads, Unavailable and Discarded ones not
-    /// counting toward the limit: adds newly seen videos (never a Discarded
-    /// one removed earlier, which the channel remembers), refreshes
+    /// `video_limit` most recent uploads, Unavailable ones not counting
+    /// toward the limit: adds newly seen videos (never a Discarded one removed
+    /// earlier, which the channel remembers and which still takes its slot),
+    /// refreshes
     /// the title and position of known ones, and removes stored videos no
     /// longer among them (removed on YouTube or aged past the limit). A
     /// failed listing either leaves membership untouched for this pass, the
@@ -269,17 +270,15 @@ impl ChannelVideoReconciler {
             .into_iter()
             .map(|discarded| discarded.youtube_id)
             .collect::<HashSet<_>>();
-        let skipped_ids: HashSet<&str> = stored_videos
+        let unavailable_ids: HashSet<&str> = stored_videos
             .iter()
             .filter(|(_, video)| video.is_unavailable())
-            .map(|(_, video)| &video.youtube_id)
-            .chain(&remembered)
-            .map(YoutubeVideoId::as_str)
+            .map(|(_, video)| video.youtube_id.as_str())
             .collect();
         let listing_started = self.clock.now();
         let listing = self.list_current_videos(
             channel,
-            u32::try_from(skipped_ids.len())?,
+            u32::try_from(unavailable_ids.len())?,
             on_listing_failure,
         )?;
         let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
@@ -291,7 +290,7 @@ impl ChannelVideoReconciler {
         };
         let current_videos = video_window::within_limit(
             listing,
-            |upload| skipped_ids.contains(upload.youtube_id.as_str()),
+            |upload| unavailable_ids.contains(upload.youtube_id.as_str()),
             channel.video_limit.value() as usize,
         );
         let now = self.clock.now();
@@ -342,18 +341,17 @@ impl ChannelVideoReconciler {
     /// The channel's current most recent uploads. When they can't be listed
     /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
     /// videos"), either `None` (logged) or the error, per
-    /// `on_listing_failure`. One more upload is asked for per `skipped`
-    /// video (stored and skipped, or remembered as discarded), which doesn't
-    /// count toward the limit.
+    /// `on_listing_failure`. One more upload is asked for per stored
+    /// `unavailable` video, which doesn't count toward the limit.
     fn list_current_videos(
         &self,
         channel: &Channel,
-        skipped: u32,
+        unavailable: u32,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<Option<Vec<ChannelVideoListing>>> {
         match (
             self.channel_videos_repository
-                .list_current_videos(&channel.id, channel.video_limit.value() + skipped),
+                .list_current_videos(&channel.id, channel.video_limit.value() + unavailable),
             on_listing_failure,
         ) {
             (Ok(videos), _) => Ok(Some(videos)),

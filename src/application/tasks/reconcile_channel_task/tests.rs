@@ -2920,7 +2920,7 @@ fn it_should_remember_a_video_discarded_during_the_listing_that_evicts_it() {
 }
 
 #[test]
-fn it_should_not_count_a_remembered_discarded_upload_toward_the_limit() {
+fn it_should_count_a_remembered_discarded_upload_toward_the_limit() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2958,7 +2958,7 @@ fn it_should_not_count_a_remembered_discarded_upload_toward_the_limit() {
     let result = run(&task, &task_for("@somechannel"));
 
     assert_eq!(result, Ok(TaskOutcome::Done));
-    assert_eq!(stored_youtube_ids(&video_repository), vec!["ytA", "ytC"]);
+    assert_eq!(stored_youtube_ids(&video_repository), vec!["ytA"]);
 }
 
 /// Builds a reconciler around the repositories and fakes a test seeds,

@@ -15,7 +15,7 @@
 
 - [x] 2.1 `it_should_count_a_discarded_video_toward_the_limit`: the channel window skips only Unavailable videos (`Video::is_unavailable`).
 - [x] 2.2 `it_should_request_one_more_upload_per_unavailable_video` replaces `it_should_request_one_more_upload_per_skipped_video`: the listing is widened by the stored Unavailable count only.
-- [ ] 2.3 `it_should_count_a_remembered_discarded_upload_toward_the_limit` replaces `it_should_not_count_a_remembered_discarded_upload_toward_the_limit`: remembered ids no longer widen the listing or the window. Update the `within_limit`, `is_skipped` and `sync_membership_with_youtube` docs.
+- [x] 2.3 `it_should_count_a_remembered_discarded_upload_toward_the_limit` replaces `it_should_not_count_a_remembered_discarded_upload_toward_the_limit`: remembered ids no longer widen the listing or the window. Update the `within_limit`, `is_skipped` and `sync_membership_with_youtube` docs.
 - [ ] 2.4 `it_should_restore_a_stored_discarded_channel_video`: `restore_discarded` takes the lock, puts stored Discarded videos back to Pending (`Download::restore`, `Video::restore`) and runs the pass.
 - [ ] 2.5 `it_should_re_add_a_remembered_channel_video_still_among_its_uploads`: `delete_all` on the channel's remembered videos before the pass.
 - [ ] 2.6 `it_should_forget_a_remembered_channel_video_past_the_limit`.
