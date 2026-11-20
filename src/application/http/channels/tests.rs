@@ -3301,6 +3301,84 @@ async fn it_should_forget_a_remembered_channel_video_past_the_limit() {
 }
 
 #[tokio::test]
+async fn it_should_restore_discarded_channel_videos_when_listing_fails() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let discarded_video_repository = Arc::new(SqliteDiscardedVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let discarded = save_discarded_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        "ytB",
+        0,
+    );
+    discarded_video_repository
+        .record(&DiscardedVideo::new(
+            ShowKey::Channel(handle("@somechannel")),
+            YoutubeVideoId::new("ytC").unwrap(),
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let reconciler = ChannelVideoReconciler::new(
+        channel_repository.clone(),
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::failing()),
+        event_publisher(&db),
+        task_repository.clone(),
+        Arc::new(InternalVideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )),
+        Arc::new(ShowFileWriter::new(
+            Arc::new(FakeShowFileRepository::default()),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            "/videos",
+        )),
+        Arc::new(ChannelAvatarRestorer::new(
+            channel_repository,
+            Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+            Arc::new(FakeChannelAvatarRepository::default()),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(ShowLocks::default()),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        discarded_video_repository.clone(),
+    );
+
+    let response = restore(reconciler, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            download: Download::pending(),
+            ..discarded.clone()
+        }]
+    );
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Channel(handle("@somechannel")))
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[tokio::test]
 async fn it_should_mark_every_downloaded_channel_video_watched() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

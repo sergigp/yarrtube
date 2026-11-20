@@ -19,7 +19,7 @@
 - [x] 2.4 `it_should_restore_a_stored_discarded_channel_video`: `restore_discarded` takes the lock, puts stored Discarded videos back to Pending (`Download::restore`, `Video::restore`) and runs the pass.
 - [x] 2.5 `it_should_re_add_a_remembered_channel_video_still_among_its_uploads`: `delete_all` on the channel's remembered videos before the pass.
 - [x] 2.6 `it_should_forget_a_remembered_channel_video_past_the_limit`.
-- [ ] 2.7 `it_should_restore_discarded_channel_videos_when_listing_fails`.
+- [x] 2.7 `it_should_restore_discarded_channel_videos_when_listing_fails`.
 - [ ] 2.8 `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_channel`: `ChannelNotFound` → 404.
 - [ ] 2.9 `it_should_restore_a_stored_discarded_playlist_video`.
 - [ ] 2.10 `it_should_re_add_a_remembered_video_back_in_the_playlist`.
