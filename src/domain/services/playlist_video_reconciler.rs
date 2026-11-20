@@ -161,6 +161,8 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
             return Ok(());
         };
 
+        self.discarded_video_repository
+            .delete_all(&ShowKey::Playlist(id))?;
         self.restore_stored_discarded(&self.list_stored_videos(&playlist)?)?;
         Ok(self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)?)
     }
