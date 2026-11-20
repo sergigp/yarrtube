@@ -283,6 +283,31 @@ describe('TasksView', () => {
     expect(within(card).getByRole('button', { name: 'Retry now' })).toBeEnabled()
   })
 
+  it('discards a failing download after confirming', async () => {
+    const user = userEvent.setup()
+    const [download, ...rest] = aProdLikeQueue()
+    let queue = [download, ...rest]
+    const discard = vi.fn(() => {
+      queue = rest
+      return null
+    })
+    mockApi({
+      'GET /api/tasks': () => queue,
+      'POST /api/videos/rec1/discard': discard,
+    })
+    renderWithProviders(<TasksView />)
+    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
+
+    await user.click(within(card).getByRole('button', { name: 'Discard' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "My Apps"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
+
+    expect(discard).toHaveBeenCalledOnce()
+    await waitFor(() =>
+      expect(screen.queryByText('Download My Apps from Starter Story Build')).not.toBeInTheDocument(),
+    )
+  })
+
   it('says when running a task now fails, and lets it be tried again', async () => {
     const user = userEvent.setup()
     const fetchMock = mockApi({

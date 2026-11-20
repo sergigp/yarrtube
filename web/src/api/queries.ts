@@ -572,17 +572,18 @@ export function useRetryVideo(): (videoId: string) => Promise<void> {
 }
 
 /**
- * Returns a function that discards a video for good, then refetches the
- * library (its video lists included) and the home videos.
+ * Returns a function that discards a video, then refetches the library (its
+ * video lists included), the home videos and the tasks.
  */
 export function useDiscardVideo(): (videoId: string) => Promise<void> {
   const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  const invalidateTasks = useInvalidateTasks()
   return useCallback(
     async (videoId: string) => {
       await discardVideo(videoId)
-      await invalidateLibraryAndHome()
+      await Promise.all([invalidateLibraryAndHome(), invalidateTasks()])
     },
-    [invalidateLibraryAndHome],
+    [invalidateLibraryAndHome, invalidateTasks],
   )
 }
 

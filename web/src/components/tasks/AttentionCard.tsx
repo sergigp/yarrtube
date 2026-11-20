@@ -6,6 +6,7 @@ import { describeTask, isPerVideoTask } from '@/lib/tasks'
 import { explainTaskError } from '@/lib/taskErrors'
 import { formatNextTry } from '@/lib/taskTimes'
 import { Button } from '../ui/button'
+import { DiscardVideoDialog } from '../DiscardVideoDialog'
 import { RunNowButton } from './RunNowButton'
 import { useTaskAction } from './useTaskAction'
 import { TASK_BUTTON_SIZE } from './taskButton'
@@ -40,7 +41,16 @@ export function AttentionCard({ task, now }: AttentionCardProps) {
       <span className="flex flex-wrap items-center gap-2 sm:pl-6">
         {isPerVideoTask(task) ? (
           task.payload.video_id && (
-            <RetryButton videoId={task.payload.video_id} describedBy={descriptionId} />
+            <>
+              <RetryButton videoId={task.payload.video_id} describedBy={descriptionId} />
+              {task.task_type === 'download_video' && (
+                <DiscardButton
+                  videoId={task.payload.video_id}
+                  title={task.payload.video_title ?? task.payload.video_id}
+                  describedBy={descriptionId}
+                />
+              )}
+            </>
           )
         ) : (
           <RunNowButton
@@ -85,6 +95,39 @@ function RetryButton({ videoId, describedBy }: { videoId: string; describedBy: s
         Retry now
       </Button>
       {retry.error && <span className="text-xs text-destructive">Retry failed: {retry.error}</span>}
+    </>
+  )
+}
+
+/** Discard for the card's failing download, after a confirmation. */
+function DiscardButton({
+  videoId,
+  title,
+  describedBy,
+}: {
+  videoId: string
+  title: string
+  describedBy: string
+}) {
+  const [confirming, setConfirming] = useState(false)
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className={TASK_BUTTON_SIZE}
+        aria-describedby={describedBy}
+        onClick={() => setConfirming(true)}
+      >
+        Discard
+      </Button>
+      <DiscardVideoDialog
+        videoId={videoId}
+        title={title}
+        downloaded={false}
+        open={confirming}
+        onOpenChange={setConfirming}
+      />
     </>
   )
 }
