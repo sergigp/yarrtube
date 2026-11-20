@@ -21,7 +21,7 @@
 - [x] 2.6 `it_should_forget_a_remembered_channel_video_past_the_limit`.
 - [x] 2.7 `it_should_restore_discarded_channel_videos_when_listing_fails`.
 - [x] 2.8 `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_channel`: `ChannelNotFound` → 404.
-- [ ] 2.9 `it_should_restore_a_stored_discarded_playlist_video`.
+- [x] 2.9 `it_should_restore_a_stored_discarded_playlist_video`.
 - [ ] 2.10 `it_should_re_add_a_remembered_video_back_in_the_playlist`.
 - [ ] 2.11 `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_playlist`: `PlaylistNotFound` → 404.
 - [ ] 2.12 Vitest `VideoDetail` "says a discarded video can be restored": the button and dialog become "Discard", the copy mentions restoring, and existing "Don't download" tests are renamed.

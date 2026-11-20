@@ -155,9 +155,14 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
         self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)
     }
 
-    fn restore_discarded(&self, _id: PlaylistId) -> Result<(), RestoreDiscardedVideosError> {
-        self.restore_stored_discarded(&[])?;
-        Ok(())
+    fn restore_discarded(&self, id: PlaylistId) -> Result<(), RestoreDiscardedVideosError> {
+        let _guard = self.lock(&id);
+        let Some(playlist) = self.find_playlist(&id)? else {
+            return Ok(());
+        };
+
+        self.restore_stored_discarded(&self.list_stored_videos(&playlist)?)?;
+        Ok(self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)?)
     }
 }
 
@@ -165,8 +170,17 @@ impl PlaylistVideoReconciler {
     /// Waits for a move of the playlist to finish, so the pass reads the
     /// playlist, and works in its folder, only once it has moved.
     /// Puts every stored Discarded video back to Pending.
-    fn restore_stored_discarded(&self, _stored: &[(PlaylistVideo, Video)]) -> anyhow::Result<()> {
-        Ok(())
+    fn restore_stored_discarded(&self, stored: &[(PlaylistVideo, Video)]) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        stored
+            .iter()
+            .map(|(_, video)| video)
+            .filter(|video| video.download.is_discarded())
+            .try_for_each(|video| {
+                self.video_updater
+                    .update(&video.id, |video| video.restore(now))
+                    .map(|_| ())
+            })
     }
 
     fn lock(&self, id: &PlaylistId) -> ShowLockGuard<'_> {
