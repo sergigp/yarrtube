@@ -36,7 +36,7 @@
 - [x] 2.21 Vitest `PlaylistDetail` "restores the playlist's discarded videos after confirming".
 - [x] 2.22 Vitest `PlaylistDetail` "sends nothing when the restore is cancelled".
 - [x] 2.23 Vitest `ChannelDetail` "tells the user when restoring fails".
-- [ ] 2.24 Vitest `CategoryDetail` "offers no Restore discarded videos".
+- [x] 2.24 Vitest `CategoryDetail` "offers no Restore discarded videos".
 
 ## 3. Infrastructure adapters (TDD)
 
