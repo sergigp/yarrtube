@@ -165,6 +165,8 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
+        self.discarded_video_repository
+            .delete_all(&ShowKey::Channel(id))?;
         self.restore_stored_discarded(&self.list_stored_videos(&channel)?)?;
         Ok(self.reconcile_channel(channel, ListingFailure::SkipMembership)?)
     }

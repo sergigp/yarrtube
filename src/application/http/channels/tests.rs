@@ -3187,6 +3187,64 @@ async fn it_should_restore_a_stored_discarded_channel_video() {
 }
 
 #[tokio::test]
+async fn it_should_re_add_a_remembered_channel_video_still_among_its_uploads() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let discarded_video_repository = SqliteDiscardedVideoRepository::new(db.database());
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    discarded_video_repository
+        .record(&DiscardedVideo::new(
+            ShowKey::Channel(handle("@somechannel")),
+            YoutubeVideoId::new("ytC").unwrap(),
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let reconciler = channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        vec![listed_video("ytC", "C", 0)],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+    );
+
+    let response = restore(reconciler, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Channel(handle("@somechannel")))
+            .unwrap(),
+        vec![]
+    );
+    let videos = video_repository.list().unwrap();
+    let video_id = videos[0].id.clone();
+    assert_eq!(
+        videos,
+        vec![Video {
+            id: video_id.clone(),
+            ..Video::create(YoutubeVideoId::new("ytC").unwrap(), "C", fixed_timestamp())
+        }]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
+                channel_id: "@somechannel".to_string(),
+                video_id: video_id.as_str().to_string(),
+            })
+        )]
+    );
+}
+
+#[tokio::test]
 async fn it_should_mark_every_downloaded_channel_video_watched() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
