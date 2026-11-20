@@ -121,4 +121,14 @@ describe('VideoListPane', () => {
       'true',
     )
   })
+
+  it('offers no Discard… for a downloading row', async () => {
+    renderPane([aVideo({ title: 'Downloading Video', status: 'IN_PROGRESS', filename: null })])
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Downloading Video' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Mark as watched' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Discard…' })).not.toBeInTheDocument()
+  })
 })
