@@ -302,14 +302,31 @@ describe('VideoDetail', () => {
     renderWithProviders(<PlaylistVideoDetail />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: "Don't download" }))
-    const dialog = screen.getByRole('dialog', { name: 'Don\'t download "My Video"?' })
-    expect(dialog).toHaveTextContent("It will never be downloaded. This can't be undone.")
-    await user.click(within(dialog).getByRole('button', { name: 'Discard video' }))
+    await user.click(await screen.findByRole('button', { name: 'Discard' }))
+    const dialog = screen.getByRole('dialog', { name: 'Discard "My Video"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
 
     expect(discard).toHaveBeenCalledOnce()
     await vi.waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'My Video' })).not.toBeInTheDocument(),
+    )
+  })
+
+  it('says a discarded video can be restored', async () => {
+    const video = aVideo({ title: 'My Video', status: 'PENDING', filename: null })
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(screen.getByRole('dialog', { name: 'Discard "My Video"?' })).toHaveTextContent(
+      "It won't be downloaded. You can restore it from its channel's or playlist's menu.",
     )
   })
 
@@ -324,10 +341,10 @@ describe('VideoDetail', () => {
       />,
     )
 
-    await userEvent.setup().click(screen.getByRole('button', { name: "Don't download" }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Discard' }))
 
-    expect(screen.getByRole('dialog', { name: 'Don\'t download "My Video"?' })).toHaveTextContent(
-      "Its files will be deleted and it will never be downloaded again. This can't be undone.",
+    expect(screen.getByRole('dialog', { name: 'Discard "My Video"?' })).toHaveTextContent(
+      "Its files will be deleted and it won't be downloaded. You can restore it from its channel's or playlist's menu.",
     )
   })
 
@@ -343,14 +360,14 @@ describe('VideoDetail', () => {
     )
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: "Don't download" }))
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'My Video' })).toBeInTheDocument()
   })
 
-  it("offers no Don't download for a downloading video", () => {
+  it('offers no Discard for a downloading video', () => {
     const video = aVideo({ status: 'IN_PROGRESS', filename: null })
 
     renderWithProviders(
@@ -362,7 +379,7 @@ describe('VideoDetail', () => {
       />,
     )
 
-    expect(screen.queryByRole('button', { name: "Don't download" })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument()
   })
 
   it('tells the user when discarding fails and leaves the video as it was', async () => {
@@ -374,8 +391,8 @@ describe('VideoDetail', () => {
     renderWithProviders(<PlaylistVideoDetail />)
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: "Don't download" }))
-    await user.click(screen.getByRole('button', { name: 'Discard video' }))
+    await user.click(await screen.findByRole('button', { name: 'Discard' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Discard' }))
 
     expect(await screen.findByRole('dialog')).toHaveTextContent(/database is locked/)
     await user.click(screen.getByRole('button', { name: 'Cancel' }))

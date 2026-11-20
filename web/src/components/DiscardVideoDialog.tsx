@@ -28,13 +28,13 @@ export function DiscardVideoDialog({
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Don't download "${title}"?`}
+      title={`Discard "${title}"?`}
       description={
         downloaded
-          ? "Its files will be deleted and it will never be downloaded again. This can't be undone."
-          : "It will never be downloaded. This can't be undone."
+          ? "Its files will be deleted and it won't be downloaded. You can restore it from its channel's or playlist's menu."
+          : "It won't be downloaded. You can restore it from its channel's or playlist's menu."
       }
-      confirmLabel="Discard video"
+      confirmLabel="Discard"
       pendingLabel="Discarding…"
       onConfirm={async () => {
         await discardVideo(videoId)

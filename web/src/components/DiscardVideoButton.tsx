@@ -12,8 +12,8 @@ interface DiscardVideoButtonProps {
 }
 
 /**
- * The video detail pane's "Don't download" button: after a confirmation
- * that it can't be undone, discards the video for good.
+ * The video detail pane's "Discard" button: after a confirmation, discards
+ * the video until its channel or playlist restores it.
  */
 export function DiscardVideoButton({ videoId, title, downloaded }: DiscardVideoButtonProps) {
   const [confirming, setConfirming] = useState(false)
@@ -22,7 +22,7 @@ export function DiscardVideoButton({ videoId, title, downloaded }: DiscardVideoB
     <>
       <Button variant="outline" size="sm" className="mb-2" onClick={() => setConfirming(true)}>
         <Ban />
-        Don't download
+        Discard
       </Button>
       <DiscardVideoDialog
         videoId={videoId}
