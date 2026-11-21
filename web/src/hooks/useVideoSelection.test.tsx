@@ -48,7 +48,7 @@ describe('useVideoSelection', () => {
     expect(result.current.autoplay).toBe(false)
   })
 
-  it('lets a manual pick override the deep link, without autoplay', () => {
+  it('lets a manual pick override the deep link, with autoplay', () => {
     const videos = [aVideo({ id: 'first' }), aVideo({ id: 'linked' }), aVideo({ id: 'picked' })]
     const { result } = renderHook(() => useVideoSelection(videos), {
       wrapper: routerAt('/channels/c?video=linked'),
@@ -59,7 +59,7 @@ describe('useVideoSelection', () => {
     })
 
     expect(result.current.selectedVideo?.id).toBe('picked')
-    expect(result.current.autoplay).toBe(false)
+    expect(result.current.autoplay).toBe(true)
   })
 
   it('keeps the manual selection across a refreshed video list', () => {

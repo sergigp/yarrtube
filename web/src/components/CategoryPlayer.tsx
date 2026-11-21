@@ -7,6 +7,8 @@ import { WatchView } from './WatchView'
 
 interface CategoryPlayerProps {
   videos: CategoryVideo[] | undefined
+  /** Whether `videos` were fetched since the page opened, not only read from the cache. */
+  videosFresh: boolean
   error: Error | null
   selection: VideoSelection<CategoryVideo>
   /** The order `videos` is in, named in the queue header. */
@@ -18,11 +20,12 @@ interface CategoryPlayerProps {
  * info, linking its channel or playlist, with the category's videos, in
  * `sort` order, as the queue beside them.
  */
-export function CategoryPlayer({ videos, error, selection, sort }: CategoryPlayerProps) {
+export function CategoryPlayer({ videos, videosFresh, error, selection, sort }: CategoryPlayerProps) {
   return (
     <WatchView
       noun="category"
       videos={videos}
+      videosFresh={videosFresh}
       error={error}
       selection={selection}
       basePathOf={(item) => item.source.path}

@@ -17,6 +17,7 @@ import {
   mockApi,
   pendingForever,
   renderWithProviders,
+  spyOnPlay,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
 
@@ -447,6 +448,7 @@ describe('CategoryDetail', () => {
   })
 
   it('opens a card in the category, playing it with the category as the queue', async () => {
+    const play = spyOnPlay()
     const hikaru = {
       kind: 'channel' as const,
       id: '@hikaru',
@@ -485,7 +487,7 @@ describe('CategoryDetail', () => {
       ),
     )
     const route = screen.getByRole('status', { name: 'Current route' }).textContent
-    const autoplay = document.querySelector('video')?.hasAttribute('autoplay')
+    const playedRook = play.mock.contexts.length
     const queue = screen.getAllByRole('button', { name: /^2:00 / })
     await user.click(screen.getByRole('button', { name: '2:00 Blitz' }))
 
@@ -495,7 +497,7 @@ describe('CategoryDetail', () => {
       ),
     )
     expect(route).toBe('/categories/chess?video=rook')
-    expect(autoplay).toBe(true)
+    expect(playedRook).toBe(1)
     expect(queue.map((row) => row.textContent)).toEqual(['2:00Blitz', '2:00Rook endings'])
     expect(screen.getByRole('link', { name: 'Hikaru' })).toHaveAttribute(
       'href',
