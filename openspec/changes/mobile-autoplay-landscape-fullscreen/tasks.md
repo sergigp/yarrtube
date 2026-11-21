@@ -25,7 +25,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Add an `## [Unreleased]` entry to `CHANGELOG.md` (picked videos autoplay; phone landscape fills the screen with the video).
+- [x] 4.1 Add an `## [Unreleased]` entry to `CHANGELOG.md` (picked videos autoplay; phone landscape fills the screen with the video).
 - [ ] 4.2 `scripts/run-tests.sh --lint --web --rust` passes.
 - [ ] 4.3 `scripts/run-tests.sh --e2e` passes (e2e specs changed).
 - [ ] 4.4 Manual (agent): `scripts/run-local.sh --port <free port> --fresh-videos`, add a playlist via the HTTP API, wait for downloads; with the Playwright MCP browser at 390×664: open a home card → video not paused; pick another queue video → it plays, same element; scroll 300 px, resize to 844×390 with touch emulation → screenshot shows only the video on black; resize back → `scrollY` restored, still playing. Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
