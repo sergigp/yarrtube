@@ -432,5 +432,17 @@ describe('VideoPlayer', () => {
       expect(railInLandscape).not.toBeInTheDocument()
       expect(screen.getByRole('navigation', { name: 'Chapters' })).toBeInTheDocument()
     })
+
+    it('does not take over without a downloaded video', () => {
+      rotatePhone('landscape')
+
+      const pending = render(player(aVideo({ status: 'PENDING', filename: null })))
+      const pendingTakesOver = playerRoot(pending.container).hasAttribute('data-landscape-takeover')
+      pending.unmount()
+      const none = render(player(null))
+
+      expect(pendingTakesOver).toBe(false)
+      expect(playerRoot(none.container)).not.toHaveAttribute('data-landscape-takeover')
+    })
   })
 })
