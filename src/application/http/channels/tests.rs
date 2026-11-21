@@ -26,6 +26,7 @@ use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::DiscardedVideo;
 use crate::domain::video::Download;
 use crate::domain::video::YoutubeVideoId;
+use crate::domain::video::{DownloadedQuality, Subtitles, Thumbnail};
 use crate::domain::video::{PlaybackPosition, Video};
 use crate::domain::video_category::{
     Verdict, VerdictAuthor, VideoCategories, VideoCategoriesChanged, VideoCategoryVerdict,
@@ -3187,6 +3188,112 @@ async fn it_should_restore_a_stored_discarded_channel_video() {
 }
 
 #[tokio::test]
+async fn it_should_stamp_a_restored_channel_video_with_the_restore_time() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let discarded_at = fixed_timestamp() - chrono::Duration::days(1);
+    let discarded = Video::create(
+        YoutubeVideoId::new("ytB").unwrap(),
+        "Video ytB",
+        discarded_at,
+    )
+    .discard(discarded_at)
+    .unwrap();
+    video_repository.insert(&discarded).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo::create(
+            handle("@somechannel"),
+            discarded.id.clone(),
+            0,
+            discarded_at,
+        ))
+        .unwrap();
+    let reconciler = channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        vec![listed_video("ytB", "Video ytB", 0)],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+    );
+
+    let response = restore(reconciler, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            download: Download::pending(),
+            updated_at: fixed_timestamp(),
+            ..discarded.clone()
+        }]
+    );
+}
+
+#[tokio::test]
+async fn it_should_refetch_the_thumbnail_and_subtitles_of_a_restored_channel_video() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let downloaded = downloaded_video("ytB");
+    let discarded = Video {
+        thumbnail: downloaded.thumbnail.clone().succeed("Video ytB.jpg"),
+        subtitles: downloaded
+            .subtitles
+            .clone()
+            .fetched("Video ytB.en.srt", fixed_timestamp()),
+        ..downloaded
+    }
+    .discard(fixed_timestamp())
+    .unwrap();
+    video_repository.insert(&discarded).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo::create(
+            handle("@somechannel"),
+            discarded.id.clone(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let reconciler = channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        vec![listed_video("ytB", "Video ytB", 0)],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+    );
+
+    let response = restore(reconciler, "@somechannel").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            download: Download::pending(),
+            thumbnail: Thumbnail::pending(),
+            subtitles: Subtitles::pending(),
+            chapters: discarded.chapters.clone().reset_checks(),
+            downloaded_quality: DownloadedQuality::pending(),
+            ..discarded.clone()
+        }]
+    );
+}
+
+#[tokio::test]
 async fn it_should_re_add_a_remembered_channel_video_still_among_its_uploads() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -3301,7 +3408,7 @@ async fn it_should_forget_a_remembered_channel_video_past_the_limit() {
 }
 
 #[tokio::test]
-async fn it_should_restore_discarded_channel_videos_when_listing_fails() {
+async fn it_should_restore_discarded_channel_videos_if_listing_fails() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

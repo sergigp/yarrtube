@@ -169,8 +169,6 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
 }
 
 impl PlaylistVideoReconciler {
-    /// Waits for a move of the playlist to finish, so the pass reads the
-    /// playlist, and works in its folder, only once it has moved.
     /// Puts every stored Discarded video back to Pending.
     fn restore_stored_discarded(&self, stored: &[(PlaylistVideo, Video)]) -> anyhow::Result<()> {
         let now = self.clock.now();
@@ -185,6 +183,8 @@ impl PlaylistVideoReconciler {
             })
     }
 
+    /// Waits for a move of the playlist to finish, so the pass reads the
+    /// playlist, and works in its folder, only once it has moved.
     fn lock(&self, id: &PlaylistId) -> ShowLockGuard<'_> {
         self.show_locks.lock(ShowKey::Playlist(id.clone()))
     }

@@ -263,10 +263,8 @@ pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
 
 pub fn restore_discarded_videos_error(error: RestoreDiscardedVideosError) -> ApiError {
     match error {
-        e @ RestoreDiscardedVideosError::ChannelNotFound(_) => {
-            ApiError::new(StatusCode::NOT_FOUND, e)
-        }
-        e @ RestoreDiscardedVideosError::PlaylistNotFound(_) => {
+        e @ (RestoreDiscardedVideosError::ChannelNotFound(_)
+        | RestoreDiscardedVideosError::PlaylistNotFound(_)) => {
             ApiError::new(StatusCode::NOT_FOUND, e)
         }
         e @ RestoreDiscardedVideosError::Repository(_) => ApiError::internal(e),

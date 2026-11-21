@@ -173,8 +173,6 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
 }
 
 impl ChannelVideoReconciler {
-    /// Waits for a move of the channel to finish, so the pass reads the
-    /// channel, and works in its folder, only once it has moved.
     /// Puts every stored Discarded video back to Pending.
     fn restore_stored_discarded(&self, stored: &[(ChannelVideo, Video)]) -> anyhow::Result<()> {
         let now = self.clock.now();
@@ -189,6 +187,8 @@ impl ChannelVideoReconciler {
             })
     }
 
+    /// Waits for a move of the channel to finish, so the pass reads the
+    /// channel, and works in its folder, only once it has moved.
     fn lock(&self, id: &ChannelHandle) -> ShowLockGuard<'_> {
         self.show_locks.lock(ShowKey::Channel(id.clone()))
     }
@@ -268,9 +268,8 @@ impl ChannelVideoReconciler {
     /// `video_limit` most recent uploads, Unavailable ones not counting
     /// toward the limit: adds newly seen videos (never a Discarded one removed
     /// earlier, which the channel remembers and which still takes its slot),
-    /// refreshes
-    /// the title and position of known ones, and removes stored videos no
-    /// longer among them (removed on YouTube or aged past the limit). A
+    /// refreshes the title and position of known ones, and removes stored
+    /// videos no longer among them (removed on YouTube or aged past the limit). A
     /// failed listing either leaves membership untouched for this pass, the
     /// filesystem steps still running from the stored rows, or fails the
     /// pass, per `on_listing_failure`.
