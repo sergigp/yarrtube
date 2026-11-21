@@ -93,6 +93,14 @@ describe('VideoPlayer', () => {
       expect(play).toHaveBeenCalledTimes(1)
       expect(container.querySelector('video')!.hasAttribute('autoplay')).toBe(false)
     })
+
+    it('does not start a video selected without autoplay', () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+
+      render(player(aVideo({ id: 'vid1' }), false))
+
+      expect(play).not.toHaveBeenCalled()
+    })
   })
 
   describe('arrow key seeking', () => {
