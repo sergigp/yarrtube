@@ -9,6 +9,7 @@ import { VideoRowsSkeleton } from './VideoSkeletons'
 import { Switch } from '@/components/ui/switch'
 import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { formatAge } from '@/lib/relativeAge'
+import { canDiscard } from '@/lib/videoSteps'
 import { cn } from '@/lib/utils'
 
 /** Where "Hide watched" is remembered, for every queue alike. */
@@ -186,6 +187,11 @@ export function VideoListPane<T extends Video>({
                   title={video.title}
                   sourceName={sourceNameOf(video)}
                   markable={!video.watched && video.status === 'DOWNLOADED'}
+                  discard={
+                    canDiscard(video.status)
+                      ? { downloaded: video.status === 'DOWNLOADED' }
+                      : undefined
+                  }
                   className="mt-2"
                 />
               </li>

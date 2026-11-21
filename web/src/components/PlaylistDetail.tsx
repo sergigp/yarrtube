@@ -11,6 +11,7 @@ import {
   usePlaylistVideos,
   useSetPlaylistExcludedFromHome,
   useSetPlaylistUnwatchedCountHidden,
+  useRestoreDiscardedVideos,
   useUpdatePlaylistSettings,
 } from '@/api/queries'
 import {
@@ -64,6 +65,7 @@ export function PlaylistDetail() {
   const { data: playlists, error: playlistsError } = usePlaylists()
   const refreshing = useLibraryAction()
   const deleteSource = useDeleteSource()
+  const restoreDiscardedVideos = useRestoreDiscardedVideos()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const setPlaylistUnwatchedCountHidden = useSetPlaylistUnwatchedCountHidden()
   const updatePlaylistSettings = useUpdatePlaylistSettings()
@@ -154,6 +156,7 @@ export function PlaylistDetail() {
         onSetUnwatchedCountHidden={(hidden) => setPlaylistUnwatchedCountHidden(id, hidden)}
         onEditRequest={() => setEditing(true)}
         youtubeLink={{ href: youtubePlaylistUrl(id), label: 'Open playlist on YouTube' }}
+        onRestoreDiscarded={() => restoreDiscardedVideos({ kind: 'playlist', id })}
         onDelete={refreshing(async () => {
           await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
           navigate('/')

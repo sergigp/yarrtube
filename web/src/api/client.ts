@@ -212,6 +212,17 @@ export async function reconcilePlaylist(id: string): Promise<void> {
   })
 }
 
+/**
+ * Restores a playlist's discarded videos: it forgets the ones it remembers,
+ * its stored ones are pending again, and it syncs once.
+ */
+export async function restoreDiscardedPlaylistVideos(id: string): Promise<void> {
+  await send(`/playlists/${encodeURIComponent(id)}/discarded/restore`, {
+    method: 'POST',
+    label: `restore discarded videos of playlist ${id}`,
+  })
+}
+
 export function fetchChannels(): Promise<ChannelListItem[]> {
   return request('/channels')
 }
@@ -224,6 +235,17 @@ export async function reconcileChannel(handle: string): Promise<void> {
   await send(`/channels/${encodeURIComponent(handle)}/reconcile`, {
     method: 'POST',
     label: `reconcile channel ${handle}`,
+  })
+}
+
+/**
+ * Restores a channel's discarded videos: it forgets the ones it remembers,
+ * its stored ones are pending again, and it syncs once.
+ */
+export async function restoreDiscardedChannelVideos(handle: string): Promise<void> {
+  await send(`/channels/${encodeURIComponent(handle)}/discarded/restore`, {
+    method: 'POST',
+    label: `restore discarded videos of channel ${handle}`,
   })
 }
 
@@ -391,7 +413,7 @@ export async function retryVideo(videoId: string): Promise<void> {
   })
 }
 
-/** Discards a video for good: never downloaded again, its files deleted. */
+/** Discards a video: not downloaded, its files deleted, until its source restores it. */
 export async function discardVideo(videoId: string): Promise<void> {
   await send(`/videos/${encodeURIComponent(videoId)}/discard`, {
     method: 'POST',

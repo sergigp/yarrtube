@@ -37,6 +37,8 @@ import {
   deleteVideoAiVerdicts,
   retryVideo,
   discardVideo,
+  restoreDiscardedChannelVideos,
+  restoreDiscardedPlaylistVideos,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
 } from './client'
@@ -570,14 +572,39 @@ export function useRetryVideo(): (videoId: string) => Promise<void> {
 }
 
 /**
- * Returns a function that discards a video for good, then refetches the
- * library (its video lists included) and the home videos.
+ * Returns a function that discards a video, then refetches the library (its
+ * video lists included), the home videos and the tasks.
  */
 export function useDiscardVideo(): (videoId: string) => Promise<void> {
   const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  const invalidateTasks = useInvalidateTasks()
   return useCallback(
     async (videoId: string) => {
       await discardVideo(videoId)
+      await Promise.all([invalidateLibraryAndHome(), invalidateTasks()])
+    },
+    [invalidateLibraryAndHome, invalidateTasks],
+  )
+}
+
+/** A channel or playlist whose discarded videos are restored. */
+export interface DiscardedVideosSource {
+  kind: 'channel' | 'playlist'
+  id: string
+}
+
+/**
+ * Returns a function that restores a channel's or playlist's discarded
+ * videos, then refetches the library (its video lists included) and the
+ * home videos.
+ */
+export function useRestoreDiscardedVideos(): (source: DiscardedVideosSource) => Promise<void> {
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  return useCallback(
+    async (source: DiscardedVideosSource) => {
+      await (source.kind === 'channel'
+        ? restoreDiscardedChannelVideos(source.id)
+        : restoreDiscardedPlaylistVideos(source.id))
       await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],

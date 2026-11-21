@@ -15,7 +15,8 @@ use crate::domain::services::{
 };
 use crate::domain::video::{
     DiscardVideoError, HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError,
-    RetryVideoError, UpdateWatchStateError, VideoDuration, VideoId, VideoSearchText, WebVtt,
+    RestoreDiscardedVideosError, RetryVideoError, UpdateWatchStateError, VideoDuration, VideoId,
+    VideoSearchText, WebVtt,
 };
 use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
@@ -257,6 +258,16 @@ pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
         e @ UpdateWatchStateError::CategoryNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
         e @ UpdateWatchStateError::PlaylistNotFound(_) => ApiError::bad_request(e),
         e @ UpdateWatchStateError::Repository(_) => ApiError::internal(e),
+    }
+}
+
+pub fn restore_discarded_videos_error(error: RestoreDiscardedVideosError) -> ApiError {
+    match error {
+        e @ (RestoreDiscardedVideosError::ChannelNotFound(_)
+        | RestoreDiscardedVideosError::PlaylistNotFound(_)) => {
+            ApiError::new(StatusCode::NOT_FOUND, e)
+        }
+        e @ RestoreDiscardedVideosError::Repository(_) => ApiError::internal(e),
     }
 }
 

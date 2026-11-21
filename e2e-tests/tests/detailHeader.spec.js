@@ -9,7 +9,7 @@ test('a playlist page lays out Sync and its YouTube link as icons on desktop, ev
 
   await expect(main.getByRole('button', { name: 'Sync', exact: true })).toBeVisible()
   await expect(main.getByRole('link', { name: 'Open playlist on YouTube', exact: true })).toBeVisible()
-  for (const name of ['Mark all watched', 'Exclude from home', 'Hide unwatched count', 'Edit settings', 'Delete']) {
+  for (const name of ['Mark all watched', 'Exclude from home', 'Hide unwatched count', 'Edit settings', 'Restore discarded videos', 'Delete']) {
     await expect(main.getByRole('button', { name, exact: true })).toHaveCount(0)
   }
   await main.getByRole('button', { name: /^More actions for / }).click()
@@ -18,6 +18,7 @@ test('a playlist page lays out Sync and its YouTube link as icons on desktop, ev
     'Exclude from home',
     'Hide unwatched count',
     'Edit settings',
+    'Restore discarded videos',
     'Clear AI categories',
     'Delete',
   ])

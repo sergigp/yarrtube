@@ -132,3 +132,28 @@ impl fmt::Display for RetryVideoError {
 }
 
 impl std::error::Error for RetryVideoError {}
+
+#[derive(Debug)]
+pub enum RestoreDiscardedVideosError {
+    ChannelNotFound(ChannelHandle),
+    PlaylistNotFound(PlaylistId),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for RestoreDiscardedVideosError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ChannelNotFound(id) => write!(f, "channel {id} not found"),
+            Self::PlaylistNotFound(id) => write!(f, "playlist {id} not found"),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for RestoreDiscardedVideosError {}
+
+impl From<anyhow::Error> for RestoreDiscardedVideosError {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Repository(e)
+    }
+}

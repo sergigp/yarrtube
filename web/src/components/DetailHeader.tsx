@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  ArchiveRestore,
   Bell,
   BellOff,
   CheckCheck,
@@ -227,6 +228,8 @@ interface DetailHeaderProps {
    * categories otherwise.
    */
   aiCategorization?: { enabled: boolean; onDeleteAiVerdicts: () => Promise<void> }
+  /** Channels and playlists: restores the source's discarded videos; categories have none. */
+  onRestoreDiscarded?: () => Promise<void>
   onDelete: () => Promise<void>
   deleteDescription: string
 }
@@ -236,8 +239,9 @@ interface DetailHeaderProps {
  * the name, a meta line, then the main call to action and the page-level
  * actions. On desktop, Sync, the YouTube link and any extra action are icon
  * buttons named in their tooltips, the rest (mark all watched, home and
- * count settings, edit, AI, delete) wait behind "⋮"; on phones the header
- * stacks, the call to action goes full width and every action is behind "⋮".
+ * count settings, edit, restore discarded videos, AI, delete) wait behind
+ * "⋮"; on phones the header stacks, the call to action goes full width and
+ * every action is behind "⋮".
  * Mark all watched and delete are always confirmed: neither can be undone.
  */
 export function DetailHeader({
@@ -260,6 +264,7 @@ export function DetailHeader({
   onEditRequest,
   youtubeLink,
   aiCategorization,
+  onRestoreDiscarded,
   onDelete,
   deleteDescription,
 }: DetailHeaderProps) {
@@ -268,6 +273,7 @@ export function DetailHeader({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [confirmingMarkWatched, setConfirmingMarkWatched] = useState(false)
   const [confirmingAiDelete, setConfirmingAiDelete] = useState(false)
+  const [confirmingRestore, setConfirmingRestore] = useState(false)
   const markWatchedPrompt = markWatchedConfirmation(name, unwatchedCount ?? 0)
 
   const actions: HeaderAction[] = []
@@ -324,6 +330,13 @@ export function DetailHeader({
   }
   if (onEditRequest) {
     actions.push({ label: 'Edit settings', icon: <SlidersHorizontal />, onSelect: onEditRequest })
+  }
+  if (onRestoreDiscarded) {
+    actions.push({
+      label: 'Restore discarded videos',
+      icon: <ArchiveRestore />,
+      onSelect: () => setConfirmingRestore(true),
+    })
   }
   const aiDeleteLabel = aiCategorization?.enabled
     ? 'Re-run AI categorization'
@@ -421,6 +434,22 @@ export function DetailHeader({
           confirmLabel={aiCategorization.enabled ? 'Re-run' : 'Clear'}
           pendingLabel={aiCategorization.enabled ? 'Re-running…' : 'Clearing…'}
           onConfirm={aiCategorization.onDeleteAiVerdicts}
+        />
+      )}
+      {onRestoreDiscarded && (
+        <ConfirmDialog
+          open={confirmingRestore}
+          onOpenChange={setConfirmingRestore}
+          title={`Restore discarded videos of "${name}"?`}
+          description="Discarded videos still in this playlist, or among this channel's most recent uploads, will be downloaded again."
+          confirmLabel="Restore"
+          pendingLabel="Restoring…"
+          onConfirm={() =>
+            alertOnFailure(
+              onRestoreDiscarded,
+              `Failed to restore the discarded videos of "${name}"`,
+            )
+          }
         />
       )}
       {onMarkWatched && (

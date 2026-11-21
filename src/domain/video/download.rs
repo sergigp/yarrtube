@@ -12,8 +12,8 @@ pub struct Download {
     pub state: StepState,
     /// In Progress: running on top of a Pending or Retrying state.
     pub started: bool,
-    /// Discarded by the user, for good (see the `video-discard`
-    /// capability): never attempted again.
+    /// Discarded by the user (see the `video-discard` capability): never
+    /// attempted again until its source restores it.
     pub discarded: bool,
     /// Why the last attempt failed; kept while started, cleared on success,
     /// unavailable and retry.
@@ -154,13 +154,22 @@ impl Download {
         }
     }
 
-    /// Discarded for good: Pending with no attempts, no failure and no
+    /// Discarded: Pending with no attempts, no failure and no
     /// file.
     pub fn discard(self) -> Self {
         Self {
             discarded: true,
             ..Self::pending()
         }
+    }
+
+    /// Pending with no attempts, no failure and no file when discarded;
+    /// unchanged otherwise.
+    pub fn restore(self) -> Self {
+        if !self.discarded {
+            return self;
+        }
+        Self::pending()
     }
 
     /// The file recorded as `file` (a relocation or quality upgrade), state

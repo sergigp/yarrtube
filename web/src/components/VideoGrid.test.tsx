@@ -289,4 +289,43 @@ describe('VideoGrid', () => {
     expect(screen.getByText('BettaTech', { selector: 'p a span' })).toHaveClass('truncate')
     expect(screen.getByText('· 2d ago', { exact: false })).toHaveClass('shrink-0')
   })
+
+  it("discards a card's video after warning its files will be deleted", async () => {
+    const fetchMock = mockApi({ 'POST /api/videos/vid1/discard': null })
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ id: 'vid1', title: 'Fresh Video' })]} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Fresh Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Discard…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "Fresh Video"?' })
+    expect(dialog).toHaveTextContent(
+      "Its files will be deleted and it won't be downloaded. You can restore it from its channel's or playlist's menu.",
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
+
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/videos/vid1/discard',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    )
+  })
+
+  it('sends nothing when the discard is cancelled', async () => {
+    const fetchMock = mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ id: 'vid1', title: 'Fresh Video' })]} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Fresh Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Discard…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "Fresh Video"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/videos/vid1/discard',
+      expect.anything(),
+    )
+    expect(card('Fresh Video')).toBeInTheDocument()
+  })
 })

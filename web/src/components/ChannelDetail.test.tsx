@@ -341,6 +341,66 @@ describe('ChannelDetail', () => {
     expect(videos).toHaveBeenCalledOnce()
   })
 
+  it("restores the channel's discarded videos after confirming", async () => {
+    const channel = aChannel({ id: 'chan', name: 'The Channel' })
+    let stored: ReturnType<typeof aVideo>[] = []
+    const restore = vi.fn(() => {
+      stored = [aVideo({ title: 'Restored Video', status: 'PENDING', filename: null })]
+      return null
+    })
+    renderChannel(
+      {
+        'GET /api/channels': [channel],
+        'GET /api/channels/chan/videos': () => stored,
+        'POST /api/channels/chan/discarded/restore': restore,
+      },
+      '/channels/chan',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Restore discarded videos' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Restore discarded videos of "The Channel"?',
+    })
+    expect(dialog).toHaveTextContent(
+      "Discarded videos still in this playlist, or among this channel's most recent uploads, will be downloaded again.",
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Restore' }))
+
+    expect(restore).toHaveBeenCalledOnce()
+    expect(
+      await screen.findByRole('button', { name: /^(?!Actions).*Restored Video/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('tells the user when restoring fails', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderChannel(
+      {
+        'GET /api/channels': [aChannel({ id: 'chan', name: 'The Channel' })],
+        'GET /api/channels/chan/videos': [],
+        'POST /api/channels/chan/discarded/restore': { status: 500, error: 'database is locked' },
+      },
+      '/channels/chan',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Restore discarded videos' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Restore discarded videos of "The Channel"?',
+    })
+    await user.click(within(dialog).getByRole('button', { name: 'Restore' }))
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith(
+        'Failed to restore the discarded videos of "The Channel": database is locked',
+      ),
+    )
+    expect(dialog).not.toBeInTheDocument()
+  })
+
   it('a channel page header menu offers no unwatched count item', async () => {
     renderChannel(
       {
@@ -355,7 +415,14 @@ describe('ChannelDetail', () => {
 
     expect(
       (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
-    ).toEqual(['Sync', 'Open channel on YouTube', 'Mark all watched', 'Edit settings', 'Delete'])
+    ).toEqual([
+      'Sync',
+      'Open channel on YouTube',
+      'Mark all watched',
+      'Edit settings',
+      'Restore discarded videos',
+      'Delete',
+    ])
   })
 
   it('offers Clear AI categories for a channel with categorization on and summaries off', async () => {

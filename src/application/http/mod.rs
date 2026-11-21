@@ -94,6 +94,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
             "/playlists/{id}/reconcile",
             post(playlists::reconcile_playlist),
         )
+        .route(
+            "/playlists/{id}/discarded/restore",
+            post(playlists::restore_discarded_playlist_videos),
+        )
         .route("/playlists/{id}/move", post(playlists::move_playlist))
         .route(
             "/playlists/{id}/watched",
@@ -152,6 +156,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route(
             "/channels/{handle}/reconcile",
             post(channels::reconcile_channel),
+        )
+        .route(
+            "/channels/{handle}/discarded/restore",
+            post(channels::restore_discarded_channel_videos),
         )
         .route("/channels/{handle}/move", post(channels::move_channel))
         .route(
