@@ -444,5 +444,17 @@ describe('VideoPlayer', () => {
       expect(pendingTakesOver).toBe(false)
       expect(playerRoot(none.container)).not.toHaveAttribute('data-landscape-takeover')
     })
+
+    it('keeps the same video element when rotating in and out', () => {
+      const { container } = render(player(aVideo({ id: 'vid1' })))
+      const before = container.querySelector('video')
+
+      act(() => rotatePhone('landscape'))
+      const inLandscape = container.querySelector('video')
+      act(() => rotatePhone('portrait'))
+
+      expect(inLandscape).toBe(before)
+      expect(container.querySelector('video')).toBe(before)
+    })
   })
 })
