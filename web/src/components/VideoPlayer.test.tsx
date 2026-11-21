@@ -135,25 +135,30 @@ describe('VideoPlayer', () => {
 
     it('stays paused without an error when the browser refuses to play', async () => {
       const refused = new DOMException('needs a user gesture', 'NotAllowedError')
-      // Not a spy: one marks the promise it returns as handled.
+      // Not a spy: one handles the promise it returns itself.
       const originalPlay = HTMLMediaElement.prototype.play
       let plays = 0
+      let handled = false
       HTMLMediaElement.prototype.play = () => {
         plays += 1
-        return Promise.reject(refused)
+        const refusal = Promise.reject(refused)
+        const then = refusal.then.bind(refusal)
+        // `catch` and `then` both go through `then`.
+        refusal.then = ((...handlers: Parameters<typeof then>) => {
+          handled = true
+          return then(...handlers)
+        }) as typeof refusal.then
+        return refusal
       }
-      const unhandled = vi.fn()
-      process.on('unhandledRejection', unhandled)
       onTestFinished(() => {
         HTMLMediaElement.prototype.play = originalPlay
-        process.off('unhandledRejection', unhandled)
       })
 
       const { container } = render(player(aVideo({ id: 'vid1' }), true))
       await new Promise((resolve) => setTimeout(resolve, 0))
 
       expect(plays).toBe(1)
-      expect(unhandled).not.toHaveBeenCalled()
+      expect(handled).toBe(true)
       expect(container.querySelector('video')).toBeInTheDocument()
       expect(container).not.toHaveTextContent(/error/i)
     })
@@ -455,6 +460,30 @@ describe('VideoPlayer', () => {
 
       expect(inLandscape).toBe(before)
       expect(container.querySelector('video')).toBe(before)
+    })
+
+    it('locks page scroll while taking over and scrolls back on return', () => {
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+      const scrollPageTo = (y: number) => {
+        Object.defineProperty(window, 'scrollY', { value: y, configurable: true })
+        fireEvent.scroll(window)
+      }
+      onTestFinished(() => {
+        scrollTo.mockRestore()
+        scrollPageTo(0)
+      })
+      render(player(aVideo({ id: 'vid1' })))
+      scrollPageTo(400)
+
+      act(() => rotatePhone('landscape'))
+      // The landscape layout no longer scrolls the document, which clamps it to the top.
+      scrollPageTo(0)
+      const overflowInLandscape = document.documentElement.style.overflow
+      act(() => rotatePhone('portrait'))
+
+      expect(overflowInLandscape).toBe('hidden')
+      expect(document.documentElement.style.overflow).toBe('')
+      expect(scrollTo).toHaveBeenLastCalledWith(0, 400)
     })
   })
 })

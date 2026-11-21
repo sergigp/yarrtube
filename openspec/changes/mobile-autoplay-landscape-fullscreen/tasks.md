@@ -15,7 +15,7 @@
 - [x] 2.9 `hides the chapter rail while taking over`.
 - [x] 2.10 `does not take over without a downloaded video`.
 - [x] 2.11 `keeps the same video element when rotating in and out`.
-- [ ] 2.12 `locks page scroll while taking over and scrolls back on return`: `useLandscapeTakeover` tracks portrait `scrollY`, locks `<html>` overflow, restores both.
+- [x] 2.12 `locks page scroll while taking over and scrolls back on return`: `useLandscapeTakeover` tracks portrait `scrollY`, locks `<html>` overflow, restores both.
 
 ## 3. End-to-end (TDD)
 
