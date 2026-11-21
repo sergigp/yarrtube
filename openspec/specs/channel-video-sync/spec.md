@@ -14,16 +14,16 @@ cleaned up automatically.
 The system SHALL discover a channel's current videos by invoking `yt-dlp`
 against that channel's videos listing, requesting only its `video_limit`
 most recent uploads plus one more for each of the channel's stored videos
-whose download is Unavailable or Discarded and each discarded upload the
-channel remembers (skipped videos don't count toward the limit; see
-`video-discard`), and parsing each discovered video's ID and title from
+whose download is Unavailable (Unavailable videos don't count toward the
+limit; Discarded ones, stored or remembered, do — see `video-discard`), and
+parsing each discovered video's ID and title from
 structured (JSON) output rather than delimited text, so that a video title
 containing arbitrary characters (including a `|` or other delimiter-like
 character) cannot corrupt discovery of that video or any other.
 
 #### Scenario: Channel has more uploads than its video limit
 - **WHEN** a reconcile pass discovers a channel's videos
-- **THEN** the system requests and receives at most `video_limit` videos plus the number of the channel's skipped videos, ordered most recent first
+- **THEN** the system requests and receives at most `video_limit` videos plus the number of the channel's Unavailable videos, ordered most recent first
 
 #### Scenario: A discovered video's title contains a delimiter-like character
 - **WHEN** a reconcile pass discovers a video whose title contains a `|` character (or other text that would corrupt a delimited-text parse)
@@ -35,7 +35,7 @@ character) cannot corrupt discovery of that video or any other.
 
 #### Scenario: Skipped videos widen the request
 - **WHEN** a reconcile pass discovers the videos of a channel with `video_limit` 3 that has one Unavailable and one Discarded stored video
-- **THEN** the system requests at most 5 videos
+- **THEN** the system requests at most 4 videos
 
 ### Requirement: Not Yet Watchable Videos Are Not Discovered (Channels)
 The system SHALL leave out of a channel's discovered videos any entry that
@@ -153,14 +153,14 @@ channel is reconciled.
 ### Requirement: Aged-Out Video Eviction (Channels)
 The system SHALL delete a stored video's record when a reconcile pass for a
 channel finds that it is no longer among the channel's current most recent uploads up to and
-including the `video_limit`-th one whose download is not Unavailable or
-Discarded and that the channel doesn't remember as discarded — whether
-because it was deleted/unlisted on YouTube or because newer uploads have
+including the `video_limit`-th one whose download is not Unavailable —
+whether because it was deleted/unlisted on YouTube or because newer uploads have
 pushed it past that position — SHALL remember an evicted Discarded video's
 YouTube id for the channel before deleting its record, SHALL log
 each such eviction, and SHALL publish a `VideoRemovedFromChannel` event
 carrying that video's title, its recorded filename (if any), and whether it
-had been downloaded.
+had been downloaded. A Discarded upload, stored or remembered by the
+channel, SHALL take its slot within the limit.
 
 #### Scenario: Previously stored video no longer among the channel's most recent uploads
 - **WHEN** a reconcile pass finds that a video previously stored for a channel is no longer among that channel's current `video_limit` most recent uploads
@@ -172,14 +172,22 @@ had been downloaded.
 
 #### Scenario: A skipped video doesn't take a slot
 - **WHEN** a reconcile pass for a channel with `video_limit` 3 lists uploads A, B, C, D (most recent first) and B is stored as Unavailable
-- **THEN** A, B, C and D are all kept, so the channel has 3 videos that aren't skipped
+- **THEN** A, B, C and D are all kept, so the channel has 3 videos that aren't Unavailable
+
+#### Scenario: A discarded video takes its slot
+- **WHEN** a reconcile pass for a channel with `video_limit` 3 lists uploads A, B, C, D (most recent first) and B is stored as Discarded
+- **THEN** A, B and C are kept, D is not stored, and the channel lists 2 videos
+
+#### Scenario: A remembered discarded upload takes its slot
+- **WHEN** a reconcile pass for a channel with `video_limit` 2 lists uploads A, B, C (most recent first) and the channel remembers B as discarded
+- **THEN** only A is stored
 
 #### Scenario: Evicting a discarded video remembers it
 - **WHEN** a reconcile pass for a channel evicts a stored video whose download is Discarded
 - **THEN** the channel remembers its YouTube id, then its stored record is deleted
 
 #### Scenario: Window ends at the limit-th unskipped video
-- **WHEN** a reconcile pass for a channel with `video_limit` 2 lists uploads A, B, C (most recent first), none skipped, and C was stored
+- **WHEN** a reconcile pass for a channel with `video_limit` 2 lists uploads A, B, C (most recent first), none Unavailable, and C was stored
 - **THEN** C is evicted
 
 ### Requirement: Reconcile Skipped For a Deleted Channel
