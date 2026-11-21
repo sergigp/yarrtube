@@ -244,6 +244,8 @@ export function DiscardVideoDialog(props: {
   videoId: string; title: string; downloaded: boolean
   open: boolean; onOpenChange: (open: boolean) => void
   /** Called after a successful discard. */ onDiscarded?: () => void
+  /** When set, a failed discard closes the dialog and is reported here instead of inside it. */
+  onFailed?: (message: string) => void
 }): JSX.Element
 // title `Discard "<title>"?`; description: downloaded
 //   ? "Its files will be deleted and it won't be downloaded. You can restore it from its channel's or playlist's menu."
@@ -254,10 +256,11 @@ export function DiscardVideoDialog(props: {
 //   discard?: { downloaded: boolean } // absent: no "Discard…" item
 // web/src/components/VideoGrid.tsx — passes discard={{ downloaded: true }} (cards are Downloaded)
 // web/src/components/VideoListPane.tsx — passes discard when canDiscard(video.status)
-// web/src/components/tasks/AttentionCard.tsx — DiscardButton when task.task_type === 'download_video' && video_id
+// web/src/components/tasks/AttentionCard.tsx — DiscardButton when task.task_type === 'download_video' && video_id;
+//   passes onFailed to show "Discard failed: <message>" on the card
 // web/src/components/DetailHeader.tsx — new prop
 //   onRestoreDiscarded?: () => Promise<void> // absent (categories): no item
-//   menu item "Restore discarded videos" (icon ArchiveRestore) + ConfirmDialog
+//   menu item "Restore discarded videos" (icon ArchiveRestore), right after "Edit settings", + ConfirmDialog
 // web/src/components/ChannelDetail.tsx, PlaylistDetail.tsx — pass onRestoreDiscarded
 ```
 
@@ -274,9 +277,9 @@ export function DiscardVideoDialog(props: {
 
 **Channel limit** — `ChannelVideoReconciler::sync_membership_with_youtube`: `stored = list_stored_videos(channel)` → `remembered` (unchanged; only for not re-adding) → `unavailable_ids = stored.filter(|(_, v)| v.is_unavailable())` → `list_current_videos(channel, unavailable_ids.len(), ..)` → `limit + unavailable` → `video_window::within_limit(listing, |u| unavailable_ids.contains(u.youtube_id), limit)` → add (skip remembered) / refresh / `remove_videos_not_in(window ids)` (remembers an evicted Discarded one, unchanged).
 
-**Web discard** — `VideoActionsMenu` "Discard…" `onSelect` → `setConfirming(true)` → `DiscardVideoDialog` (rendered beside the menu) → `useDiscardVideo()(videoId)` → `discardVideo` → invalidate library, home, tasks; failure → `ConfirmDialog` reports it as today. `AttentionCard` → `DiscardButton` → same dialog with `downloaded: false`; on failure the card shows "Discard failed: …".
+**Web discard** — `VideoActionsMenu` "Discard…" `onSelect` → `setConfirming(true)` → `DiscardVideoDialog` (rendered beside the menu) → `useDiscardVideo()(videoId)` → `discardVideo` → invalidate library, home, tasks; failure → `ConfirmDialog` reports it as today. `AttentionCard` → `DiscardButton` → same dialog with `downloaded: false` and `onFailed`; on failure the dialog closes and the card shows "Discard failed: …".
 
-**Web restore** — `DetailHeader` menu "Restore discarded videos" → `ConfirmDialog` (`Restore discarded videos of "<name>"?`, "Discarded videos still in this playlist, or among this channel's most recent uploads, will be downloaded again.") → `onRestoreDiscarded()` → `useRestoreDiscardedVideos()({kind, id})` → client call → invalidate; failure → `window.alert`.
+**Web restore** — `DetailHeader` menu "Restore discarded videos" → `ConfirmDialog` (`Restore discarded videos of "<name>"?`, "Discarded videos still in this playlist, or among this channel's most recent uploads, will be downloaded again.") → `onRestoreDiscarded()` → `useRestoreDiscardedVideos()({kind, id})` → client call → invalidate; failure → `window.alert('Failed to restore the discarded videos of "<name>": <error>')`.
 
 ## Test Plan
 
