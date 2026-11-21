@@ -19,9 +19,9 @@
 
 ## 3. End-to-end (TDD)
 
-- [ ] 3.1 `mobileWatch.spec.js` › home card test asserts the video is playing (not paused, `currentTime` advancing) before `assertVideoPlays`.
-- [ ] 3.2 `picking a video in the queue starts it playing @mobile`.
-- [ ] 3.3 `rotating to landscape fills the screen with the video and back restores the page @mobile` (if WebKit emulation doesn't report `pointer: coarse`, note it in the summary and leave the check to Manual (human)).
+- [x] 3.1 `mobileWatch.spec.js` › home card test asserts the video is playing (not paused, `currentTime` advancing) before `assertVideoPlays`.
+- [x] 3.2 `picking a video in the queue starts it playing @mobile`.
+- [x] 3.3 `rotating to landscape fills the screen with the video and back restores the page @mobile` (if WebKit emulation doesn't report `pointer: coarse`, note it in the summary and leave the check to Manual (human)).
 
 ## 4. Verification
 
