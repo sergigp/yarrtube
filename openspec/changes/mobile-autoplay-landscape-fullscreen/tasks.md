@@ -11,7 +11,7 @@
 - [x] 2.5 `does not start the video again when it re-renders`.
 - [x] 2.6 `does not start a video that finishes downloading while selected`.
 - [x] 2.7 `stays paused without an error when the browser refuses to play`.
-- [ ] 2.8 `takes over the screen with a downloaded video on a phone in landscape`: fixed full-viewport black root with safe-area padding and `data-landscape-takeover`, video `object-contain`, no `md:` sizing classes.
+- [x] 2.8 `takes over the screen with a downloaded video on a phone in landscape`: fixed full-viewport black root with safe-area padding and `data-landscape-takeover`, video `object-contain`, no `md:` sizing classes.
 - [ ] 2.9 `hides the chapter rail while taking over`.
 - [ ] 2.10 `does not take over without a downloaded video`.
 - [ ] 2.11 `keeps the same video element when rotating in and out`.

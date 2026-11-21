@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { Chapter, Video } from '@/api/types'
 import { aVideo } from '@/test/helpers'
-import { useDesktopViewport } from '@/test/viewport'
+import { rotatePhone, useDesktopViewport } from '@/test/viewport'
 import { VideoPlayer } from './VideoPlayer'
 
 
@@ -393,6 +393,29 @@ describe('VideoPlayer', () => {
       expect(play).toHaveBeenCalled()
       expect(screen.queryByRole('dialog', { name: 'Chapters' })).not.toBeInTheDocument()
       play.mockRestore()
+    })
+  })
+
+  describe('landscape takeover', () => {
+    function player(video: Video | null) {
+      return (
+        <VideoPlayer basePath="music" video={video} autoplay={false} onVideoElement={() => {}} />
+      )
+    }
+
+    /** The player's root, which takes over the screen. */
+    function playerRoot(container: HTMLElement): HTMLElement {
+      return container.querySelector<HTMLElement>('[data-pinned-player]')!
+    }
+
+    it('takes over the screen with a downloaded video on a phone in landscape', () => {
+      rotatePhone('landscape')
+
+      const { container } = render(player(aVideo({ id: 'vid1' })))
+
+      expect(playerRoot(container)).toHaveAttribute('data-landscape-takeover')
+      expect(playerRoot(container)).toHaveClass('fixed', 'inset-0', 'bg-black')
+      expect(container.querySelector('video')).toHaveClass('object-contain')
     })
   })
 })

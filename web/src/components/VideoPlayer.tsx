@@ -60,7 +60,8 @@ function SeekIndicator({ feedback }: { feedback: SeekFeedback }) {
  * Below the desktop breakpoint it bleeds to the side edges of the screen
  * (cancelling the page gutter), sticks right under the header while the
  * page scrolls, and carries the chapter rail; on desktop the chapters are
- * listed beside the video's AI summary instead (`ChapterList`).
+ * listed beside the video's AI summary instead (`ChapterList`). On a phone
+ * held in landscape a downloaded video takes over the whole screen.
  */
 export function VideoPlayer({
   basePath,
@@ -100,17 +101,27 @@ export function VideoPlayer({
       // Pinned below the header on phones, chapter rail included, which keeps the header in view.
       data-pinned-player=""
       data-landscape-takeover={takeover ? '' : undefined}
-      className={cn(
-        'sticky top-(--header-offset) z-10 -mx-4 flex flex-col bg-background sm:-mx-6',
-        'md:relative md:top-auto md:z-auto md:m-0 md:shrink-0 md:gap-2',
-      )}
+      className={
+        takeover
+          ? // A phone in landscape: only the video, on black, clear of the notch. Same
+            // elements as in portrait, so the <video> isn't remounted and keeps playing.
+            'fixed inset-0 z-30 flex bg-black pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]'
+          : cn(
+              'sticky top-(--header-offset) z-10 -mx-4 flex flex-col bg-background sm:-mx-6',
+              'md:relative md:top-auto md:z-auto md:m-0 md:shrink-0 md:gap-2',
+            )
+      }
     >
       <div
-        className={cn(
-          'relative flex overflow-hidden aspect-video items-center justify-center',
-          'md:aspect-auto md:min-h-80 md:rounded-xl',
-          filename ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
-        )}
+        className={
+          takeover
+            ? 'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden'
+            : cn(
+                'relative flex overflow-hidden aspect-video items-center justify-center',
+                'md:aspect-auto md:min-h-80 md:rounded-xl',
+                filename ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
+              )
+        }
       >
         {video && filename ? (
           <video
@@ -119,7 +130,11 @@ export function VideoPlayer({
             // iOS Safari goes fullscreen on play without it; stay inline so the chapter
             // rail stays reachable, fullscreen remains one tap away in the controls.
             playsInline
-            className="block h-full w-full md:h-auto md:max-h-[70vh] md:rounded-xl"
+            className={
+              takeover
+                ? 'block h-full w-full object-contain'
+                : 'block h-full w-full md:h-auto md:max-h-[70vh] md:rounded-xl'
+            }
             src={videoMediaUrl(basePath, filename)}
             poster={
               video.thumbnail_filename ? videoMediaUrl(basePath, video.thumbnail_filename) : undefined
