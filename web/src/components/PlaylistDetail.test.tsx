@@ -391,6 +391,7 @@ describe('PlaylistDetail', () => {
       'Exclude from home',
       'Hide unwatched count',
       'Edit settings',
+      'Restore discarded videos',
       'Delete',
     ])
     expect(screen.queryByRole('button', { name: 'Sync' })).not.toBeInTheDocument()
@@ -421,9 +422,58 @@ describe('PlaylistDetail', () => {
         'Exclude from home',
         'Hide unwatched count',
         'Edit settings',
+        'Restore discarded videos',
         'Delete',
       ])
     })
+  })
+
+  it("restores the playlist's discarded videos after confirming", async () => {
+    let stored: ReturnType<typeof aVideo>[] = []
+    const restore = vi.fn(() => {
+      stored = [aVideo({ title: 'Restored Video', status: 'PENDING', filename: null })]
+      return null
+    })
+    renderPlaylist(
+      {
+        'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
+        'GET /api/playlists/PL1/videos': () => stored,
+        'POST /api/playlists/PL1/discarded/restore': restore,
+      },
+      '/playlists/PL1',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Restore discarded videos' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Restore discarded videos of "The Playlist"?',
+    })
+    await user.click(within(dialog).getByRole('button', { name: 'Restore' }))
+
+    expect(restore).toHaveBeenCalledOnce()
+    expect(await screen.findByText('Restored Video')).toBeInTheDocument()
+  })
+
+  it('sends nothing when the restore is cancelled', async () => {
+    const { fetchMock } = renderPlaylist(
+      {
+        'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
+        'GET /api/playlists/PL1/videos': [],
+      },
+      '/playlists/PL1',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Restore discarded videos' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Restore discarded videos of "The Playlist"?',
+    })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toEqual([])
   })
 
   it('excludes the playlist from home from its page header menu', async () => {

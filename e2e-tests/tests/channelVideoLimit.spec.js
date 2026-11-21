@@ -2,6 +2,7 @@ import { test, expect } from '../helpers/fixtures.js'
 import { chooseHeaderAction } from '../helpers/video.js'
 import { slugOf } from '../helpers/addDialog.js'
 import { CHANNEL } from '../helpers/fakeYoutube.js'
+import { addChannel } from '../helpers/seed.js'
 import { libraryPath } from '../helpers/library.js'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -79,4 +80,35 @@ test('lowering a channel video limit deletes the videos beyond it on the next sy
   for (const file of filesOf(newest)) {
     expect(existsSync(file), file).toBe(true)
   }
+})
+
+test("a discarded video keeps its channel's slot until the channel restores it", async ({ page }) => {
+  const channel = await addChannel(page.request, CHANNEL, { videoLimit: 1 })
+  const [video] = channel.videos
+  const discarded = await page.request.post(`/api/videos/${encodeURIComponent(video.id)}/discard`)
+  expect(discarded.ok(), await discarded.text()).toBeTruthy()
+
+  // A sync doesn't fetch the channel's next upload in its place.
+  await page.goto(`/channels/${encodeURIComponent(CHANNEL_HANDLE)}`)
+  const synced = page.waitForResponse(
+    (response) => response.url().endsWith('/reconcile') && response.request().method() === 'POST',
+  )
+  await page.getByRole('button', { name: 'Sync', exact: true }).click()
+  expect((await synced).ok()).toBe(true)
+  expect(await (await page.request.get(VIDEOS_URL)).json()).toEqual([])
+
+  // Restoring from the page header downloads it again.
+  await chooseHeaderAction(page, 'Restore discarded videos')
+  const restored = page.waitForResponse(
+    (response) => response.url().endsWith('/discarded/restore') && response.request().method() === 'POST',
+  )
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore', exact: true }).click()
+  expect((await restored).status()).toBe(204)
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(VIDEOS_URL)).json()).map((listed) => [listed.id, listed.status]),
+      { message: 'the restored video downloaded again', timeout: 30_000 },
+    )
+    .toEqual([[video.id, 'DOWNLOADED']])
 })

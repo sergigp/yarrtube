@@ -10,7 +10,9 @@ use crate::domain::services::{
 use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{DiscardedVideo, Video, VideoId, YoutubeVideoId};
+use crate::domain::video::{
+    DiscardedVideo, RestoreDiscardedVideosError, Video, VideoId, YoutubeVideoId,
+};
 use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
@@ -118,6 +120,9 @@ pub trait PlaylistVideoReconcilerApi: Send + Sync {
     /// means triggering it repeatedly never queues extra tasks. No-ops
     /// entirely if the playlist no longer exists.
     fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()>;
+
+    /// As `ChannelVideoReconcilerApi::restore_discarded`, for a playlist.
+    fn restore_discarded(&self, id: PlaylistId) -> Result<(), RestoreDiscardedVideosError>;
 }
 
 impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
@@ -149,9 +154,35 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
 
         self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)
     }
+
+    fn restore_discarded(&self, id: PlaylistId) -> Result<(), RestoreDiscardedVideosError> {
+        let _guard = self.lock(&id);
+        let Some(playlist) = self.find_playlist(&id)? else {
+            return Err(RestoreDiscardedVideosError::PlaylistNotFound(id));
+        };
+
+        self.discarded_video_repository
+            .delete_all(&ShowKey::Playlist(id))?;
+        self.restore_stored_discarded(&self.list_stored_videos(&playlist)?)?;
+        Ok(self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)?)
+    }
 }
 
 impl PlaylistVideoReconciler {
+    /// Puts every stored Discarded video back to Pending.
+    fn restore_stored_discarded(&self, stored: &[(PlaylistVideo, Video)]) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        stored
+            .iter()
+            .map(|(_, video)| video)
+            .filter(|video| video.download.is_discarded())
+            .try_for_each(|video| {
+                self.video_updater
+                    .update(&video.id, |video| video.restore(now))
+                    .map(|_| ())
+            })
+    }
+
     /// Waits for a move of the playlist to finish, so the pass reads the
     /// playlist, and works in its folder, only once it has moved.
     fn lock(&self, id: &PlaylistId) -> ShowLockGuard<'_> {

@@ -715,7 +715,7 @@ A channel detail view SHALL provide an action to mark the channel watched, which
 - **THEN** every downloaded video in the list shows a tick, and the channel's sidebar badge disappears
 
 ### Requirement: Video Actions Menu
-Every video card on the home view and every row of a playlist or channel detail view's video list, the selected video's row included, SHALL show an always-visible vertical "⋮" control to the right of the video's title. Activating it SHALL open a menu with a "Mark as watched" item, without selecting or navigating to the video. Choosing the item SHALL mark the video watched without confirmation. The item SHALL be disabled when the video is already watched or has not finished downloading. When marking fails, the application SHALL tell the user and leave the video as it was. On a home card whose source is a playlist, the menu SHALL also offer an item labeled `Exclude "<playlist name>" from home`, which excludes that playlist from home without confirmation and refreshes the home view's sections; when it fails, the application SHALL tell the user and leave the playlist as it was. Home cards whose source is a channel and list rows SHALL NOT offer it. The video detail pane SHALL NOT show a "⋮" control; the selected video can also be marked watched from its "Mark watched" button, as described in "Video Detail Watched Control".
+Every video card on the home, playlist and category views and every row of a playlist or channel detail view's video list, the selected video's row included, SHALL show an always-visible vertical "⋮" control to the right of the video's title. Activating it SHALL open a menu with a "Mark as watched" item and a "Discard…" item, without selecting or navigating to the video. Choosing "Mark as watched" SHALL mark the video watched without confirmation. It SHALL be disabled when the video is already watched or has not finished downloading. When marking fails, the application SHALL tell the user and leave the video as it was. "Discard…" SHALL be offered for a video whose download is Pending, Retrying, Failed or Downloaded, and SHALL ask for the same confirmation as the video detail pane's "Discard" before discarding the video (see `video-discard`); once discarded the video leaves the view without a page reload, and when discarding fails the application SHALL tell the user and leave the video as it was. On a home card whose source is a playlist, the menu SHALL also offer an item labeled `Exclude "<playlist name>" from home`, which excludes that playlist from home without confirmation and refreshes the home view's sections; when it fails, the application SHALL tell the user and leave the playlist as it was. Home cards whose source is a channel and list rows SHALL NOT offer it. The video detail pane SHALL NOT show a "⋮" control; the selected video can also be marked watched from its "Mark watched" button, as described in "Video Detail Watched Control".
 
 #### Scenario: Marking a video watched from a home card
 - **WHEN** a user chooses "Mark as watched" from the menu of a "Continue watching" card
@@ -751,11 +751,27 @@ Every video card on the home view and every row of a playlist or channel detail 
 
 #### Scenario: Channel cards have no exclude item
 - **WHEN** a user opens the menu of a home card whose source is a channel
-- **THEN** the menu offers "Mark as watched" only
+- **THEN** the menu offers "Mark as watched" and "Discard…" only
 
 #### Scenario: List rows and the detail pane have no exclude item
 - **WHEN** a user opens the menu of a row in a playlist's video list
-- **THEN** the menu offers "Mark as watched" only, and the video detail pane offers no menu at all
+- **THEN** the menu offers "Mark as watched" and "Discard…" only, and the video detail pane offers no menu at all
+
+#### Scenario: Discarding from a home card
+- **WHEN** a user chooses "Discard…" from the menu of a "Latest videos" card and confirms
+- **THEN** the confirmation said the video's files will be deleted, and the card leaves the home view without a page reload
+
+#### Scenario: Discarding from a list row
+- **WHEN** a user chooses "Discard…" from the menu of a Retrying row in a channel's video list and confirms
+- **THEN** the row leaves the list and the selected video does not change
+
+#### Scenario: Cancelling a discard from the menu
+- **WHEN** a user chooses "Discard…" from a card's menu and cancels the confirmation
+- **THEN** no request is sent and the card stays
+
+#### Scenario: Downloading row
+- **WHEN** a user opens the menu of a row whose download is In Progress
+- **THEN** the menu offers no "Discard…"
 
 ### Requirement: Video Detail Watched Control
 The selected video's info SHALL group its own actions right of the title (below it when they don't fit): a "Mark watched" button with a tick and its label while the video is downloaded and unwatched, which marks the video watched without confirmation, then the playback speed control, then the link to the video on YouTube. The button SHALL NOT be shown once the video is watched or while it has not finished downloading; a watched video is shown as such on the meta line, as described in "Video Detail Meta Line".
@@ -2713,7 +2729,7 @@ A task under **Needs attention** SHALL be shown as a card with its description, 
 - **THEN** the full raw error text is shown, and the control reads **Hide error**
 
 ### Requirement: Retry From Tasks View
-A **Needs attention** card for a task that works on one video SHALL offer **Retry now**, which retries the video. While it is in progress it SHALL be disabled; on success the list SHALL refresh; on failure the card SHALL say the retry failed. The card SHALL NOT offer a way to stop retrying: a failing step gives up on its own.
+A **Needs attention** card for a task that works on one video SHALL offer **Retry now**, which retries the video. While it is in progress it SHALL be disabled; on success the list SHALL refresh; on failure the card SHALL say the retry failed. A failing download's card SHALL also offer **Discard**, which asks for the same confirmation as the video detail pane's "Discard" before discarding the video (see `video-discard`); on success the list SHALL refresh without the download's task, and on failure the card SHALL say the discard failed. Cards of other per-video tasks SHALL NOT offer **Discard**.
 
 #### Scenario: Retry now
 - **WHEN** a user activates **Retry now** on a failing download's card
@@ -2722,6 +2738,18 @@ A **Needs attention** card for a task that works on one video SHALL offer **Retr
 #### Scenario: Action fails
 - **WHEN** the retry request fails
 - **THEN** the card says the retry failed and its actions can be used again
+
+#### Scenario: Discard a failing download
+- **WHEN** a user activates **Discard** on a failing download's card and confirms
+- **THEN** the application discards that video and the card leaves the list
+
+#### Scenario: Discard fails
+- **WHEN** a user confirms **Discard** on a failing download's card and the request fails
+- **THEN** the card says the discard failed and its actions can be used again
+
+#### Scenario: Failing subtitle fetch
+- **WHEN** a subtitle fetch is under **Needs attention**
+- **THEN** its card offers **Retry now** and no **Discard**
 
 ### Requirement: Run Now From Tasks View
 Every pending task that does not work on one video SHALL offer **Run now**; a batch SHALL offer **Sync all now**, and each source in an expanded batch **Sync now**. Each SHALL ask the server to run those tasks now, disable itself while in progress, refresh the list on success, and say the action failed on failure. Running tasks and per-video tasks SHALL NOT offer them.
@@ -2907,25 +2935,44 @@ In the add and the edit dialogs for channels and playlists, while AI categorizat
 - **WHEN** a user opens "Edit settings" for a channel with summaries and categorization on, unchecks "Summarize videos" and saves
 - **THEN** "Categorize videos" stays checked and becomes disabled, and only `summaries_enabled` `false` is sent
 
-### Requirement: Don't Download A Video From The Video Detail
-The video detail pane SHALL show a "Don't download" button for a video whose download is Pending, Retrying, Failed or Downloaded. Activating it SHALL ask for confirmation, saying the video will never be downloaded, it can't be undone, and, for a downloaded video, that its files are deleted. Confirming SHALL discard the video (see `video-discard`) and refresh the list, without a page reload; cancelling SHALL change nothing.
+### Requirement: Discard A Video From The Video Detail
+The video detail pane SHALL show a "Discard" button for a video whose download is Pending, Retrying, Failed or Downloaded. Activating it SHALL ask for confirmation, saying the video won't be downloaded, that it can be restored from its channel's or playlist's menu, and, for a downloaded video, that its files are deleted. Confirming SHALL discard the video (see `video-discard`) and refresh the list, without a page reload; cancelling SHALL change nothing.
 
 #### Scenario: Discard a retrying video
-- **WHEN** a user selects a video whose download is Retrying, activates "Don't download" and confirms
+- **WHEN** a user selects a video whose download is Retrying, activates "Discard" and confirms
 - **THEN** the video is discarded and no longer appears in the list
 
 #### Scenario: Confirmation for a downloaded video
-- **WHEN** a user selects a downloaded video and activates "Don't download"
-- **THEN** the confirmation says the video's files will be deleted and that this can't be undone
+- **WHEN** a user selects a downloaded video and activates "Discard"
+- **THEN** the confirmation says the video's files will be deleted and that it can be restored from its channel's or playlist's menu
 
 #### Scenario: Cancel
-- **WHEN** a user activates "Don't download" and cancels the confirmation
+- **WHEN** a user activates "Discard" and cancels the confirmation
 - **THEN** no request is sent and the video is shown as before
 
 #### Scenario: Downloading video
 - **WHEN** a user selects a video whose download is In Progress
-- **THEN** no "Don't download" button is shown
+- **THEN** no "Discard" button is shown
 
 #### Scenario: Discard fails
-- **WHEN** a user confirms "Don't download" and the request fails
+- **WHEN** a user confirms "Discard" and the request fails
 - **THEN** the application tells the user and the video is shown as before
+
+### Requirement: Restore Discarded Videos From A Source's Menu
+The "⋮" menu of a channel's or playlist's page header SHALL offer "Restore discarded videos". It SHALL ask for confirmation, naming the source and saying its discarded videos still in the playlist, or still among the channel's most recent uploads, will be downloaded again, then restore the source's discarded videos (see `video-discard`) and refresh its video list without a page reload. When restoring fails, the application SHALL tell the user.
+
+#### Scenario: Restoring a channel's discarded videos
+- **WHEN** a user chooses "Restore discarded videos" from the menu of "@GothamChess", whose discarded video is among its most recent uploads, and confirms
+- **THEN** the daemon is asked to restore the channel's discarded videos and the video reappears in its list as pending
+
+#### Scenario: Cancelled
+- **WHEN** a user chooses "Restore discarded videos" and cancels the confirmation
+- **THEN** nothing is sent to the daemon
+
+#### Scenario: Restore fails
+- **WHEN** a user confirms "Restore discarded videos" and the request fails
+- **THEN** the application tells the user
+
+#### Scenario: Category menu
+- **WHEN** a user opens the "⋮" menu of a category's page header
+- **THEN** it offers no "Restore discarded videos"

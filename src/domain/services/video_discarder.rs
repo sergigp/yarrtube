@@ -9,7 +9,8 @@ use crate::infrastructure::shared::domain_events::event_publisher::EventPublishe
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 
-/// Discards a video for good — see the `video-discard` capability.
+/// Discards a video until its source restores it — see the `video-discard`
+/// capability.
 #[derive(Clone)]
 pub struct VideoDiscarder {
     video_repository: Arc<dyn VideoRepository>,
@@ -40,7 +41,7 @@ impl VideoDiscarder {
 }
 
 pub trait VideoDiscarderApi: Send + Sync {
-    /// The video's download Discarded for good, its pending tasks deleted,
+    /// The video's download Discarded, its pending tasks deleted,
     /// and `VideoDiscarded` published when it had a recorded file. A video
     /// already Discarded is left as it is; one In Progress or Unavailable
     /// can't be discarded.

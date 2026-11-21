@@ -11,7 +11,9 @@ use crate::domain::services::{
 use crate::domain::shared::{MembershipChanges, elapsed_seconds};
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
-use crate::domain::video::{DiscardedVideo, Video, VideoId, YoutubeVideoId};
+use crate::domain::video::{
+    DiscardedVideo, RestoreDiscardedVideosError, Video, VideoId, YoutubeVideoId,
+};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_discarded_video_repository::DiscardedVideoRepository;
@@ -120,6 +122,11 @@ pub trait ChannelVideoReconcilerApi: Send + Sync {
     /// touching the recurring reconcile schedule. No-ops entirely if the
     /// channel no longer exists.
     fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
+
+    /// Forgets the channel's remembered discarded videos, puts its stored
+    /// Discarded ones back to Pending, then runs one pass like
+    /// `force_reconcile`, under the channel's lock.
+    fn restore_discarded(&self, id: ChannelHandle) -> Result<(), RestoreDiscardedVideosError>;
 }
 
 impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
@@ -151,9 +158,35 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
 
         self.reconcile_channel(channel, ListingFailure::SkipMembership)
     }
+
+    fn restore_discarded(&self, id: ChannelHandle) -> Result<(), RestoreDiscardedVideosError> {
+        let _guard = self.lock(&id);
+        let Some(channel) = self.find_channel(&id)? else {
+            return Err(RestoreDiscardedVideosError::ChannelNotFound(id));
+        };
+
+        self.discarded_video_repository
+            .delete_all(&ShowKey::Channel(id))?;
+        self.restore_stored_discarded(&self.list_stored_videos(&channel)?)?;
+        Ok(self.reconcile_channel(channel, ListingFailure::SkipMembership)?)
+    }
 }
 
 impl ChannelVideoReconciler {
+    /// Puts every stored Discarded video back to Pending.
+    fn restore_stored_discarded(&self, stored: &[(ChannelVideo, Video)]) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        stored
+            .iter()
+            .map(|(_, video)| video)
+            .filter(|video| video.download.is_discarded())
+            .try_for_each(|video| {
+                self.video_updater
+                    .update(&video.id, |video| video.restore(now))
+                    .map(|_| ())
+            })
+    }
+
     /// Waits for a move of the channel to finish, so the pass reads the
     /// channel, and works in its folder, only once it has moved.
     fn lock(&self, id: &ChannelHandle) -> ShowLockGuard<'_> {
@@ -232,11 +265,11 @@ impl ChannelVideoReconciler {
     }
 
     /// Brings the stored membership in line with the channel's current
-    /// `video_limit` most recent uploads, Unavailable and Discarded ones not
-    /// counting toward the limit: adds newly seen videos (never a Discarded
-    /// one removed earlier, which the channel remembers), refreshes
-    /// the title and position of known ones, and removes stored videos no
-    /// longer among them (removed on YouTube or aged past the limit). A
+    /// `video_limit` most recent uploads, Unavailable ones not counting
+    /// toward the limit: adds newly seen videos (never a Discarded one removed
+    /// earlier, which the channel remembers and which still takes its slot),
+    /// refreshes the title and position of known ones, and removes stored
+    /// videos no longer among them (removed on YouTube or aged past the limit). A
     /// failed listing either leaves membership untouched for this pass, the
     /// filesystem steps still running from the stored rows, or fails the
     /// pass, per `on_listing_failure`.
@@ -252,17 +285,15 @@ impl ChannelVideoReconciler {
             .into_iter()
             .map(|discarded| discarded.youtube_id)
             .collect::<HashSet<_>>();
-        let skipped_ids: HashSet<&str> = stored_videos
+        let unavailable_ids: HashSet<&str> = stored_videos
             .iter()
-            .filter(|(_, video)| video.is_skipped())
-            .map(|(_, video)| &video.youtube_id)
-            .chain(&remembered)
-            .map(YoutubeVideoId::as_str)
+            .filter(|(_, video)| video.is_unavailable())
+            .map(|(_, video)| video.youtube_id.as_str())
             .collect();
         let listing_started = self.clock.now();
         let listing = self.list_current_videos(
             channel,
-            u32::try_from(skipped_ids.len())?,
+            u32::try_from(unavailable_ids.len())?,
             on_listing_failure,
         )?;
         let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
@@ -274,7 +305,7 @@ impl ChannelVideoReconciler {
         };
         let current_videos = video_window::within_limit(
             listing,
-            |upload| skipped_ids.contains(upload.youtube_id.as_str()),
+            |upload| unavailable_ids.contains(upload.youtube_id.as_str()),
             channel.video_limit.value() as usize,
         );
         let now = self.clock.now();
@@ -325,18 +356,17 @@ impl ChannelVideoReconciler {
     /// The channel's current most recent uploads. When they can't be listed
     /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
     /// videos"), either `None` (logged) or the error, per
-    /// `on_listing_failure`. One more upload is asked for per `skipped`
-    /// video (stored and skipped, or remembered as discarded), which doesn't
-    /// count toward the limit.
+    /// `on_listing_failure`. One more upload is asked for per stored
+    /// `unavailable` video, which doesn't count toward the limit.
     fn list_current_videos(
         &self,
         channel: &Channel,
-        skipped: u32,
+        unavailable: u32,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<Option<Vec<ChannelVideoListing>>> {
         match (
             self.channel_videos_repository
-                .list_current_videos(&channel.id, channel.video_limit.value() + skipped),
+                .list_current_videos(&channel.id, channel.video_limit.value() + unavailable),
             on_listing_failure,
         ) {
             (Ok(videos), _) => Ok(Some(videos)),

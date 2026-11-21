@@ -132,7 +132,7 @@ impl Video {
         }
     }
 
-    /// Discards the video for good (see the `video-discard` capability):
+    /// Discards the video (see the `video-discard` capability):
     /// `None` unless its download is discardable; else its download
     /// Discarded and its thumbnail and subtitle filenames cleared.
     pub fn discard(self, now: DateTime<Utc>) -> Option<Self> {
@@ -154,8 +154,31 @@ impl Video {
         })
     }
 
-    /// Unavailable or Discarded: hidden from lists and outside a channel's
-    /// video limit.
+    /// `None` unless its download is Discarded; else its download restored
+    /// (Pending) and, as for a redownload, its thumbnail, subtitles, quality
+    /// and chapters checks back to Pending, since the discard deleted their
+    /// files.
+    pub fn restore(self, now: DateTime<Utc>) -> Option<Self> {
+        if !self.download.is_discarded() {
+            return None;
+        }
+        Some(Self {
+            download: self.download.restore(),
+            thumbnail: Thumbnail::pending(),
+            subtitles: Subtitles::pending(),
+            chapters: self.chapters.reset_checks(),
+            downloaded_quality: DownloadedQuality::pending(),
+            updated_at: now,
+            ..self
+        })
+    }
+
+    /// Download Unavailable: outside a channel's video limit.
+    pub fn is_unavailable(&self) -> bool {
+        self.download.status() == VideoStatus::Unavailable
+    }
+
+    /// Unavailable or Discarded: hidden from lists.
     pub fn is_skipped(&self) -> bool {
         matches!(
             self.download.status(),

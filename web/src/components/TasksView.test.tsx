@@ -283,6 +283,68 @@ describe('TasksView', () => {
     expect(within(card).getByRole('button', { name: 'Retry now' })).toBeEnabled()
   })
 
+  it('discards a failing download after confirming', async () => {
+    const user = userEvent.setup()
+    const [download, ...rest] = aProdLikeQueue()
+    let queue = [download, ...rest]
+    const discard = vi.fn(() => {
+      queue = rest
+      return null
+    })
+    mockApi({
+      'GET /api/tasks': () => queue,
+      'POST /api/videos/rec1/discard': discard,
+    })
+    renderWithProviders(<TasksView />)
+    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
+
+    await user.click(within(card).getByRole('button', { name: 'Discard' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "My Apps"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
+
+    expect(discard).toHaveBeenCalledOnce()
+    await waitFor(() =>
+      expect(screen.queryByText('Download My Apps from Starter Story Build')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('says the discard failed', async () => {
+    const user = userEvent.setup()
+    mockApi({
+      'GET /api/tasks': aProdLikeQueue(),
+      'POST /api/videos/rec1/discard': { status: 500, error: 'db locked' },
+    })
+    renderWithProviders(<TasksView />)
+    const card = (await screen.findByText('Download My Apps from Starter Story Build')).closest('li')!
+
+    await user.click(within(card).getByRole('button', { name: 'Discard' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard "My Apps"?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
+
+    expect(await within(card).findByText('Discard failed: db locked')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Discard' })).toBeEnabled()
+  })
+
+  it('offers no Discard on a failing subtitle fetch', async () => {
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 9,
+          task_type: 'fetch_subtitles',
+          run_at: inMinutes(5),
+          last_error: 'HTTP Error 429: Too Many Requests',
+          payload: { video_id: 'rec1', video_title: 'My Apps', channel_name: 'Starter Story Build' },
+        }),
+      ],
+    })
+    renderWithProviders(<TasksView />)
+    const attention = await screen.findByRole('region', { name: 'Needs attention' })
+
+    expect(within(attention).getByRole('button', { name: 'Retry now' })).toBeInTheDocument()
+    expect(within(attention).queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument()
+  })
+
   it('says when running a task now fails, and lets it be tried again', async () => {
     const user = userEvent.setup()
     const fetchMock = mockApi({

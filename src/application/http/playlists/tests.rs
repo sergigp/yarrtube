@@ -21,6 +21,7 @@ use crate::domain::services::ShowFileWriter;
 use crate::domain::show::{ShowKey, ShowMoved};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::DiscardedVideo;
+use crate::domain::video::Download;
 use crate::domain::video::PlaylistEpisodeNumber;
 use crate::domain::video::Video;
 use crate::domain::video::VideoDownloaded;
@@ -3440,6 +3441,140 @@ async fn it_should_fail_to_reconcile_if_invalid_playlist_id_provided() {
 }
 
 #[tokio::test]
+async fn it_should_restore_a_stored_discarded_playlist_video() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = task_repository(&db);
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    let discarded = playlist_episode("vidB", "B", 1)
+        .discard(fixed_timestamp())
+        .unwrap();
+    video_repository.insert(&discarded).unwrap();
+    playlist_video_repository
+        .save(&PlaylistVideo::create(
+            playlist_id("PL1"),
+            discarded.id.clone(),
+            0,
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository,
+        vec![playlist_item("vidB", "B", 0)],
+        task_repository.clone(),
+    );
+
+    let response = restore(playlist_video_reconciler, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            download: Download::pending(),
+            ..discarded.clone()
+        }]
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(
+            1,
+            &Task::SyncVideo {
+                video_id: discarded.id.as_str().to_string(),
+            },
+            fixed_timestamp(),
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_re_add_a_remembered_video_back_in_the_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let discarded_video_repository = SqliteDiscardedVideoRepository::new(db.database());
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&playlist("PL1", DEFAULT_PATH))
+        .unwrap();
+    discarded_video_repository
+        .record(&DiscardedVideo::new(
+            ShowKey::Playlist(playlist_id("PL1")),
+            YoutubeVideoId::new("vidC").unwrap(),
+            fixed_timestamp(),
+        ))
+        .unwrap();
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        vec![playlist_item("vidC", "C", 0)],
+        task_repository(&db),
+    );
+
+    let response = restore(playlist_video_reconciler, "PL1").await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        discarded_video_repository
+            .list(&ShowKey::Playlist(playlist_id("PL1")))
+            .unwrap(),
+        vec![]
+    );
+    let videos = video_repository.list().unwrap();
+    let video_id = videos[0].id.clone();
+    assert_eq!(
+        videos,
+        vec![Video {
+            id: video_id.clone(),
+            ..playlist_episode("vidC", "C", 1)
+        }]
+    );
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
+                playlist_id: "PL1".to_string(),
+                video_id: video_id.as_str().to_string(),
+            })
+        )]
+    );
+}
+
+#[tokio::test]
+async fn it_should_fail_to_restore_the_discarded_videos_of_an_unknown_playlist() {
+    let db = TestDatabase::new();
+    let playlist_video_reconciler = playlist_video_reconciler(
+        &db,
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        Vec::new(),
+        task_repository(&db),
+    );
+
+    let response = restore(playlist_video_reconciler, "PL404").await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "playlist PL404 not found"
+        ))
+    );
+}
+
+#[tokio::test]
 async fn it_should_mark_every_downloaded_playlist_video_watched() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -5198,6 +5333,13 @@ async fn reconcile(
     id: &str,
 ) -> Result<StatusCode, ApiError> {
     reconcile_playlist(State(playlist_video_reconciler), Path(id.to_string())).await
+}
+
+async fn restore(
+    playlist_video_reconciler: PlaylistVideoReconciler,
+    id: &str,
+) -> Result<StatusCode, ApiError> {
+    restore_discarded_playlist_videos(State(playlist_video_reconciler), Path(id.to_string())).await
 }
 
 async fn move_(

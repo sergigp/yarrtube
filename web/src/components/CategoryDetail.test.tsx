@@ -600,4 +600,20 @@ describe('CategoryDetail', () => {
     expect(status).toHaveTextContent('Loading…')
     expect(status.closest('[aria-busy="true"]')).not.toBeNull()
   })
+
+  it('offers no Restore discarded videos', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
+      'GET /api/channels': [],
+      'GET /api/categories/chess/videos': [],
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Restore discarded videos' }),
+    ).not.toBeInTheDocument()
+  })
 })
