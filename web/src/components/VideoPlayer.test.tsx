@@ -121,6 +121,17 @@ describe('VideoPlayer', () => {
 
       expect(play).toHaveBeenCalledTimes(1)
     })
+
+    it('does not start a video that finishes downloading while selected', () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+      const { rerender } = render(
+        player(aVideo({ id: 'vid1', status: 'IN_PROGRESS', filename: null }), true),
+      )
+
+      rerender(player(aVideo({ id: 'vid1' }), true))
+
+      expect(play).not.toHaveBeenCalled()
+    })
   })
 
   describe('arrow key seeking', () => {
