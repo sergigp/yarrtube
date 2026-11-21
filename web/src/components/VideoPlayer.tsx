@@ -94,7 +94,7 @@ export function VideoPlayer({
   const takeover = useLandscapeTakeover(filename !== null)
 
   const isDesktop = useIsDesktop()
-  const chapters = video && filename && !isDesktop ? video.chapters : []
+  const chapters = video && filename && !isDesktop && !takeover ? video.chapters : []
 
   return (
     <div

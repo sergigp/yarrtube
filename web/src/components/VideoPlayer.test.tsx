@@ -417,5 +417,20 @@ describe('VideoPlayer', () => {
       expect(playerRoot(container)).toHaveClass('fixed', 'inset-0', 'bg-black')
       expect(container.querySelector('video')).toHaveClass('object-contain')
     })
+
+    it('hides the chapter rail while taking over', () => {
+      const chapters: Chapter[] = [
+        { start_seconds: 0, end_seconds: 75, title: 'Intro' },
+        { start_seconds: 75, end_seconds: 200, title: 'Game 1' },
+      ]
+      render(player(aVideo({ id: 'vid1', chapters })))
+
+      act(() => rotatePhone('landscape'))
+      const railInLandscape = screen.queryByRole('navigation', { name: 'Chapters' })
+      act(() => rotatePhone('portrait'))
+
+      expect(railInLandscape).not.toBeInTheDocument()
+      expect(screen.getByRole('navigation', { name: 'Chapters' })).toBeInTheDocument()
+    })
   })
 })
