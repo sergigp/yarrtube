@@ -119,7 +119,6 @@ export function VideoPlayer({
             // iOS Safari goes fullscreen on play without it; stay inline so the chapter
             // rail stays reachable, fullscreen remains one tap away in the controls.
             playsInline
-            autoPlay={autoplay}
             className="block h-full w-full md:h-auto md:max-h-[70vh] md:rounded-xl"
             src={videoMediaUrl(basePath, filename)}
             poster={

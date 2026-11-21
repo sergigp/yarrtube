@@ -74,6 +74,27 @@ describe('VideoPlayer', () => {
     expect(tracks(container)).toEqual([])
   })
 
+  describe('autoplay', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    function player(video: Video | null, autoplay: boolean) {
+      return (
+        <VideoPlayer basePath="music" video={video} autoplay={autoplay} onVideoElement={() => {}} />
+      )
+    }
+
+    it('starts playing a downloaded video selected with autoplay', () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+
+      const { container } = render(player(aVideo({ id: 'vid1' }), true))
+
+      expect(play).toHaveBeenCalledTimes(1)
+      expect(container.querySelector('video')!.hasAttribute('autoplay')).toBe(false)
+    })
+  })
+
   describe('arrow key seeking', () => {
     afterEach(() => {
       vi.useRealTimers()

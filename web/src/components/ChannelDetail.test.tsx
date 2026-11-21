@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
@@ -36,6 +36,13 @@ function sentBodies(fetchMock: ReturnType<typeof mockApi>, method: string, path:
   return fetchMock.mock.calls
     .filter(([url, init]) => url === path && (init as RequestInit | undefined)?.method === method)
     .map(([, init]) => JSON.parse(((init as RequestInit).body as string | undefined) ?? 'null'))
+}
+
+/** Spies on every <video>'s `play()`, restored after the test. */
+function spyOnPlay() {
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+  onTestFinished(() => play.mockRestore())
+  return play
 }
 
 describe('ChannelDetail', () => {
@@ -116,6 +123,7 @@ describe('ChannelDetail', () => {
   })
 
   it('plays the first video by default without autoplay', async () => {
+    const play = spyOnPlay()
     const channel = aChannel({ id: 'chan' })
     const first = aVideo({ title: 'First Video', filename: 'first.mp4' })
     renderChannel(
@@ -130,10 +138,11 @@ describe('ChannelDetail', () => {
     const video = document.querySelector('video')
     expect(video).not.toBeNull()
     expect(video?.getAttribute('src')).toBe(`/media/${channel.path}/first.mp4`)
-    expect(video?.hasAttribute('autoplay')).toBe(false)
+    expect(play).not.toHaveBeenCalled()
   })
 
   it('autoplays a deep-linked video', async () => {
+    const play = spyOnPlay()
     const channel = aChannel({ id: 'chan' })
     const linked = aVideo({ id: 'linked', title: 'Linked Video', filename: 'linked.mp4' })
     renderChannel(
@@ -147,7 +156,7 @@ describe('ChannelDetail', () => {
     await screen.findByRole('heading', { name: 'Linked Video' })
     const video = document.querySelector('video')
     expect(video?.getAttribute('src')).toBe(`/media/${channel.path}/linked.mp4`)
-    expect(video?.hasAttribute('autoplay')).toBe(true)
+    await waitFor(() => expect(play.mock.contexts).toContain(video))
   })
 
   it('switches the player when a video is picked from the list', async () => {
