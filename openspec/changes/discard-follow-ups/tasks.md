@@ -56,6 +56,6 @@
   - With `video_limit` 3 and one video discarded, the channel lists 2 after a Sync.
 
   Take a screenshot of each, then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
-- [ ] 4.4 Manual (human). On a phone:
+- [x] 4.4 Manual (human). On a phone:
   - The "Discard…" menu item and its confirmation dialog are usable, with the menu's 44 px hit area.
   - The wording of the discard and restore confirmations reads well.
