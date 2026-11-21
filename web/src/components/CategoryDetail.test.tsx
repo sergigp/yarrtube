@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
@@ -17,6 +17,7 @@ import {
   mockApi,
   pendingForever,
   renderWithProviders,
+  spyOnPlay,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
 
@@ -447,8 +448,7 @@ describe('CategoryDetail', () => {
   })
 
   it('opens a card in the category, playing it with the category as the queue', async () => {
-    const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
-    onTestFinished(() => play.mockRestore())
+    const play = spyOnPlay()
     const hikaru = {
       kind: 'channel' as const,
       id: '@hikaru',

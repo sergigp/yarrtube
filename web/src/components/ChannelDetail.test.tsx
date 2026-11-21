@@ -1,4 +1,4 @@
-import { describe, expect, it, onTestFinished, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
@@ -12,6 +12,7 @@ import {
   aPreferences,
   mockApi,
   renderWithProviders,
+  spyOnPlay,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
 import { channelPath } from '@/lib/sourcePath'
@@ -36,13 +37,6 @@ function sentBodies(fetchMock: ReturnType<typeof mockApi>, method: string, path:
   return fetchMock.mock.calls
     .filter(([url, init]) => url === path && (init as RequestInit | undefined)?.method === method)
     .map(([, init]) => JSON.parse(((init as RequestInit).body as string | undefined) ?? 'null'))
-}
-
-/** Spies on every <video>'s `play()`, restored after the test. */
-function spyOnPlay() {
-  const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
-  onTestFinished(() => play.mockRestore())
-  return play
 }
 
 describe('ChannelDetail', () => {

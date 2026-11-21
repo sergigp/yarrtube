@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, type InitialEntry } from 'react-router-dom'
-import { vi } from 'vitest'
+import { onTestFinished, vi } from 'vitest'
 import SHIPPED_PROMPT from '../../../prompts/summaries/v3.md?raw'
 import SHIPPED_CATEGORIZATION_PROMPT from '../../../prompts/categorization/v2-batch.md?raw'
 import { VideoCategoriesEditor } from '@/components/VideoCategoriesEditor'
@@ -60,6 +60,13 @@ export function mockApi(routes: Routes): ReturnType<typeof vi.fn> {
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+/** Spies on every <video>'s `play()`, restored after the test. */
+export function spyOnPlay() {
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+  onTestFinished(() => play.mockRestore())
+  return play
 }
 
 /** A route value that never responds, keeping the query in its loading state. */

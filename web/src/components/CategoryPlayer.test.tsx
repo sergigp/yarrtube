@@ -6,7 +6,7 @@ import { aCategoryVideo, mockApi, renderWithProviders } from '@/test/helpers'
 import { CategoryPlayer } from './CategoryPlayer'
 
 function Player({ videos }: { videos: CategoryVideo[] }) {
-  return <CategoryPlayer videos={videos} error={null} selection={useVideoSelection(videos)} sort="newest" />
+  return <CategoryPlayer videos={videos} videosFresh error={null} selection={useVideoSelection(videos)} sort="newest" />
 }
 
 describe('CategoryPlayer', () => {

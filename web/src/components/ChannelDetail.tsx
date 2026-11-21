@@ -45,7 +45,7 @@ export function ChannelDetail() {
   const categorizationAvailable = useCategorizationAvailable()
   const channel = channels?.find((item) => item.id === id) ?? null
 
-  const { data: videos, error } = useChannelVideos(id)
+  const { data: videos, error, isFetchedAfterMount: videosFresh } = useChannelVideos(id)
   const selection = useVideoSelection(videos)
 
   // A failed background refresh keeps the loaded channel, and its player, on screen.
@@ -125,6 +125,7 @@ export function ChannelDetail() {
       <WatchView
         noun="channel"
         videos={videos}
+        videosFresh={videosFresh}
         error={error}
         selection={selection}
         basePathOf={() => channel.path}

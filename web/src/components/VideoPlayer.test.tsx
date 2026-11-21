@@ -13,6 +13,7 @@ function renderPlayer(subtitleLanguage: string | null) {
       basePath="music"
       video={aVideo({ id: 'vid1', subtitle_language: subtitleLanguage })}
       autoplay={false}
+      videoFresh
       onVideoElement={() => {}}
     />,
   )
@@ -27,6 +28,18 @@ function tracks(container: HTMLElement) {
     label: track.getAttribute('label'),
     default: track.hasAttribute('default'),
   }))
+}
+
+function player(video: Video | null, autoplay = false, videoFresh = true) {
+  return (
+    <VideoPlayer
+      basePath="music"
+      video={video}
+      autoplay={autoplay}
+      videoFresh={videoFresh}
+      onVideoElement={() => {}}
+    />
+  )
 }
 
 describe('VideoPlayer', () => {
@@ -50,6 +63,7 @@ describe('VideoPlayer', () => {
         basePath="music"
         video={aVideo({ id, subtitle_language: 'en' })}
         autoplay={false}
+        videoFresh
         onVideoElement={() => {}}
       />
     )
@@ -78,12 +92,6 @@ describe('VideoPlayer', () => {
     afterEach(() => {
       vi.restoreAllMocks()
     })
-
-    function player(video: Video | null, autoplay: boolean) {
-      return (
-        <VideoPlayer basePath="music" video={video} autoplay={autoplay} onVideoElement={() => {}} />
-      )
-    }
 
     it('starts playing a downloaded video selected with autoplay', () => {
       const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
@@ -122,6 +130,15 @@ describe('VideoPlayer', () => {
       expect(play).toHaveBeenCalledTimes(1)
     })
 
+    it('starts the shown video when it is then picked from the list', () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+      const { rerender } = render(player(aVideo({ id: 'vid1' }), false))
+
+      rerender(player(aVideo({ id: 'vid1' }), true))
+
+      expect(play).toHaveBeenCalledTimes(1)
+    })
+
     it('does not start a video that finishes downloading while selected', () => {
       const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
       const { rerender } = render(
@@ -131,6 +148,17 @@ describe('VideoPlayer', () => {
       rerender(player(aVideo({ id: 'vid1' }), true))
 
       expect(play).not.toHaveBeenCalled()
+    })
+
+    it('starts a video the cache still showed downloading once the list is refreshed', () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+      const { rerender } = render(
+        player(aVideo({ id: 'vid1', status: 'IN_PROGRESS', filename: null }), true, false),
+      )
+
+      rerender(player(aVideo({ id: 'vid1' }), true, true))
+
+      expect(play).toHaveBeenCalledTimes(1)
     })
 
     it('stays paused without an error when the browser refuses to play', async () => {
@@ -216,6 +244,7 @@ describe('VideoPlayer', () => {
             basePath="music"
             video={aVideo()}
             autoplay={false}
+            videoFresh
             onVideoElement={() => {}}
           />
         </>,
@@ -244,6 +273,7 @@ describe('VideoPlayer', () => {
           basePath="music"
           video={aVideo({ id: 'vid1', ...video })}
           autoplay={false}
+          videoFresh
           onVideoElement={() => {}}
         />,
       )
@@ -402,12 +432,6 @@ describe('VideoPlayer', () => {
   })
 
   describe('landscape takeover', () => {
-    function player(video: Video | null) {
-      return (
-        <VideoPlayer basePath="music" video={video} autoplay={false} onVideoElement={() => {}} />
-      )
-    }
-
     /** The player's root, which takes over the screen. */
     function playerRoot(container: HTMLElement): HTMLElement {
       return container.querySelector<HTMLElement>('[data-pinned-player]')!
@@ -484,6 +508,46 @@ describe('VideoPlayer', () => {
       expect(overflowInLandscape).toBe('hidden')
       expect(document.documentElement.style.overflow).toBe('')
       expect(scrollTo).toHaveBeenLastCalledWith(0, 400)
+    })
+
+    it('scrolls back to where the page already was when it opened', () => {
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+      Object.defineProperty(window, 'scrollY', { value: 250, configurable: true })
+      onTestFinished(() => {
+        scrollTo.mockRestore()
+        Object.defineProperty(window, 'scrollY', { value: 0, configurable: true })
+      })
+      render(player(aVideo({ id: 'vid1' })))
+
+      act(() => rotatePhone('landscape'))
+      act(() => rotatePhone('portrait'))
+
+      expect(scrollTo).toHaveBeenLastCalledWith(0, 250)
+    })
+
+    it('leaves the scroll alone when the page is left in landscape', () => {
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+      onTestFinished(() => scrollTo.mockRestore())
+      const { unmount } = render(player(aVideo({ id: 'vid1' })))
+      act(() => rotatePhone('landscape'))
+
+      unmount()
+
+      expect(scrollTo).not.toHaveBeenCalled()
+      expect(document.documentElement.style.overflow).toBe('')
+    })
+
+    it('keeps the video clear of the notch while taking over', () => {
+      rotatePhone('landscape')
+
+      const { container } = render(player(aVideo({ id: 'vid1' })))
+
+      expect(playerRoot(container)).toHaveClass(
+        'pt-[env(safe-area-inset-top)]',
+        'pr-[env(safe-area-inset-right)]',
+        'pb-[env(safe-area-inset-bottom)]',
+        'pl-[env(safe-area-inset-left)]',
+      )
     })
   })
 })

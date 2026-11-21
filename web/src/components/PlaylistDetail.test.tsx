@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Route, Routes } from 'react-router-dom'
+import { Link, Route, Routes } from 'react-router-dom'
 import { PlaylistDetail } from './PlaylistDetail'
 import { queryKeys } from '@/api/queries'
 import {
@@ -13,6 +13,7 @@ import {
   aPreferences,
   mockApi,
   renderWithProviders,
+  spyOnPlay,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
 import { useDesktopViewport } from '@/test/viewport'
@@ -258,6 +259,31 @@ describe('PlaylistDetail', () => {
   })
 
   describe('watching', () => {
+    it('autoplays a video opened from home that the cached list still shows downloading', async () => {
+      const play = spyOnPlay()
+      mockApi({
+        'GET /api/preferences': aPreferences({ categories_enabled: false }),
+        'GET /api/playlists': [aPlaylist({ id: 'PL1' })],
+        'GET /api/playlists/PL1/videos': [aVideo({ id: 'x', title: 'Rooks', filename: 'x.mp4' })],
+      })
+      const { queryClient } = renderWithProviders(
+        <Routes>
+          <Route path="/playlists/:id" element={<PlaylistDetail />} />
+          <Route path="/" element={<Link to="/playlists/PL1?video=x">Rooks</Link>} />
+        </Routes>,
+      )
+      // Cached while the page was last open, before the download finished.
+      queryClient.setQueryData(queryKeys.playlists, [aPlaylist({ id: 'PL1' })])
+      queryClient.setQueryData(queryKeys.playlistVideos('PL1'), [
+        aVideo({ id: 'x', title: 'Rooks', status: 'IN_PROGRESS', filename: null }),
+      ])
+
+      await userEvent.setup().click(screen.getByRole('link', { name: 'Rooks' }))
+
+      await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+      expect(play.mock.contexts[0]).toHaveAttribute('src', expect.stringMatching(/x\.mp4$/))
+    })
+
     it('shows the playlist header, player and queue', async () => {
       const playlist = aPlaylist({ id: 'PL1', name: 'The Playlist' })
       renderPlaylist(

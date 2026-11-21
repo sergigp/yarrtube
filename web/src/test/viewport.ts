@@ -7,6 +7,16 @@ export const viewport = { desktop: false, phoneLandscape: false }
 /** The `change` listeners registered on the `matchMedia` stub, per query. */
 export const mediaListeners = new Map<string, Set<() => void>>()
 
+/** The `change` listeners of `query`, created on first use. */
+export function listenersFor(query: string): Set<() => void> {
+  let listeners = mediaListeners.get(query)
+  if (!listeners) {
+    listeners = new Set()
+    mediaListeners.set(query, listeners)
+  }
+  return listeners
+}
+
 /** Whether the `matchMedia` stub matches `query` on the current viewport. */
 export function matchesQuery(query: string): boolean {
   return query === PHONE_LANDSCAPE_QUERY ? viewport.phoneLandscape : viewport.desktop

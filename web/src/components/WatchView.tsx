@@ -12,6 +12,8 @@ interface WatchViewProps<T extends Video> {
   /** Names the source in the queue's empty message ("channel", "playlist" or "category"). */
   noun: string
   videos: T[] | undefined
+  /** Whether `videos` were fetched since the page opened, not only read from the cache. */
+  videosFresh: boolean
   error: Error | null
   selection: VideoSelection<T>
   /** The channel/playlist path a video is served under. */
@@ -35,6 +37,7 @@ interface WatchViewProps<T extends Video> {
 export function WatchView<T extends Video>({
   noun,
   videos,
+  videosFresh,
   error,
   selection,
   basePathOf,
@@ -56,6 +59,7 @@ export function WatchView<T extends Video>({
           basePath={video ? basePathOf(video) : ''}
           video={video}
           autoplay={autoplay}
+          videoFresh={videosFresh}
           onVideoElement={setVideoElement}
         />
 

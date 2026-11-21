@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 
 /**
  * Calls `element.play()` once per newly selected `videoId`, when `autoplay`
- * and the video is `playable` the first time its id is seen; waits for the
+ * and the video is `playable` the first time its id is seen in a `fresh`
+ * list (fetched since the page opened, not only cached); waits for the
  * element to mount. A refused play is ignored: the video stays paused.
  *
  * Calling `play()` rather than setting `autoplay` on the element is what lets
@@ -13,6 +14,7 @@ export function useAutoplay(
   element: HTMLVideoElement | null,
   videoId: string | null,
   playable: boolean,
+  fresh: boolean,
   autoplay: boolean,
 ): void {
   // The selection last acted on; re-renders and list polls repeat it.
@@ -24,8 +26,11 @@ export function useAutoplay(
       return
     }
     if (!playable) {
-      // Selected before it downloaded: finishing later doesn't start it.
-      handled.current = selection
+      // Selected before it downloaded: finishing later doesn't start it. A
+      // cached list may only be out of date, so wait for a fresh one.
+      if (fresh) {
+        handled.current = selection
+      }
       return
     }
     if (!element) {
@@ -36,5 +41,5 @@ export function useAutoplay(
       // Refused (iOS outside a tap): it stays paused, one tap on play away.
       element.play().catch(() => {})
     }
-  }, [element, videoId, playable, autoplay])
+  }, [element, videoId, playable, fresh, autoplay])
 }

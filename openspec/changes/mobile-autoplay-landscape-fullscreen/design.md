@@ -5,7 +5,7 @@
   - Queue pick: the `<video>` is never remounted (only `src` changes), and React flushes the effects of a discrete event (the tap) in the same task, so `play()` runs inside the tap's user activation, on an element the user has usually played already. Reliable on iOS.
   - Card click / deep link: the `<video>` mounts after the fetch, outside the gesture. `play()` is still tried; iOS (Safari and home-screen app) may refuse.
   - Refused (`NotAllowedError`, or any rejection): caught and ignored. The video stays paused on its poster with native controls; one tap on play starts it. No error UI, no muted fallback (sound would silently be off).
-- **Not autoplayed:** the default video; re-renders/list polls of the same id; a selected video whose download finishes while selected (`playable` false when the id was first seen marks it consumed).
+- **Not autoplayed:** the default video; re-renders/list polls of the same id; a selected video whose download finishes while selected (`playable` false when the id is first seen in a list fetched since mount marks it consumed). A list only read from the react-query cache (`isFetchedAfterMount` false) can still show a since-downloaded video as downloading, so it never consumes: the Home card of a video that finished after its source was last open still starts.
 - **Phone-landscape query, not the width breakpoint:** `(orientation: landscape) and (pointer: coarse) and (max-height: 32rem)`. A phone in landscape is 568–932 px wide, so it crosses the 48rem desktop breakpoint (`useIsDesktop` true, `md:` styles apply); its height stays ≤ ~480 px. `pointer: coarse` excludes short desktop windows; `max-height: 32rem` excludes tablets (≥ 744 px tall in landscape).
 - **CSS takeover, no Fullscreen API:** iPhone has no element `requestFullscreen`, and `webkitEnterFullscreen` needs a gesture a rotation isn't. Takeover = same DOM, other classes: the player root becomes `fixed inset-0 z-30 bg-black` (above the header's z-20, below the sidebar/dialogs) padded by `env(safe-area-inset-*)` (`viewport-fit=cover` is already set), the video `object-contain` at full size, no `md:` sizing classes, no chapter rail. The `<video>` keeps its place in the tree, so it is never remounted and playback continues.
 - **Scroll position:** in landscape the page switches to the desktop layout (`main` scrolls, the document doesn't), so the document's `scrollY` is clamped while landscape and lost on return. `useLandscapeTakeover` records `window.scrollY` on `scroll` events only while the phone-landscape query does not match (checked live via `matchMedia(...).matches`, so the clamp's own scroll event is ignored), locks `<html>` overflow while active, and on release restores the overflow and `scrollTo(0, saved)` in a layout effect.
@@ -23,6 +23,7 @@ classDiagram
     +basePath: string
     +video: Video | null
     +autoplay: boolean
+    +videoFresh: boolean
     +onVideoElement(element)
   }
   class useVideoSelection {
@@ -31,7 +32,7 @@ classDiagram
     +selectVideo(id)
   }
   class useAutoplay {
-    +useAutoplay(element, videoId, playable, autoplay) void
+    +useAutoplay(element, videoId, playable, fresh, autoplay) void
   }
   class useLandscapeTakeover {
     +useLandscapeTakeover(hasVideo) boolean
@@ -86,10 +87,10 @@ sequenceDiagram
   end
   D->>UVS: useVideoSelection(videos) [?video=id]
   UVS-->>D: { selectedVideo, autoplay: true }
-  D->>VP: video, autoplay=true
+  D->>VP: video, autoplay=true, videoFresh=isFetchedAfterMount
   VP->>V: mount (src, playsInline, no autoplay attr)
   V-->>VP: ref → setVideoElement(el)
-  VP->>UA: useAutoplay(el, id, playable=true, true)
+  VP->>UA: useAutoplay(el, id, playable=true, fresh, true)
   UA->>V: play()
   alt refused (outside gesture on iOS)
     V-->>UA: reject → caught, stays paused on poster
@@ -115,7 +116,7 @@ sequenceDiagram
   Q->>UVS: selectVideo(id) [tap]
   UVS-->>VP: video=picked, autoplay=true
   VP->>V: src = picked file (same element)
-  VP->>UA: useAutoplay(el, pickedId, playable=true, true)
+  VP->>UA: useAutoplay(el, pickedId, playable=true, fresh, true)
   UA->>V: play() [same task as the tap]
   alt refused
     V-->>UA: reject → caught, stays paused
@@ -178,13 +179,15 @@ export function useIsPhoneLandscape(): boolean
 // web/src/hooks/useAutoplay.ts
 /**
  * Calls `element.play()` once per newly selected `videoId`, when `autoplay`
- * and the video is `playable` the first time its id is seen; waits for the
- * element to mount. A refused play is ignored (stays paused).
+ * and the video is `playable` the first time its id is seen in a `fresh`
+ * list (fetched since mount, not only cached); waits for the element to
+ * mount. A refused play is ignored (stays paused).
  */
 export function useAutoplay(
   element: HTMLVideoElement | null,
   videoId: string | null,
   playable: boolean,
+  fresh: boolean,
   autoplay: boolean,
 ): void
 ```
@@ -210,8 +213,15 @@ export interface VideoSelection<T> {
 ```
 
 ```ts
-// web/src/components/VideoPlayer.tsx (props unchanged; <video> loses `autoPlay`,
-// root gains `data-landscape-takeover` while taking over)
+// web/src/components/VideoPlayer.tsx (<video> loses `autoPlay`, root gains
+// `data-landscape-takeover` while taking over)
+interface VideoPlayerProps {
+  // …existing props
+  /** `video` comes from a list fetched since the page opened, not only cached. */
+  videoFresh: boolean
+}
+// web/src/components/WatchView.tsx, CategoryPlayer.tsx: new prop `videosFresh: boolean`,
+// from the list query's `isFetchedAfterMount` in Channel/Playlist/CategoryDetail
 ```
 
 ```ts
@@ -224,8 +234,8 @@ export function rotatePhone(orientation: 'landscape' | 'portrait'): void
 
 ## Call Stack
 
-1. **Card click / deep link**: `ChannelDetail|PlaylistDetail|CategoryDetail` → `useVideoSelection(videos)` (deep-linked → `autoplay: true`) → `WatchView` → `VideoPlayer({ video, autoplay })` → `<video ref>` → `setVideoElement(el)` → `useAutoplay(el, video.id, filename !== null, autoplay)` → `el.play().catch(() => {})`.
-2. **Queue pick**: `VideoListPane.onSelect(id)` → `selectVideo(id)` → `setPick({ id, at })` → `useVideoSelection` (manual → `autoplay: true`) → `VideoPlayer` (same `<video>`, new `src`) → `useAutoplay(el, id, true, true)` → `el.play()`.
+1. **Card click / deep link**: `ChannelDetail|PlaylistDetail|CategoryDetail` → `useVideoSelection(videos)` (deep-linked → `autoplay: true`) → `WatchView({ videosFresh: isFetchedAfterMount })` → `VideoPlayer({ video, autoplay, videoFresh })` → `<video ref>` → `setVideoElement(el)` → `useAutoplay(el, video.id, filename !== null, videoFresh, autoplay)` → `el.play().catch(() => {})`.
+2. **Queue pick**: `VideoListPane.onSelect(id)` → `selectVideo(id)` → `setPick({ id, at })` → `useVideoSelection` (manual → `autoplay: true`) → `VideoPlayer` (same `<video>`, new `src`) → `useAutoplay(el, id, true, videoFresh, true)` → `el.play()`.
 3. **Rotation**: `matchMedia(PHONE_LANDSCAPE_QUERY)` change → `useMediaQuery` → `useIsPhoneLandscape()` → `useLandscapeTakeover(filename !== null)` → layout effect: lock `<html>` overflow / on release restore it and `window.scrollTo(0, saved)` → `VideoPlayer` swaps classes, drops the chapter rail.
 
 ## Test Plan
@@ -237,12 +247,13 @@ export function rotatePhone(orientation: 'landscape' | 'portrait'): void
    4. `starts each newly picked video in the same video element` — rerender with another id + autoplay: `play()` called again, same `<video>` node.
    5. `does not start the video again when it re-renders` — same id rerendered (poll): `play()` called once.
    6. `does not start a video that finishes downloading while selected` — pending → downloaded, same id: `play()` not called.
-   7. `stays paused without an error when the browser refuses to play` — `play()` rejects `NotAllowedError`: no unhandled rejection, no error text.
-   8. `takes over the screen with a downloaded video on a phone in landscape` — root has `data-landscape-takeover`, video `object-contain`.
-   9. `hides the chapter rail while taking over` — rail gone in landscape, back in portrait.
-   10. `does not take over without a downloaded video` — pending video and no video: no takeover in landscape.
-   11. `keeps the same video element when rotating in and out` — same node before/after both rotations.
-   12. `locks page scroll while taking over and scrolls back on return` — `<html>` overflow hidden while active; restored and `scrollTo(0, 400)` after.
+   7. `starts a video the cache still showed downloading once the list is refreshed` — not playable while `fresh` false, then downloaded and fresh: `play()` called once. Plus `PlaylistDetail.test.tsx` › `autoplays a video opened from home that the cached list still shows downloading`.
+   8. `stays paused without an error when the browser refuses to play` — `play()` rejects `NotAllowedError`: no unhandled rejection, no error text.
+   9. `takes over the screen with a downloaded video on a phone in landscape` — root has `data-landscape-takeover`, video `object-contain`.
+   10. `hides the chapter rail while taking over` — rail gone in landscape, back in portrait.
+   11. `does not take over without a downloaded video` — pending video and no video: no takeover in landscape.
+   12. `keeps the same video element when rotating in and out` — same node before/after both rotations.
+   13. `locks page scroll while taking over and scrolls back on return` — `<html>` overflow hidden while active; restored and `scrollTo(0, 400)` after.
 2. End-to-end (`e2e-tests/tests/mobileWatch.spec.js`, `@mobile`, WebKit iPhone 13):
    1. `home card opens the video playing …` — existing test also asserts the video is playing before `assertVideoPlays` calls `play()`.
    2. `picking a video in the queue starts it playing @mobile` — after a queue tap, `paused === false` and `currentTime` grows.

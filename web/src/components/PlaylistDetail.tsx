@@ -73,7 +73,7 @@ export function PlaylistDetail() {
   const { data: categoryList } = useCategories({ enabled: categoriesShown })
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
-  const { data: videos, error } = usePlaylistVideos(id)
+  const { data: videos, error, isFetchedAfterMount: videosFresh } = usePlaylistVideos(id)
   const selection = useVideoSelection(videos)
 
   // A failed background refresh keeps the loaded playlist, and its player, on screen.
@@ -180,6 +180,7 @@ export function PlaylistDetail() {
         <WatchView
           noun="playlist"
           videos={videos}
+          videosFresh={videosFresh}
           error={error}
           selection={selection}
           basePathOf={() => playlist.path}

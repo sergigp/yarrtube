@@ -16,6 +16,11 @@ interface VideoPlayerProps {
   basePath: string
   video: Video | null
   autoplay: boolean
+  /**
+   * Whether `video` comes from a list fetched since the page opened, not
+   * only from the cache, which can still show it downloading.
+   */
+  videoFresh: boolean
   onVideoElement: (element: HTMLVideoElement | null) => void
 }
 
@@ -67,6 +72,7 @@ export function VideoPlayer({
   basePath,
   video,
   autoplay,
+  videoFresh,
   onVideoElement,
 }: VideoPlayerProps) {
   // The downloaded file to play, or null while the video can't play yet.
@@ -90,7 +96,7 @@ export function VideoPlayer({
     [onVideoElement],
   )
 
-  useAutoplay(videoElement, video?.id ?? null, filename !== null, autoplay)
+  useAutoplay(videoElement, video?.id ?? null, filename !== null, videoFresh, autoplay)
   const takeover = useLandscapeTakeover(filename !== null)
 
   const isDesktop = useIsDesktop()

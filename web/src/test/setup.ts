@@ -1,11 +1,13 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
-import { matchesQuery, mediaListeners, viewport } from './viewport'
+import { listenersFor, matchesQuery, mediaListeners, viewport } from './viewport'
 
 // jsdom implements neither `matchMedia` nor `ResizeObserver`; the components
 // only need them to exist (VideoDetail starts expanded on desktop widths,
-// Description measures overflow). Every query matches only on a desktop
-// viewport, which `useDesktopViewport()` opts a test into.
+// Description measures overflow). Queries match per `matchesQuery`: the
+// phone-landscape query on `viewport.phoneLandscape` (toggled by
+// `rotatePhone()`, which fires their `change` listeners), every other query
+// only on a desktop viewport, which `useDesktopViewport()` opts a test into.
 afterEach(() => {
   viewport.desktop = false
   viewport.phoneLandscape = false
@@ -14,28 +16,19 @@ afterEach(() => {
   document.documentElement.classList.remove('dark')
 })
 
-// Queries match per `matchesQuery`; `rotatePhone()` fires their `change` listeners.
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => {
-    const listenersOf = () => {
-      let listeners = mediaListeners.get(query)
-      if (!listeners) {
-        listeners = new Set()
-        mediaListeners.set(query, listeners)
-      }
-      return listeners
-    }
     return {
       get matches() {
         return matchesQuery(query)
       },
       media: query,
       onchange: null,
-      addEventListener: (_type: string, listener: () => void) => listenersOf().add(listener),
-      removeEventListener: (_type: string, listener: () => void) => listenersOf().delete(listener),
-      addListener: (listener: () => void) => listenersOf().add(listener),
-      removeListener: (listener: () => void) => listenersOf().delete(listener),
+      addEventListener: (_type: string, listener: () => void) => listenersFor(query).add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listenersFor(query).delete(listener),
+      addListener: (listener: () => void) => listenersFor(query).add(listener),
+      removeListener: (listener: () => void) => listenersFor(query).delete(listener),
       dispatchEvent: () => false,
     }
   },
@@ -103,6 +96,8 @@ if (!Element.prototype.scrollIntoView) {
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {}
 }
+// jsdom has no `window.scrollTo` either (it logs "Not implemented").
+window.scrollTo = () => {}
 
 // jsdom has no media playback: its `play()`/`pause()`/`load()` log "Not implemented".
 HTMLMediaElement.prototype.play = () => Promise.resolve()
