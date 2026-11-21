@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
-import { viewport } from './viewport'
+import { matchesQuery, mediaListeners, viewport } from './viewport'
 
 // jsdom implements neither `matchMedia` nor `ResizeObserver`; the components
 // only need them to exist (VideoDetail starts expanded on desktop widths,
@@ -8,22 +8,37 @@ import { viewport } from './viewport'
 // viewport, which `useDesktopViewport()` opts a test into.
 afterEach(() => {
   viewport.desktop = false
+  viewport.phoneLandscape = false
+  mediaListeners.clear()
   // The theme lives on <html>, which outlives each test's render.
   document.documentElement.classList.remove('dark')
 })
 
+// Queries match per `matchesQuery`; `rotatePhone()` fires their `change` listeners.
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: (query: string) => ({
-    matches: viewport.desktop,
-    media: query,
-    onchange: null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-    dispatchEvent: () => false,
-  }),
+  value: (query: string) => {
+    const listenersOf = () => {
+      let listeners = mediaListeners.get(query)
+      if (!listeners) {
+        listeners = new Set()
+        mediaListeners.set(query, listeners)
+      }
+      return listeners
+    }
+    return {
+      get matches() {
+        return matchesQuery(query)
+      },
+      media: query,
+      onchange: null,
+      addEventListener: (_type: string, listener: () => void) => listenersOf().add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listenersOf().delete(listener),
+      addListener: (listener: () => void) => listenersOf().add(listener),
+      removeListener: (listener: () => void) => listenersOf().delete(listener),
+      dispatchEvent: () => false,
+    }
+  },
 })
 
 class ResizeObserverStub {
@@ -89,6 +104,7 @@ if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {}
 }
 
-// jsdom has no media playback: its `pause()`/`load()` log "Not implemented".
+// jsdom has no media playback: its `play()`/`pause()`/`load()` log "Not implemented".
+HTMLMediaElement.prototype.play = () => Promise.resolve()
 HTMLMediaElement.prototype.pause = () => {}
 HTMLMediaElement.prototype.load = () => {}

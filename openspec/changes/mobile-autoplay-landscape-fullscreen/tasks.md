@@ -1,6 +1,6 @@
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every type and signature from design.md › Types & Signatures, wired end-to-end: `useMediaQuery` (real: the `useSyncExternalStore` body moved from `useIsDesktop`, which now calls it), `useIsPhoneLandscape` + `PHONE_LANDSCAPE_QUERY`, `useAutoplay` (no-op body), `useLandscapeTakeover` (returns `false`), both called from `VideoPlayer` (`useAutoplay(videoElement, video?.id ?? null, filename !== null, autoplay)`, `useLandscapeTakeover(filename !== null)`); test doubles: `viewport.phoneLandscape` + `rotatePhone()` in `src/test/viewport.ts`, a query-aware `matchMedia` stub with change listeners and a resolving `HTMLMediaElement.prototype.play` stub in `src/test/setup.ts`. Done when `scripts/run-tests.sh --lint --web` passes with no new tests.
+- [x] 1.1 Create every type and signature from design.md › Types & Signatures, wired end-to-end: `useMediaQuery` (real: the `useSyncExternalStore` body moved from `useIsDesktop`, which now calls it), `useIsPhoneLandscape` + `PHONE_LANDSCAPE_QUERY`, `useAutoplay` (no-op body), `useLandscapeTakeover` (returns `false`), both called from `VideoPlayer` (`useAutoplay(videoElement, video?.id ?? null, filename !== null, autoplay)`, `useLandscapeTakeover(filename !== null)`); test doubles: `viewport.phoneLandscape` + `rotatePhone()` in `src/test/viewport.ts`, a query-aware `matchMedia` stub with change listeners and a resolving `HTMLMediaElement.prototype.play` stub in `src/test/setup.ts`. Done when `scripts/run-tests.sh --lint --web` passes with no new tests.
 
 ## 2. Behaviour (TDD)
 

@@ -4,7 +4,9 @@ import { videoMediaUrl, videoSubtitlesUrl } from '@/api/client'
 import type { Chapter, Video } from '@/api/types'
 import { useCurrentTime } from '@/hooks/useCurrentTime'
 import { type SeekFeedback, useSeekKeys } from '@/hooks/useSeekKeys'
+import { useAutoplay } from '@/hooks/useAutoplay'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
+import { useLandscapeTakeover } from '@/hooks/useLandscapeTakeover'
 import { languageName } from '@/lib/languageName'
 import { playFrom } from '@/lib/playFrom'
 import { cn } from '@/lib/utils'
@@ -87,6 +89,9 @@ export function VideoPlayer({
     [onVideoElement],
   )
 
+  useAutoplay(videoElement, video?.id ?? null, filename !== null, autoplay)
+  const takeover = useLandscapeTakeover(filename !== null)
+
   const isDesktop = useIsDesktop()
   const chapters = video && filename && !isDesktop ? video.chapters : []
 
@@ -94,6 +99,7 @@ export function VideoPlayer({
     <div
       // Pinned below the header on phones, chapter rail included, which keeps the header in view.
       data-pinned-player=""
+      data-landscape-takeover={takeover ? '' : undefined}
       className={cn(
         'sticky top-(--header-offset) z-10 -mx-4 flex flex-col bg-background sm:-mx-6',
         'md:relative md:top-auto md:z-auto md:m-0 md:shrink-0 md:gap-2',
