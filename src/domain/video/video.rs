@@ -155,13 +155,19 @@ impl Video {
     }
 
     /// `None` unless its download is Discarded; else its download restored
-    /// (Pending).
+    /// (Pending) and, as for a redownload, its thumbnail, subtitles, quality
+    /// and chapters checks back to Pending, since the discard deleted their
+    /// files.
     pub fn restore(self, now: DateTime<Utc>) -> Option<Self> {
         if !self.download.is_discarded() {
             return None;
         }
         Some(Self {
             download: self.download.restore(),
+            thumbnail: Thumbnail::pending(),
+            subtitles: Subtitles::pending(),
+            chapters: self.chapters.reset_checks(),
+            downloaded_quality: DownloadedQuality::pending(),
             updated_at: now,
             ..self
         })

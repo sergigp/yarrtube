@@ -20,11 +20,15 @@ When a reconcile removes a Discarded video from its source (evicted from a chann
 ## ADDED Requirements
 
 ### Requirement: Restore A Source's Discarded Videos
-The system SHALL let a client restore a channel's or playlist's discarded videos (`POST /api/channels/{handle}/discarded/restore`, `POST /api/playlists/{id}/discarded/restore`, answering 204). The source SHALL forget every video it remembers as discarded, each of its stored Discarded videos SHALL be back to Pending with no attempts, and one reconcile pass of the source SHALL run before the response. An unknown source SHALL answer 404.
+The system SHALL let a client restore a channel's or playlist's discarded videos (`POST /api/channels/{handle}/discarded/restore`, `POST /api/playlists/{id}/discarded/restore`, answering 204). The source SHALL forget every video it remembers as discarded, each of its stored Discarded videos SHALL be back to Pending with no attempts, its thumbnail and subtitles to be fetched again, and one reconcile pass of the source SHALL run before the response. An unknown source SHALL answer 404.
 
 #### Scenario: Restore a stored discarded video
 - **WHEN** a client restores the discarded videos of a channel whose upload B, among its 3 most recent, is stored as Discarded
 - **THEN** the request answers 204, B is Pending with no attempts, and its video sync is scheduled, so it is downloaded again
+
+#### Scenario: Restore a discarded video that had subtitles
+- **WHEN** a client restores the discarded videos of a playlist whose video B was downloaded with its thumbnail and subtitles before being discarded
+- **THEN** B's thumbnail and subtitles are Pending, so they are fetched again along with its download
 
 #### Scenario: Restore a remembered video back in the source
 - **WHEN** a client restores the discarded videos of a playlist that remembers video C, which is in the playlist on YouTube again

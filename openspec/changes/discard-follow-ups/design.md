@@ -5,7 +5,7 @@ Requirements: `specs/`. Motivation: proposal.md.
 Key decisions (one line each, so they aren't "fixed" later):
 - **Only Unavailable is skipped by a channel's window**: a stored Discarded video and a remembered discarded upload both take their slot. `Video::is_skipped` keeps hiding both from lists; the window uses `Video::is_unavailable`.
 - **Restore lives on the reconcilers** (`restore_discarded` next to `force_reconcile`). It runs under the show lock, reuses `list_stored_videos`, and runs the pass, so a concurrent reconcile can't re-remember or re-evict between the forget and the pass.
-- **Stored Discarded videos are reset in place** (`Video::restore` → download Pending, no attempts), keeping id and episode number. The pass's `InternalVideoReconciler` schedules their `SyncVideo`, which schedules thumbnail and download.
+- **Stored Discarded videos are reset in place** (`Video::restore` → download Pending, no attempts; thumbnail, subtitles, quality and chapters checks back to Pending, as for a redownload, since the discard deleted their files), keeping id and episode number. The pass's `InternalVideoReconciler` schedules their `SyncVideo`, which schedules thumbnail and download.
 - **A listing failure doesn't fail the restore** (`ListingFailure::SkipMembership`, as on-demand sync): the forget and the resets are kept, and remembered ids still in the source come back on the next successful pass.
 - **A discard's `DeleteVideoFile` task, scheduled now, runs before a restored video's download**, which only starts after its sync: the old files are gone before the new ones are written.
 
@@ -165,7 +165,8 @@ impl Download {
 ```rust
 // src/domain/video/video.rs
 impl Video {
-    /// `None` unless its download is Discarded; else its download restored (Pending).
+    /// `None` unless its download is Discarded; else its download restored (Pending) and its
+    /// thumbnail, subtitles, quality and chapters checks back to Pending.
     pub fn restore(self, now: DateTime<Utc>) -> Option<Self>;
     /// Download Unavailable: outside a channel's video limit.
     pub fn is_unavailable(&self) -> bool;
@@ -271,8 +272,8 @@ export function DiscardVideoDialog(props: {
 2. `ChannelVideoReconciler::restore_discarded(id)`:
    1. `self.lock(&id)` → `self.find_channel(&id)?` → `None`: `ChannelNotFound(id)`
    2. `discarded_video_repository.delete_all(&ShowKey::Channel(id.clone()))`
-   3. `restore_stored_discarded(&self.list_stored_videos(&channel)?)` → for each `video.download.is_discarded()`: `video_updater.update(&video.id, |v| v.restore(now))`
-   4. `self.reconcile_channel(channel, ListingFailure::SkipMembership)` → membership pass (re-adds forgotten ids in the window) → `InternalVideoReconciler::reconcile(&desired)` → `SyncVideo` per video → `VideoSyncPlan::for_video` schedules thumbnail + download for the restored Pending ones
+   3. `restore_stored_discarded(&self.list_stored_videos(&channel)?)` → for each `video.download.is_discarded()`: `video_updater.update(&video.id, |v| v.restore(now))` (download, thumbnail, subtitles, quality and chapters checks Pending)
+   4. `self.reconcile_channel(channel, ListingFailure::SkipMembership)` → membership pass (re-adds forgotten ids in the window) → `InternalVideoReconciler::reconcile(&desired)` → `SyncVideo` per video → `VideoSyncPlan::for_video` schedules thumbnail + download for the restored Pending ones and, once downloaded, subtitles
 3. Map: `ChannelNotFound` / `PlaylistNotFound` → 404, `Repository` → 500; ok → 204.
 
 **Channel limit** — `ChannelVideoReconciler::sync_membership_with_youtube`: `stored = list_stored_videos(channel)` → `remembered` (unchanged; only for not re-adding) → `unavailable_ids = stored.filter(|(_, v)| v.is_unavailable())` → `list_current_videos(channel, unavailable_ids.len(), ..)` → `limit + unavailable` → `video_window::within_limit(listing, |u| unavailable_ids.contains(u.youtube_id), limit)` → add (skip remembered) / refresh / `remove_videos_not_in(window ids)` (remembers an evicted Discarded one, unchanged).
@@ -292,9 +293,11 @@ Channel limit — `src/application/tasks/reconcile_channel_task/tests.rs`:
 
 Restore a channel — `src/application/http/channels/tests.rs`:
 4. `it_should_restore_a_stored_discarded_channel_video` — 204; B Pending, no attempts; a `SyncVideo` of B pending.
+4a. `it_should_stamp_a_restored_channel_video_with_the_restore_time` — B discarded a day ago → restored with `updated_at` now.
+4b. `it_should_refetch_the_thumbnail_and_subtitles_of_a_restored_channel_video` — B downloaded with thumbnail and subtitles, then discarded → thumbnail, subtitles, quality and chapters checks Pending.
 5. `it_should_re_add_a_remembered_channel_video_still_among_its_uploads` — C remembered and in the window → stored Pending, `VideoAddedToChannel` published, no longer remembered.
 6. `it_should_forget_a_remembered_channel_video_past_the_limit` — limit 2, D remembered and 4th → not stored, not remembered.
-7. `it_should_restore_discarded_channel_videos_when_listing_fails` — 204; stored Discarded now Pending; nothing remembered.
+7. `it_should_restore_discarded_channel_videos_if_listing_fails` — 204; stored Discarded now Pending; nothing remembered.
 8. `it_should_fail_to_restore_the_discarded_videos_of_an_unknown_channel` — 404.
 
 Restore a playlist — `src/application/http/playlists/tests.rs`:
