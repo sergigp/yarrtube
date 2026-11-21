@@ -7,8 +7,8 @@
 - [x] 2.1 `useVideoSelection.test.tsx` › `lets a manual pick override the deep link, with autoplay`: a pick from the list autoplays (update the hook's `autoplay` doc comment).
 - [x] 2.2 `VideoPlayer.test.tsx` › `starts playing a downloaded video selected with autoplay`: `useAutoplay` calls `play()`, the `autoPlay` attribute goes; in the same cycle switch `ChannelDetail.test.tsx` / `CategoryDetail.test.tsx` autoplay-attribute assertions to a `play()` spy.
 - [x] 2.3 `does not start a video selected without autoplay`.
-- [ ] 2.4 `starts each newly picked video in the same video element`.
-- [ ] 2.5 `does not start the video again when it re-renders`.
+- [x] 2.4 `starts each newly picked video in the same video element`.
+- [x] 2.5 `does not start the video again when it re-renders`.
 - [ ] 2.6 `does not start a video that finishes downloading while selected`.
 - [ ] 2.7 `stays paused without an error when the browser refuses to play`.
 - [ ] 2.8 `takes over the screen with a downloaded video on a phone in landscape`: fixed full-viewport black root with safe-area padding and `data-landscape-takeover`, video `object-contain`, no `md:` sizing classes.

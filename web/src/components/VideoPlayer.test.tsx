@@ -101,6 +101,26 @@ describe('VideoPlayer', () => {
 
       expect(play).not.toHaveBeenCalled()
     })
+
+    it('starts each newly picked video in the same video element', () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+      const { container, rerender } = render(player(aVideo({ id: 'vid1' }), true))
+      const first = container.querySelector('video')
+
+      rerender(player(aVideo({ id: 'vid2', filename: 'vid2.mp4' }), true))
+
+      expect(play.mock.contexts).toEqual([first, first])
+      expect(container.querySelector('video')).toBe(first)
+    })
+
+    it('does not start the video again when it re-renders', () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+      const { rerender } = render(player(aVideo({ id: 'vid1' }), true))
+
+      rerender(player(aVideo({ id: 'vid1' }), true))
+
+      expect(play).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('arrow key seeking', () => {
