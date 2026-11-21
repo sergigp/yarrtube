@@ -4,7 +4,10 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 export interface VideoSelection<T> {
   /** The video the player shows, or `null` while none can be. */
   selectedVideo: T | null
-  /** Autoplay only a deep-linked video: the user opened a link straight to it. */
+  /**
+   * Start the selected video: the user chose it, by a link straight to it or
+   * a pick from the list. Never for the default video.
+   */
   autoplay: boolean
   /** Selects a video from the list by its ID. */
   selectVideo: (id: string) => void
@@ -45,7 +48,7 @@ export function useVideoSelection<T extends { id: string }>(
     setDefaultVideoId(defaultVideo.id)
   }
   const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
-  const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
+  const autoplay = selectedVideo !== null && selectedVideo !== defaultVideo
 
   return {
     selectedVideo,

@@ -108,7 +108,7 @@ export function CategoryDetail() {
     }
   }, [arrivedEditing, location.pathname, navigate])
   const { data } = useCategories()
-  const { data: videos, error } = useCategoryVideos(id)
+  const { data: videos, error, isFetchedAfterMount: videosFresh } = useCategoryVideos(id)
   const { data: preferences } = usePreferences()
   const category = data?.categories.find((candidate) => candidate.id === id)
   const [sort, setSort] = useRememberedChoice(
@@ -190,6 +190,7 @@ export function CategoryDetail() {
         <CategoryPlayer
           key={category.id}
           videos={queue}
+          videosFresh={videosFresh}
           error={error}
           selection={selection}
           sort={sort}

@@ -203,9 +203,12 @@ actually loaded rather than the placeholder a broken one is swapped for.
   open the page behind doesn't scroll (PageDown, as mobile WebKit has no
   mouse wheel), and closing it keeps the scroll position.
 - **Mobile watching** (`tests/mobileWatch.spec.js`, iPhone): a home card
-  opens its video, selected, which plays in WebKit and resumes after a
-  reload; the player sticks under the header while the page scrolls; video
-  details start collapsed and "More" expands them.
+  opens its video, selected, which starts playing on its own in WebKit and
+  resumes after a reload; picking a video in the queue starts it in the same
+  player; turning the phone to landscape fills the screen with the video,
+  and turning it back restores the page's scroll without stopping it; the
+  player sticks under the header while the page scrolls; video details
+  start collapsed and "More" expands them.
 - **Mobile layout** (`tests/mobileLayout.spec.js`, iPhone): home, playlist,
   channel, category and Tasks views never scroll sideways; the Add (with
   the folder browser open), Edit settings and Delete dialogs fit the screen

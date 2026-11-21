@@ -3,6 +3,17 @@
 All notable changes to yarrtube are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Also new
+
+- Picking a video in the "Up next" queue starts playing it, like opening a
+  video card already did. On iPhone, a video opened from a card may still
+  wait for a tap on play.
+- On a phone, turning it sideways while a downloaded video is in the player
+  fills the screen with the video; turning it back returns to the page
+  where you left it, without interrupting playback.
+
 ## [1.0.0] - 2026-11-16
 
 AI summaries and categorization, two-way Plex watch sync, chapters, and a
