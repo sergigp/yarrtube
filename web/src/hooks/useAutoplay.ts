@@ -33,7 +33,8 @@ export function useAutoplay(
     }
     handled.current = selection
     if (autoplay) {
-      void element.play()
+      // Refused (iOS outside a tap): it stays paused, one tap on play away.
+      element.play().catch(() => {})
     }
   }, [element, videoId, playable, autoplay])
 }

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { Chapter, Video } from '@/api/types'
 import { aVideo } from '@/test/helpers'
 import { useDesktopViewport } from '@/test/viewport'
@@ -131,6 +131,31 @@ describe('VideoPlayer', () => {
       rerender(player(aVideo({ id: 'vid1' }), true))
 
       expect(play).not.toHaveBeenCalled()
+    })
+
+    it('stays paused without an error when the browser refuses to play', async () => {
+      const refused = new DOMException('needs a user gesture', 'NotAllowedError')
+      // Not a spy: one marks the promise it returns as handled.
+      const originalPlay = HTMLMediaElement.prototype.play
+      let plays = 0
+      HTMLMediaElement.prototype.play = () => {
+        plays += 1
+        return Promise.reject(refused)
+      }
+      const unhandled = vi.fn()
+      process.on('unhandledRejection', unhandled)
+      onTestFinished(() => {
+        HTMLMediaElement.prototype.play = originalPlay
+        process.off('unhandledRejection', unhandled)
+      })
+
+      const { container } = render(player(aVideo({ id: 'vid1' }), true))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(plays).toBe(1)
+      expect(unhandled).not.toHaveBeenCalled()
+      expect(container.querySelector('video')).toBeInTheDocument()
+      expect(container).not.toHaveTextContent(/error/i)
     })
   })
 
