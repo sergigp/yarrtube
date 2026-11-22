@@ -38,7 +38,8 @@ interface SearchDialogProps {
  * Global search: categories, channels and playlists by name as the user
  * types, and downloaded videos by title once the text has 2 characters and
  * typing pauses. Arrow keys move through the results, Enter or a click opens
- * one and closes the dialog. Full screen on phones.
+ * one and closes the dialog. Full screen on phones, with a Cancel button
+ * since there is no Escape key or backdrop to tap there.
  */
 export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   return (
@@ -52,13 +53,13 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
           Find categories, channels, playlists and videos.
         </DialogDescription>
         {/* Remounted on every open, so it starts empty. */}
-        {open && <SearchPanel onChosen={() => onOpenChange(false)} />}
+        {open && <SearchPanel onClose={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function SearchPanel({ onChosen }: { onChosen: () => void }) {
+function SearchPanel({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const [text, setText] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -148,7 +149,7 @@ function SearchPanel({ onChosen }: { onChosen: () => void }) {
     if (!result) {
       return
     }
-    onChosen()
+    onClose()
     navigate(result.path)
   }
 
@@ -185,6 +186,13 @@ function SearchPanel({ onChosen }: { onChosen: () => void }) {
           placeholder="Search categories, channels, playlists and videos"
           className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
         />
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 py-2 pl-2 text-sm font-medium text-primary sm:hidden"
+        >
+          Cancel
+        </button>
       </div>
       <div
         id={listboxId}

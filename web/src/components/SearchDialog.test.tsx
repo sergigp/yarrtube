@@ -195,6 +195,14 @@ describe('SearchDialog', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('closes on Cancel, for phones without an Escape key', async () => {
+    const { user } = renderSearch({})
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('searches no categories while categories are turned off', async () => {
     const { user } = renderSearch({
       'GET /api/preferences': aPreferences({ categories_enabled: false }),
