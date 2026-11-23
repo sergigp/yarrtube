@@ -1865,6 +1865,51 @@ fn it_should_settle_a_private_video_that_is_now_removed() {
 }
 
 #[test]
+fn it_should_retry_a_members_only_video_that_fails_transiently() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = my_video()
+        .start_download(fixed_timestamp() - Duration::days(30))
+        .mark_unavailable(
+            &DownloadFailure::new("Join this channel to get access to members-only content."),
+            fixed_timestamp() - Duration::days(30),
+        );
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = failing_download_task(&db, video_repository.clone(), "HTTP Error 503");
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: fixed_timestamp() + Duration::minutes(10),
+            reason: "HTTP Error 503".to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 2,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                state: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 1,
+                        last_failed_at: Some(fixed_timestamp()),
+                    },
+                },
+                started: false,
+                failure: Some("HTTP Error 503".to_string()),
+                ..video.download.clone()
+            },
+            ..video.clone()
+        }]
+    );
+}
+
+#[test]
 fn it_should_skip_a_failed_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
