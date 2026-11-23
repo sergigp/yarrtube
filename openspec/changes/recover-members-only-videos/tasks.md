@@ -12,7 +12,7 @@
 - [x] 2.4 `it_should_not_schedule_a_download_for_a_permanently_unavailable_video`: a permanent reason stays settled.
 - [x] 2.5 `it_should_download_a_members_only_unavailable_video_that_became_public`: `VideoDownloader::is_settled` lets a recheckable Unavailable download through.
 - [x] 2.6 `it_should_keep_a_still_members_only_video_unavailable_without_counting_an_attempt`: a repeated members-only failure leaves the video Unavailable with 0 attempts and the task settled.
-- [ ] 2.7 `it_should_settle_a_private_video_that_is_now_removed`: the new reason replaces the old one, and a later task attempts nothing.
+- [x] 2.7 `it_should_settle_a_private_video_that_is_now_removed`: the new reason replaces the old one, and a later task attempts nothing.
 - [ ] 2.8 `it_should_not_attempt_a_permanently_unavailable_video`: no download call for a permanent Unavailable.
 - [ ] 2.9 `it_should_retry_a_members_only_video_that_fails_transiently`: a transient failure on a recheckable Unavailable becomes Retrying with 1 attempt.
 
