@@ -14,6 +14,6 @@ pub enum Unavailability {
 impl Unavailability {
     /// MembersOnly and Private.
     pub fn is_recheckable(self) -> bool {
-        false
+        matches!(self, Self::MembersOnly | Self::Private)
     }
 }

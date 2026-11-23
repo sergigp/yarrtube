@@ -2,6 +2,7 @@ use super::download_failure::DownloadFailure;
 use super::downloaded_file::DownloadedFile;
 use super::step_state::StepState;
 use super::step_status::StepStatus;
+use super::unavailability::Unavailability;
 use super::video_status::VideoStatus;
 use chrono::{DateTime, Utc};
 
@@ -74,16 +75,23 @@ impl Download {
         self.status() == VideoStatus::Downloaded
     }
 
-    /// Whether a download should run at `now`: started, Pending, or Retrying
-    /// with its next attempt due; never while discarded.
+    /// Whether a download should run at `now`: started, Pending, Retrying
+    /// with its next attempt due, or a recheckable Unavailable; never while
+    /// discarded.
     pub fn is_due(&self, now: DateTime<Utc>) -> bool {
-        !self.discarded && (self.started || self.state.is_due(now))
+        !self.discarded
+            && (self.started || self.state.is_due(now) || self.is_recheckable_unavailable())
     }
 
     /// Unavailable (not discarded, not started) with a recheckable reason or
     /// none recorded.
     pub fn is_recheckable_unavailable(&self) -> bool {
-        false
+        self.status() == VideoStatus::Unavailable
+            && self
+                .failure
+                .as_ref()
+                .and_then(|reason| DownloadFailure::new(reason.as_str()).unavailability())
+                .is_some_and(Unavailability::is_recheckable)
     }
 
     /// When a Retrying download's next attempt is due; none while started.
