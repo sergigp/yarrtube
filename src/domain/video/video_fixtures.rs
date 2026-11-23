@@ -2,6 +2,7 @@
 //! production files so a new field doesn't sweep through them.
 
 use super::chapters::Chapters;
+use super::download_failure::DownloadFailure;
 use super::downloaded_file::DownloadedFile;
 use super::downloaded_quality::DownloadedQuality;
 use super::retry_attempts::{MAX_ATTEMPTS, RetryAttempts};
@@ -26,6 +27,15 @@ pub fn downloaded_video(youtube_id: &str, filename: &str, now: DateTime<Utc>) ->
 }
 
 impl Video {
+    /// A download Unavailable `now` because the uploader removed the video:
+    /// a permanent reason, never attempted again.
+    pub fn mark_removed(self, now: DateTime<Utc>) -> Self {
+        self.mark_unavailable(
+            &DownloadFailure::new("This video has been removed by the uploader."),
+            now,
+        )
+    }
+
     /// A download that gave up, after every allowed attempt failed `now`
     /// with `reason`.
     pub fn mark_download_failed(self, reason: &str, now: DateTime<Utc>) -> Self {

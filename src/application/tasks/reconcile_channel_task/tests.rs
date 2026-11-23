@@ -23,7 +23,9 @@ use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::show::ShowKey;
 use crate::domain::task::{ScheduledTask, TaskStatus};
 use crate::domain::video::Video;
-use crate::domain::video::{EpisodeNumber, FetchedThumbnail, VideoId, YoutubeVideoId};
+use crate::domain::video::{
+    DownloadFailure, EpisodeNumber, FetchedThumbnail, VideoId, YoutubeVideoId,
+};
 use crate::domain::video_category::{
     Verdict, VerdictAuthor, VideoCategories, VideoCategoryVerdict,
 };
@@ -2534,7 +2536,10 @@ fn it_should_request_one_more_upload_per_unavailable_video() {
         "Members only",
         fixed_timestamp(),
     )
-    .mark_unavailable(fixed_timestamp());
+    .mark_unavailable(
+        &DownloadFailure::new("Join this channel to get access to members-only content."),
+        fixed_timestamp(),
+    );
     let discarded = Video::create(
         YoutubeVideoId::new("yt_discarded").unwrap(),
         "Too long",
@@ -2595,7 +2600,7 @@ fn it_should_not_count_skipped_videos_toward_the_limit() {
         })
         .unwrap();
     let unavailable = Video::create(YoutubeVideoId::new("ytB").unwrap(), "B", fixed_timestamp())
-        .mark_unavailable(fixed_timestamp());
+        .mark_removed(fixed_timestamp());
     save_channel_video_at(
         video_repository.as_ref(),
         channel_video_repository.as_ref(),

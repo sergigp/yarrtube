@@ -30,7 +30,7 @@ The system SHALL sync a stored video through a video sync task that targets that
 - **THEN** the sync completes successfully and schedules nothing
 
 ### Requirement: Sync Schedules the Download
-A video sync SHALL schedule a download of the video when the video is due for one: its download status is Pending or In Progress, or it is Retrying and its next attempt is due (see `video-retries`). It SHALL NOT schedule one for a Downloaded, Failed or Unavailable video, nor for a Retrying video whose next attempt is not due yet, nor add a second download for a video that already has one pending or running. The download SHALL use its playlist's or channel's quality and output directory as they are when it runs, not when it was scheduled.
+A video sync SHALL schedule a download of the video when the video is due for one: its download status is Pending or In Progress, it is Retrying and its next attempt is due (see `video-retries`), or it is Unavailable for a recheckable reason or with no recorded reason (see `video-download`). It SHALL NOT schedule one for a Downloaded or Failed video, an Unavailable video whose reason is permanent, nor for a Retrying video whose next attempt is not due yet, nor add a second download for a video that already has one pending or running. The download SHALL use its playlist's or channel's quality and output directory as they are when it runs, not when it was scheduled.
 
 #### Scenario: New video
 - **WHEN** a video sync runs for a Pending video with no download pending or running
@@ -45,8 +45,12 @@ A video sync SHALL schedule a download of the video when the video is due for on
 - **THEN** no additional download is scheduled
 
 #### Scenario: Settled video
-- **WHEN** a video sync runs for a Downloaded, Failed or Unavailable video
+- **WHEN** a video sync runs for a Downloaded or Failed video, or a video Unavailable because it was removed by the uploader
 - **THEN** no download is scheduled
+
+#### Scenario: Members-only video
+- **WHEN** a video sync runs for a video Unavailable as members-only, with no download pending or running
+- **THEN** a download of the video is scheduled to run immediately
 
 #### Scenario: Retrying download not due yet
 - **WHEN** a video sync runs for a video whose download is Retrying with its next attempt due in 2 hours, with no download pending

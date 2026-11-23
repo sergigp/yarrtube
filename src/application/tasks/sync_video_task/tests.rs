@@ -19,6 +19,7 @@ use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, TaskStatus};
 use crate::domain::video::Chapters;
 use crate::domain::video::Download;
+use crate::domain::video::DownloadFailure;
 use crate::domain::video::DownloadedQuality;
 use crate::domain::video::StepStatus;
 use crate::domain::video::Subtitles;
@@ -1901,7 +1902,7 @@ fn it_should_reset_a_video_whose_file_is_not_mp4() {
 }
 
 #[test]
-fn it_should_never_recover_an_excluded_video() {
+fn it_should_not_schedule_a_download_for_a_permanently_unavailable_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1912,7 +1913,7 @@ fn it_should_never_recover_an_excluded_video() {
     ));
     let video = my_video()
         .start_download(a_day_ago() - Duration::days(30))
-        .mark_unavailable(a_day_ago() - Duration::days(30));
+        .mark_removed(a_day_ago() - Duration::days(30));
     save_channel_video(
         &video_repository,
         &channel_repository,
@@ -1952,6 +1953,130 @@ fn it_should_never_recover_an_excluded_video() {
         }]
     );
     assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_schedule_a_download_for_a_members_only_unavailable_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video = my_video()
+        .start_download(a_day_ago() - Duration::days(30))
+        .mark_unavailable(
+            &DownloadFailure::new("Join this channel to get access to members-only content."),
+            a_day_ago() - Duration::days(30),
+        );
+    save_channel_video(
+        &video_repository,
+        &channel_repository,
+        &channel_video_repository,
+        &video,
+    );
+    let task = SyncVideoTask::new(VideoReconciler::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        task_repository.clone(),
+        Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(MetadataGenerator::new(
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        video_category_assigner(db.database()),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        video_categorizer(db.database()),
+    ));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(1, &download_video(&video))]
+    );
+}
+
+#[test]
+fn it_should_schedule_a_download_for_an_unavailable_video_without_a_reason() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let unavailable = my_video()
+        .start_download(a_day_ago() - Duration::days(30))
+        .mark_removed(a_day_ago() - Duration::days(30));
+    let video = Video {
+        download: Download {
+            failure: None,
+            ..unavailable.download
+        },
+        ..unavailable
+    };
+    save_channel_video(
+        &video_repository,
+        &channel_repository,
+        &channel_video_repository,
+        &video,
+    );
+    let task = SyncVideoTask::new(VideoReconciler::new(
+        video_repository.clone(),
+        Arc::new(VideoOwnerFinder::new(
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            "/videos",
+        )),
+        task_repository.clone(),
+        Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(MetadataGenerator::new(
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        video_category_assigner(db.database()),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        video_categorizer(db.database()),
+    ));
+
+    let result = run(&task, &task_for(&video));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 1,
+            ..video.clone()
+        }]
+    );
+    assert_eq!(
+        task_repository.list_non_completed().unwrap(),
+        vec![pending_task(1, &download_video(&video))]
+    );
 }
 
 #[test]

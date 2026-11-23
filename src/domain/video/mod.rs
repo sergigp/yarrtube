@@ -30,6 +30,7 @@ pub mod step_status;
 pub mod subtitles;
 pub mod thumbnail;
 pub mod thumbnail_fetch;
+pub mod unavailability;
 #[allow(clippy::module_inception)]
 pub mod video;
 pub mod video_chapter;
@@ -89,6 +90,7 @@ pub use step_status::StepStatus;
 pub use subtitles::Subtitles;
 pub use thumbnail::Thumbnail;
 pub use thumbnail_fetch::ThumbnailFetch;
+pub use unavailability::Unavailability;
 pub use video::Video;
 pub use video_chapter::VideoChapter;
 pub use video_duration::VideoDuration;

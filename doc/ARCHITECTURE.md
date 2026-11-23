@@ -100,7 +100,10 @@ their own events and reconciler.
 5. **Every interval after that.** `ReconcileChannel` repeats step 2. Since
    it schedules a `SyncVideo` for every stored video, not only the new ones,
    it is also the safety net: it picks up a step lost in a crash, a retry
-   that is now due, or captions YouTube published late.
+   that is now due, captions YouTube published late, or a members-only or
+   private video its creator has since made public (an `UNAVAILABLE`
+   download is tried again on every video sync unless YouTube gave a
+   permanent reason, such as a removed or copyright-blocked video).
 
 So the flow is driven by stored state rather than by a chain of calls: the
 video sync can run any number of times, and the system converges to

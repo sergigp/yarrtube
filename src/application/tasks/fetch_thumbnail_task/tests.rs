@@ -155,7 +155,7 @@ fn it_should_not_fetch_a_thumbnail_for_an_excluded_video() {
             published_at: None,
         },
     )));
-    let video = my_video().mark_unavailable(fixed_timestamp());
+    let video = my_video().mark_removed(fixed_timestamp());
     video_repository.insert(&video).unwrap();
     SqliteChannelRepository::new(db.database())
         .insert(&my_channel())

@@ -752,7 +752,9 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::video::{Chapters, DownloadedQuality, PlaylistEpisodeNumber, Thumbnail};
+    use crate::domain::video::{
+        Chapters, DownloadFailure, DownloadedQuality, PlaylistEpisodeNumber, Thumbnail,
+    };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
@@ -1071,6 +1073,23 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_an_unavailable_download_with_its_reason() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let unavailable = video("Members only", now)
+            .start_download(now)
+            .mark_unavailable(
+                &DownloadFailure::new("Join this channel to get access to members-only content."),
+                now,
+            );
+        repo.insert(&unavailable).unwrap();
+
+        let found = repo.find(&unavailable.id).unwrap().unwrap();
+
+        assert_eq!(found.download, unavailable.download);
+    }
+
+    #[test]
     fn it_should_round_trip_a_video_with_a_recorded_thumbnail_filename() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
@@ -1239,7 +1258,7 @@ mod tests {
                 Some(223),
                 now,
             ),
-            video("Unavailable", now).mark_unavailable(now),
+            video("Unavailable", now).mark_removed(now),
         ];
 
         videos.iter().for_each(|video| repo.insert(video).unwrap());

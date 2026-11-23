@@ -1,5 +1,6 @@
 use super::chapters::Chapters;
 use super::download::Download;
+use super::download_failure::DownloadFailure;
 use super::downloaded_file::DownloadedFile;
 use super::downloaded_quality::DownloadedQuality;
 use super::episode_number::EpisodeNumber;
@@ -121,12 +122,11 @@ impl Video {
         }
     }
 
-    /// Marks a video's download Unavailable: final, for a video that can
-    /// never be downloaded (see the `video-download` capability), its failed
-    /// attempts and failure cleared.
-    pub fn mark_unavailable(self, now: DateTime<Utc>) -> Self {
+    /// Marks a video's download Unavailable for `failure`'s reason (see the
+    /// `video-download` capability), its failed attempts cleared.
+    pub fn mark_unavailable(self, failure: &DownloadFailure, now: DateTime<Utc>) -> Self {
         Self {
-            download: self.download.unavailable(),
+            download: self.download.unavailable(failure),
             updated_at: now,
             ..self
         }
@@ -710,13 +710,16 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let video = video();
 
-        let unavailable = video.clone().mark_unavailable(now);
+        let unavailable = video
+            .clone()
+            .mark_unavailable(&DownloadFailure::new("Private video"), now);
 
         assert_eq!(
             unavailable,
             Video {
                 download: Download {
                     state: StepState::pending().unavailable(),
+                    failure: Some("Private video".to_string()),
                     ..Download::pending()
                 },
                 updated_at: now,

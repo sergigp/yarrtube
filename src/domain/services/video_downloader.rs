@@ -420,14 +420,14 @@ impl VideoDownloader {
         }
     }
 
-    /// A clean `yt-dlp` failure: either makes a permanently-unavailable
-    /// video Unavailable (settling the task) or records a failed attempt.
+    /// A clean `yt-dlp` failure: either makes a video YouTube won't serve
+    /// Unavailable (settling the task) or records a failed attempt.
     fn record_failed(
         &self,
         started: Video,
         failure: DownloadFailure,
     ) -> anyhow::Result<VideoStepOutcome> {
-        if failure.is_permanent() {
+        if failure.unavailability().is_some() {
             self.mark_unavailable(started, &failure)
                 .map(|()| VideoStepOutcome::Settled)
         } else {
@@ -435,14 +435,16 @@ impl VideoDownloader {
         }
     }
 
-    /// Marks a permanently-unavailable video Unavailable and settles the
-    /// task without error, so no retry is scheduled.
+    /// Marks the video Unavailable with `failure`'s reason and settles the
+    /// task without error, so no retry is scheduled; a recheckable reason is
+    /// attempted again on the next video sync.
     fn mark_unavailable(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
         let video_id = started.id.clone();
         let now = self.clock.now();
-        self.video_updater
-            .update(&video_id, |video| Some(video.mark_unavailable(now)))?;
-        info!(video_id = %video_id, reason = %failure.reason(), "marking permanently-unavailable video unavailable");
+        self.video_updater.update(&video_id, |video| {
+            Some(video.mark_unavailable(failure, now))
+        })?;
+        info!(video_id = %video_id, reason = %failure.reason(), "marking video unavailable");
         Ok(())
     }
 
@@ -491,15 +493,13 @@ impl VideoDownloader {
     }
 
     /// Whether the video's download has nothing left to do: Downloaded,
-    /// Failed, Unavailable or Discarded.
+    /// Failed, Discarded, or Unavailable unless recheckable.
     fn is_settled(video: &Video) -> bool {
-        matches!(
-            video.download.status(),
-            VideoStatus::Downloaded
-                | VideoStatus::Failed
-                | VideoStatus::Unavailable
-                | VideoStatus::Discarded
-        )
+        match video.download.status() {
+            VideoStatus::Downloaded | VideoStatus::Failed | VideoStatus::Discarded => true,
+            VideoStatus::Unavailable => !video.download.is_recheckable_unavailable(),
+            VideoStatus::Pending | VideoStatus::InProgress | VideoStatus::Retrying => false,
+        }
     }
 
     /// Builds `video`'s metadata with its playlist position (no `thumb` yet)

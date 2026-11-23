@@ -10,9 +10,9 @@ use crate::domain::services::VideoOwnerFinder;
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
-    Chapters, Download, DownloadedFile, DownloadedQuality, DownloadedVideo, EpisodeNumber,
-    PlaybackPosition, PlaylistEpisodeNumber, RetryAttempts, StepState, StepStatus, Thumbnail,
-    Video, VideoChapter, VideoDownloaded, WatchState, YoutubeVideoId,
+    Chapters, Download, DownloadFailure, DownloadedFile, DownloadedQuality, DownloadedVideo,
+    EpisodeNumber, PlaybackPosition, PlaylistEpisodeNumber, RetryAttempts, StepState, StepStatus,
+    Thumbnail, Video, VideoChapter, VideoDownloaded, WatchState, YoutubeVideoId,
 };
 use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
@@ -1724,6 +1724,192 @@ fn it_should_download_a_retrying_video_once_due() {
 }
 
 #[test]
+fn it_should_download_a_members_only_unavailable_video_that_became_public() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let videos_dir = tempfile::tempdir().unwrap();
+    let video = my_video()
+        .start_download(fixed_timestamp() - Duration::days(30))
+        .mark_unavailable(
+            &DownloadFailure::new("Join this channel to get access to members-only content."),
+            fixed_timestamp() - Duration::days(30),
+        );
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = DownloadVideoTask::new(video_downloader(
+        &db,
+        videos_dir.path(),
+        video_repository.clone(),
+        Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+            DownloadedVideo {
+                height: Some(720),
+                ..staged_download()
+            },
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+        Arc::new(FakeYoutubeMetadataRepository {
+            metadata: Some(youtube_metadata()),
+        }),
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+    ));
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 3,
+            download: Download {
+                state: StepState::pending().succeed(),
+                started: false,
+                discarded: false,
+                failure: None,
+                file: Some(DownloadedFile {
+                    filename: "Season 2026/S2026E031501 - My Video.mp4".to_string(),
+                    quality: Quality::High,
+                    duration_seconds: None,
+                }),
+            },
+            episode_number: Some(published_episode()),
+            synced_at: Some(fixed_timestamp()),
+            updated_at: fixed_timestamp(),
+            downloaded_quality: DownloadedQuality {
+                height: Some(720),
+                ..DownloadedQuality::checked(Some(fixed_timestamp()), 0)
+            },
+            thumbnail: Thumbnail {
+                filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                state: StepState::pending().succeed()
+            },
+            ..video
+        }]
+    );
+}
+
+#[test]
+fn it_should_keep_a_still_members_only_video_unavailable_without_counting_an_attempt() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let members_only =
+        DownloadFailure::new("Join this channel to get access to members-only content.");
+    let video = my_video()
+        .start_download(fixed_timestamp() - Duration::days(30))
+        .mark_unavailable(&members_only, fixed_timestamp() - Duration::days(30));
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = failing_download_task(&db, video_repository.clone(), members_only.reason());
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 2,
+            updated_at: fixed_timestamp(),
+            ..video.clone()
+        }]
+    );
+}
+
+#[test]
+fn it_should_settle_a_private_video_that_is_now_removed() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = my_video()
+        .start_download(fixed_timestamp() - Duration::days(30))
+        .mark_unavailable(
+            &DownloadFailure::new("Private video. Sign in if you've been granted access."),
+            fixed_timestamp() - Duration::days(30),
+        );
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let downloader = Arc::new(FakeVideoDownloaderRepository::with_failed_reason(
+        "This video has been removed by the uploader.",
+    ));
+    let task = DownloadVideoTask::new(video_downloader(
+        &db,
+        Path::new("/videos"),
+        video_repository.clone(),
+        downloader.clone(),
+        Arc::new(FakeVideoFileRepository::default()),
+        Arc::new(FakeYoutubeMetadataRepository::default()),
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+    ));
+
+    let results = [
+        run(&task, &task_for(video.id.as_str())),
+        run(&task, &task_for(video.id.as_str())),
+    ];
+
+    assert_eq!(results, [Ok(TaskOutcome::Done), Ok(TaskOutcome::Done)]);
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 2,
+            ..video
+                .clone()
+                .start_download(fixed_timestamp())
+                .mark_removed(fixed_timestamp())
+        }]
+    );
+    assert_eq!(
+        *downloader.calls.lock().unwrap(),
+        vec![(
+            "https://www.youtube.com/watch?v=yt1".to_string(),
+            Quality::High,
+            PathBuf::from(format!("/videos/.downloads/{}", video.id.as_str())),
+        )]
+    );
+}
+
+#[test]
+fn it_should_retry_a_members_only_video_that_fails_transiently() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = my_video()
+        .start_download(fixed_timestamp() - Duration::days(30))
+        .mark_unavailable(
+            &DownloadFailure::new("Join this channel to get access to members-only content."),
+            fixed_timestamp() - Duration::days(30),
+        );
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = failing_download_task(&db, video_repository.clone(), "HTTP Error 503");
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(
+        result,
+        Ok(TaskOutcome::RunAgainAt {
+            run_at: fixed_timestamp() + Duration::minutes(10),
+            reason: "HTTP Error 503".to_string(),
+        })
+    );
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 2,
+            updated_at: fixed_timestamp(),
+            download: Download {
+                state: StepState {
+                    status: StepStatus::Retrying,
+                    attempts: RetryAttempts {
+                        failed: 1,
+                        last_failed_at: Some(fixed_timestamp()),
+                    },
+                },
+                started: false,
+                failure: Some("HTTP Error 503".to_string()),
+                ..video.download.clone()
+            },
+            ..video.clone()
+        }]
+    );
+}
+
+#[test]
 fn it_should_skip_a_failed_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2116,15 +2302,18 @@ fn it_should_exclude_a_video_blocked_by_claimed_content() {
         video_repository.list().unwrap(),
         vec![Video {
             version: 2,
-            ..video
-                .start_download(fixed_timestamp())
-                .mark_unavailable(fixed_timestamp())
+            ..video.start_download(fixed_timestamp()).mark_unavailable(
+                &DownloadFailure::new(
+                    "It was blocked due to the claimed content by Mediatoon. | Video unavailable",
+                ),
+                fixed_timestamp(),
+            )
         }]
     );
 }
 
 #[test]
-fn it_should_mark_the_video_unavailable_if_the_failure_is_permanent() {
+fn it_should_keep_the_reason_when_marking_the_video_unavailable() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = retrying_video(3);
@@ -2150,7 +2339,10 @@ fn it_should_mark_the_video_unavailable_if_the_failure_is_permanent() {
                     status: StepStatus::Unavailable,
                     attempts: RetryAttempts::default()
                 },
-                failure: None,
+                failure: Some(
+                    "Join this channel to get access to members-only content like this video, and other exclusive perks."
+                        .to_string()
+                ),
                 ..video.download
             },
             ..video
@@ -2383,10 +2575,15 @@ fn it_should_skip_the_download_of_an_already_downloaded_video() {
 }
 
 #[test]
-fn it_should_skip_the_download_of_an_excluded_video() {
+fn it_should_not_attempt_a_permanently_unavailable_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-    let video = my_video().mark_unavailable(fixed_timestamp());
+    let video = my_video().mark_unavailable(
+        &DownloadFailure::new(
+            "This video contains content that has been blocked on copyright grounds.",
+        ),
+        fixed_timestamp(),
+    );
     video_repository.insert(&video).unwrap();
     let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
     SqliteChannelRepository::new(db.database())
@@ -2705,7 +2902,7 @@ fn it_should_keep_the_watch_state_recorded_while_downloading_an_excluded_video()
             ..with_watch_state_recorded_meanwhile(
                 video
                     .start_download(fixed_timestamp())
-                    .mark_unavailable(fixed_timestamp())
+                    .mark_removed(fixed_timestamp())
             )
         }]
     );

@@ -1,19 +1,21 @@
-use crate::domain::video::VideoId;
+use crate::domain::video::{Unavailability, VideoId};
 
-/// Substrings that, found (case-insensitively) in a failure reason, mark a
-/// video permanently unavailable — see design.md's token table. This is an
-/// allowlist of *permanent* reasons, never an inverted "everything except
-/// transient" rule, so an unseen `yt-dlp`/YouTube wording is never silently
-/// excluded forever.
-const PERMANENT_UNAVAILABILITY_TOKENS: [&str; 8] = [
-    "members-only",
-    "claimed content",
-    "copyright",
-    "in your country",
-    "private video",
-    "has been removed",
-    "no longer available",
-    "account associated with this video has been terminated",
+/// Substrings that, found (case-insensitively) in a failure reason, name the
+/// video's unavailability. This is an allowlist of unavailability reasons,
+/// never an inverted "everything except transient" rule, so an unseen
+/// `yt-dlp`/YouTube wording is never silently made Unavailable.
+const UNAVAILABILITY_TOKENS: [(&str, Unavailability); 8] = [
+    ("members-only", Unavailability::MembersOnly),
+    ("claimed content", Unavailability::Copyright),
+    ("copyright", Unavailability::Copyright),
+    ("in your country", Unavailability::GeoBlocked),
+    ("private video", Unavailability::Private),
+    ("has been removed", Unavailability::Removed),
+    ("no longer available", Unavailability::Removed),
+    (
+        "account associated with this video has been terminated",
+        Unavailability::AccountTerminated,
+    ),
 ];
 
 /// Why a download failed cleanly, as the downloader reported it (empty when
@@ -34,13 +36,15 @@ impl DownloadFailure {
         &self.reason
     }
 
-    /// Whether the reason names a block that can never succeed on a later
-    /// attempt, so the video should be excluded rather than retried.
-    pub fn is_permanent(&self) -> bool {
+    /// The unavailability the reason names, matched case-insensitively
+    /// against the token allowlist: the video is made Unavailable rather
+    /// than retried.
+    pub fn unavailability(&self) -> Option<Unavailability> {
         let reason = self.reason.to_lowercase();
-        PERMANENT_UNAVAILABILITY_TOKENS
+        UNAVAILABILITY_TOKENS
             .iter()
-            .any(|token| reason.contains(token))
+            .find(|(token, _)| reason.contains(token))
+            .map(|(_, unavailability)| *unavailability)
     }
 
     /// The reason, or a generic message naming `video_id` when there is none.
@@ -58,7 +62,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_should_be_permanent_for_every_permanent_unavailability_reason() {
+    fn it_should_name_the_unavailability_of_every_unavailability_reason() {
         let reasons = [
             "Join this channel to get access to members-only content like this video, and other exclusive perks.",
             "It was blocked due to the claimed content by Mediatoon.",
@@ -71,13 +75,13 @@ mod tests {
         ];
 
         assert_eq!(
-            reasons.map(|reason| DownloadFailure::new(reason).is_permanent()),
-            [true; 8]
+            reasons.map(|reason| DownloadFailure::new(reason).unavailability()),
+            EXPECTED_UNAVAILABILITIES
         );
     }
 
     #[test]
-    fn it_should_be_permanent_regardless_of_case() {
+    fn it_should_name_the_unavailability_regardless_of_case() {
         let reasons = [
             "JOIN THIS CHANNEL FOR MEMBERS-ONLY CONTENT",
             "It was blocked due to the CLAIMED CONTENT by X.",
@@ -90,22 +94,22 @@ mod tests {
         ];
 
         assert_eq!(
-            reasons.map(|reason| DownloadFailure::new(reason).is_permanent()),
-            [true; 8]
+            reasons.map(|reason| DownloadFailure::new(reason).unavailability()),
+            EXPECTED_UNAVAILABILITIES
         );
     }
 
     #[test]
-    fn it_should_be_permanent_if_a_combined_reason_contains_a_permanent_part() {
+    fn it_should_name_the_unavailability_if_a_combined_reason_contains_one() {
         let failure = DownloadFailure::new(
             "This video has been removed by the uploader. | Video unavailable",
         );
 
-        assert!(failure.is_permanent());
+        assert_eq!(failure.unavailability(), Some(Unavailability::Removed));
     }
 
     #[test]
-    fn it_should_not_be_permanent_for_generic_or_transient_reasons() {
+    fn it_should_name_no_unavailability_for_generic_or_transient_reasons() {
         let reasons = [
             "Video unavailable",
             "HTTP Error 403: Forbidden",
@@ -118,10 +122,21 @@ mod tests {
         ];
 
         assert_eq!(
-            reasons.map(|reason| DownloadFailure::new(reason).is_permanent()),
-            [false; 8]
+            reasons.map(|reason| DownloadFailure::new(reason).unavailability()),
+            [None; 8]
         );
     }
+
+    const EXPECTED_UNAVAILABILITIES: [Option<Unavailability>; 8] = [
+        Some(Unavailability::MembersOnly),
+        Some(Unavailability::Copyright),
+        Some(Unavailability::Copyright),
+        Some(Unavailability::GeoBlocked),
+        Some(Unavailability::Private),
+        Some(Unavailability::Removed),
+        Some(Unavailability::Removed),
+        Some(Unavailability::AccountTerminated),
+    ];
 
     #[test]
     fn it_should_expose_its_reason() {
