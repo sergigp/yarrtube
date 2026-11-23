@@ -1,3 +1,4 @@
+use super::download_failure::DownloadFailure;
 use super::downloaded_file::DownloadedFile;
 use super::step_state::StepState;
 use super::step_status::StepStatus;
@@ -79,6 +80,12 @@ impl Download {
         !self.discarded && (self.started || self.state.is_due(now))
     }
 
+    /// Unavailable (not discarded, not started) with a recheckable reason or
+    /// none recorded.
+    pub fn is_recheckable_unavailable(&self) -> bool {
+        false
+    }
+
     /// When a Retrying download's next attempt is due; none while started.
     pub fn next_attempt_at(&self) -> Option<DateTime<Utc>> {
         self.state.next_attempt_at().filter(|_| !self.started)
@@ -131,8 +138,8 @@ impl Download {
         }
     }
 
-    /// Unavailable: final, its failed attempts and failure cleared.
-    pub fn unavailable(self) -> Self {
+    /// Unavailable, its failed attempts and failure cleared.
+    pub fn unavailable(self, _failure: &DownloadFailure) -> Self {
         Self {
             state: self.state.unavailable(),
             started: false,

@@ -1239,7 +1239,7 @@ mod tests {
                 Some(223),
                 now,
             ),
-            video("Unavailable", now).mark_unavailable(now),
+            video("Unavailable", now).mark_removed(now),
         ];
 
         videos.iter().for_each(|video| repo.insert(video).unwrap());

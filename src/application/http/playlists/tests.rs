@@ -3787,7 +3787,7 @@ async fn it_should_move_a_playlist_with_errored_and_excluded_videos() {
         &video_repository,
         &playlist_video_repository,
         "PL1",
-        playlist_episode("vid_excluded", "Excluded", 3).mark_unavailable(fixed_timestamp()),
+        playlist_episode("vid_excluded", "Excluded", 3).mark_removed(fixed_timestamp()),
         2,
     );
     let show_mover = show_mover(&db, video_file_repository);

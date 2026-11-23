@@ -10,9 +10,9 @@ use crate::domain::services::VideoOwnerFinder;
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
-    Chapters, Download, DownloadedFile, DownloadedQuality, DownloadedVideo, EpisodeNumber,
-    PlaybackPosition, PlaylistEpisodeNumber, RetryAttempts, StepState, StepStatus, Thumbnail,
-    Video, VideoChapter, VideoDownloaded, WatchState, YoutubeVideoId,
+    Chapters, Download, DownloadFailure, DownloadedFile, DownloadedQuality, DownloadedVideo,
+    EpisodeNumber, PlaybackPosition, PlaylistEpisodeNumber, RetryAttempts, StepState, StepStatus,
+    Thumbnail, Video, VideoChapter, VideoDownloaded, WatchState, YoutubeVideoId,
 };
 use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
@@ -2116,9 +2116,12 @@ fn it_should_exclude_a_video_blocked_by_claimed_content() {
         video_repository.list().unwrap(),
         vec![Video {
             version: 2,
-            ..video
-                .start_download(fixed_timestamp())
-                .mark_unavailable(fixed_timestamp())
+            ..video.start_download(fixed_timestamp()).mark_unavailable(
+                &DownloadFailure::new(
+                    "It was blocked due to the claimed content by Mediatoon. | Video unavailable",
+                ),
+                fixed_timestamp(),
+            )
         }]
     );
 }
@@ -2386,7 +2389,7 @@ fn it_should_skip_the_download_of_an_already_downloaded_video() {
 fn it_should_skip_the_download_of_an_excluded_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-    let video = my_video().mark_unavailable(fixed_timestamp());
+    let video = my_video().mark_removed(fixed_timestamp());
     video_repository.insert(&video).unwrap();
     let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
     SqliteChannelRepository::new(db.database())
@@ -2705,7 +2708,7 @@ fn it_should_keep_the_watch_state_recorded_while_downloading_an_excluded_video()
             ..with_watch_state_recorded_meanwhile(
                 video
                     .start_download(fixed_timestamp())
-                    .mark_unavailable(fixed_timestamp())
+                    .mark_removed(fixed_timestamp())
             )
         }]
     );

@@ -1219,7 +1219,7 @@ async fn it_should_omit_excluded_videos_from_a_playlist() {
         fixed_timestamp(),
     )
     .start_download(fixed_timestamp())
-    .mark_unavailable(fixed_timestamp());
+    .mark_removed(fixed_timestamp());
     save_playlist_video(
         video_repository.as_ref(),
         playlist_video_repository.as_ref(),
@@ -1699,7 +1699,7 @@ async fn it_should_omit_excluded_videos_from_a_channel() {
         fixed_timestamp(),
     )
     .start_download(fixed_timestamp())
-    .mark_unavailable(fixed_timestamp());
+    .mark_removed(fixed_timestamp());
     save_channel_video(
         video_repository.as_ref(),
         channel_video_repository.as_ref(),
@@ -2786,7 +2786,7 @@ async fn it_should_exclude_excluded_videos_from_home() {
             fixed_timestamp(),
         )
         .start_download(fixed_timestamp())
-        .mark_unavailable(fixed_timestamp()),
+        .mark_removed(fixed_timestamp()),
     );
     let video_searcher = VideoSearcher::new(
         playlist_repository,
@@ -6166,7 +6166,7 @@ async fn it_should_list_only_downloaded_videos_for_a_category() {
         pending("pending"),
         pending("downloading").start_download(fixed_timestamp()),
         pending("failed").mark_download_failed("HTTP Error 503", fixed_timestamp()),
-        pending("excluded").mark_unavailable(fixed_timestamp()),
+        pending("excluded").mark_removed(fixed_timestamp()),
     ]
     .iter()
     .for_each(|video| {
@@ -7927,7 +7927,7 @@ async fn it_should_fail_to_discard_an_unavailable_video() {
         "My Video",
         fixed_timestamp(),
     )
-    .mark_unavailable(fixed_timestamp());
+    .mark_removed(fixed_timestamp());
     video_repository.insert(&video).unwrap();
 
     let response = discard_video(

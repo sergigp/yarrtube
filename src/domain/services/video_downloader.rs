@@ -427,7 +427,7 @@ impl VideoDownloader {
         started: Video,
         failure: DownloadFailure,
     ) -> anyhow::Result<VideoStepOutcome> {
-        if failure.is_permanent() {
+        if failure.unavailability().is_some() {
             self.mark_unavailable(started, &failure)
                 .map(|()| VideoStepOutcome::Settled)
         } else {
@@ -440,8 +440,9 @@ impl VideoDownloader {
     fn mark_unavailable(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
         let video_id = started.id.clone();
         let now = self.clock.now();
-        self.video_updater
-            .update(&video_id, |video| Some(video.mark_unavailable(now)))?;
+        self.video_updater.update(&video_id, |video| {
+            Some(video.mark_unavailable(failure, now))
+        })?;
         info!(video_id = %video_id, reason = %failure.reason(), "marking permanently-unavailable video unavailable");
         Ok(())
     }

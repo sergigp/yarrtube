@@ -1912,7 +1912,7 @@ fn it_should_never_recover_an_excluded_video() {
     ));
     let video = my_video()
         .start_download(a_day_ago() - Duration::days(30))
-        .mark_unavailable(a_day_ago() - Duration::days(30));
+        .mark_removed(a_day_ago() - Duration::days(30));
     save_channel_video(
         &video_repository,
         &channel_repository,

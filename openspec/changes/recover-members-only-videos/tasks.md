@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Add `Unavailability` (with `is_recheckable`), `DownloadFailure::unavailability`, `Download::unavailable(&DownloadFailure)`, `Download::is_recheckable_unavailable` and `Video::mark_unavailable(&DownloadFailure, now)` with the signatures from design.md. Replace `is_permanent()` callers with `unavailability().is_some()` and update every `mark_unavailable` call site and fixture. Stub bodies: `unavailability` keeps today's token matching, mapped to the variants; `is_recheckable` returns `false`; `is_recheckable_unavailable` returns `false`; `unavailable` still clears `failure`. Done when `cargo build` succeeds and all existing tests pass.
+- [x] 1.1 Add `Unavailability` (with `is_recheckable`), `DownloadFailure::unavailability`, `Download::unavailable(&DownloadFailure)`, `Download::is_recheckable_unavailable` and `Video::mark_unavailable(&DownloadFailure, now)` with the signatures from design.md. Replace `is_permanent()` callers with `unavailability().is_some()` and update every `mark_unavailable` call site and fixture. Stub bodies: `unavailability` keeps today's token matching, mapped to the variants; `is_recheckable` returns `false`; `is_recheckable_unavailable` returns `false`; `unavailable` still clears `failure`. Done when `cargo build` succeeds and all existing tests pass.
 
 ## 2. Behaviour (TDD)
 
