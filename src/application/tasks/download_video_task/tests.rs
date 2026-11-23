@@ -1724,6 +1724,70 @@ fn it_should_download_a_retrying_video_once_due() {
 }
 
 #[test]
+fn it_should_download_a_members_only_unavailable_video_that_became_public() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let videos_dir = tempfile::tempdir().unwrap();
+    let video = my_video()
+        .start_download(fixed_timestamp() - Duration::days(30))
+        .mark_unavailable(
+            &DownloadFailure::new("Join this channel to get access to members-only content."),
+            fixed_timestamp() - Duration::days(30),
+        );
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = DownloadVideoTask::new(video_downloader(
+        &db,
+        videos_dir.path(),
+        video_repository.clone(),
+        Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+            DownloadedVideo {
+                height: Some(720),
+                ..staged_download()
+            },
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+        Arc::new(FakeYoutubeMetadataRepository {
+            metadata: Some(youtube_metadata()),
+        }),
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+    ));
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 3,
+            download: Download {
+                state: StepState::pending().succeed(),
+                started: false,
+                discarded: false,
+                failure: None,
+                file: Some(DownloadedFile {
+                    filename: "Season 2026/S2026E031501 - My Video.mp4".to_string(),
+                    quality: Quality::High,
+                    duration_seconds: None,
+                }),
+            },
+            episode_number: Some(published_episode()),
+            synced_at: Some(fixed_timestamp()),
+            updated_at: fixed_timestamp(),
+            downloaded_quality: DownloadedQuality {
+                height: Some(720),
+                ..DownloadedQuality::checked(Some(fixed_timestamp()), 0)
+            },
+            thumbnail: Thumbnail {
+                filename: Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                state: StepState::pending().succeed()
+            },
+            ..video
+        }]
+    );
+}
+
+#[test]
 fn it_should_skip_a_failed_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

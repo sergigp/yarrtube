@@ -492,15 +492,13 @@ impl VideoDownloader {
     }
 
     /// Whether the video's download has nothing left to do: Downloaded,
-    /// Failed, Unavailable or Discarded.
+    /// Failed, Discarded, or Unavailable unless recheckable.
     fn is_settled(video: &Video) -> bool {
-        matches!(
-            video.download.status(),
-            VideoStatus::Downloaded
-                | VideoStatus::Failed
-                | VideoStatus::Unavailable
-                | VideoStatus::Discarded
-        )
+        match video.download.status() {
+            VideoStatus::Downloaded | VideoStatus::Failed | VideoStatus::Discarded => true,
+            VideoStatus::Unavailable => !video.download.is_recheckable_unavailable(),
+            VideoStatus::Pending | VideoStatus::InProgress | VideoStatus::Retrying => false,
+        }
     }
 
     /// Builds `video`'s metadata with its playlist position (no `thumb` yet)

@@ -10,7 +10,7 @@
 - [x] 2.2 `it_should_schedule_a_download_for_a_members_only_unavailable_video`: `is_recheckable` for MembersOnly/Private, `is_recheckable_unavailable`, and `is_due` covering it.
 - [x] 2.3 `it_should_schedule_a_download_for_an_unavailable_video_without_a_reason`: a legacy Unavailable with no reason counts as recheckable.
 - [x] 2.4 `it_should_not_schedule_a_download_for_a_permanently_unavailable_video`: a permanent reason stays settled.
-- [ ] 2.5 `it_should_download_a_members_only_unavailable_video_that_became_public`: `VideoDownloader::is_settled` lets a recheckable Unavailable download through.
+- [x] 2.5 `it_should_download_a_members_only_unavailable_video_that_became_public`: `VideoDownloader::is_settled` lets a recheckable Unavailable download through.
 - [ ] 2.6 `it_should_keep_a_still_members_only_video_unavailable_without_counting_an_attempt`: a repeated members-only failure leaves the video Unavailable with 0 attempts and the task settled.
 - [ ] 2.7 `it_should_settle_a_private_video_that_is_now_removed`: the new reason replaces the old one, and a later task attempts nothing.
 - [ ] 2.8 `it_should_not_attempt_a_permanently_unavailable_video`: no download call for a permanent Unavailable.
