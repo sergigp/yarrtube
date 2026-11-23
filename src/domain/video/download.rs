@@ -87,11 +87,11 @@ impl Download {
     /// none recorded.
     pub fn is_recheckable_unavailable(&self) -> bool {
         self.status() == VideoStatus::Unavailable
-            && self
-                .failure
-                .as_ref()
-                .and_then(|reason| DownloadFailure::new(reason.as_str()).unavailability())
-                .is_some_and(Unavailability::is_recheckable)
+            && self.failure.as_ref().is_none_or(|reason| {
+                DownloadFailure::new(reason.as_str())
+                    .unavailability()
+                    .is_some_and(Unavailability::is_recheckable)
+            })
     }
 
     /// When a Retrying download's next attempt is due; none while started.
