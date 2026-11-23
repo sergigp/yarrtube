@@ -16,8 +16,8 @@ pub struct Download {
     /// Discarded by the user (see the `video-discard` capability): never
     /// attempted again until its source restores it.
     pub discarded: bool,
-    /// Why the last attempt failed; kept while started, cleared on success,
-    /// unavailable and retry.
+    /// Why the last attempt failed; kept while started and when Unavailable,
+    /// cleared on success and retry.
     pub failure: Option<String>,
     /// Some only once Done.
     pub file: Option<DownloadedFile>,
@@ -138,12 +138,12 @@ impl Download {
         }
     }
 
-    /// Unavailable, its failed attempts and failure cleared.
-    pub fn unavailable(self, _failure: &DownloadFailure) -> Self {
+    /// Unavailable, its failed attempts cleared and `failure`'s reason kept.
+    pub fn unavailable(self, failure: &DownloadFailure) -> Self {
         Self {
             state: self.state.unavailable(),
             started: false,
-            failure: None,
+            failure: Some(failure.reason().to_string()),
             ..self
         }
     }

@@ -2127,7 +2127,7 @@ fn it_should_exclude_a_video_blocked_by_claimed_content() {
 }
 
 #[test]
-fn it_should_mark_the_video_unavailable_if_the_failure_is_permanent() {
+fn it_should_keep_the_reason_when_marking_the_video_unavailable() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = retrying_video(3);
@@ -2153,7 +2153,10 @@ fn it_should_mark_the_video_unavailable_if_the_failure_is_permanent() {
                     status: StepStatus::Unavailable,
                     attempts: RetryAttempts::default()
                 },
-                failure: None,
+                failure: Some(
+                    "Join this channel to get access to members-only content like this video, and other exclusive perks."
+                        .to_string()
+                ),
                 ..video.download
             },
             ..video

@@ -122,9 +122,8 @@ impl Video {
         }
     }
 
-    /// Marks a video's download Unavailable: final, for a video that can
-    /// never be downloaded (see the `video-download` capability), its failed
-    /// attempts and failure cleared.
+    /// Marks a video's download Unavailable for `failure`'s reason (see the
+    /// `video-download` capability), its failed attempts cleared.
     pub fn mark_unavailable(self, failure: &DownloadFailure, now: DateTime<Utc>) -> Self {
         Self {
             download: self.download.unavailable(failure),
@@ -720,6 +719,7 @@ mod tests {
             Video {
                 download: Download {
                     state: StepState::pending().unavailable(),
+                    failure: Some("Private video".to_string()),
                     ..Download::pending()
                 },
                 updated_at: now,
