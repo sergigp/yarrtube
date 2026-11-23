@@ -18,7 +18,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 SqliteVideoRepository: `it_should_round_trip_an_unavailable_download_with_its_reason`.
+- [x] 3.1 SqliteVideoRepository: `it_should_round_trip_an_unavailable_download_with_its_reason`.
 
 ## 4. Verification
 
