@@ -115,9 +115,17 @@ test('rotating to landscape fills the screen with the video and back restores th
   await video.evaluate((el) => {
     el.dataset.e2eElement = 'portrait'
   })
-  await page.evaluate(() => window.scrollTo(0, 300))
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
-  const scrollY = await page.evaluate(() => window.scrollY)
+  // Up to the scroll event, not just `scrollY`: it fires a frame later, and
+  // the page only knows where to scroll back from it. Turning the phone in
+  // that frame is not something a person does.
+  const scrollY = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        window.addEventListener('scroll', () => resolve(window.scrollY), { once: true })
+        window.scrollTo(0, 300)
+      }),
+  )
+  expect(scrollY).toBeGreaterThan(0)
   const portrait = page.viewportSize()
 
   await page.setViewportSize({ width: portrait.height + 180, height: portrait.width })
