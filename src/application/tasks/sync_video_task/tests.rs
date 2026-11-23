@@ -1902,7 +1902,7 @@ fn it_should_reset_a_video_whose_file_is_not_mp4() {
 }
 
 #[test]
-fn it_should_never_recover_an_excluded_video() {
+fn it_should_not_schedule_a_download_for_a_permanently_unavailable_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
