@@ -420,8 +420,8 @@ impl VideoDownloader {
         }
     }
 
-    /// A clean `yt-dlp` failure: either makes a permanently-unavailable
-    /// video Unavailable (settling the task) or records a failed attempt.
+    /// A clean `yt-dlp` failure: either makes a video YouTube won't serve
+    /// Unavailable (settling the task) or records a failed attempt.
     fn record_failed(
         &self,
         started: Video,
@@ -435,15 +435,16 @@ impl VideoDownloader {
         }
     }
 
-    /// Marks a permanently-unavailable video Unavailable and settles the
-    /// task without error, so no retry is scheduled.
+    /// Marks the video Unavailable with `failure`'s reason and settles the
+    /// task without error, so no retry is scheduled; a recheckable reason is
+    /// attempted again on the next video sync.
     fn mark_unavailable(&self, started: Video, failure: &DownloadFailure) -> anyhow::Result<()> {
         let video_id = started.id.clone();
         let now = self.clock.now();
         self.video_updater.update(&video_id, |video| {
             Some(video.mark_unavailable(failure, now))
         })?;
-        info!(video_id = %video_id, reason = %failure.reason(), "marking permanently-unavailable video unavailable");
+        info!(video_id = %video_id, reason = %failure.reason(), "marking video unavailable");
         Ok(())
     }
 

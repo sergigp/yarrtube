@@ -22,6 +22,6 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `scripts/run-tests.sh --lint --web --rust` passes.
+- [x] 4.1 `scripts/run-tests.sh --lint --web --rust` passes.
 - [ ] 4.2 Update `doc/` wherever it says Unavailable/members-only videos are never retried (grep `doc/` and `README.md`), and verify the wording matches the specs.
 - [ ] 4.3 Manual (human): on a real install, a members-first video from a channel goes from Unavailable to Downloaded within one reconcile pass after it goes public.

@@ -1,5 +1,4 @@
-use super::unavailability::Unavailability;
-use crate::domain::video::VideoId;
+use crate::domain::video::{Unavailability, VideoId};
 
 /// Substrings that, found (case-insensitively) in a failure reason, name the
 /// video's unavailability. This is an allowlist of unavailability reasons,
