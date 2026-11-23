@@ -2530,10 +2530,15 @@ fn it_should_skip_the_download_of_an_already_downloaded_video() {
 }
 
 #[test]
-fn it_should_skip_the_download_of_an_excluded_video() {
+fn it_should_not_attempt_a_permanently_unavailable_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-    let video = my_video().mark_removed(fixed_timestamp());
+    let video = my_video().mark_unavailable(
+        &DownloadFailure::new(
+            "This video contains content that has been blocked on copyright grounds.",
+        ),
+        fixed_timestamp(),
+    );
     video_repository.insert(&video).unwrap();
     let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
     SqliteChannelRepository::new(db.database())
