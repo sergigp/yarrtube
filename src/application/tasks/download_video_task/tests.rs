@@ -1788,6 +1788,32 @@ fn it_should_download_a_members_only_unavailable_video_that_became_public() {
 }
 
 #[test]
+fn it_should_keep_a_still_members_only_video_unavailable_without_counting_an_attempt() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let members_only =
+        DownloadFailure::new("Join this channel to get access to members-only content.");
+    let video = my_video()
+        .start_download(fixed_timestamp() - Duration::days(30))
+        .mark_unavailable(&members_only, fixed_timestamp() - Duration::days(30));
+    video_repository.insert(&video).unwrap();
+    seed_channel_video(&db, &video);
+    let task = failing_download_task(&db, video_repository.clone(), members_only.reason());
+
+    let result = run(&task, &task_for(video.id.as_str()));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository.list().unwrap(),
+        vec![Video {
+            version: 2,
+            updated_at: fixed_timestamp(),
+            ..video.clone()
+        }]
+    );
+}
+
+#[test]
 fn it_should_skip_a_failed_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
