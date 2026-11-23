@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { Chapter, Video } from '@/api/types'
 import { aVideo } from '@/test/helpers'
-import { rotatePhone, useDesktopViewport } from '@/test/viewport'
+import { rotatePhone, useDesktopViewport, viewport } from '@/test/viewport'
 import { VideoPlayer } from './VideoPlayer'
 
 
@@ -486,12 +486,39 @@ describe('VideoPlayer', () => {
       expect(container.querySelector('video')).toBe(before)
     })
 
-    it('locks page scroll while taking over and scrolls back on return', () => {
-      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-      const scrollPageTo = (y: number) => {
-        Object.defineProperty(window, 'scrollY', { value: y, configurable: true })
-        fireEvent.scroll(window)
+    /** Holds animation frames until `runFrames()` runs them, as the next frame would. */
+    function holdFrames(): { runFrames: () => void } {
+      const frames = new Map<number, FrameRequestCallback>()
+      let lastId = 0
+      const request = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+        frames.set(++lastId, callback)
+        return lastId
+      })
+      const cancel = vi
+        .spyOn(window, 'cancelAnimationFrame')
+        .mockImplementation((id) => frames.delete(id))
+      onTestFinished(() => {
+        request.mockRestore()
+        cancel.mockRestore()
+      })
+      return {
+        runFrames: () => {
+          const due = [...frames.values()]
+          frames.clear()
+          for (const callback of due) callback(0)
+        },
       }
+    }
+
+    /** Reports the document scrolled to `y`, as the browser would. */
+    function scrollPageTo(y: number): void {
+      Object.defineProperty(window, 'scrollY', { value: y, configurable: true })
+      fireEvent.scroll(window)
+    }
+
+    it('locks page scroll while taking over and scrolls back on return', () => {
+      const { runFrames } = holdFrames()
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
       onTestFinished(() => {
         scrollTo.mockRestore()
         scrollPageTo(0)
@@ -504,13 +531,61 @@ describe('VideoPlayer', () => {
       scrollPageTo(0)
       const overflowInLandscape = document.documentElement.style.overflow
       act(() => rotatePhone('portrait'))
+      runFrames()
 
       expect(overflowInLandscape).toBe('hidden')
       expect(document.documentElement.style.overflow).toBe('')
       expect(scrollTo).toHaveBeenLastCalledWith(0, 400)
     })
 
+    it('scrolls back once the portrait layout is in, ignoring the scrolls of the turn back', () => {
+      const { runFrames } = holdFrames()
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+      onTestFinished(() => {
+        scrollTo.mockRestore()
+        scrollPageTo(0)
+      })
+      render(player(aVideo({ id: 'vid1' })))
+      scrollPageTo(400)
+      act(() => rotatePhone('landscape'))
+
+      // Portrait again, its clamped scroll reported before the page re-renders.
+      viewport.phoneLandscape = false
+      scrollPageTo(0)
+      act(() => rotatePhone('portrait'))
+      scrollPageTo(0)
+      const scrolledBeforeTheFrame = scrollTo.mock.calls.length
+      runFrames()
+
+      expect(scrolledBeforeTheFrame).toBe(0)
+      expect(scrollTo).toHaveBeenLastCalledWith(0, 400)
+    })
+
+    it('scrolls back once when turned back to landscape before the page was restored', () => {
+      const { runFrames } = holdFrames()
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+      onTestFinished(() => {
+        scrollTo.mockRestore()
+        scrollPageTo(0)
+      })
+      render(player(aVideo({ id: 'vid1' })))
+      scrollPageTo(400)
+
+      act(() => rotatePhone('landscape'))
+      act(() => rotatePhone('portrait'))
+      act(() => rotatePhone('landscape'))
+      runFrames()
+      const scrolledInLandscape = scrollTo.mock.calls.length
+      act(() => rotatePhone('portrait'))
+      scrollPageTo(0)
+      runFrames()
+
+      expect(scrolledInLandscape).toBe(0)
+      expect(scrollTo.mock.calls).toEqual([[0, 400]])
+    })
+
     it('scrolls back to where the page already was when it opened', () => {
+      const { runFrames } = holdFrames()
       const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
       Object.defineProperty(window, 'scrollY', { value: 250, configurable: true })
       onTestFinished(() => {
@@ -521,17 +596,20 @@ describe('VideoPlayer', () => {
 
       act(() => rotatePhone('landscape'))
       act(() => rotatePhone('portrait'))
+      runFrames()
 
       expect(scrollTo).toHaveBeenLastCalledWith(0, 250)
     })
 
     it('leaves the scroll alone when the page is left in landscape', () => {
+      const { runFrames } = holdFrames()
       const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
       onTestFinished(() => scrollTo.mockRestore())
       const { unmount } = render(player(aVideo({ id: 'vid1' })))
       act(() => rotatePhone('landscape'))
 
       unmount()
+      runFrames()
 
       expect(scrollTo).not.toHaveBeenCalled()
       expect(document.documentElement.style.overflow).toBe('')
