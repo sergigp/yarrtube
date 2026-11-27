@@ -179,7 +179,7 @@ impl Video {
 
     /// Favorited at `at`; `None` when already a favorite or Discarded.
     pub fn favorite(self, at: DateTime<Utc>) -> Option<Self> {
-        if self.is_favorite() {
+        if self.is_favorite() || self.download.is_discarded() {
             return None;
         }
         Some(Self {

@@ -17,7 +17,7 @@
 - [x] 2.3 `it_should_keep_the_favorite_time_when_favorited_again`: 204, `favorited_at` unchanged.
 - [x] 2.4 `it_should_unfavorite_every_copy_of_the_youtube_video`: 204, neither copy favorite.
 - [x] 2.5 `it_should_leave_a_video_that_is_not_a_favorite_unchanged_when_unfavorited`: 204, no write.
-- [ ] 2.6 `it_should_refuse_to_favorite_a_discarded_video`: 409, not favorite.
+- [x] 2.6 `it_should_refuse_to_favorite_a_discarded_video`: 409, not favorite.
 - [ ] 2.7 `it_should_fail_to_favorite_an_unknown_video`: 404 for favorite and unfavorite.
 - [ ] 2.8 `it_should_unfavorite_every_copy_when_discarding_a_favorite`: `Video::discard` clears `favorited_at`, and `VideoDiscarder` calls `unfavorite`.
 - [ ] 2.9 `it_should_report_favorite_and_kept_in_a_channel_list`: `VideoView.kept` from the membership row, plus `VideoResponse.favorite` / `kept`.

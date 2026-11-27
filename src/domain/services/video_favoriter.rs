@@ -34,42 +34,52 @@ pub trait VideoFavoriterApi: Send + Sync {
 
 impl VideoFavoriterApi for VideoFavoriter {
     fn favorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
+        let Some(video) = self.find_video(video_id)? else {
+            return Ok(());
+        };
+        Self::ensure_not_discarded(&video)?;
         let at = self.clock.now();
-        self.update_copies(video_id, |video| video.favorite(at))
+        self.update_copies(&video, |video| video.favorite(at))
     }
 
     fn unfavorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
+        let Some(video) = self.find_video(video_id)? else {
+            return Ok(());
+        };
         let now = self.clock.now();
-        self.update_copies(video_id, |video| video.unfavorite(now))
+        self.update_copies(&video, |video| video.unfavorite(now))
     }
 }
 
 impl VideoFavoriter {
-    /// Applies `transition` to every stored copy of video `video_id`'s
-    /// YouTube video.
-    fn update_copies(
-        &self,
-        video_id: &VideoId,
-        transition: impl Fn(Video) -> Option<Video>,
-    ) -> Result<(), FavoriteVideoError> {
-        self.find_copies(video_id)?
-            .iter()
-            .try_for_each(|copy| self.video_updater.update(&copy.id, &transition).map(drop))
+    fn find_video(&self, video_id: &VideoId) -> Result<Option<Video>, FavoriteVideoError> {
+        self.video_repository
+            .find(video_id)
             .map_err(FavoriteVideoError::Repository)
     }
 
-    /// Every stored copy of video `video_id`'s YouTube video: a favorite
-    /// belongs to the YouTube video.
-    fn find_copies(&self, video_id: &VideoId) -> Result<Vec<Video>, FavoriteVideoError> {
-        let Some(video) = self
-            .video_repository
-            .find(video_id)
-            .map_err(FavoriteVideoError::Repository)?
-        else {
-            return Ok(Vec::new());
-        };
+    fn ensure_not_discarded(video: &Video) -> Result<(), FavoriteVideoError> {
+        if video.download.is_discarded() {
+            Err(FavoriteVideoError::Discarded(video.id.clone()))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Applies `transition` to every stored copy of `video`'s YouTube video,
+    /// `video` included: a favorite belongs to the YouTube video.
+    fn update_copies(
+        &self,
+        video: &Video,
+        transition: impl Fn(Video) -> Option<Video>,
+    ) -> Result<(), FavoriteVideoError> {
         self.video_repository
             .find_by_youtube_id(&video.youtube_id)
+            .and_then(|copies| {
+                copies
+                    .iter()
+                    .try_for_each(|copy| self.video_updater.update(&copy.id, &transition).map(drop))
+            })
             .map_err(FavoriteVideoError::Repository)
     }
 }

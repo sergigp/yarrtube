@@ -170,7 +170,7 @@ impl fmt::Display for FavoriteVideoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::VideoNotFound(id) => write!(f, "video {id} not found"),
-            Self::Discarded(id) => write!(f, "video {id} is discarded"),
+            Self::Discarded(id) => write!(f, "video {id} can't be favorited while discarded"),
             Self::Repository(e) => write!(f, "{e}"),
         }
     }
