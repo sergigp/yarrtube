@@ -134,6 +134,7 @@ Enforced by: cargo test · `architecture_tests::domain_services_are_flat`
 - A handler extracts only the service(s) it uses (`State<PlaylistCreator>`), never the whole `ApiServices`. `ApiServices` derives `FromRef` so axum resolves the sub-state.
   Enforced by: cargo test · `architecture_tests::handlers_extract_only_their_services`
 - Handlers return typed results, never an opaque `Response`: `Result<(StatusCode, Json<T>), ApiError>` when the status varies, `Result<Json<T>, ApiError>` for a plain 200, `Result<StatusCode, ApiError>` for bodiless responses.
+  Enforced by: cargo test · `architecture_tests::handlers_return_typed_results`
 - Every failure is an `ApiError` (status + message, rendered as `{"error": ...}`). Input is validated with `?` only: VOs via `From<ValidationError>`, missing fields via `required(request.field, MISSING_X)?` (`http/validation.rs`).
 - Domain errors are mapped explicitly per variant (`Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e))`), no catch-all arm. A mapping repeated across handlers gets one small function.
 - Every service call goes through `run_blocking` (`http/blocking.rs`), since services are synchronous (SQLite, blocking HTTP). Don't judge per call whether it's needed.

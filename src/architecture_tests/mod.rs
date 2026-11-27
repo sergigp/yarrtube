@@ -16,6 +16,7 @@ mod domain_service_layout;
 mod domain_services_are_flat;
 mod fn_ordering;
 mod handlers_extract_only_their_services;
+mod handlers_return_typed_results;
 mod port_traits_live_in_infrastructure;
 mod repository_files_are_named_after_their_port;
 mod repository_ports_return_anyhow_results;
