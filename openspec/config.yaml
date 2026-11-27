@@ -146,6 +146,8 @@ rules:
       Structure tasks.md as a vertical slice built outside-in. Do NOT group tasks by
       layer (domain / application / infrastructure). Use exactly these sections, in order:
 
+      Enforced by: cargo test · `architecture_tests::tasks_md_sections`
+
       ## 1. Walking skeleton
       One task that creates every type and signature from design.md's
       ## Types & Signatures, in the files it names, across all layers, wired end-to-end
