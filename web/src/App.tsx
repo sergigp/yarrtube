@@ -5,6 +5,7 @@ import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelDetail } from './components/ChannelDetail'
 import { TasksView } from './components/TasksView'
 import { CategoryDetail } from './components/CategoryDetail'
+import { FavoritesDetail } from './components/FavoritesDetail'
 import { AddChannelDialog } from './components/AddChannelDialog'
 import { AddPlaylistDialog } from './components/AddPlaylistDialog'
 import { CategoryDialog } from './components/CategoryDialog'
@@ -159,6 +160,7 @@ export function AppShell() {
               <Route path="/tasks" element={<TasksView />} />
               {settingsRoutes()}
               <Route path="/categories/:id" element={<CategoryDetail />} />
+              <Route path="/favorites" element={<FavoritesDetail />} />
             </Routes>
           </div>
         </main>

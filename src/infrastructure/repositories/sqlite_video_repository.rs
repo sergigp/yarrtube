@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitles_status, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_status, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_status, summary_status, version, download_failed_attempts, download_failure, thumbnail_status, thumbnail_failed_attempts, thumbnail_last_failed_at, summary_failed_attempts, summary_last_failed_at, categorization_status, categorization_failed_attempts, categorization_last_failed_at";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitles_status, subtitle_filename, subtitles_last_checked_at, subtitles_failed_attempts, chapters, chapters_last_checked_at, chapters_failed_attempts, chapters_status, downloaded_height, quality_last_checked_at, quality_failed_attempts, quality_status, summary_status, version, download_failed_attempts, download_failure, thumbnail_status, thumbnail_failed_attempts, thumbnail_last_failed_at, summary_failed_attempts, summary_last_failed_at, categorization_status, categorization_failed_attempts, categorization_last_failed_at, favorited_at";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -56,6 +56,7 @@ struct VideoRow {
     categorization_status: String,
     categorization_failed_attempts: u32,
     categorization_last_failed_at: Option<String>,
+    favorited_at: Option<String>,
 }
 
 pub trait VideoRepository: Send + Sync {
@@ -102,6 +103,9 @@ pub trait VideoRepository: Send + Sync {
     /// Up to `limit` `Downloaded` videos whose title contains `text`, ignoring
     /// ASCII case, newest sync first.
     fn find_downloaded_by_title(&self, text: &str, limit: usize) -> anyhow::Result<Vec<Video>>;
+    /// Every video with a `favorited_at`.
+    #[allow(dead_code)] // walking skeleton
+    fn list_favorites(&self) -> anyhow::Result<Vec<Video>>;
 }
 
 pub struct SqliteVideoRepository {
@@ -121,7 +125,7 @@ impl VideoRepository for SqliteVideoRepository {
         conn.execute(
             &format!(
                 "INSERT INTO videos ({VIDEO_COLUMNS}) VALUES ({})",
-                (1..=41)
+                (1..=42)
                     .map(|i| format!("?{i}"))
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -168,6 +172,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.categorization.status.as_str(),
                 video.categorization.attempts.failed,
                 Self::encode_timestamp(video.categorization.attempts.last_failed_at),
+                Self::encode_timestamp(video.favorited_at),
             ],
         )
         .inspect_err(
@@ -220,8 +225,8 @@ impl VideoRepository for SqliteVideoRepository {
         let file = video.download.file.as_ref();
         let conn = self.db.write()?;
         let updated = conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitles_status = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_status = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_status = ?28, summary_status = ?29, download_failed_attempts = ?30, download_failure = ?31, thumbnail_status = ?32, thumbnail_failed_attempts = ?33, thumbnail_last_failed_at = ?34, summary_failed_attempts = ?35, summary_last_failed_at = ?36, categorization_status = ?37, categorization_failed_attempts = ?38, categorization_last_failed_at = ?39, version = version + 1
-             WHERE id = ?1 AND version = ?40",
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitles_status = ?17, subtitle_filename = ?18, subtitles_last_checked_at = ?19, subtitles_failed_attempts = ?20, chapters = ?21, chapters_last_checked_at = ?22, chapters_failed_attempts = ?23, chapters_status = ?24, downloaded_height = ?25, quality_last_checked_at = ?26, quality_failed_attempts = ?27, quality_status = ?28, summary_status = ?29, download_failed_attempts = ?30, download_failure = ?31, thumbnail_status = ?32, thumbnail_failed_attempts = ?33, thumbnail_last_failed_at = ?34, summary_failed_attempts = ?35, summary_last_failed_at = ?36, categorization_status = ?37, categorization_failed_attempts = ?38, categorization_last_failed_at = ?39, favorited_at = ?40, version = version + 1
+             WHERE id = ?1 AND version = ?41",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -262,6 +267,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.categorization.status.as_str(),
                 video.categorization.attempts.failed,
                 Self::encode_timestamp(video.categorization.attempts.last_failed_at),
+                Self::encode_timestamp(video.favorited_at),
                 video.version,
             ],
         )
@@ -391,6 +397,10 @@ impl VideoRepository for SqliteVideoRepository {
         .into_iter()
         .map(Self::row_to_video)
         .collect()
+    }
+
+    fn list_favorites(&self) -> anyhow::Result<Vec<Video>> {
+        Ok(Vec::new())
     }
 }
 
@@ -527,6 +537,7 @@ impl SqliteVideoRepository {
             categorization_status: row.get(38)?,
             categorization_failed_attempts: row.get(39)?,
             categorization_last_failed_at: row.get(40)?,
+            favorited_at: row.get(41)?,
         })
     }
 
@@ -596,6 +607,7 @@ impl SqliteVideoRepository {
                 row.categorization_last_failed_at,
                 "categorization_last_failed_at",
             )?,
+            favorited_at: Self::decode_timestamp(row.favorited_at, "favorited_at")?,
             version: row.version,
             watch: WatchState {
                 watched_at: Self::decode_timestamp(row.watched_at, "watched_at")?,

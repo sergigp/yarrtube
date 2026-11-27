@@ -61,6 +61,8 @@ export interface ChannelListItem {
   work_in_progress: boolean
   /** When its videos were last synced from YouTube; null until the first sync. */
   last_synced_at: string | null
+  /** Its favorite videos, Unavailable and Discarded ones not counted. */
+  favorite_count: number
 }
 
 /** An entry of `GET /api/playlists`. */
@@ -83,6 +85,8 @@ export interface PlaylistListItem {
   work_in_progress: boolean
   /** When its videos were last synced from YouTube; null until the first sync. */
   last_synced_at: string | null
+  /** Its favorite videos, Unavailable and Discarded ones not counted. */
+  favorite_count: number
 }
 
 /** A sidebar/detail library entry: what channels and playlists share. */
@@ -126,6 +130,10 @@ export interface Video {
   summary: string | null
   /** Its episode number on disk (a playlist's S01E<n>); null until assigned. */
   episode: number | null
+  /** Whether its YouTube video is a favorite (see `video-favorites`). */
+  favorite: boolean
+  /** A favorite its channel or playlist keeps though it no longer lists it. */
+  kept: boolean
 }
 
 /** One of a video's chapters, in whole seconds from the start of the video. */
@@ -160,6 +168,8 @@ export interface HomeVideo {
   source: HomeVideoSource
   /** Categories having the YouTube video, in category-name order. */
   category_ids: string[]
+  /** Whether its YouTube video is a favorite (see `video-favorites`). */
+  favorite: boolean
 }
 
 /** Response of `GET /api/videos/search`. */

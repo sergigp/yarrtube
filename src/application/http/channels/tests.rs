@@ -4589,6 +4589,7 @@ fn some_channel_list_item_response() -> ChannelListItemResponse {
         summaries_enabled: false,
         categorization_enabled: false,
         last_synced_at: None,
+        favorite_count: 0,
     }
 }
 

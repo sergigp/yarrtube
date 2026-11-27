@@ -49,6 +49,9 @@ pub struct Video {
     /// capability.
     pub categorization: StepState,
     pub watch: WatchState,
+    /// When the YouTube video was favorited; `None` when it isn't a
+    /// favorite — see the `video-favorites` capability.
+    pub favorited_at: Option<DateTime<Utc>>,
     /// Bumped by every stored update; an update only applies on top of the
     /// version it was read at — see the `video-write-consistency` capability.
     pub version: u32,
@@ -76,6 +79,7 @@ impl Video {
             summary: StepState::pending(),
             categorization: StepState::pending(),
             watch: WatchState::unwatched(),
+            favorited_at: None,
             version: 0,
         }
     }
@@ -171,6 +175,28 @@ impl Video {
             updated_at: now,
             ..self
         })
+    }
+
+    /// Favorited at `at`; `None` when already a favorite or Discarded.
+    #[allow(dead_code)] // walking skeleton
+    pub fn favorite(self, _at: DateTime<Utc>) -> Option<Self> {
+        None
+    }
+
+    /// No longer a favorite; `None` when it wasn't one.
+    #[allow(dead_code)] // walking skeleton
+    pub fn unfavorite(self, _now: DateTime<Utc>) -> Option<Self> {
+        None
+    }
+
+    pub fn is_favorite(&self) -> bool {
+        false
+    }
+
+    /// For a new copy: the favorite time of an existing copy.
+    #[allow(dead_code)] // walking skeleton
+    pub fn with_favorited_at(self, _at: Option<DateTime<Utc>>) -> Self {
+        self
     }
 
     /// Download Unavailable: outside a channel's video limit.

@@ -223,5 +223,6 @@ export function asHomeVideo(video: Video, source: HomeVideoSource): HomeVideo {
     published_at: video.published_at,
     source,
     category_ids: [],
+    favorite: video.favorite,
   }
 }

@@ -94,6 +94,7 @@ pub struct PlaylistListItemResponse {
     pub unwatched_count: usize,
     pub work_in_progress: bool,
     pub last_synced_at: Option<DateTime<Utc>>,
+    pub favorite_count: usize,
 }
 
 impl From<PlaylistView> for PlaylistListItemResponse {
@@ -113,6 +114,7 @@ impl From<PlaylistView> for PlaylistListItemResponse {
             unwatched_count: playlist.unwatched_count,
             work_in_progress: playlist.work_in_progress,
             last_synced_at: playlist.last_synced_at,
+            favorite_count: playlist.favorite_count,
         }
     }
 }

@@ -12,6 +12,8 @@ pub struct PlaylistVideo {
     pub video_id: VideoId,
     pub position: i64,
     pub created_at: DateTime<Utc>,
+    /// A favorite no longer in the YouTube playlist, kept anyway.
+    pub kept: bool,
 }
 
 impl PlaylistVideo {
@@ -29,7 +31,14 @@ impl PlaylistVideo {
             video_id,
             position,
             created_at: now,
+            kept: false,
         }
+    }
+
+    /// Kept at `position`, after the listed items.
+    #[allow(dead_code)] // walking skeleton
+    pub fn keep(self, _position: i64, _now: DateTime<Utc>) -> Self {
+        self
     }
 }
 

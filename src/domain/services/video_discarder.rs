@@ -1,6 +1,6 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
-    VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
+    VideoFavoriter, VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
 };
 use crate::domain::video::{DiscardVideoError, Video, VideoDiscarded, VideoId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -19,6 +19,8 @@ pub struct VideoDiscarder {
     task_repository: Arc<dyn TaskRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
+    #[allow(dead_code)]
+    video_favoriter: VideoFavoriter,
 }
 
 impl VideoDiscarder {
@@ -28,6 +30,7 @@ impl VideoDiscarder {
         task_repository: Arc<dyn TaskRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
+        video_favoriter: VideoFavoriter,
     ) -> Self {
         Self {
             video_updater: VideoUpdater::new(video_repository.clone()),
@@ -36,6 +39,7 @@ impl VideoDiscarder {
             task_repository,
             event_publisher,
             clock,
+            video_favoriter,
         }
     }
 }

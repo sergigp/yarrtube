@@ -50,6 +50,7 @@ const PLEX_SETTINGS_SQL: &str = include_str!("../../../migrations/0032_plex_sett
 const SOURCE_LAST_SYNCED_AT_SQL: &str =
     include_str!("../../../migrations/0033_source_last_synced_at.sql");
 const DISCARDED_VIDEOS_SQL: &str = include_str!("../../../migrations/0034_discarded_videos.sql");
+const VIDEO_FAVORITES_SQL: &str = include_str!("../../../migrations/0035_video_favorites.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(migrations())
@@ -98,6 +99,7 @@ fn migrations() -> Vec<M<'static>> {
         M::up(PLEX_SETTINGS_SQL),
         M::up(SOURCE_LAST_SYNCED_AT_SQL),
         M::up(DISCARDED_VIDEOS_SQL),
+        M::up(VIDEO_FAVORITES_SQL),
     ]
 }
 

@@ -8266,7 +8266,8 @@ fn video_discarder(
         Arc::new(video_owner_finder(&|| db.database())),
         task_repository,
         Arc::new(SqliteEventPublisher::new(db.database(), clock.clone())),
-        clock,
+        clock.clone(),
+        VideoFavoriter::new(Arc::new(SqliteVideoRepository::new(db.database())), clock),
     )
 }
 
@@ -8684,6 +8685,8 @@ fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         chapters: vec![],
         summary: None,
         episode: None,
+        favorite: false,
+        kept: false,
     }
 }
 
@@ -8737,6 +8740,7 @@ fn home_video_response(
         published_at: None,
         source,
         category_ids: vec![],
+        favorite: false,
     }
 }
 
@@ -8769,6 +8773,7 @@ fn category_video_response(
         chapters: vec![],
         summary: None,
         episode: None,
+        favorite: false,
         source,
         category_ids: vec![],
     }

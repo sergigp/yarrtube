@@ -5278,6 +5278,7 @@ fn playlist_list_item_response(id: &str, path: &str) -> PlaylistListItemResponse
         summaries_enabled: false,
         categorization_enabled: false,
         last_synced_at: None,
+        favorite_count: 0,
     }
 }
 

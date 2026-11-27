@@ -124,6 +124,7 @@ impl ChannelViewSearcher {
             summaries_enabled: channel.summaries_enabled,
             categorization_enabled: channel.categorization_enabled,
             last_synced_at: channel.last_synced_at,
+            favorite_count: 0,
         }
     }
 }

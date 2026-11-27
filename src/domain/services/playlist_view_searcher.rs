@@ -126,6 +126,7 @@ impl PlaylistViewSearcher {
             categorization_enabled: playlist.categorization_enabled,
             created_at: playlist.created_at,
             last_synced_at: playlist.last_synced_at,
+            favorite_count: 0,
         }
     }
 }

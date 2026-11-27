@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create every type and signature from design.md's Types & Signatures, wired end-to-end with trivial bodies (no `todo!()`):
+- [x] 1.1 Create every type and signature from design.md's Types & Signatures, wired end-to-end with trivial bodies (no `todo!()`):
   - Migration `migrations/0035_video_favorites.sql` (registered like 0034).
   - Domain: `Video.favorited_at` + `favorite` / `unfavorite` (return `None`) / `is_favorite` (`false`) / `with_favorited_at` (returns `self`); `FavoriteVideoError`; `VideoFavoriter` + `VideoFavoriterApi` (return `Ok(())`) exported from `domain::services`; `VideoDiscarder` taking a `VideoFavoriter` (unused); `ChannelVideo.kept` / `PlaylistVideo.kept` + `keep` (returns `self`); `VideoView.kept`, `HomeVideoView.favorite`, `ChannelView.favorite_count`, `PlaylistView.favorite_count` (all `false` / `0`); `VideoSearcherApi::list_favorites` (empty `Vec`); `VideoRepository::list_favorites` (empty `Vec`) in the SQLite repo and every fake.
   - Infrastructure: SQLite repos read and write `favorited_at` / `kept` columns (round-trip not yet tested).

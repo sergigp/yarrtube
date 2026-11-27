@@ -22,6 +22,7 @@ pub struct HomeVideoView {
     pub source: VideoSource,
     /// Categories having the YouTube video, in category-name order.
     pub category_ids: Vec<CategoryId>,
+    pub favorite: bool,
 }
 
 impl From<SourcedVideo> for HomeVideoView {
@@ -39,6 +40,7 @@ impl From<SourcedVideo> for HomeVideoView {
             published_at: None,
             source: sourced.source,
             category_ids: Vec::new(),
+            favorite: false,
         }
     }
 }

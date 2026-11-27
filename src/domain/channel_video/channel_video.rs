@@ -12,6 +12,8 @@ pub struct ChannelVideo {
     pub video_id: VideoId,
     pub position: i64,
     pub created_at: DateTime<Utc>,
+    /// A favorite no longer among the channel's listed uploads, kept anyway.
+    pub kept: bool,
 }
 
 impl ChannelVideo {
@@ -27,6 +29,13 @@ impl ChannelVideo {
             video_id,
             position,
             created_at: now,
+            kept: false,
         }
+    }
+
+    /// Kept at `position`, after the listed uploads.
+    #[allow(dead_code)] // walking skeleton
+    pub fn keep(self, _position: i64, _now: DateTime<Utc>) -> Self {
+        self
     }
 }

@@ -105,6 +105,10 @@ pub trait VideoSearcherApi: Send + Sync {
         text: &VideoSearchText,
         limit: usize,
     ) -> Result<Vec<HomeVideoView>, ListVideosError>;
+
+    /// Favorite videos, Unavailable and Discarded ones left out, once per
+    /// YouTube video (channel copy preferred), most recently favorited first.
+    fn list_favorites(&self) -> Result<Vec<CategoryVideoView>, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -224,6 +228,10 @@ impl VideoSearcherApi for VideoSearcher {
             .map_err(ListVideosError::Repository)?;
         Ok(Self::with_categories(self.views(videos)?, &by_video))
     }
+
+    fn list_favorites(&self) -> Result<Vec<CategoryVideoView>, ListVideosError> {
+        Ok(Vec::new())
+    }
 }
 
 /// Whether a looked-up video is Unavailable or Discarded, so the video-list
@@ -266,6 +274,7 @@ impl VideoSearcher {
             video,
             metadata,
             summary,
+            kept: false,
         })
     }
 
@@ -284,6 +293,7 @@ impl VideoSearcher {
             video,
             metadata,
             summary,
+            ..
         } = self.view(sourced.video, summaries_shown)?;
         let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
         Ok(CategoryVideoView {

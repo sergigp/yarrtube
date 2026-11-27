@@ -46,6 +46,7 @@ pub mod video_category_choice_searcher;
 pub mod video_category_editor;
 pub mod video_discarder;
 pub mod video_downloader;
+pub mod video_favoriter;
 pub mod video_file_deleter;
 pub mod video_owner_finder;
 pub mod video_reconciler;
@@ -107,6 +108,7 @@ pub use video_category_choice_searcher::{
 pub use video_category_editor::{VideoCategoryEditor, VideoCategoryEditorApi};
 pub use video_discarder::{VideoDiscarder, VideoDiscarderApi};
 pub use video_downloader::{VideoDownloader, VideoDownloaderApi};
+pub use video_favoriter::{VideoFavoriter, VideoFavoriterApi};
 pub use video_file_deleter::{VideoFileDeleter, VideoFileDeleterApi};
 pub use video_owner_finder::{VideoOwnerFinder, VideoOwnerFinderApi};
 pub use video_reconciler::{VideoReconciler, VideoReconcilerApi};

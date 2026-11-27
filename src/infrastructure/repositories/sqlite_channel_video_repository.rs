@@ -37,16 +37,18 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO channel_videos (channel_id, video_id, position, created_at)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO channel_videos (channel_id, video_id, position, created_at, kept)
+             VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (channel_id, video_id) DO UPDATE SET
                 position = excluded.position,
-                created_at = excluded.created_at",
+                created_at = excluded.created_at,
+                kept = excluded.kept",
             params![
                 channel_video.channel_id.as_str(),
                 channel_video.video_id.as_str(),
                 channel_video.position,
                 channel_video.created_at.to_rfc3339(),
+                channel_video.kept,
             ],
         )
         .inspect_err(|e| {
@@ -59,7 +61,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<ChannelVideo>> {
         let conn = self.db.read()?;
         conn.query_row(
-            "SELECT id, channel_id, video_id, position, created_at
+            "SELECT id, channel_id, video_id, position, created_at, kept
              FROM channel_videos WHERE video_id = ?1",
             params![video_id.as_str()],
             row_to_columns,
@@ -77,7 +79,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, channel_id, video_id, position, created_at
+                "SELECT id, channel_id, video_id, position, created_at, kept
                  FROM channel_videos WHERE channel_id = ?1
                  ORDER BY position ASC",
             )
@@ -99,7 +101,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, channel_id, video_id, position, created_at
+                "SELECT id, channel_id, video_id, position, created_at, kept
                  FROM channel_videos ORDER BY id ASC",
             )
             .inspect_err(
@@ -141,7 +143,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     }
 }
 
-type Columns = (i64, String, String, i64, String);
+type Columns = (i64, String, String, i64, String, bool);
 
 fn row_to_columns(row: &rusqlite::Row) -> rusqlite::Result<Columns> {
     Ok((
@@ -150,6 +152,7 @@ fn row_to_columns(row: &rusqlite::Row) -> rusqlite::Result<Columns> {
         row.get::<_, String>(2)?,
         row.get::<_, i64>(3)?,
         row.get::<_, String>(4)?,
+        row.get::<_, bool>(5)?,
     ))
 }
 
@@ -166,7 +169,7 @@ fn rows_to_channel_videos(
 }
 
 fn columns_to_channel_video(columns: Columns) -> anyhow::Result<ChannelVideo> {
-    let (id, channel_id, video_id, position, created_at) = columns;
+    let (id, channel_id, video_id, position, created_at, kept) = columns;
     Ok(ChannelVideo {
         id,
         channel_id: ChannelHandle::new(channel_id)?,
@@ -175,6 +178,7 @@ fn columns_to_channel_video(columns: Columns) -> anyhow::Result<ChannelVideo> {
         created_at: DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc),
+        kept,
     })
 }
 
