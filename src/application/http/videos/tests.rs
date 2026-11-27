@@ -8600,6 +8600,46 @@ async fn it_should_list_favorites_most_recently_favorited_first() {
     );
 }
 
+#[tokio::test]
+async fn it_should_list_a_favorite_tracked_twice_once_from_its_channel() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let channel_copy = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..downloaded_video("vid1", "My Video", None, 100)
+    };
+    save_playlist_video(
+        &video_repository,
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &playlist_copy_of(&channel_copy),
+    );
+    save_channel_video(
+        &video_repository,
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &channel_copy,
+        0,
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![favorite_response(
+            "vid1",
+            "My Video",
+            channel_source(None)
+        )])
+    );
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }

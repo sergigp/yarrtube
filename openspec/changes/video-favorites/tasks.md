@@ -23,7 +23,7 @@
 - [x] 2.9 `it_should_report_favorite_and_kept_in_a_channel_list`: `VideoView.kept` from the membership row, plus `VideoResponse.favorite` / `kept`.
 - [x] 2.10 `it_should_report_favorite_on_home_cards`: `HomeVideoView.favorite`.
 - [x] 2.11 `it_should_list_favorites_most_recently_favorited_first`: `VideoSearcher::list_favorites`.
-- [ ] 2.12 `it_should_list_a_favorite_tracked_twice_once_from_its_channel`.
+- [x] 2.12 `it_should_list_a_favorite_tracked_twice_once_from_its_channel`.
 - [ ] 2.13 `it_should_omit_unavailable_favorites_from_the_favorites_list`.
 - [ ] 2.14 `it_should_list_no_favorites`: 200, `[]`.
 - [ ] 2.15 `it_should_list_a_channel_with_its_favorite_count`: `ChannelViewSearcher`.

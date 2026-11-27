@@ -232,13 +232,14 @@ impl VideoSearcherApi for VideoSearcher {
     }
 
     fn list_favorites(&self) -> Result<Vec<CategoryVideoView>, ListVideosError> {
-        let mut videos = self
-            .with_sources(
+        let mut videos = Self::once_per_youtube_video(Self::channels_first(
+            self.with_sources(
                 self.video_repository
                     .list_favorites()
                     .map_err(ListVideosError::Repository)?,
             )
-            .map_err(ListVideosError::Repository)?;
+            .map_err(ListVideosError::Repository)?,
+        ));
         videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.favorited_at));
         self.category_views(videos)
     }
