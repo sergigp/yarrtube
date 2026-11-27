@@ -12,7 +12,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_favorite_a_video`: 204, the video is a favorite with `favorited_at` = now (`Video::favorite`, `VideoFavoriter::favorite`).
+- [x] 2.1 `it_should_favorite_a_video`: 204, the video is a favorite with `favorited_at` = now (`Video::favorite`, `VideoFavoriter::favorite`).
 - [ ] 2.2 `it_should_favorite_every_copy_of_the_youtube_video`: channel and playlist copies both favorite, same time.
 - [ ] 2.3 `it_should_keep_the_favorite_time_when_favorited_again`: 204, `favorited_at` unchanged.
 - [ ] 2.4 `it_should_unfavorite_every_copy_of_the_youtube_video`: 204, neither copy favorite.

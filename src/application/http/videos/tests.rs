@@ -8194,6 +8194,39 @@ async fn it_should_announce_the_thumbnail_of_a_discarded_video_never_downloaded(
     );
 }
 
+#[tokio::test]
+async fn it_should_favorite_a_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    video_repository.insert(&video).unwrap();
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = favorite(video_favoriter, video.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            favorited_at: Some(favorited_timestamp()),
+            updated_at: favorited_timestamp(),
+            version: 1,
+            ..video
+        })
+    );
+}
+
+async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
+    favorite_video(State(video_favoriter), Path(id.to_string())).await
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
@@ -9221,4 +9254,9 @@ fn categorize_source(db: &TestDatabase, source: &CategoryMember, categories: &[&
                 .collect::<Vec<_>>(),
         )
         .unwrap();
+}
+
+/// When a test favorites a video: a day after `fixed_timestamp()`.
+fn favorited_timestamp() -> DateTime<Utc> {
+    fixed_timestamp() + Duration::days(1)
 }

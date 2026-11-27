@@ -178,9 +178,12 @@ impl Video {
     }
 
     /// Favorited at `at`; `None` when already a favorite or Discarded.
-    #[allow(dead_code)] // walking skeleton
-    pub fn favorite(self, _at: DateTime<Utc>) -> Option<Self> {
-        None
+    pub fn favorite(self, at: DateTime<Utc>) -> Option<Self> {
+        Some(Self {
+            favorited_at: Some(at),
+            updated_at: at,
+            ..self
+        })
     }
 
     /// No longer a favorite; `None` when it wasn't one.

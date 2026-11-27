@@ -1,4 +1,4 @@
-use crate::domain::services::VideoUpdater;
+use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
 use crate::domain::video::{FavoriteVideoError, VideoId};
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -8,8 +8,8 @@ use std::sync::Arc;
 /// A favorite belongs to the YouTube video, so every change applies to every
 /// stored copy of it.
 #[derive(Clone)]
-#[allow(dead_code)] // walking skeleton
 pub struct VideoFavoriter {
+    #[allow(dead_code)] // walking skeleton
     video_repository: Arc<dyn VideoRepository>,
     video_updater: VideoUpdater,
     clock: Arc<dyn Clock>,
@@ -34,8 +34,12 @@ pub trait VideoFavoriterApi: Send + Sync {
 }
 
 impl VideoFavoriterApi for VideoFavoriter {
-    fn favorite(&self, _video_id: &VideoId) -> Result<(), FavoriteVideoError> {
-        Ok(())
+    fn favorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
+        let at = self.clock.now();
+        self.video_updater
+            .update(video_id, |video| video.favorite(at))
+            .map(|_| ())
+            .map_err(FavoriteVideoError::Repository)
     }
 
     fn unfavorite(&self, _video_id: &VideoId) -> Result<(), FavoriteVideoError> {
