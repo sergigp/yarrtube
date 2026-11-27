@@ -87,6 +87,8 @@ declare every endpoint a test touches. A route value can be JSON, an
 `pendingForever()` to hold a query in its loading state. Never mock
 components, hooks, react-query, or the router.
 
+Enforced by: oxlint · `vitest/no-restricted-vi-methods`
+
 Conventions:
 
 - Render routed/query components with `renderWithProviders` (real

@@ -7,7 +7,14 @@
     // The vitest plugin is on for no-restricted-vi-methods only: these two
     // rules it turns on by default stay off, as before.
     "vitest/require-mock-type-parameters": "off",
-    "vitest/valid-expect": "off"
+    "vitest/valid-expect": "off",
+    "vitest/no-restricted-vi-methods": [
+      "error",
+      {
+        "mock": "Only the network boundary is mocked: declare the endpoints with mockApi (src/test/helpers.tsx), never mock modules, components, hooks, react-query or the router. Convention: CLAUDE.md (Frontend testing (web/))",
+        "doMock": "Only the network boundary is mocked: declare the endpoints with mockApi (src/test/helpers.tsx), never mock modules, components, hooks, react-query or the router. Convention: CLAUDE.md (Frontend testing (web/))"
+      }
+    ]
   },
   "overrides": [
     {
