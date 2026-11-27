@@ -36,7 +36,7 @@
 - [x] 2.22 `reconcile_channel_task::it_should_place_kept_videos_after_the_listed_ones`: order A, B, C, D (`ChannelVideo::keep`).
 - [x] 2.23 `reconcile_channel_task::it_should_stop_keeping_a_kept_video_listed_again`: `refresh_known_video` clears `kept`.
 - [x] 2.24 `reconcile_channel_task::it_should_evict_a_kept_video_once_unfavorited`.
-- [ ] 2.25 `reconcile_channel_task::it_should_keep_a_video_favorited_during_the_listing`: `is_favorite_now` re-read.
+- [x] 2.25 `reconcile_channel_task::it_should_keep_a_video_favorited_during_the_listing`: `is_favorite_now` re-read.
 - [ ] 2.26 `reconcile_channel_task::it_should_store_a_new_copy_of_a_favorite_as_a_favorite`: `inherited_favorite`.
 - [ ] 2.27 `reconcile_channel_task::it_should_not_delete_the_files_of_a_kept_favorite`: filesystem reconcile leaves its episode files.
 - [ ] 2.28 `reconcile_playlist_task::it_should_keep_a_favorite_removed_from_the_playlist`: stays `S01E004`, kept, no `VideoRemovedFromPlaylist`.

@@ -75,6 +75,9 @@ pub struct FakeChannelVideosRepository {
     /// Discards this video in this repository, as if a user discarded it
     /// while the reconcile was running.
     pub(crate) discards: Option<(Arc<dyn VideoRepository>, VideoId, DateTime<Utc>)>,
+    /// Favorites this video in this repository, as if a user favorited it
+    /// while the reconcile was running.
+    pub(crate) favorites: Option<(Arc<dyn VideoRepository>, VideoId, DateTime<Utc>)>,
     /// The `limit` of every listing asked for, in order.
     pub(crate) requested_limits: std::sync::Mutex<Vec<u32>>,
 }
@@ -115,6 +118,18 @@ impl FakeChannelVideosRepository {
             ..Self::with_videos(videos)
         }
     }
+
+    pub fn favoriting_during_the_listing(
+        videos: Vec<ChannelVideoListing>,
+        repository: Arc<dyn VideoRepository>,
+        id: VideoId,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            favorites: Some((repository, id, now)),
+            ..Self::with_videos(videos)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -132,6 +147,11 @@ impl ChannelVideosRepository for FakeChannelVideosRepository {
             && let Some(discarded) = repository.find(id)?.and_then(|video| video.discard(*now))
         {
             repository.update(&discarded)?;
+        }
+        if let Some((repository, id, now)) = &self.favorites
+            && let Some(favorited) = repository.find(id)?.and_then(|video| video.favorite(*now))
+        {
+            repository.update(&favorited)?;
         }
         if *self.fails.lock().unwrap() {
             anyhow::bail!("yt-dlp failed to list channel videos");

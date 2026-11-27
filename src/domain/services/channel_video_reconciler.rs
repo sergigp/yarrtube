@@ -485,15 +485,18 @@ impl ChannelVideoReconciler {
         let (favorites, others): (Vec<_>, Vec<_>) = stored_videos
             .iter()
             .filter(|(_, video)| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .partition(|(_, video)| video.is_favorite());
+            .map(|(cv, video)| Ok((cv, video, self.is_favorite_now(video)?)))
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .partition(|(_, _, favorite)| *favorite);
         let now = self.clock.now();
         (last_listed_position + 1..)
             .zip(favorites)
-            .try_for_each(|(position, (cv, _))| {
+            .try_for_each(|(position, (cv, _, _))| {
                 self.channel_video_repository
                     .save(&cv.clone().keep(position, now))
             })?;
-        others.into_iter().try_fold(0, |removed, (_, video)| {
+        others.into_iter().try_fold(0, |removed, (_, video, _)| {
             self.remove_video(channel, video)?;
             Ok(removed + 1)
         })
@@ -528,6 +531,16 @@ impl ChannelVideoReconciler {
                     was_downloaded: video.download.is_downloaded(),
                 },
             ))
+    }
+
+    /// Whether `video` is a favorite, re-read: it may have been favorited
+    /// since the pass read it.
+    fn is_favorite_now(&self, video: &Video) -> anyhow::Result<bool> {
+        Ok(video.is_favorite()
+            || self
+                .video_repository
+                .find(&video.id)?
+                .is_some_and(|stored| stored.is_favorite()))
     }
 
     /// Remembers a Discarded video being removed, so the channel never adds
