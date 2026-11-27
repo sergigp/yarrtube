@@ -1,0 +1,5 @@
+# Baseline of rule `repository_ports_return_anyhow_results` (src/architecture_tests/repository_ports_return_anyhow_results.rs): code that broke it
+# when it arrived. It only shrinks: fix a unit, then delete its line.
+src/infrastructure/repositories/filesystem_channel_avatar_repository.rs::ChannelAvatarRepository::path_of
+src/infrastructure/repositories/filesystem_video_file_repository.rs::VideoFileRepository::dir_exists
+src/infrastructure/repositories/filesystem_video_file_repository.rs::VideoFileRepository::file_exists
