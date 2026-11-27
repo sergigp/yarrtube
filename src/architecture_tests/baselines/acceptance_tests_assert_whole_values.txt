@@ -1,0 +1,5 @@
+# Baseline of rule `acceptance_tests_assert_whole_values` (src/architecture_tests/acceptance_tests_assert_whole_values.rs): code that broke it
+# when it arrived. It only shrinks: fix a unit, then delete its line.
+src/application/tasks/categorize_video_task/tests.rs
+src/application/tasks/summarize_video_task/tests.rs
+src/application/tasks/sync_plex_watch_state_task/tests.rs

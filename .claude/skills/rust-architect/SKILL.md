@@ -164,6 +164,7 @@ Every test has the same 7 steps, top to bottom and inline: `TestDatabase` + repo
 
 - No fixture structs that bundle fakes/repositories and no `service()` → `service_with()` builder chains. They hide which dependencies a test uses and make it easy to skip asserting them. The one allowed exception is a constructor helper for a service with many ports no test observes: it takes the asserted repositories as parameters and fills in the rest (`channel_video_reconciler(&db, channel_repository, ..)`). A test that observes one of the ports the helper fills in builds the service inline with `Service::new(..)` instead of growing the helper or adding a second one.
 - Assert whole typed values in one `assert_eq!`: `Ok((StatusCode::CREATED, some_channel_response()))`, `Err(ApiError::bad_request("<exact message>"))`, `repository.list().unwrap() == vec![..]`. Never field by field, never `len()`, never raw JSON (that only re-tests serde).
+  Enforced by: cargo test · `architecture_tests::acceptance_tests_assert_whole_values`
 - Requests and expected values are built from a valid default overridden with struct update syntax (`CreateChannelRequest { quality: None, ..create_request("@x") }`).
 - Seed state directly into repositories, never by calling another handler: a test only exercises the handler it names.
 - DTO mapping is covered through handler responses, not with standalone DTO tests.
