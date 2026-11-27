@@ -265,8 +265,8 @@ impl ChannelVideoReconciler {
     }
 
     /// Brings the stored membership in line with the channel's current
-    /// `video_limit` most recent uploads, Unavailable ones not counting
-    /// toward the limit: adds newly seen videos (never a Discarded one removed
+    /// `video_limit` most recent uploads, Unavailable ones and favorites not
+    /// counting toward the limit: adds newly seen videos (never a Discarded one removed
     /// earlier, which the channel remembers and which still takes its slot),
     /// refreshes the title and position of known ones, and removes stored
     /// videos no longer among them (removed on YouTube or aged past the limit). A
@@ -285,11 +285,6 @@ impl ChannelVideoReconciler {
             .into_iter()
             .map(|discarded| discarded.youtube_id)
             .collect::<HashSet<_>>();
-        let unavailable_ids: HashSet<&str> = stored_videos
-            .iter()
-            .filter(|(_, video)| video.is_unavailable())
-            .map(|(_, video)| video.youtube_id.as_str())
-            .collect();
         let skipped_ids: HashSet<&str> = stored_videos
             .iter()
             .filter(|(_, video)| video.is_unavailable() || video.is_favorite())
@@ -310,7 +305,7 @@ impl ChannelVideoReconciler {
         };
         let current_videos = video_window::within_limit(
             listing,
-            |upload| unavailable_ids.contains(upload.youtube_id.as_str()),
+            |upload| skipped_ids.contains(upload.youtube_id.as_str()),
             channel.video_limit.value() as usize,
         );
         let now = self.clock.now();
