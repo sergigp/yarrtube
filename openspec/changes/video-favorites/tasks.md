@@ -43,7 +43,7 @@
 - [x] 2.29 `reconcile_playlist_task::it_should_not_reuse_the_episode_number_of_a_kept_favorite`: next new video is `7`.
 - [x] 2.30 `reconcile_playlist_task::it_should_place_kept_videos_after_the_listed_ones_in_a_playlist`.
 - [x] 2.31 `reconcile_playlist_task::it_should_stop_keeping_a_video_re_added_to_the_playlist`.
-- [ ] 2.32 `reconcile_playlist_task::it_should_remove_a_kept_video_once_unfavorited_from_the_playlist`.
+- [x] 2.32 `reconcile_playlist_task::it_should_remove_a_kept_video_once_unfavorited_from_the_playlist`.
 - [ ] 2.33 `reconcile_playlist_task::it_should_keep_a_video_favorited_during_the_playlist_listing`.
 - [ ] 2.34 `reconcile_playlist_task::it_should_store_a_new_playlist_copy_of_a_favorite_as_a_favorite`.
 - [ ] 2.35 Web `FavoriteButton` "favorites a video": `PUT /api/videos/v1/favorite`, toggle becomes "Remove from favorites"; placed in `VideoDetail`.

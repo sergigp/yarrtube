@@ -1974,6 +1974,62 @@ fn it_should_stop_keeping_a_video_re_added_to_the_playlist() {
     );
 }
 
+#[test]
+fn it_should_remove_a_kept_video_once_unfavorited_from_the_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let unfavorited = downloaded_playlist_episode("vidK", "Kept", 4);
+    let stored = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &unfavorited,
+        0,
+    );
+    playlist_video_repository
+        .save(&PlaylistVideo {
+            kept: true,
+            ..stored
+        })
+        .unwrap();
+    let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository,
+        vec![],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.list().unwrap(), vec![]);
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoRemovedFromPlaylist(VideoRemovedFromPlaylist {
+                playlist_id: "PL1".to_string(),
+                video_id: unfavorited.id.as_str().to_string(),
+                title: "Kept".to_string(),
+                filename: Some("Season 1/S01E004 - Kept.mp4".to_string()),
+                thumbnail_filename: Some("Season 1/S01E004 - Kept.jpg".to_string()),
+                subtitle_filename: None,
+                was_downloaded: true,
+            })
+        )]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
