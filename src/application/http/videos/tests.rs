@@ -8378,6 +8378,26 @@ async fn it_should_refuse_to_favorite_a_discarded_video() {
     assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
 }
 
+#[tokio::test]
+async fn it_should_fail_to_favorite_an_unknown_video() {
+    let db = TestDatabase::new();
+    let video_favoriter = VideoFavoriter::new(
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let favorited = favorite(video_favoriter.clone(), "rec1").await;
+    let unfavorited = unfavorite(video_favoriter, "rec1").await;
+
+    assert_eq!(
+        (favorited, unfavorited),
+        (
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found")),
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found"))
+        )
+    );
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }

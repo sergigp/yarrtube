@@ -159,7 +159,6 @@ impl From<anyhow::Error> for RestoreDiscardedVideosError {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // walking skeleton
 pub enum FavoriteVideoError {
     VideoNotFound(VideoId),
     Discarded(VideoId),

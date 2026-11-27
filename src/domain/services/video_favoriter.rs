@@ -34,28 +34,25 @@ pub trait VideoFavoriterApi: Send + Sync {
 
 impl VideoFavoriterApi for VideoFavoriter {
     fn favorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
-        let Some(video) = self.find_video(video_id)? else {
-            return Ok(());
-        };
+        let video = self.find_video(video_id)?;
         Self::ensure_not_discarded(&video)?;
         let at = self.clock.now();
         self.update_copies(&video, |video| video.favorite(at))
     }
 
     fn unfavorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
-        let Some(video) = self.find_video(video_id)? else {
-            return Ok(());
-        };
+        let video = self.find_video(video_id)?;
         let now = self.clock.now();
         self.update_copies(&video, |video| video.unfavorite(now))
     }
 }
 
 impl VideoFavoriter {
-    fn find_video(&self, video_id: &VideoId) -> Result<Option<Video>, FavoriteVideoError> {
+    fn find_video(&self, video_id: &VideoId) -> Result<Video, FavoriteVideoError> {
         self.video_repository
             .find(video_id)
-            .map_err(FavoriteVideoError::Repository)
+            .map_err(FavoriteVideoError::Repository)?
+            .ok_or_else(|| FavoriteVideoError::VideoNotFound(video_id.clone()))
     }
 
     fn ensure_not_discarded(video: &Video) -> Result<(), FavoriteVideoError> {
