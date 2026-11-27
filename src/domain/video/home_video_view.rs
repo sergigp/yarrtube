@@ -22,6 +22,7 @@ pub struct HomeVideoView {
     pub source: VideoSource,
     /// Categories having the YouTube video, in category-name order.
     pub category_ids: Vec<CategoryId>,
+    pub favorite: bool,
 }
 
 impl From<SourcedVideo> for HomeVideoView {
@@ -31,6 +32,7 @@ impl From<SourcedVideo> for HomeVideoView {
             watched: video.watch.is_watched(),
             position_seconds: video.watch.position.seconds(),
             in_progress: video.watch_progress().is_in_progress(),
+            favorite: video.is_favorite(),
             id: video.id,
             youtube_id: video.youtube_id,
             title: video.title,

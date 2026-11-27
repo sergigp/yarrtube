@@ -1,9 +1,15 @@
 use crate::domain::playlist::PlaylistId;
 #[cfg(test)]
+use crate::domain::video::VideoId;
+#[cfg(test)]
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+#[cfg(test)]
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::youtube_api_key::YOUTUBE_API_KEY_HEADER;
 use anyhow::{Context, anyhow};
+#[cfg(test)]
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::collections::HashSet;
 #[cfg(test)]
@@ -270,6 +276,9 @@ pub struct FakeYoutubePlaylistItemsRepository {
     /// Deletes the listed playlist from this repository, as if a user deleted
     /// it while the reconcile was running.
     deletes_from: Option<Arc<dyn PlaylistRepository>>,
+    /// Favorites this video in this repository, as if a user favorited it
+    /// while the reconcile was running.
+    favorites: Option<(Arc<dyn VideoRepository>, VideoId, DateTime<Utc>)>,
 }
 
 #[cfg(test)]
@@ -277,16 +286,14 @@ impl FakeYoutubePlaylistItemsRepository {
     pub fn with_videos(videos: Vec<YoutubePlaylistItem>) -> Self {
         Self {
             videos: std::sync::Mutex::new(videos),
-            fails: false,
-            deletes_from: None,
+            ..Self::default()
         }
     }
 
     pub fn failing() -> Self {
         Self {
-            videos: std::sync::Mutex::new(Vec::new()),
             fails: true,
-            deletes_from: None,
+            ..Self::default()
         }
     }
 
@@ -294,6 +301,18 @@ impl FakeYoutubePlaylistItemsRepository {
         Self {
             deletes_from: Some(repository),
             ..Self::default()
+        }
+    }
+
+    pub fn favoriting_during_the_listing(
+        videos: Vec<YoutubePlaylistItem>,
+        repository: Arc<dyn VideoRepository>,
+        id: VideoId,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            favorites: Some((repository, id, now)),
+            ..Self::with_videos(videos)
         }
     }
 }
@@ -306,6 +325,11 @@ impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
     ) -> anyhow::Result<Vec<YoutubePlaylistItem>> {
         if let Some(repository) = &self.deletes_from {
             repository.delete(playlist_id)?;
+        }
+        if let Some((repository, id, now)) = &self.favorites
+            && let Some(favorited) = repository.find(id)?.and_then(|video| video.favorite(*now))
+        {
+            repository.update(&favorited)?;
         }
         if self.fails {
             anyhow::bail!("YouTube API failed to list playlist items");

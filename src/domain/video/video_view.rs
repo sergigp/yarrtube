@@ -9,4 +9,6 @@ pub struct VideoView {
     pub video: Video,
     pub metadata: Option<VideoMetadata>,
     pub summary: Option<VideoSummary>,
+    /// Kept by its channel or playlist; `false` outside a source listing.
+    pub kept: bool,
 }

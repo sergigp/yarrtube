@@ -14,6 +14,7 @@ import { useRememberedChoice } from '@/hooks/useRememberedChoice'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
 import {
+  VIDEO_SORT_LABELS,
   WATCH_FILTERS,
   matchesWatchFilter,
   newestUnwatched,
@@ -193,7 +194,7 @@ export function CategoryDetail() {
           videosFresh={videosFresh}
           error={error}
           selection={selection}
-          sort={sort}
+          orderLabel={VIDEO_SORT_LABELS[sort].toLowerCase()}
         />
       ) : !videos ? (
         // A failed background refresh keeps the loaded videos on screen.

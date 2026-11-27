@@ -68,8 +68,8 @@ pub use downloaded_video::DownloadedVideo;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
 pub use errors::{
-    DiscardVideoError, ListVideosError, ReadSubtitlesError, RestoreDiscardedVideosError,
-    RetryVideoError, StaleVideo, UpdateWatchStateError,
+    DiscardVideoError, FavoriteVideoError, ListVideosError, ReadSubtitlesError,
+    RestoreDiscardedVideosError, RetryVideoError, StaleVideo, UpdateWatchStateError,
 };
 pub use events::{
     VideoDiscarded, VideoDownloaded, VideoFileDeleted, VideoSubtitlesFetched, VideoSummaryGenerated,

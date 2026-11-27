@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Ban, EllipsisVertical, Check, EyeOff, Tags } from 'lucide-react'
+import { Ban, EllipsisVertical, Check, EyeOff, Star, Tags } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,12 +10,14 @@ import {
   useCategoriesShown,
   useMarkVideoWatched,
   useSetPlaylistExcludedFromHome,
+  useSetVideoFavorite,
 } from '@/api/queries'
 import { useEditVideoCategories } from '@/hooks/useEditVideoCategories'
 import { errorMessage } from '@/lib/errorMessage'
 import { homeSettingAction } from '@/lib/homeSetting'
 import { cn } from '@/lib/utils'
 import { DiscardVideoDialog } from './DiscardVideoDialog'
+import { UnfavoriteKeptDialog } from './UnfavoriteKeptDialog'
 
 interface VideoActionsMenuProps {
   /** The stored video's `id`. */
@@ -30,6 +32,11 @@ interface VideoActionsMenuProps {
   excludablePlaylist?: { id: string; name: string }
   /** Offers "Discard…"; `downloaded` says whether discarding deletes its files. */
   discard?: { downloaded: boolean }
+  /**
+   * Offers "Add to favorites" or "Remove from favorites"; a `kept` video asks
+   * before it is unfavorited.
+   */
+  favorite?: { favorite: boolean; kept?: { sourceName: string } }
   className?: string
 }
 
@@ -41,9 +48,12 @@ export function VideoActionsMenu({
   markable,
   excludablePlaylist,
   discard,
+  favorite,
   className,
 }: VideoActionsMenuProps) {
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  const [confirmingUnfavorite, setConfirmingUnfavorite] = useState(false)
+  const setVideoFavorite = useSetVideoFavorite()
   const markVideoWatched = useMarkVideoWatched()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const categoriesShown = useCategoriesShown()
@@ -93,6 +103,27 @@ export function VideoActionsMenu({
               Exclude "{excludablePlaylist.name}" from home
             </DropdownMenuItem>
           )}
+          {favorite && (
+            <DropdownMenuItem
+              onSelect={async () => {
+                if (favorite.favorite && favorite.kept) {
+                  setConfirmingUnfavorite(true)
+                  return
+                }
+                try {
+                  await setVideoFavorite(videoId, !favorite.favorite)
+                } catch (err) {
+                  const action = favorite.favorite
+                    ? `remove "${title}" from`
+                    : `add "${title}" to`
+                  window.alert(`Failed to ${action} favorites: ${errorMessage(err)}`)
+                }
+              }}
+            >
+              <Star />
+              {favorite.favorite ? 'Remove from favorites' : 'Add to favorites'}
+            </DropdownMenuItem>
+          )}
           {categoriesShown && (
             <DropdownMenuItem onSelect={() => editCategories({ videoId, title, sourceName })}>
               <Tags />
@@ -114,6 +145,15 @@ export function VideoActionsMenu({
           downloaded={discard.downloaded}
           open={confirmingDiscard}
           onOpenChange={setConfirmingDiscard}
+        />
+      )}
+      {favorite?.kept && (
+        <UnfavoriteKeptDialog
+          open={confirmingUnfavorite}
+          title={title}
+          sourceName={favorite.kept.sourceName}
+          onConfirm={() => setVideoFavorite(videoId, false)}
+          onCancel={() => setConfirmingUnfavorite(false)}
         />
       )}
     </>

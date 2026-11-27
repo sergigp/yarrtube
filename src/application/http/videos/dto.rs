@@ -45,6 +45,9 @@ pub struct VideoResponse {
     /// The video's episode number within its show (the `<nnn>` of a
     /// playlist's `S01E<nnn>`, a channel's `MMDDii`); `None` until assigned.
     pub episode: Option<u32>,
+    pub favorite: bool,
+    /// A favorite its channel or playlist keeps though it no longer lists it.
+    pub kept: bool,
 }
 
 /// Where each of a video's steps stands — see the `video-listing`
@@ -151,6 +154,7 @@ impl From<VideoView> for VideoResponse {
             watched: video.watch.is_watched(),
             position_seconds: video.watch.position.seconds(),
             in_progress: video.watch_progress().is_in_progress(),
+            favorite: video.is_favorite(),
             id: video.id.as_str().to_string(),
             youtube_id: video.youtube_id.as_str().to_string(),
             title: video.title,
@@ -163,6 +167,7 @@ impl From<VideoView> for VideoResponse {
             updated_at: video.updated_at,
             synced_at: video.synced_at,
             episode: video.episode_number.map(|number| number.episode()),
+            kept: view.kept,
             published_at,
             channel_name,
             chapters: video
@@ -210,6 +215,7 @@ pub struct HomeVideoResponse {
     pub published_at: Option<DateTime<Utc>>,
     pub source: HomeVideoSourceResponse,
     pub category_ids: Vec<String>,
+    pub favorite: bool,
 }
 
 impl From<VideoSource> for HomeVideoSourceResponse {
@@ -251,6 +257,7 @@ impl From<HomeVideoView> for HomeVideoResponse {
             position_seconds: view.position_seconds,
             in_progress: view.in_progress,
             published_at: view.published_at,
+            favorite: view.favorite,
             source,
             category_ids: view
                 .category_ids
@@ -284,6 +291,7 @@ pub struct CategoryVideoResponse {
     pub chapters: Vec<ChapterResponse>,
     pub summary: Option<String>,
     pub episode: Option<u32>,
+    pub favorite: bool,
     pub source: HomeVideoSourceResponse,
     pub category_ids: Vec<String>,
 }
@@ -295,6 +303,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
             video: view.video,
             metadata: view.metadata,
             summary: view.summary,
+            kept: false,
         });
         Self {
             id: video.id,
@@ -318,6 +327,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
             chapters: video.chapters,
             summary: video.summary,
             episode: video.episode,
+            favorite: video.favorite,
             source: HomeVideoSourceResponse::from(view.source),
             category_ids: view
                 .category_ids

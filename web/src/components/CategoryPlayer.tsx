@@ -2,7 +2,6 @@ import { avatarMediaUrl } from '@/api/client'
 import type { CategoryVideo } from '@/api/types'
 import type { VideoSelection } from '@/hooks/useVideoSelection'
 import { channelPath, playlistPath } from '@/lib/sourcePath'
-import { VIDEO_SORT_LABELS, type VideoSort } from '@/lib/sourceVideos'
 import { WatchView } from './WatchView'
 
 interface CategoryPlayerProps {
@@ -11,19 +10,28 @@ interface CategoryPlayerProps {
   videosFresh: boolean
   error: Error | null
   selection: VideoSelection<CategoryVideo>
-  /** The order `videos` is in, named in the queue header. */
-  sort: VideoSort
+  /** The order `videos` is in, named in the queue header, e.g. "newest first". */
+  orderLabel: string
+  /** Names what is played in the queue's empty message; "category" by default. */
+  noun?: string
 }
 
 /**
- * A category played like a playlist: the player and the selected video's
- * info, linking its channel or playlist, with the category's videos, in
- * `sort` order, as the queue beside them.
+ * A category (or the favorites) played like a playlist: the player and the
+ * selected video's info, linking its channel or playlist, with the videos, in
+ * `orderLabel` order, as the queue beside them.
  */
-export function CategoryPlayer({ videos, videosFresh, error, selection, sort }: CategoryPlayerProps) {
+export function CategoryPlayer({
+  videos,
+  videosFresh,
+  error,
+  selection,
+  orderLabel,
+  noun = 'category',
+}: CategoryPlayerProps) {
   return (
     <WatchView
-      noun="category"
+      noun={noun}
       videos={videos}
       videosFresh={videosFresh}
       error={error}
@@ -40,7 +48,7 @@ export function CategoryPlayer({ videos, videosFresh, error, selection, sort }: 
             }
           : { kind: 'playlist', name: source.name, href: playlistPath(source.id) }
       }
-      orderLabel={VIDEO_SORT_LABELS[sort].toLowerCase()}
+      orderLabel={orderLabel}
     />
   )
 }

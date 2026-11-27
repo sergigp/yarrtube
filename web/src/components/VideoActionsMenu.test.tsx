@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VideoActionsMenu } from './VideoActionsMenu'
 import { useChannels, useRecentVideos } from '@/api/queries'
@@ -218,5 +218,44 @@ describe('VideoActionsMenu', () => {
 
     expect(await screen.findByRole('menuitem', { name: 'Mark as watched' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Edit categories…' })).not.toBeInTheDocument()
+  })
+
+  it('offers Add to favorites and Remove from favorites', async () => {
+    const favorite = vi.fn(() => null)
+    const unfavorite = vi.fn(() => null)
+    mockApi({
+      'PUT /api/videos/abc/favorite': favorite,
+      'DELETE /api/videos/kept/favorite': unfavorite,
+    })
+    renderWithProviders(
+      <>
+        <VideoActionsMenu
+          videoId="abc"
+          title="My Video"
+          sourceName="My Channel"
+          markable
+          favorite={{ favorite: false }}
+        />
+        <VideoActionsMenu
+          videoId="kept"
+          title="Old talk"
+          sourceName="Talks"
+          markable
+          favorite={{ favorite: true, kept: { sourceName: 'Talks' } }}
+        />
+      </>,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Add to favorites' }))
+    expect(favorite).toHaveBeenCalledOnce()
+    await user.click(screen.getByRole('button', { name: 'Actions for Old talk' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove from favorites' }))
+    const dialog = screen.getByRole('dialog', { name: 'Remove "Old talk" from favorites?' })
+    expect(unfavorite).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
+
+    expect(unfavorite).toHaveBeenCalledOnce()
   })
 })

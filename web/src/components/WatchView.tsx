@@ -68,6 +68,7 @@ export function WatchView<T extends Video>({
             basePath={basePathOf(video)}
             video={video}
             source={detailSourceOf?.(video)}
+            sourceName={sourceNameOf(video)}
             episodeLabel={episodeLabel(episode, 'long')}
             playbackRate={playbackSpeed.rate}
             onPlaybackRateChange={playbackSpeed.changeRate}

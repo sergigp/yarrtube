@@ -37,6 +37,9 @@ import {
   deleteVideoAiVerdicts,
   retryVideo,
   discardVideo,
+  favoriteVideo,
+  unfavoriteVideo,
+  fetchFavoriteVideos,
   restoreDiscardedChannelVideos,
   restoreDiscardedPlaylistVideos,
   type UpdateChannelRequest,
@@ -109,6 +112,7 @@ export const queryKeys = {
   channelPreview: (value: string) => ['channel-preview', value] as const,
   videoSearch: (text: string) => ['video-search', text] as const,
   videoCategories: (videoId: string) => ['videos', videoId, 'categories'] as const,
+  favoriteVideos: ['favorites'] as const,
 }
 
 /** Shortest trimmed text the daemon searches video titles for. */
@@ -584,6 +588,34 @@ export function useDiscardVideo(): (videoId: string) => Promise<void> {
       await Promise.all([invalidateLibraryAndHome(), invalidateTasks()])
     },
     [invalidateLibraryAndHome, invalidateTasks],
+  )
+}
+
+export function useFavoriteVideos(): UseQueryResult<CategoryVideo[], Error> {
+  return useQuery({
+    queryKey: queryKeys.favoriteVideos,
+    queryFn: fetchFavoriteVideos,
+    refetchInterval: LIVE_INTERVAL_MS,
+  })
+}
+
+/**
+ * Returns a function that favorites (`favorite`) or unfavorites a video, then
+ * refetches the library (its video lists included), the home videos and the
+ * favorites.
+ */
+export function useSetVideoFavorite(): (videoId: string, favorite: boolean) => Promise<void> {
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  const queryClient = useQueryClient()
+  return useCallback(
+    async (videoId: string, favorite: boolean) => {
+      await (favorite ? favoriteVideo(videoId) : unfavoriteVideo(videoId))
+      await Promise.all([
+        invalidateLibraryAndHome(),
+        queryClient.invalidateQueries({ queryKey: queryKeys.favoriteVideos }),
+      ])
+    },
+    [invalidateLibraryAndHome, queryClient],
   )
 }
 

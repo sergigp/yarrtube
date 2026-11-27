@@ -31,6 +31,8 @@ interface VideoGridProps {
    * own page, where naming the playlist again says nothing.
    */
   labelOf?: (video: HomeVideo) => string | null
+  /** Whether a card's video is kept by its source, which badges it "Kept". */
+  keptOf?: (video: HomeVideo) => boolean
 }
 
 /** Home-style video cards, each linking to its video in its source. */
@@ -40,6 +42,7 @@ export function VideoGrid({
   layout = 'grid',
   videoPathOf,
   labelOf,
+  keptOf,
 }: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
@@ -54,6 +57,7 @@ export function VideoGrid({
             ? channelPath(video.source.id)
             : playlistPath(video.source.id)
         const age = formatAge(video.published_at)
+        const kept = keptOf?.(video) ?? false
         return (
           <li
             key={`${video.source.kind}:${video.source.id}:${video.id}`}
@@ -88,6 +92,8 @@ export function VideoGrid({
                   positionSeconds={video.position_seconds}
                   durationSeconds={video.duration_seconds}
                   size="card"
+                  favorite={video.favorite}
+                  kept={kept}
                 />
                 {!video.watched && <CardMarkWatchedButton videoId={video.id} title={video.title} />}
               </div>
@@ -143,6 +149,10 @@ export function VideoGrid({
                   sourceName={video.source.name}
                   markable={!video.watched}
                   discard={{ downloaded: true }}
+                  favorite={{
+                    favorite: video.favorite,
+                    kept: kept ? { sourceName: video.source.name } : undefined,
+                  }}
                   excludablePlaylist={
                     video.source.kind === 'playlist'
                       ? { id: video.source.id, name: video.source.name }

@@ -328,7 +328,17 @@ impl PlaylistVideoReconciler {
             .iter()
             .map(|current| current.youtube_id.as_str())
             .collect();
-        let removed = self.remove_videos_not_in(playlist, &stored_videos, &current_youtube_ids)?;
+        let last_listed_position = current_videos
+            .iter()
+            .map(|current| current.position)
+            .max()
+            .unwrap_or(-1);
+        let removed = self.keep_or_remove_videos_not_in(
+            playlist,
+            &stored_videos,
+            &current_youtube_ids,
+            last_listed_position,
+        )?;
 
         Ok(MembershipChanges {
             listed: Some(current_videos.len()),
@@ -392,7 +402,8 @@ impl PlaylistVideoReconciler {
     }
 
     /// Stores a newly seen video as `PENDING` at its playlist position, under
-    /// the playlist's next episode number, and announces it, which is what
+    /// the playlist's next episode number, a favorite when another copy of it
+    /// is, and announces it, which is what
     /// schedules its video sync. Returns the playlist with that
     /// number recorded as its last.
     fn add_video(
@@ -403,8 +414,10 @@ impl PlaylistVideoReconciler {
         now: DateTime<Utc>,
     ) -> anyhow::Result<(Playlist, (PlaylistVideo, Video))> {
         let number = playlist.next_episode_number()?;
+        let inherited = self.inherited_favorite(&youtube_id)?;
         let video = Video::create(youtube_id, current.title.clone(), now)
-            .with_episode_number(number.into(), now);
+            .with_episode_number(number.into(), now)
+            .with_favorited_at(inherited);
         self.video_repository.insert(&video)?;
         let playlist_video =
             PlaylistVideo::create(playlist.id.clone(), video.id.clone(), current.position, now);
@@ -428,7 +441,22 @@ impl PlaylistVideoReconciler {
         Ok((playlist, (playlist_video, video)))
     }
 
-    /// Follows a known video's title and playlist position on YouTube.
+    /// Earliest favorite time among the stored copies of `youtube_id`: a
+    /// favorite belongs to the YouTube video.
+    fn inherited_favorite(
+        &self,
+        youtube_id: &YoutubeVideoId,
+    ) -> anyhow::Result<Option<DateTime<Utc>>> {
+        Ok(self
+            .video_repository
+            .find_by_youtube_id(youtube_id)?
+            .into_iter()
+            .filter_map(|copy| copy.favorited_at)
+            .min())
+    }
+
+    /// Follows a known video's title and playlist position on YouTube; a
+    /// kept video back in the playlist is no longer kept.
     fn refresh_known_video(
         &self,
         existing: &PlaylistVideo,
@@ -441,58 +469,91 @@ impl PlaylistVideoReconciler {
                 Some(video.with_title(current.title.clone(), now))
             })?;
         }
-        if existing.position != current.position {
-            self.playlist_video_repository.save(&PlaylistVideo {
-                position: current.position,
-                created_at: now,
-                ..existing.clone()
-            })?;
+        if existing.position != current.position || existing.kept {
+            self.playlist_video_repository
+                .save(&existing.clone().listed_at(current.position, now))?;
         }
 
         Ok(())
     }
 
-    /// Deletes every stored video whose YouTube id is not in
-    /// `current_youtube_ids` and announces its removal, which is what
-    /// cleans up its files. A Discarded one is remembered first.
-    fn remove_videos_not_in(
+    /// Every stored video whose YouTube id is not in `current_youtube_ids`:
+    /// a favorite is kept, placed after `last_listed_position` in its
+    /// previous order, keeping its episode number; any other is removed (see
+    /// `remove_video`). Returns how many were removed.
+    fn keep_or_remove_videos_not_in(
         &self,
         playlist: &Playlist,
         stored_videos: &[(PlaylistVideo, Video)],
         current_youtube_ids: &HashSet<&str>,
+        last_listed_position: i64,
     ) -> anyhow::Result<usize> {
-        stored_videos
+        let (favorites, others): (Vec<_>, Vec<_>) = stored_videos
             .iter()
-            .map(|(_, video)| video)
-            .filter(|video| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .try_fold(0, |removed, video| {
-                info!(
-                    playlist_id = %playlist.id,
-                    youtube_id = %video.youtube_id,
-                    "removing video from playlist (no longer on YouTube)"
-                );
-                self.remember_if_discarded(playlist, video)?;
-                self.playlist_video_repository.delete(&video.id)?;
-                self.video_repository.delete(&video.id)?;
-                self.video_transcript_repository.delete(&video.id)?;
-                self.video_summary_repository.delete(&video.id)?;
-                self.video_categories_repository.delete(&video.id)?;
-                self.video_category_verdict_repository
-                    .delete_for_video(&video.id)?;
-                self.event_publisher
-                    .publish(&DomainEvent::VideoRemovedFromPlaylist(
-                        VideoRemovedFromPlaylist {
-                            playlist_id: playlist.id.as_str().to_string(),
-                            video_id: video.id.as_str().to_string(),
-                            title: video.title.clone(),
-                            filename: video.download.filename().map(str::to_string),
-                            thumbnail_filename: video.thumbnail.filename.clone(),
-                            subtitle_filename: video.subtitles.filename.clone(),
-                            was_downloaded: video.download.is_downloaded(),
-                        },
-                    ))?;
-                Ok(removed + 1)
+            .filter(|(_, video)| !current_youtube_ids.contains(video.youtube_id.as_str()))
+            .map(|(pv, video)| {
+                Ok((
+                    pv,
+                    video,
+                    // An Unavailable favorite isn't kept: no view shows it to unfavorite.
+                    !video.is_skipped() && self.is_favorite_now(video)?,
+                ))
             })
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .partition(|(_, _, favorite)| *favorite);
+        let now = self.clock.now();
+        (last_listed_position + 1..)
+            .zip(favorites)
+            .try_for_each(|(position, (pv, _, _))| {
+                self.playlist_video_repository
+                    .save(&pv.clone().keep(position, now))
+            })?;
+        others.into_iter().try_fold(0, |removed, (_, video, _)| {
+            self.remove_video(playlist, video)?;
+            Ok(removed + 1)
+        })
+    }
+
+    /// Deletes a stored video no longer in the YouTube playlist and announces
+    /// its removal, which is what cleans up its files. A Discarded one is
+    /// remembered first.
+    fn remove_video(&self, playlist: &Playlist, video: &Video) -> anyhow::Result<()> {
+        info!(
+            playlist_id = %playlist.id,
+            youtube_id = %video.youtube_id,
+            "removing video from playlist (no longer on YouTube)"
+        );
+        self.remember_if_discarded(playlist, video)?;
+        self.playlist_video_repository.delete(&video.id)?;
+        self.video_repository.delete(&video.id)?;
+        self.video_transcript_repository.delete(&video.id)?;
+        self.video_summary_repository.delete(&video.id)?;
+        self.video_categories_repository.delete(&video.id)?;
+        self.video_category_verdict_repository
+            .delete_for_video(&video.id)?;
+        self.event_publisher
+            .publish(&DomainEvent::VideoRemovedFromPlaylist(
+                VideoRemovedFromPlaylist {
+                    playlist_id: playlist.id.as_str().to_string(),
+                    video_id: video.id.as_str().to_string(),
+                    title: video.title.clone(),
+                    filename: video.download.filename().map(str::to_string),
+                    thumbnail_filename: video.thumbnail.filename.clone(),
+                    subtitle_filename: video.subtitles.filename.clone(),
+                    was_downloaded: video.download.is_downloaded(),
+                },
+            ))
+    }
+
+    /// Whether `video` is a favorite, re-read: it may have been favorited
+    /// since the pass read it.
+    fn is_favorite_now(&self, video: &Video) -> anyhow::Result<bool> {
+        Ok(video.is_favorite()
+            || self
+                .video_repository
+                .find(&video.id)?
+                .is_some_and(|stored| stored.is_favorite()))
     }
 
     /// Remembers a Discarded video being removed, so the playlist never adds

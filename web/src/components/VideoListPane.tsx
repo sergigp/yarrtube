@@ -162,6 +162,8 @@ export function VideoListPane<T extends Video>({
                       watched={video.watched}
                       positionSeconds={video.position_seconds}
                       durationSeconds={video.duration_seconds}
+                      favorite={video.favorite}
+                      kept={video.kept}
                       size="row"
                     />
                   </div>
@@ -192,6 +194,10 @@ export function VideoListPane<T extends Video>({
                       ? { downloaded: video.status === 'DOWNLOADED' }
                       : undefined
                   }
+                  favorite={{
+                    favorite: video.favorite,
+                    kept: video.kept ? { sourceName: sourceNameOf(video) } : undefined,
+                  }}
                   className="mt-2"
                 />
               </li>
