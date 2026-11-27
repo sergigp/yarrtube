@@ -1737,6 +1737,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_list_only_favorite_videos() {
+        let repo = repo();
+        let favorite = |title: &str| Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..video(title, fixed_timestamp())
+        };
+        let first = favorite("First");
+        let second = favorite("Second");
+        repo.insert(&first).unwrap();
+        repo.insert(&video("Not a favorite", fixed_timestamp()))
+            .unwrap();
+        repo.insert(&second).unwrap();
+
+        assert_eq!(repo.list_favorites().unwrap(), vec![first, second]);
+    }
+
     fn downloaded(title: &str, created_at_seconds: i64) -> Video {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
         Video::create(YoutubeVideoId::new("yt1").unwrap(), title, created_at)
