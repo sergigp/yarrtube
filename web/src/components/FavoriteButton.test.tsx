@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FavoriteButton } from './FavoriteButton'
 import { mockApi, renderWithProviders } from '@/test/helpers'
@@ -31,5 +31,23 @@ describe('FavoriteButton', () => {
       'aria-pressed',
       'false',
     )
+  })
+  it('asks before unfavoriting a kept video', async () => {
+    const unfavorite = vi.fn(() => null)
+    mockApi({ 'DELETE /api/videos/v1/favorite': unfavorite })
+    renderWithProviders(
+      <FavoriteButton videoId="v1" title="Old talk" favorite kept={{ sourceName: 'Talks' }} />,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Remove from favorites' }))
+    const dialog = screen.getByRole('dialog', { name: 'Remove "Old talk" from favorites?' })
+
+    expect(dialog).toHaveTextContent(
+      '"Old talk" is no longer in "Talks". Its files will be deleted at the next sync.',
+    )
+    expect(unfavorite).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    expect(unfavorite).toHaveBeenCalledOnce()
   })
 })
