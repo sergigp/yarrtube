@@ -15,7 +15,7 @@
 - [x] 2.1 `it_should_favorite_a_video`: 204, the video is a favorite with `favorited_at` = now (`Video::favorite`, `VideoFavoriter::favorite`).
 - [x] 2.2 `it_should_favorite_every_copy_of_the_youtube_video`: channel and playlist copies both favorite, same time.
 - [x] 2.3 `it_should_keep_the_favorite_time_when_favorited_again`: 204, `favorited_at` unchanged.
-- [ ] 2.4 `it_should_unfavorite_every_copy_of_the_youtube_video`: 204, neither copy favorite.
+- [x] 2.4 `it_should_unfavorite_every_copy_of_the_youtube_video`: 204, neither copy favorite.
 - [ ] 2.5 `it_should_leave_a_video_that_is_not_a_favorite_unchanged_when_unfavorited`: 204, no write.
 - [ ] 2.6 `it_should_refuse_to_favorite_a_discarded_video`: 409, not favorite.
 - [ ] 2.7 `it_should_fail_to_favorite_an_unknown_video`: 404 for favorite and unfavorite.

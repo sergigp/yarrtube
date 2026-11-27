@@ -35,22 +35,29 @@ pub trait VideoFavoriterApi: Send + Sync {
 impl VideoFavoriterApi for VideoFavoriter {
     fn favorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
         let at = self.clock.now();
-        self.find_copies(video_id)?
-            .iter()
-            .try_for_each(|copy| {
-                self.video_updater
-                    .update(&copy.id, |video| video.favorite(at))
-                    .map(drop)
-            })
-            .map_err(FavoriteVideoError::Repository)
+        self.update_copies(video_id, |video| video.favorite(at))
     }
 
-    fn unfavorite(&self, _video_id: &VideoId) -> Result<(), FavoriteVideoError> {
-        Ok(())
+    fn unfavorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
+        let now = self.clock.now();
+        self.update_copies(video_id, |video| video.unfavorite(now))
     }
 }
 
 impl VideoFavoriter {
+    /// Applies `transition` to every stored copy of video `video_id`'s
+    /// YouTube video.
+    fn update_copies(
+        &self,
+        video_id: &VideoId,
+        transition: impl Fn(Video) -> Option<Video>,
+    ) -> Result<(), FavoriteVideoError> {
+        self.find_copies(video_id)?
+            .iter()
+            .try_for_each(|copy| self.video_updater.update(&copy.id, &transition).map(drop))
+            .map_err(FavoriteVideoError::Repository)
+    }
+
     /// Every stored copy of video `video_id`'s YouTube video: a favorite
     /// belongs to the YouTube video.
     fn find_copies(&self, video_id: &VideoId) -> Result<Vec<Video>, FavoriteVideoError> {

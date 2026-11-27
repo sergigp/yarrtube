@@ -190,9 +190,12 @@ impl Video {
     }
 
     /// No longer a favorite; `None` when it wasn't one.
-    #[allow(dead_code)] // walking skeleton
-    pub fn unfavorite(self, _now: DateTime<Utc>) -> Option<Self> {
-        None
+    pub fn unfavorite(self, now: DateTime<Utc>) -> Option<Self> {
+        Some(Self {
+            favorited_at: None,
+            updated_at: now,
+            ..self
+        })
     }
 
     pub fn is_favorite(&self) -> bool {

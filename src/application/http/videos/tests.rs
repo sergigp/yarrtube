@@ -8286,8 +8286,54 @@ async fn it_should_keep_the_favorite_time_when_favorited_again() {
     assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
 }
 
+#[tokio::test]
+async fn it_should_unfavorite_every_copy_of_the_youtube_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_copy = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+    };
+    let playlist_copy = playlist_copy_of(&channel_copy);
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &channel_copy,
+        0,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &playlist_copy,
+    );
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = unfavorite(video_favoriter, playlist_copy.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository
+            .find_many(&[channel_copy.id.clone(), playlist_copy.id.clone()])
+            .unwrap(),
+        vec![unfavorited(channel_copy), unfavorited(playlist_copy)]
+    );
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
+}
+
+async fn unfavorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
+    unfavorite_video(State(video_favoriter), Path(id.to_string())).await
 }
 
 async fn list_categories_of(
@@ -9336,6 +9382,16 @@ fn playlist_copy_of(video: &Video) -> Video {
 fn favorited(video: Video) -> Video {
     Video {
         favorited_at: Some(favorited_timestamp()),
+        updated_at: favorited_timestamp(),
+        version: video.version + 1,
+        ..video
+    }
+}
+
+/// `video` as stored once unfavorited at `favorited_timestamp()`.
+fn unfavorited(video: Video) -> Video {
+    Video {
+        favorited_at: None,
         updated_at: favorited_timestamp(),
         version: video.version + 1,
         ..video
