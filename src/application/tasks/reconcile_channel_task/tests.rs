@@ -3247,6 +3247,62 @@ fn it_should_keep_the_pending_download_of_a_kept_favorite() {
     assert_eq!(video_repository.find(&retrying.id).unwrap(), Some(retrying));
 }
 
+#[test]
+fn it_should_place_kept_videos_after_the_listed_ones() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    [("ytC", "C"), ("ytD", "D")].into_iter().zip(0..).for_each(
+        |((youtube_id, title), position)| {
+            save_channel_video_at(
+                video_repository.as_ref(),
+                channel_video_repository.as_ref(),
+                &favorite(Video::create(
+                    YoutubeVideoId::new(youtube_id).unwrap(),
+                    title,
+                    fixed_timestamp(),
+                )),
+                position,
+            );
+        },
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        channel_youtube_ids(&video_repository, &channel_video_repository),
+        vec![
+            ("ytA".to_string(), 0, false),
+            ("ytB".to_string(), 1, false),
+            ("ytC".to_string(), 2, true),
+            ("ytD".to_string(), 3, true)
+        ]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
@@ -3620,4 +3676,21 @@ fn stored_youtube_ids(video_repository: &SqliteVideoRepository) -> Vec<String> {
         .collect();
     ids.sort();
     ids
+}
+
+/// The channel's videos in order: each YouTube id with its position and
+/// whether it is kept.
+fn channel_youtube_ids(
+    video_repository: &SqliteVideoRepository,
+    channel_video_repository: &SqliteChannelVideoRepository,
+) -> Vec<(String, i64, bool)> {
+    channel_video_repository
+        .list_for_channel(&handle("@somechannel"))
+        .unwrap()
+        .into_iter()
+        .map(|cv| {
+            let video = video_repository.find(&cv.video_id).unwrap().unwrap();
+            (video.youtube_id.as_str().to_string(), cv.position, cv.kept)
+        })
+        .collect()
 }

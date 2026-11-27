@@ -33,7 +33,7 @@
 - [x] 2.19 `reconcile_channel_task::it_should_keep_a_favorite_that_ages_out`: stored, kept, no `VideoRemovedFromChannel` (`keep_or_remove_videos_not_in`).
 - [x] 2.20 `reconcile_channel_task::it_should_keep_a_favorite_deleted_on_youtube`.
 - [x] 2.21 `reconcile_channel_task::it_should_keep_the_pending_download_of_a_kept_favorite`.
-- [ ] 2.22 `reconcile_channel_task::it_should_place_kept_videos_after_the_listed_ones`: order A, B, C, D (`ChannelVideo::keep`).
+- [x] 2.22 `reconcile_channel_task::it_should_place_kept_videos_after_the_listed_ones`: order A, B, C, D (`ChannelVideo::keep`).
 - [ ] 2.23 `reconcile_channel_task::it_should_stop_keeping_a_kept_video_listed_again`: `refresh_known_video` clears `kept`.
 - [ ] 2.24 `reconcile_channel_task::it_should_evict_a_kept_video_once_unfavorited`.
 - [ ] 2.25 `reconcile_channel_task::it_should_keep_a_video_favorited_during_the_listing`: `is_favorite_now` re-read.
