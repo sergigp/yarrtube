@@ -138,7 +138,8 @@ impl Video {
 
     /// Discards the video (see the `video-discard` capability):
     /// `None` unless its download is discardable; else its download
-    /// Discarded and its thumbnail and subtitle filenames cleared.
+    /// Discarded, its thumbnail and subtitle filenames cleared, and no longer
+    /// a favorite.
     pub fn discard(self, now: DateTime<Utc>) -> Option<Self> {
         if !self.download.is_discardable() {
             return None;
@@ -153,6 +154,7 @@ impl Video {
                 filename: None,
                 ..self.subtitles
             },
+            favorited_at: None,
             updated_at: now,
             ..self
         })

@@ -8398,6 +8398,67 @@ async fn it_should_fail_to_favorite_an_unknown_video() {
     );
 }
 
+#[tokio::test]
+async fn it_should_unfavorite_every_copy_when_discarding_a_favorite() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let channel_copy = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+    };
+    let playlist_copy = playlist_copy_of(&channel_copy);
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &channel_copy,
+        0,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &playlist_copy,
+    );
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(channel_copy.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository
+            .find_many(&[channel_copy.id.clone(), playlist_copy.id.clone()])
+            .unwrap(),
+        vec![
+            Video {
+                favorited_at: None,
+                version: 1,
+                ..channel_copy.discard(fixed_timestamp()).unwrap()
+            },
+            Video {
+                favorited_at: None,
+                version: 1,
+                ..playlist_copy
+            }
+        ]
+    );
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }

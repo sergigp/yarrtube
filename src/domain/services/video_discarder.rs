@@ -1,6 +1,7 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
-    VideoFavoriter, VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater, VideoUpdaterApi,
+    VideoFavoriter, VideoFavoriterApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoUpdater,
+    VideoUpdaterApi,
 };
 use crate::domain::video::{DiscardVideoError, Video, VideoDiscarded, VideoId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -19,7 +20,6 @@ pub struct VideoDiscarder {
     task_repository: Arc<dyn TaskRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
-    #[allow(dead_code)]
     video_favoriter: VideoFavoriter,
 }
 
@@ -45,8 +45,9 @@ impl VideoDiscarder {
 }
 
 pub trait VideoDiscarderApi: Send + Sync {
-    /// The video's download Discarded, its pending tasks deleted,
-    /// and `VideoDiscarded` published when it had a recorded file. A video
+    /// The video's download Discarded, its pending tasks deleted, every
+    /// copy of its YouTube video unfavorited when it was a favorite, and
+    /// `VideoDiscarded` published when it had a recorded file. A video
     /// already Discarded is left as it is; one In Progress or Unavailable
     /// can't be discarded.
     fn discard(&self, video_id: &VideoId) -> Result<(), DiscardVideoError>;
@@ -61,6 +62,7 @@ impl VideoDiscarderApi for VideoDiscarder {
         Self::ensure_discardable(&before)?;
         self.discard_stored(video_id)?;
         self.delete_pending_tasks(video_id)?;
+        self.unfavorite_if_favorite(&before)?;
         self.publish_discarded(&before)
     }
 }
@@ -95,6 +97,17 @@ impl VideoDiscarder {
             .find(video_id)
             .map_err(DiscardVideoError::Repository)?
             .ok_or_else(|| DiscardVideoError::VideoNotFound(video_id.clone()))
+    }
+
+    /// Every copy of `video`'s YouTube video unfavorited, when `video`, as
+    /// read before the discard, was a favorite.
+    fn unfavorite_if_favorite(&self, video: &Video) -> Result<(), DiscardVideoError> {
+        if !video.is_favorite() {
+            return Ok(());
+        }
+        self.video_favoriter
+            .unfavorite(&video.id)
+            .map_err(|e| DiscardVideoError::Repository(e.into()))
     }
 
     /// Every task of the video still waiting in the queue.
