@@ -1,0 +1,5 @@
+# Baseline of rule `fn_ordering` (src/architecture_tests/fn_ordering.rs): code that broke it
+# when it arrived. It only shrinks: fix a unit, then delete its line.
+src/domain/category/category_id.rs::impl CategoryId
+src/domain/video_metadata/nfo.rs::(free fns)
+src/infrastructure/client/ytdlp_updater.rs::(free fns)
