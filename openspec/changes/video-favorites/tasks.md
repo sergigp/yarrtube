@@ -39,7 +39,7 @@
 - [x] 2.25 `reconcile_channel_task::it_should_keep_a_video_favorited_during_the_listing`: `is_favorite_now` re-read.
 - [x] 2.26 `reconcile_channel_task::it_should_store_a_new_copy_of_a_favorite_as_a_favorite`: `inherited_favorite`.
 - [x] 2.27 `reconcile_channel_task::it_should_not_delete_the_files_of_a_kept_favorite`: filesystem reconcile leaves its episode files.
-- [ ] 2.28 `reconcile_playlist_task::it_should_keep_a_favorite_removed_from_the_playlist`: stays `S01E004`, kept, no `VideoRemovedFromPlaylist`.
+- [x] 2.28 `reconcile_playlist_task::it_should_keep_a_favorite_removed_from_the_playlist`: stays `S01E004`, kept, no `VideoRemovedFromPlaylist`.
 - [ ] 2.29 `reconcile_playlist_task::it_should_not_reuse_the_episode_number_of_a_kept_favorite`: next new video is `7`.
 - [ ] 2.30 `reconcile_playlist_task::it_should_place_kept_videos_after_the_listed_ones_in_a_playlist`.
 - [ ] 2.31 `reconcile_playlist_task::it_should_stop_keeping_a_video_re_added_to_the_playlist`.

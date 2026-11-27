@@ -1753,6 +1753,68 @@ fn it_should_not_re_add_a_discarded_video_returning_to_the_playlist() {
     assert_eq!(video_repository.list().unwrap(), vec![kept]);
 }
 
+#[test]
+fn it_should_keep_a_favorite_removed_from_the_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    playlist_repository
+        .insert(&Playlist {
+            last_episode: Some(PlaylistEpisodeNumber::new(4).unwrap()),
+            ..playlist("PL1")
+        })
+        .unwrap();
+    let listed = playlist_episode("vidA", "A", 3);
+    let removed = favorite(downloaded_playlist_episode("vidD", "D", 4));
+    let stored = [
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &listed,
+            0,
+        ),
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &removed,
+            1,
+        ),
+    ];
+    let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        vec![playlist_item("vidA", "A", 0)],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.list().unwrap(), vec![listed, removed]);
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id())
+            .unwrap(),
+        vec![
+            stored[0].clone(),
+            PlaylistVideo {
+                kept: true,
+                ..stored[1].clone()
+            }
+        ]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
@@ -1871,6 +1933,14 @@ fn save_playlist_video(
         .find_by_video(&video.id)
         .unwrap()
         .unwrap()
+}
+
+/// `video` favorited at `fixed_timestamp()`.
+fn favorite(video: Video) -> Video {
+    Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..video
+    }
 }
 
 fn playlist(id: &str) -> Playlist {

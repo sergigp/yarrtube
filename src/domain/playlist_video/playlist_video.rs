@@ -36,9 +36,13 @@ impl PlaylistVideo {
     }
 
     /// Kept at `position`, after the listed items.
-    #[allow(dead_code)] // walking skeleton
-    pub fn keep(self, _position: i64, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn keep(self, position: i64, now: DateTime<Utc>) -> Self {
+        Self {
+            position,
+            kept: true,
+            created_at: now,
+            ..self
+        }
     }
 }
 
