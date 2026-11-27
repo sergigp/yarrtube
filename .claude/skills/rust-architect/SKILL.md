@@ -170,6 +170,7 @@ Every test has the same 7 steps, top to bottom and inline: `TestDatabase` + repo
 - DTO mapping is covered through handler responses, not with standalone DTO tests.
   Enforced by: cargo test · `architecture_tests::dtos_have_no_tests`
 - Module layout: imports, then every `it_should_*` test, then helpers.
+  Enforced by: cargo test · `architecture_tests::acceptance_test_module_layout`
 
 A domain service reached from several adapters (e.g. the reconcilers, called from a task, a subscriber and an HTTP handler) has its logic tested exhaustively through one primary adapter, the one that does the recurring work (the task). Every other adapter tests only what differs for it (e.g. `force_reconcile` not rescheduling, error mapping) plus one happy path proving the service is wired. When an adapter's call path starts to diverge inside the service, the tests for that difference go in that adapter.
 

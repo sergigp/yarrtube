@@ -9,6 +9,7 @@ mod baseline;
 mod openspec;
 mod source;
 
+mod acceptance_test_module_layout;
 mod acceptance_tests_assert_whole_values;
 mod adapter_folder_layout;
 mod domain_errors_live_in_errors_rs;
