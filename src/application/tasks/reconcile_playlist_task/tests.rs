@@ -1870,6 +1870,55 @@ fn it_should_not_reuse_the_episode_number_of_a_kept_favorite() {
     );
 }
 
+#[test]
+fn it_should_place_kept_videos_after_the_listed_ones_in_a_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&Playlist {
+            last_episode: Some(PlaylistEpisodeNumber::new(1).unwrap()),
+            ..playlist("PL1")
+        })
+        .unwrap();
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &favorite(playlist_episode("vidD", "D", 1)),
+        0,
+    );
+    let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        vec![
+            playlist_item("vidA", "A", 0),
+            playlist_item("vidB", "B", 1),
+            playlist_item("vidC", "C", 2),
+        ],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        playlist_youtube_ids(&video_repository, &playlist_video_repository),
+        vec![
+            ("vidA".to_string(), 0, false),
+            ("vidB".to_string(), 1, false),
+            ("vidC".to_string(), 2, false),
+            ("vidD".to_string(), 3, true)
+        ]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
@@ -2188,4 +2237,21 @@ fn pass_lines(logs: &[String]) -> Vec<&str> {
 
 fn run(task: &ReconcilePlaylistTask, queued: &Task) -> Result<TaskOutcome, String> {
     task.handle(queued).map_err(|e| e.to_string())
+}
+
+/// The playlist's videos in order: each YouTube id with its position and
+/// whether it is kept.
+fn playlist_youtube_ids(
+    video_repository: &SqliteVideoRepository,
+    playlist_video_repository: &SqlitePlaylistVideoRepository,
+) -> Vec<(String, i64, bool)> {
+    playlist_video_repository
+        .list_for_playlist(&playlist_id())
+        .unwrap()
+        .into_iter()
+        .map(|pv| {
+            let video = video_repository.find(&pv.video_id).unwrap().unwrap();
+            (video.youtube_id.as_str().to_string(), pv.position, pv.kept)
+        })
+        .collect()
 }
