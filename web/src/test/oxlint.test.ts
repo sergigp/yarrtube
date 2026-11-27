@@ -21,6 +21,22 @@ describe('oxlint rules', () => {
     })
   })
 
+  describe('the UI is driven with user-event', () => {
+    it('reports importing fireEvent', () => {
+      const source = "import { fireEvent, screen } from '@testing-library/react'\nfireEvent.click(screen.getByRole('button'))\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual(['eslint(no-restricted-imports)'])
+    })
+
+    it('accepts user-event', () => {
+      const source =
+        "import { screen } from '@testing-library/react'\nimport userEvent from '@testing-library/user-event'\n" +
+        "await userEvent.setup().click(screen.getByRole('button'))\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([])
+    })
+  })
+
   describe('baselines', () => {
     it('only list files that still break the rules they are exempt from', () => {
       const config = readConfig()

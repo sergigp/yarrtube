@@ -100,6 +100,7 @@ Conventions:
 - Drive the UI with `@testing-library/user-event` and query by role/label,
   the way a user would; assert exact user-visible text, not implementation
   details.
+  Enforced by: oxlint · `no-restricted-imports` (fireEvent)
 - Time-sensitive logic (debounce, relative timestamps, task categories) uses
   `vi.useFakeTimers()` + `vi.setSystemTime(...)`; restore real timers in
   `afterEach`.
