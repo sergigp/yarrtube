@@ -15,6 +15,7 @@ mod domain_errors_live_in_errors_rs;
 mod domain_is_call_agnostic;
 mod domain_service_layout;
 mod domain_services_are_flat;
+mod dtos_have_no_tests;
 mod fn_ordering;
 mod handler_tests_skip_the_router;
 mod handlers_extract_only_their_services;
