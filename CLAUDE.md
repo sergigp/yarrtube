@@ -79,6 +79,8 @@ jsdom with Vitest + Testing Library. The whole suite must stay fast (seconds)
 and deterministic — anything needing the real backend or real downloads
 belongs in `e2e-tests/`, not here.
 
+Enforced by: Vitest · `web/src/test/colocation.test.ts`
+
 The one mocking rule: **only the network boundary (`fetch`) is mocked** — via
 `mockApi` from `src/test/helpers.tsx`, a route table keyed by
 `"METHOD /api/path"` (query string included). Unrouted requests throw, so
