@@ -32,7 +32,7 @@
 - [x] 2.18 `reconcile_channel_task::it_should_not_count_a_favorite_toward_the_limit`: limit 3, A B C D with B favorite, so all four stored.
 - [x] 2.19 `reconcile_channel_task::it_should_keep_a_favorite_that_ages_out`: stored, kept, no `VideoRemovedFromChannel` (`keep_or_remove_videos_not_in`).
 - [x] 2.20 `reconcile_channel_task::it_should_keep_a_favorite_deleted_on_youtube`.
-- [ ] 2.21 `reconcile_channel_task::it_should_keep_the_pending_download_of_a_kept_favorite`.
+- [x] 2.21 `reconcile_channel_task::it_should_keep_the_pending_download_of_a_kept_favorite`.
 - [ ] 2.22 `reconcile_channel_task::it_should_place_kept_videos_after_the_listed_ones`: order A, B, C, D (`ChannelVideo::keep`).
 - [ ] 2.23 `reconcile_channel_task::it_should_stop_keeping_a_kept_video_listed_again`: `refresh_known_video` clears `kept`.
 - [ ] 2.24 `reconcile_channel_task::it_should_evict_a_kept_video_once_unfavorited`.

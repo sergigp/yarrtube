@@ -3191,6 +3191,62 @@ fn it_should_keep_a_favorite_deleted_on_youtube() {
     assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
 }
 
+#[test]
+fn it_should_keep_the_pending_download_of_a_kept_favorite() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(1).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    let retrying = favorite(my_video().mark_errored("HTTP Error 503", fixed_timestamp()));
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &retrying,
+        1,
+    );
+    let download = Task::DownloadVideo {
+        video_id: retrying.id.as_str().to_string(),
+    };
+    let retry_at = fixed_timestamp() + chrono::Duration::hours(1);
+    task_repository.schedule(&download, retry_at).unwrap();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+        ])),
+        task_repository.clone(),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        task_repository
+            .list_non_completed()
+            .unwrap()
+            .into_iter()
+            .filter(|scheduled| matches!(scheduled.task, Task::DownloadVideo { .. }))
+            .collect::<Vec<_>>(),
+        vec![pending_task(1, &download, retry_at)]
+    );
+    assert_eq!(video_repository.find(&retrying.id).unwrap(), Some(retrying));
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
