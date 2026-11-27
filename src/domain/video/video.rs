@@ -179,6 +179,9 @@ impl Video {
 
     /// Favorited at `at`; `None` when already a favorite or Discarded.
     pub fn favorite(self, at: DateTime<Utc>) -> Option<Self> {
+        if self.is_favorite() {
+            return None;
+        }
         Some(Self {
             favorited_at: Some(at),
             updated_at: at,
@@ -193,7 +196,7 @@ impl Video {
     }
 
     pub fn is_favorite(&self) -> bool {
-        false
+        self.favorited_at.is_some()
     }
 
     /// For a new copy: the favorite time of an existing copy.
