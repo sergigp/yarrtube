@@ -208,9 +208,11 @@ impl Video {
     }
 
     /// For a new copy: the favorite time of an existing copy.
-    #[allow(dead_code)] // walking skeleton
-    pub fn with_favorited_at(self, _at: Option<DateTime<Utc>>) -> Self {
-        self
+    pub fn with_favorited_at(self, favorited_at: Option<DateTime<Utc>>) -> Self {
+        Self {
+            favorited_at,
+            ..self
+        }
     }
 
     /// Download Unavailable: outside a channel's video limit.

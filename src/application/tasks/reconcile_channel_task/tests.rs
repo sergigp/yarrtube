@@ -3463,6 +3463,47 @@ fn it_should_keep_a_video_favorited_during_the_listing() {
     );
 }
 
+#[test]
+fn it_should_store_a_new_copy_of_a_favorite_as_a_favorite() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let favorited_at = fixed_timestamp() - chrono::Duration::days(1);
+    let playlist_copy = Video {
+        favorited_at: Some(favorited_at),
+        ..my_video()
+    };
+    video_repository.insert(&playlist_copy).unwrap();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("yt1", "My Video", 0),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository
+            .find_by_youtube_id(&YoutubeVideoId::new("yt1").unwrap())
+            .unwrap()
+            .into_iter()
+            .map(|copy| copy.favorited_at)
+            .collect::<Vec<_>>(),
+        vec![Some(favorited_at), Some(favorited_at)]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
