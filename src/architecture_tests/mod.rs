@@ -16,6 +16,7 @@ mod adapter_folder_layout;
 mod adapter_tests_live_in_sibling_file;
 mod clock_is_a_port;
 mod contract_tests_are_ignored;
+mod design_md_sections;
 mod domain_errors_live_in_errors_rs;
 mod domain_is_call_agnostic;
 mod domain_service_layout;
