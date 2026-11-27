@@ -69,6 +69,7 @@ src/
 
 - We prefer not generic names: not `entity.rs`, not `value_objects.rs`, not `ports.rs`. A file is named after the single type/concept it holds (`user.rs` holds `User`, `user_id.rs` holds `UserId`).
 - `errors.rs` is the one deliberately generic name: every error type for an aggregate (use-case error enums) lives together in one file, not scattered across the files that raise them.
+  Enforced by: cargo test · `architecture_tests::domain_errors_live_in_errors_rs`
 - Every value object constructor fails with the single shared `ValidationError(String)` (`domain/shared/errors.rs`), never a per-VO error type. The application layer maps it once (e.g. `impl From<ValidationError> for ApiError` → 400), so handlers build VOs with a plain `?`.
 - Every value object gets its own file. Don't bundle multiple value objects into one "value objects" file.
 - A port is named after the concept it fronts, not the one method it happens to expose (`WidgetRepository`, not `WidgetLookup`, even if today it only has an `exists` method). "Repository" is used loosely for "adapter implementing a domain port," not strictly persistence.

@@ -9,5 +9,6 @@ mod baseline;
 mod openspec;
 mod source;
 
+mod domain_errors_live_in_errors_rs;
 mod domain_is_call_agnostic;
 mod port_traits_live_in_infrastructure;
