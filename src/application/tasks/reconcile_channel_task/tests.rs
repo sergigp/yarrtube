@@ -3351,6 +3351,56 @@ fn it_should_stop_keeping_a_kept_video_listed_again() {
     );
 }
 
+#[test]
+fn it_should_evict_a_kept_video_once_unfavorited() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let unfavorited = downloaded_episode();
+    save_kept_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &unfavorited,
+        0,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(stored_youtube_ids(&video_repository), Vec::<String>::new());
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoRemovedFromChannel(VideoRemovedFromChannel {
+                channel_id: "@somechannel".to_string(),
+                video_id: unfavorited.id.as_str().to_string(),
+                title: "My Video".to_string(),
+                filename: Some("Season 2023/S2023E111401 - My Video.mp4".to_string()),
+                thumbnail_filename: Some("Season 2023/S2023E111401 - My Video.jpg".to_string()),
+                subtitle_filename: None,
+                was_downloaded: true,
+            })
+        )]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
