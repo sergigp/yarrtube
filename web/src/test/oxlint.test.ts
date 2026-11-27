@@ -37,6 +37,25 @@ describe('oxlint rules', () => {
     })
   })
 
+  describe('queries go by role or label', () => {
+    it('reports test id queries', () => {
+      const source =
+        "import { screen } from '@testing-library/react'\nscreen.getByTestId('notice')\nconst { findAllByTestId } = screen\nvoid findAllByTestId\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([
+        'eslint(no-restricted-properties)',
+        'eslint(no-restricted-properties)',
+      ])
+    })
+
+    it('accepts role and label queries', () => {
+      const source =
+        "import { screen } from '@testing-library/react'\nscreen.getByRole('button', { name: 'Save' })\nscreen.getByLabelText('Name')\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([])
+    })
+  })
+
   describe('baselines', () => {
     it('only list files that still break the rules they are exempt from', () => {
       const config = readConfig()

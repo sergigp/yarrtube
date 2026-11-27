@@ -101,6 +101,7 @@ Conventions:
   the way a user would; assert exact user-visible text, not implementation
   details.
   Enforced by: oxlint · `no-restricted-imports` (fireEvent)
+  Enforced by: oxlint · `no-restricted-properties` (`*ByTestId`)
 - Time-sensitive logic (debounce, relative timestamps, task categories) uses
   `vi.useFakeTimers()` + `vi.setSystemTime(...)`; restore real timers in
   `afterEach`.

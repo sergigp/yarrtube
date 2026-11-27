@@ -31,6 +31,15 @@
           }
         ]
       }
+    ],
+    "no-restricted-properties": [
+      "error",
+      { "property": "getByTestId", "message": "Query by role or label (getByRole, getByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "getAllByTestId", "message": "Query by role or label (getAllByRole, getAllByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "queryByTestId", "message": "Query by role or label (queryByRole, queryByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "queryAllByTestId", "message": "Query by role or label (queryAllByRole, queryAllByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "findByTestId", "message": "Query by role or label (findByRole, findByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "findAllByTestId", "message": "Query by role or label (findAllByRole, findAllByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" }
     ]
   },
   "overrides": [
@@ -46,6 +55,10 @@
     {
       "files": ["src/components/CategoryColorPicker.test.tsx", "src/components/VideoPlayer.test.tsx"],
       "rules": { "no-restricted-imports": "off" }
+    },
+    {
+      "files": ["src/components/MoveSourceDialog.test.tsx"],
+      "rules": { "no-restricted-properties": "off" }
     }
   ]
 }
