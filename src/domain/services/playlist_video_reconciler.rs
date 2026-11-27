@@ -402,7 +402,8 @@ impl PlaylistVideoReconciler {
     }
 
     /// Stores a newly seen video as `PENDING` at its playlist position, under
-    /// the playlist's next episode number, and announces it, which is what
+    /// the playlist's next episode number, a favorite when another copy of it
+    /// is, and announces it, which is what
     /// schedules its video sync. Returns the playlist with that
     /// number recorded as its last.
     fn add_video(
@@ -413,8 +414,10 @@ impl PlaylistVideoReconciler {
         now: DateTime<Utc>,
     ) -> anyhow::Result<(Playlist, (PlaylistVideo, Video))> {
         let number = playlist.next_episode_number()?;
+        let inherited = self.inherited_favorite(&youtube_id)?;
         let video = Video::create(youtube_id, current.title.clone(), now)
-            .with_episode_number(number.into(), now);
+            .with_episode_number(number.into(), now)
+            .with_favorited_at(inherited);
         self.video_repository.insert(&video)?;
         let playlist_video =
             PlaylistVideo::create(playlist.id.clone(), video.id.clone(), current.position, now);
@@ -436,6 +439,20 @@ impl PlaylistVideoReconciler {
             }))?;
 
         Ok((playlist, (playlist_video, video)))
+    }
+
+    /// Earliest favorite time among the stored copies of `youtube_id`: a
+    /// favorite belongs to the YouTube video.
+    fn inherited_favorite(
+        &self,
+        youtube_id: &YoutubeVideoId,
+    ) -> anyhow::Result<Option<DateTime<Utc>>> {
+        Ok(self
+            .video_repository
+            .find_by_youtube_id(youtube_id)?
+            .into_iter()
+            .filter_map(|copy| copy.favorited_at)
+            .min())
     }
 
     /// Follows a known video's title and playlist position on YouTube; a

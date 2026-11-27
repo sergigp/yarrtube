@@ -2096,6 +2096,46 @@ fn it_should_keep_a_video_favorited_during_the_playlist_listing() {
     );
 }
 
+#[test]
+fn it_should_store_a_new_playlist_copy_of_a_favorite_as_a_favorite() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let favorited_at = fixed_timestamp() - chrono::Duration::days(1);
+    video_repository
+        .insert(&Video {
+            favorited_at: Some(favorited_at),
+            ..my_video()
+        })
+        .unwrap();
+    let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        vec![member_playlist_item()],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository
+            .find_by_youtube_id(&YoutubeVideoId::new("vid1").unwrap())
+            .unwrap()
+            .into_iter()
+            .map(|copy| copy.favorited_at)
+            .collect::<Vec<_>>(),
+        vec![Some(favorited_at), Some(favorited_at)]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
