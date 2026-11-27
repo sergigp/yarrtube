@@ -3147,6 +3147,50 @@ fn it_should_keep_a_favorite_that_ages_out() {
     assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
 }
 
+#[test]
+fn it_should_keep_a_favorite_deleted_on_youtube() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let deleted = favorite(downloaded_episode());
+    let stored = save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &deleted,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::with_listing(episode_files())),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.find(&deleted.id).unwrap(), Some(deleted));
+    assert_eq!(
+        channel_video_repository
+            .list_for_channel(&handle("@somechannel"))
+            .unwrap(),
+        vec![ChannelVideo {
+            kept: true,
+            ..stored
+        }]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
