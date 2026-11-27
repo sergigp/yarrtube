@@ -1,5 +1,5 @@
 use crate::domain::services::{VideoUpdater, VideoUpdaterApi};
-use crate::domain::video::{FavoriteVideoError, VideoId};
+use crate::domain::video::{FavoriteVideoError, Video, VideoId};
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
@@ -9,7 +9,6 @@ use std::sync::Arc;
 /// stored copy of it.
 #[derive(Clone)]
 pub struct VideoFavoriter {
-    #[allow(dead_code)] // walking skeleton
     video_repository: Arc<dyn VideoRepository>,
     video_updater: VideoUpdater,
     clock: Arc<dyn Clock>,
@@ -36,13 +35,34 @@ pub trait VideoFavoriterApi: Send + Sync {
 impl VideoFavoriterApi for VideoFavoriter {
     fn favorite(&self, video_id: &VideoId) -> Result<(), FavoriteVideoError> {
         let at = self.clock.now();
-        self.video_updater
-            .update(video_id, |video| video.favorite(at))
-            .map(|_| ())
+        self.find_copies(video_id)?
+            .iter()
+            .try_for_each(|copy| {
+                self.video_updater
+                    .update(&copy.id, |video| video.favorite(at))
+                    .map(drop)
+            })
             .map_err(FavoriteVideoError::Repository)
     }
 
     fn unfavorite(&self, _video_id: &VideoId) -> Result<(), FavoriteVideoError> {
         Ok(())
+    }
+}
+
+impl VideoFavoriter {
+    /// Every stored copy of video `video_id`'s YouTube video: a favorite
+    /// belongs to the YouTube video.
+    fn find_copies(&self, video_id: &VideoId) -> Result<Vec<Video>, FavoriteVideoError> {
+        let Some(video) = self
+            .video_repository
+            .find(video_id)
+            .map_err(FavoriteVideoError::Repository)?
+        else {
+            return Ok(Vec::new());
+        };
+        self.video_repository
+            .find_by_youtube_id(&video.youtube_id)
+            .map_err(FavoriteVideoError::Repository)
     }
 }
