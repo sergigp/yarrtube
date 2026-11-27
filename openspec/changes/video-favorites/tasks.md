@@ -28,7 +28,7 @@
 - [x] 2.14 `it_should_list_no_favorites`: 200, `[]`.
 - [x] 2.15 `it_should_list_a_channel_with_its_favorite_count`: `ChannelViewSearcher`.
 - [x] 2.16 `it_should_list_a_playlist_with_its_favorite_count`: `PlaylistViewSearcher`.
-- [ ] 2.17 `reconcile_channel_task::it_should_request_one_more_upload_per_favorite`: limit 3, two favorites (one kept), so 5 requested.
+- [x] 2.17 `reconcile_channel_task::it_should_request_one_more_upload_per_favorite`: limit 3, two favorites (one kept), so 5 requested.
 - [ ] 2.18 `reconcile_channel_task::it_should_not_count_a_favorite_toward_the_limit`: limit 3, A B C D with B favorite, so all four stored.
 - [ ] 2.19 `reconcile_channel_task::it_should_keep_a_favorite_that_ages_out`: stored, kept, no `VideoRemovedFromChannel` (`keep_or_remove_videos_not_in`).
 - [ ] 2.20 `reconcile_channel_task::it_should_keep_a_favorite_deleted_on_youtube`.

@@ -290,10 +290,15 @@ impl ChannelVideoReconciler {
             .filter(|(_, video)| video.is_unavailable())
             .map(|(_, video)| video.youtube_id.as_str())
             .collect();
+        let skipped_ids: HashSet<&str> = stored_videos
+            .iter()
+            .filter(|(_, video)| video.is_unavailable() || video.is_favorite())
+            .map(|(_, video)| video.youtube_id.as_str())
+            .collect();
         let listing_started = self.clock.now();
         let listing = self.list_current_videos(
             channel,
-            u32::try_from(unavailable_ids.len())?,
+            u32::try_from(skipped_ids.len())?,
             on_listing_failure,
         )?;
         let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
@@ -357,16 +362,17 @@ impl ChannelVideoReconciler {
     /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
     /// videos"), either `None` (logged) or the error, per
     /// `on_listing_failure`. One more upload is asked for per stored
-    /// `unavailable` video, which doesn't count toward the limit.
+    /// `skipped` video (Unavailable or a favorite), which doesn't count
+    /// toward the limit.
     fn list_current_videos(
         &self,
         channel: &Channel,
-        unavailable: u32,
+        skipped: u32,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<Option<Vec<ChannelVideoListing>>> {
         match (
             self.channel_videos_repository
-                .list_current_videos(&channel.id, channel.video_limit.value() + unavailable),
+                .list_current_videos(&channel.id, channel.video_limit.value() + skipped),
             on_listing_failure,
         ) {
             (Ok(videos), _) => Ok(Some(videos)),

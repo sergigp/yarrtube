@@ -75,6 +75,8 @@ pub struct FakeChannelVideosRepository {
     /// Discards this video in this repository, as if a user discarded it
     /// while the reconcile was running.
     pub(crate) discards: Option<(Arc<dyn VideoRepository>, VideoId, DateTime<Utc>)>,
+    /// The `limit` of every listing asked for, in order.
+    pub(crate) requested_limits: std::sync::Mutex<Vec<u32>>,
 }
 
 #[cfg(test)]
@@ -122,6 +124,7 @@ impl ChannelVideosRepository for FakeChannelVideosRepository {
         channel_id: &ChannelHandle,
         limit: u32,
     ) -> anyhow::Result<Vec<ChannelVideoListing>> {
+        self.requested_limits.lock().unwrap().push(limit);
         if let Some(repository) = &self.deletes_from {
             repository.delete(channel_id)?;
         }

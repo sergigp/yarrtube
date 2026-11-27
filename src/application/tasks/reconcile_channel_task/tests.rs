@@ -2966,6 +2966,64 @@ fn it_should_count_a_remembered_discarded_upload_toward_the_limit() {
     assert_eq!(stored_youtube_ids(&video_repository), vec!["ytA"]);
 }
 
+#[test]
+fn it_should_request_one_more_upload_per_favorite() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(3).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(Video::create(
+            YoutubeVideoId::new("ytF").unwrap(),
+            "Favorite",
+            fixed_timestamp(),
+        )),
+        0,
+    );
+    save_kept_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(Video::create(
+            YoutubeVideoId::new("ytK").unwrap(),
+            "Kept",
+            fixed_timestamp(),
+        )),
+        1,
+    );
+    let channel_videos_repository = Arc::new(FakeChannelVideosRepository::with_videos(vec![
+        listed_video("ytF", "Favorite", 0),
+        listed_video("ytA", "A", 1),
+    ]));
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository,
+        channel_video_repository,
+        channel_videos_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        *channel_videos_repository.requested_limits.lock().unwrap(),
+        vec![5]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
@@ -3101,6 +3159,35 @@ fn save_channel_video_at(
         .find_by_video(&video.id)
         .unwrap()
         .unwrap()
+}
+
+/// Like `save_channel_video_at`, the membership kept: a favorite the
+/// channel no longer lists.
+fn save_kept_channel_video_at(
+    video_repository: &dyn VideoRepository,
+    channel_video_repository: &dyn ChannelVideoRepository,
+    video: &Video,
+    position: i64,
+) -> ChannelVideo {
+    let stored = save_channel_video_at(video_repository, channel_video_repository, video, position);
+    channel_video_repository
+        .save(&ChannelVideo {
+            kept: true,
+            ..stored.clone()
+        })
+        .unwrap();
+    ChannelVideo {
+        kept: true,
+        ..stored
+    }
+}
+
+/// `video` favorited at `fixed_timestamp()`.
+fn favorite(video: Video) -> Video {
+    Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..video
+    }
 }
 
 fn channel(channel_handle: &str) -> Channel {
