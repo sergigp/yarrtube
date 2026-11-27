@@ -3303,6 +3303,54 @@ fn it_should_place_kept_videos_after_the_listed_ones() {
     );
 }
 
+#[test]
+fn it_should_stop_keeping_a_kept_video_listed_again() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &Video::create(YoutubeVideoId::new("ytA").unwrap(), "A", fixed_timestamp()),
+        0,
+    );
+    save_kept_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(Video::create(
+            YoutubeVideoId::new("ytC").unwrap(),
+            "C",
+            fixed_timestamp(),
+        )),
+        1,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytC", "C", 1),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        channel_youtube_ids(&video_repository, &channel_video_repository),
+        vec![("ytA".to_string(), 0, false), ("ytC".to_string(), 1, false)]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones

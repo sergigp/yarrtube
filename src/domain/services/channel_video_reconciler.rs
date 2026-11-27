@@ -445,7 +445,8 @@ impl ChannelVideoReconciler {
         Ok((channel_video, video))
     }
 
-    /// Follows a known video's title and recency position on YouTube.
+    /// Follows a known video's title and recency position on YouTube; a
+    /// kept video listed again is no longer kept.
     fn refresh_known_video(
         &self,
         existing: &ChannelVideo,
@@ -458,10 +459,11 @@ impl ChannelVideoReconciler {
                 Some(video.with_title(current.title.clone(), now))
             })?;
         }
-        if existing.position != current.position {
+        if existing.position != current.position || existing.kept {
             self.channel_video_repository.save(&ChannelVideo {
                 position: current.position,
                 created_at: now,
+                kept: false,
                 ..existing.clone()
             })?;
         }
