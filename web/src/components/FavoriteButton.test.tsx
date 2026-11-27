@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FavoriteButton } from './FavoriteButton'
 import { mockApi, renderWithProviders } from '@/test/helpers'
@@ -67,5 +67,28 @@ describe('FavoriteButton', () => {
       'aria-pressed',
       'true',
     )
+  })
+  it('tells the user when favoriting fails', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockApi({
+      'PUT /api/videos/v1/favorite': {
+        status: 409,
+        error: "video v1 can't be favorited while discarded",
+      },
+    })
+    renderWithProviders(<FavoriteButton videoId="v1" title="My Video" favorite={false} />)
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Add to favorites' }))
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith(
+        `Failed to add "My Video" to favorites: video v1 can't be favorited while discarded`,
+      ),
+    )
+    expect(screen.getByRole('button', { name: 'Add to favorites' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    alert.mockRestore()
   })
 })
