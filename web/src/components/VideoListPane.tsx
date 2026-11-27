@@ -192,6 +192,10 @@ export function VideoListPane<T extends Video>({
                       ? { downloaded: video.status === 'DOWNLOADED' }
                       : undefined
                   }
+                  favorite={{
+                    favorite: video.favorite,
+                    kept: video.kept ? { sourceName: sourceNameOf(video) } : undefined,
+                  }}
                   className="mt-2"
                 />
               </li>
