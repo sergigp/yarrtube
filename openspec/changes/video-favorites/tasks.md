@@ -49,7 +49,7 @@
 - [x] 2.35 Web `FavoriteButton` "favorites a video": `PUT /api/videos/v1/favorite`, toggle becomes "Remove from favorites"; placed in `VideoDetail`.
 - [x] 2.36 Web `FavoriteButton` "unfavorites a favorite without asking".
 - [x] 2.37 Web `FavoriteButton` "asks before unfavoriting a kept video": `UnfavoriteKeptDialog` text names the title and source; confirm sends `DELETE`.
-- [ ] 2.38 Web `FavoriteButton` "sends nothing when unfavoriting a kept video is cancelled".
+- [x] 2.38 Web `FavoriteButton` "sends nothing when unfavoriting a kept video is cancelled".
 - [ ] 2.39 Web `FavoriteButton` "tells the user when favoriting fails".
 - [ ] 2.40 Web `VideoActionsMenu` "offers Add to favorites and Remove from favorites": new `favorite` prop, passed by every card caller.
 - [ ] 2.41 Web `VideoGrid` "shows a star on favorite cards and a Kept badge on kept ones": `ThumbnailOverlay`.

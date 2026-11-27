@@ -50,4 +50,22 @@ describe('FavoriteButton', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
     expect(unfavorite).toHaveBeenCalledOnce()
   })
+  it('sends nothing when unfavoriting a kept video is cancelled', async () => {
+    const unfavorite = vi.fn(() => null)
+    mockApi({ 'DELETE /api/videos/v1/favorite': unfavorite })
+    renderWithProviders(
+      <FavoriteButton videoId="v1" title="Old talk" favorite kept={{ sourceName: 'Talks' }} />,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Remove from favorites' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(unfavorite).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove from favorites' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
 })
