@@ -124,7 +124,10 @@ impl ChannelViewSearcher {
             summaries_enabled: channel.summaries_enabled,
             categorization_enabled: channel.categorization_enabled,
             last_synced_at: channel.last_synced_at,
-            favorite_count: 0,
+            favorite_count: videos
+                .iter()
+                .filter(|video| video.is_favorite() && !video.is_skipped())
+                .count(),
         }
     }
 }

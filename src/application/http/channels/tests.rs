@@ -24,8 +24,8 @@ use crate::domain::services::ShowFileWriter;
 use crate::domain::show::{ShowKey, ShowMoved};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::DiscardedVideo;
-use crate::domain::video::Download;
 use crate::domain::video::YoutubeVideoId;
+use crate::domain::video::{Download, DownloadFailure};
 use crate::domain::video::{DownloadedQuality, Subtitles, Thumbnail};
 use crate::domain::video::{PlaybackPosition, Video};
 use crate::domain::video_category::{
@@ -4630,6 +4630,76 @@ async fn update(
     )
     .await
     .map(|Json(channel)| channel)
+}
+
+#[tokio::test]
+async fn it_should_list_a_channel_with_its_favorite_count() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let favorite = |video: Video| Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..video
+    };
+    let unavailable = |video: Video| {
+        video.mark_unavailable(
+            &DownloadFailure::new("This video has been removed by the uploader"),
+            fixed_timestamp(),
+        )
+    };
+    let videos = [
+        (favorite(downloaded_video("vid_favorite")), false),
+        (favorite(downloaded_video("vid_kept")), true),
+        (
+            favorite(unavailable(downloaded_video("vid_unavailable"))),
+            false,
+        ),
+        (downloaded_video("vid_a"), false),
+        (downloaded_video("vid_b"), false),
+        (downloaded_video("vid_c"), false),
+    ];
+    for (position, (video, kept)) in (0..).zip(videos) {
+        video_repository.insert(&video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo {
+                kept,
+                ..ChannelVideo::create(
+                    handle("@somechannel"),
+                    video.id.clone(),
+                    position,
+                    fixed_timestamp(),
+                )
+            })
+            .unwrap();
+    }
+    let channel_view_searcher = ChannelViewSearcher::new(
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(channel_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![ChannelListItemResponse {
+            unwatched_count: 5,
+            favorite_count: 2,
+            ..some_channel_list_item_response()
+        }])
+    );
 }
 
 async fn list(
