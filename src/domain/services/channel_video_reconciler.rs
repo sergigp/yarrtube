@@ -343,7 +343,17 @@ impl ChannelVideoReconciler {
             .iter()
             .map(|current| current.youtube_id.as_str())
             .collect();
-        let removed = self.remove_videos_not_in(channel, &stored_videos, &current_youtube_ids)?;
+        let last_listed_position = current_videos
+            .iter()
+            .map(|current| current.position)
+            .max()
+            .unwrap_or(-1);
+        let removed = self.keep_or_remove_videos_not_in(
+            channel,
+            &stored_videos,
+            &current_youtube_ids,
+            last_listed_position,
+        )?;
 
         Ok(MembershipChanges {
             listed: Some(current_videos.len()),
@@ -459,47 +469,63 @@ impl ChannelVideoReconciler {
         Ok(())
     }
 
-    /// Deletes every stored video whose YouTube id is not in
-    /// `current_youtube_ids` and announces its removal, which is what
-    /// cleans up its files. A Discarded one is remembered first.
-    fn remove_videos_not_in(
+    /// Every stored video whose YouTube id is not in `current_youtube_ids`:
+    /// a favorite is kept, placed after `last_listed_position` in its
+    /// previous order; any other is removed (see `remove_video`). Returns
+    /// how many were removed.
+    fn keep_or_remove_videos_not_in(
         &self,
         channel: &Channel,
         stored_videos: &[(ChannelVideo, Video)],
         current_youtube_ids: &HashSet<&str>,
+        last_listed_position: i64,
     ) -> anyhow::Result<usize> {
-        stored_videos
+        let (favorites, others): (Vec<_>, Vec<_>) = stored_videos
             .iter()
-            .map(|(_, video)| video)
-            .filter(|video| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .try_fold(0, |removed, video| {
-                info!(
-                    channel_id = %channel.id,
-                    youtube_id = %video.youtube_id,
-                    "removing video from channel (no longer among its most recent uploads)"
-                );
-                self.remember_if_discarded(channel, video)?;
-                self.channel_video_repository.delete(&video.id)?;
-                self.video_repository.delete(&video.id)?;
-                self.video_transcript_repository.delete(&video.id)?;
-                self.video_summary_repository.delete(&video.id)?;
-                self.video_categories_repository.delete(&video.id)?;
-                self.video_category_verdict_repository
-                    .delete_for_video(&video.id)?;
-                self.event_publisher
-                    .publish(&DomainEvent::VideoRemovedFromChannel(
-                        VideoRemovedFromChannel {
-                            channel_id: channel.id.as_str().to_string(),
-                            video_id: video.id.as_str().to_string(),
-                            title: video.title.clone(),
-                            filename: video.download.filename().map(str::to_string),
-                            thumbnail_filename: video.thumbnail.filename.clone(),
-                            subtitle_filename: video.subtitles.filename.clone(),
-                            was_downloaded: video.download.is_downloaded(),
-                        },
-                    ))?;
-                Ok(removed + 1)
-            })
+            .filter(|(_, video)| !current_youtube_ids.contains(video.youtube_id.as_str()))
+            .partition(|(_, video)| video.is_favorite());
+        let now = self.clock.now();
+        (last_listed_position + 1..)
+            .zip(favorites)
+            .try_for_each(|(position, (cv, _))| {
+                self.channel_video_repository
+                    .save(&cv.clone().keep(position, now))
+            })?;
+        others.into_iter().try_fold(0, |removed, (_, video)| {
+            self.remove_video(channel, video)?;
+            Ok(removed + 1)
+        })
+    }
+
+    /// Deletes a stored video no longer among the channel's uploads and
+    /// announces its removal, which is what cleans up its files. A Discarded
+    /// one is remembered first.
+    fn remove_video(&self, channel: &Channel, video: &Video) -> anyhow::Result<()> {
+        info!(
+            channel_id = %channel.id,
+            youtube_id = %video.youtube_id,
+            "removing video from channel (no longer among its most recent uploads)"
+        );
+        self.remember_if_discarded(channel, video)?;
+        self.channel_video_repository.delete(&video.id)?;
+        self.video_repository.delete(&video.id)?;
+        self.video_transcript_repository.delete(&video.id)?;
+        self.video_summary_repository.delete(&video.id)?;
+        self.video_categories_repository.delete(&video.id)?;
+        self.video_category_verdict_repository
+            .delete_for_video(&video.id)?;
+        self.event_publisher
+            .publish(&DomainEvent::VideoRemovedFromChannel(
+                VideoRemovedFromChannel {
+                    channel_id: channel.id.as_str().to_string(),
+                    video_id: video.id.as_str().to_string(),
+                    title: video.title.clone(),
+                    filename: video.download.filename().map(str::to_string),
+                    thumbnail_filename: video.thumbnail.filename.clone(),
+                    subtitle_filename: video.subtitles.filename.clone(),
+                    was_downloaded: video.download.is_downloaded(),
+                },
+            ))
     }
 
     /// Remembers a Discarded video being removed, so the channel never adds

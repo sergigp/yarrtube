@@ -3074,6 +3074,79 @@ fn it_should_not_count_a_favorite_toward_the_limit() {
     );
 }
 
+#[test]
+fn it_should_keep_a_favorite_that_ages_out() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    let stored = [
+        Video::create(YoutubeVideoId::new("ytA").unwrap(), "A", fixed_timestamp()),
+        Video::create(YoutubeVideoId::new("ytB").unwrap(), "B", fixed_timestamp()),
+        favorite(Video::create(
+            YoutubeVideoId::new("ytC").unwrap(),
+            "C",
+            fixed_timestamp(),
+        )),
+    ]
+    .iter()
+    .zip(0..)
+    .map(|(video, position)| {
+        save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            video,
+            position,
+        )
+    })
+    .collect::<Vec<_>>();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        stored_youtube_ids(&video_repository),
+        vec!["ytA", "ytB", "ytC"]
+    );
+    assert_eq!(
+        channel_video_repository
+            .list_for_channel(&handle("@somechannel"))
+            .unwrap(),
+        vec![
+            stored[0].clone(),
+            stored[1].clone(),
+            ChannelVideo {
+                kept: true,
+                ..stored[2].clone()
+            }
+        ]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
