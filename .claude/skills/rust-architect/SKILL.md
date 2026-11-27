@@ -213,6 +213,8 @@ Infrastructure tests use the real dependency, colocated with the code. Some exam
 
 Keep tests in `#[cfg(test)] mod tests` in the same file as the code they test by default. The exception is HTTP handlers and tasks: their acceptance tests live in a sibling `tests.rs` (`<resource>/tests.rs`, `tasks/<task>/tests.rs`), declared with `#[cfg(test)] mod tests;` at the end of `mod.rs`, because those tests outweigh the production code many times over. Only introduce a top-level `tests/` directory (which needs a `lib.rs`, turning the project into a library + thin binary) when a project independently justifies it — not just to match a template.
 
+Enforced by: cargo test · `architecture_tests::adapter_tests_live_in_sibling_file`
+
 ## Testing Opinions
 
 - Test naming: `it_should_<behaviour>[_if_<condition>]`, short enough to read at a glance — drop the `_if_...` part when there's no meaningful precondition beyond "given valid input". This naming focuses on behaviour instead of implementation.
