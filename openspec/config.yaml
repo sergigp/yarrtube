@@ -48,9 +48,28 @@ operations:
 rules:
   design:
     - |
+      Before writing design.md, list your open assumptions and non-obvious choices as
+      3-5 short questions to the user, each with your recommended answer, and wait for
+      the answers. Record each answer as a decision line in ## Review. If there are no
+      open assumptions or non-obvious choices, skip the questions and write design.md.
+    - |
       On design.md add these sections that will be used as an overview of the design. Don't add anything else,
       we want to keep this short and simple
+      ## Review
+      Always the first section, at most ~10 lines. It is the only part the human is
+      expected to read; every section after it is agent-facing detail the human opens
+      only when ## Review looks off. One line per item:
+      - Each non-obvious decision, naming the alternative it discarded
+        ("X, not Y").
+      - New/changed public types and ports: names only.
+      - SQLite schema or migration changes (or "none").
+      - Out of scope.
+      - Risks and assumptions the agent made.
+      - Last line: "Check: the ## Test Plan test names are the behaviour contract;
+        review those and the final /audit-change result, not the prose below."
       ## Diagrams
+      Only when the change has more than ~3 new/changed types, or changes the SQLite
+      schema, or changes a status/lifecycle; otherwise omit this section.
       Mermaid diagrams for the human reviewer. They are drawn from the sections
       below and add nothing to them: those sections stay complete on their own.
       - `classDiagram` of the new/changed types from ## Types & Signatures and
@@ -90,16 +109,27 @@ rules:
          ordered from simplest/happy path to edge cases and errors.
       2. Infrastructure tests, one group per real adapter the change adds or changes.
       For each: test name (`it_should_...`) and what it asserts. One test = one cycle.
-    - Be very concise — no prose narration, no alternatives-considered
+    - |
+      Keep design.md proportional to the change. If the change adds no new types,
+      ports or flows, design.md contains only ## Review and ## Test Plan. A small
+      change's design.md fits in under ~80 lines.
+    - |
+      Be very concise — no prose narration, no alternatives-considered
       discussion, no rationale paragraphs, unless a decision is genuinely
-      non-obvious and needs one sentence to avoid it being "fixed" later
+      non-obvious and needs one sentence to avoid it being "fixed" later.
+      Discarded alternatives go only in ## Review, one line each
     - Follow /rust-architect's layering and naming conventions when naming
       files, types, and methods in the contract
-    - Whenever ## Types & Signatures or ## Call Stack change, update
+    - |
+      Whenever ## Types & Signatures or ## Call Stack change, update
       ## Diagrams in the same edit so they never disagree
+    - |
+      Whenever any other section changes, update ## Review in the same edit so it
+      never disagrees with them
   proposal:
     - |
-      Keep `## Impact`'s text list, and below it add a Mermaid `flowchart LR`
+      Keep `## Impact`'s text list. Only when the change touches more than ~3 modules,
+      add below it a Mermaid `flowchart LR`
       for the human reviewer: the modules/components the change touches, grouped by layer
       in `subgraph`s, plus the unchanged callers of anything it changes (that
       is where side effects land). Mark nodes with the same classes as design.md:
