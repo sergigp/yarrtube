@@ -217,6 +217,60 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_a_kept_channel_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let kept = seed_video(&repo, "yt_kept", "Kept");
+        let listed = seed_video(&repo, "yt_listed", "Listed");
+        let kept_row = ChannelVideo {
+            kept: true,
+            ..ChannelVideo::create(channel_id(), kept.id.clone(), 0, now)
+        };
+        let listed_row = ChannelVideo::create(channel_id(), listed.id.clone(), 1, now);
+        repo.save(&kept_row).unwrap();
+        repo.save(&listed_row).unwrap();
+        let saved = repo.list_for_channel(&channel_id()).unwrap();
+        repo.save(&ChannelVideo {
+            kept: false,
+            ..kept_row.clone()
+        })
+        .unwrap();
+        repo.save(&ChannelVideo {
+            kept: true,
+            ..listed_row.clone()
+        })
+        .unwrap();
+
+        assert_eq!(
+            (saved, repo.list_for_channel(&channel_id()).unwrap()),
+            (
+                vec![
+                    ChannelVideo {
+                        id: 1,
+                        ..kept_row.clone()
+                    },
+                    ChannelVideo {
+                        id: 2,
+                        ..listed_row.clone()
+                    }
+                ],
+                vec![
+                    ChannelVideo {
+                        id: 1,
+                        kept: false,
+                        ..kept_row
+                    },
+                    ChannelVideo {
+                        id: 2,
+                        kept: true,
+                        ..listed_row
+                    }
+                ]
+            )
+        );
+    }
+
+    #[test]
     fn it_should_return_the_channel_video_after_saving_it() {
         let repo = repo();
         let video = seed_video(&repo, "yt1", "First");
