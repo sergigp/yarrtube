@@ -438,7 +438,8 @@ impl PlaylistVideoReconciler {
         Ok((playlist, (playlist_video, video)))
     }
 
-    /// Follows a known video's title and playlist position on YouTube.
+    /// Follows a known video's title and playlist position on YouTube; a
+    /// kept video back in the playlist is no longer kept.
     fn refresh_known_video(
         &self,
         existing: &PlaylistVideo,
@@ -451,10 +452,11 @@ impl PlaylistVideoReconciler {
                 Some(video.with_title(current.title.clone(), now))
             })?;
         }
-        if existing.position != current.position {
+        if existing.position != current.position || existing.kept {
             self.playlist_video_repository.save(&PlaylistVideo {
                 position: current.position,
                 created_at: now,
+                kept: false,
                 ..existing.clone()
             })?;
         }
