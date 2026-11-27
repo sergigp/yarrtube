@@ -68,7 +68,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run `scripts/run-tests.sh --lint --web --rust`; all suites pass.
+- [x] 4.1 Run `scripts/run-tests.sh --lint --web --rust`; all suites pass.
 - [ ] 4.2 Manual (agent):
   - Start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a channel with `video_limit` 2 via the HTTP API, and wait for its videos to download.
   - With the Playwright MCP browser, star a video in the detail pane. Assert:
