@@ -1,0 +1,6 @@
+# Baseline of rule `repository_files_are_named_after_their_port` (src/architecture_tests/repository_files_are_named_after_their_port.rs): code that broke it
+# when it arrived. It only shrinks: fix a unit, then delete its line.
+src/infrastructure/repositories/domain_events_consumer.rs
+src/infrastructure/repositories/event_subscriber.rs
+src/infrastructure/repositories/task_executor.rs
+src/infrastructure/repositories/task_handler.rs
