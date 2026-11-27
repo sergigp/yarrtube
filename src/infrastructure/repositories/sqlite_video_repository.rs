@@ -1706,6 +1706,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_round_trip_a_favorite_video() {
+        let repo = repo();
+        let favorite = Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..video("Favorite", fixed_timestamp())
+        };
+        let not_favorite = video("Not a favorite", fixed_timestamp());
+        repo.insert(&favorite).unwrap();
+        repo.insert(&not_favorite).unwrap();
+        let inserted = repo
+            .find_many(&[favorite.id.clone(), not_favorite.id.clone()])
+            .unwrap();
+        let unfavorited = favorite.clone().unfavorite(fixed_timestamp()).unwrap();
+        let favorited = not_favorite.clone().favorite(fixed_timestamp()).unwrap();
+        repo.update(&unfavorited).unwrap();
+        repo.update(&favorited).unwrap();
+
+        assert_eq!(
+            (
+                inserted,
+                repo.find_many(&[favorite.id.clone(), not_favorite.id.clone()])
+                    .unwrap()
+            ),
+            (
+                vec![favorite, not_favorite],
+                vec![unfavorited.next_version(), favorited.next_version()]
+            )
+        );
+    }
+
     fn downloaded(title: &str, created_at_seconds: i64) -> Video {
         let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
         Video::create(YoutubeVideoId::new("yt1").unwrap(), title, created_at)
