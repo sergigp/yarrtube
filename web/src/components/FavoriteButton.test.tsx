@@ -18,4 +18,18 @@ describe('FavoriteButton', () => {
       'true',
     )
   })
+  it('unfavorites a favorite without asking', async () => {
+    const unfavorite = vi.fn(() => null)
+    mockApi({ 'DELETE /api/videos/v1/favorite': unfavorite })
+    renderWithProviders(<FavoriteButton videoId="v1" title="My Video" favorite />)
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Remove from favorites' }))
+
+    expect(unfavorite).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add to favorites' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
 })
