@@ -64,7 +64,7 @@
 - [x] 3.1 `SqliteVideoRepository::it_should_round_trip_a_favorite_video`: `favorited_at` round-trips, `None` included.
 - [x] 3.2 `SqliteVideoRepository::it_should_list_only_favorite_videos`.
 - [x] 3.3 `SqliteChannelVideoRepository::it_should_round_trip_a_kept_channel_video`.
-- [ ] 3.4 `SqlitePlaylistVideoRepository::it_should_round_trip_a_kept_playlist_video`.
+- [x] 3.4 `SqlitePlaylistVideoRepository::it_should_round_trip_a_kept_playlist_video`.
 
 ## 4. Verification
 
