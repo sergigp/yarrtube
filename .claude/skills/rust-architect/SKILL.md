@@ -223,6 +223,7 @@ Enforced by: cargo test · `architecture_tests::adapter_tests_live_in_sibling_fi
   - Errors use `fail`: `it_should_fail_to_create_if_path_missing`, `it_should_fail_if_invalid_handle_provided`.
   - Tolerated no-ops use `skip` / `ignore`: `it_should_skip_if_playlist_is_gone`, `it_should_ignore_reconcile_of_a_missing_channel`.
   - When one test module covers several handlers, keep the operation in the name so it stays unambiguous (`fail_to_delete_…` vs `fail_to_reconcile_…`).
+  Enforced by: cargo test · `architecture_tests::test_naming`
 - Tests should be as deterministic as possible. In the case of time we will use a fake clock that we can control. This will behave as a regular port.
 
 # Other Opinions
