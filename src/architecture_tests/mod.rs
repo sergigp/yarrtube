@@ -15,6 +15,7 @@ mod domain_is_call_agnostic;
 mod domain_service_layout;
 mod domain_services_are_flat;
 mod fn_ordering;
+mod handler_tests_skip_the_router;
 mod handlers_extract_only_their_services;
 mod handlers_return_typed_results;
 mod port_traits_live_in_infrastructure;

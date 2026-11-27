@@ -158,6 +158,8 @@ This tests the domain logic and the validations at application level. We will pl
 
 HTTP acceptance tests call the handler function directly with only the service it uses, not through a `Router`. A small helper per handler unwraps the `Json` (`create(service, request) -> Result<(StatusCode, ChannelResponse), ApiError>`). Route wiring (paths, methods, which handler each route reaches) is covered by the Playwright suite in `e2e-tests/`, not by Rust tests: every route the UI calls must be exercised by some spec there.
 
+Enforced by: cargo test · `architecture_tests::handler_tests_skip_the_router`
+
 Every test has the same 7 steps, top to bottom and inline: `TestDatabase` + repositories/fakes → seed them → build the service with `Service::new(..)` → build the request → call the handler → assert the response → assert side effects (repositories, outbox events, scheduled tasks, fake state).
 
 - No fixture structs that bundle fakes/repositories and no `service()` → `service_with()` builder chains. They hide which dependencies a test uses and make it easy to skip asserting them. The one allowed exception is a constructor helper for a service with many ports no test observes: it takes the asserted repositories as parameters and fills in the rest (`channel_video_reconciler(&db, channel_repository, ..)`). A test that observes one of the ports the helper fills in builds the service inline with `Service::new(..)` instead of growing the helper or adding a second one.
