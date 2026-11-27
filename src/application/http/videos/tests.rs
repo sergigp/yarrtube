@@ -8688,6 +8688,24 @@ async fn it_should_omit_unavailable_favorites_from_the_favorites_list() {
     );
 }
 
+#[tokio::test]
+async fn it_should_list_no_favorites() {
+    let db = TestDatabase::new();
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    save_playlist_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &downloaded_video("vid1", "Not a favorite", None, 100),
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(response, Ok(vec![]));
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }
