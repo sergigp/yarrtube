@@ -184,6 +184,8 @@ Ideally we should not tests domain services at all because the logic there is te
 
 **Persistence is real, not faked.** Because our database is an embedded SQLite file, which is fast, cheap to create and _is_ the production engine, acceptance and behaviour tests wire the real `Sqlite*` repositories against a fresh database per test instead of fakes. This catches SQL, row-mapping, ordering, upsert and constraint bugs that a hand-written fake silently re-implements (and drifts from). Concretely:
 
+Enforced by: cargo test · `architecture_tests::persistence_is_not_faked`
+
 - Every test starts with `let db = TestDatabase::new();` (`infrastructure/shared/sqlite_connection.rs`): a freshly migrated database file in its own temp directory, removed when the test ends, so tests run in parallel without sharing state. No pool of pre-migrated databases: migrating a fresh one costs a few milliseconds.
 - Each repository gets its own connection, `SqliteXRepository::new(db.connection())` (or `db.shared_connection()` for the ones taking `Arc<Mutex<Connection>>`), opened with the same `sqlite_connection::open` as production (WAL, busy timeout), so tests exercise the real multi-connection setup.
 - Seed and assert through the port traits (`insert`, `list`, `find`, `list_for_...`), never through raw SQL. When a whole-table assertion needs a read the port doesn't have (e.g. listing every video), add a `#[cfg(test)]` inherent method on the SQLite implementation rather than widening the port for tests.
