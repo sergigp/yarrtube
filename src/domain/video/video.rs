@@ -191,6 +191,9 @@ impl Video {
 
     /// No longer a favorite; `None` when it wasn't one.
     pub fn unfavorite(self, now: DateTime<Utc>) -> Option<Self> {
+        if !self.is_favorite() {
+            return None;
+        }
         Some(Self {
             favorited_at: None,
             updated_at: now,

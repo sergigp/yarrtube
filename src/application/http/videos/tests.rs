@@ -8328,6 +8328,27 @@ async fn it_should_unfavorite_every_copy_of_the_youtube_video() {
     );
 }
 
+#[tokio::test]
+async fn it_should_leave_a_video_that_is_not_a_favorite_unchanged_when_unfavorited() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    video_repository.insert(&video).unwrap();
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = unfavorite(video_favoriter, video.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }
