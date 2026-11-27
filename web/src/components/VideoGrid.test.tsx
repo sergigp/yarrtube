@@ -352,4 +352,26 @@ describe('VideoGrid', () => {
       { star: true, kept: true },
     ])
   })
+
+  it('asks before unfavoriting a kept card from its menu', async () => {
+    const unfavorite = vi.fn(() => null)
+    mockApi({ 'DELETE /api/videos/kept/favorite': unfavorite })
+    renderWithProviders(
+      <VideoGrid
+        videos={[
+          aHomeVideo({ id: 'kept', title: 'Old talk', favorite: true, source: BETTATECH }),
+        ]}
+        keptOf={() => true}
+      />,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Old talk' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove from favorites' }))
+
+    expect(
+      screen.getByRole('dialog', { name: 'Remove "Old talk" from favorites?' }),
+    ).toHaveTextContent('"Old talk" is no longer in "BettaTech".')
+    expect(unfavorite).not.toHaveBeenCalled()
+  })
 })

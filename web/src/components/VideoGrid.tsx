@@ -57,6 +57,7 @@ export function VideoGrid({
             ? channelPath(video.source.id)
             : playlistPath(video.source.id)
         const age = formatAge(video.published_at)
+        const kept = keptOf?.(video) ?? false
         return (
           <li
             key={`${video.source.kind}:${video.source.id}:${video.id}`}
@@ -92,7 +93,7 @@ export function VideoGrid({
                   durationSeconds={video.duration_seconds}
                   size="card"
                   favorite={video.favorite}
-                  kept={keptOf?.(video) ?? false}
+                  kept={kept}
                 />
                 {!video.watched && <CardMarkWatchedButton videoId={video.id} title={video.title} />}
               </div>
@@ -148,7 +149,10 @@ export function VideoGrid({
                   sourceName={video.source.name}
                   markable={!video.watched}
                   discard={{ downloaded: true }}
-                  favorite={{ favorite: video.favorite }}
+                  favorite={{
+                    favorite: video.favorite,
+                    kept: kept ? { sourceName: video.source.name } : undefined,
+                  }}
                   excludablePlaylist={
                     video.source.kind === 'playlist'
                       ? { id: video.source.id, name: video.source.name }
