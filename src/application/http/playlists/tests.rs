@@ -5304,6 +5304,64 @@ async fn delete(playlist_deleter: PlaylistDeleter, id: &str) -> Result<StatusCod
     delete_playlist(State(playlist_deleter), Path(id.to_string())).await
 }
 
+#[tokio::test]
+async fn it_should_list_a_playlist_with_its_favorite_count() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&playlist("PL1", "music/first"))
+        .unwrap();
+    let videos = [
+        Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..downloaded_video("vid_favorite")
+        },
+        downloaded_video("vid_a"),
+        downloaded_video("vid_b"),
+        downloaded_video("vid_c"),
+        downloaded_video("vid_d"),
+    ];
+    for (position, video) in (0..).zip(videos) {
+        video_repository.insert(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                video.id.clone(),
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+    let playlist_view_searcher = PlaylistViewSearcher::new(
+        playlist_repository,
+        playlist_video_repository,
+        video_repository,
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(SqliteEventRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        "/videos",
+        Arc::new(FixedClock(fixed_timestamp())),
+    );
+
+    let response = list(playlist_view_searcher).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![PlaylistListItemResponse {
+            unwatched_count: 5,
+            favorite_count: 1,
+            ..playlist_list_item_response("PL1", "music/first")
+        }])
+    );
+}
+
 async fn list(
     playlist_view_searcher: PlaylistViewSearcher,
 ) -> Result<Vec<PlaylistListItemResponse>, ApiError> {
