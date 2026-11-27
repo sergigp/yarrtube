@@ -8459,6 +8459,76 @@ async fn it_should_unfavorite_every_copy_when_discarding_a_favorite() {
     );
 }
 
+#[tokio::test]
+async fn it_should_report_favorite_and_kept_in_a_channel_list() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let listed = new_video(
+        YoutubeVideoId::new("vid_listed").unwrap(),
+        "Listed",
+        fixed_timestamp(),
+    );
+    let kept = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..new_video(
+            YoutubeVideoId::new("vid_kept").unwrap(),
+            "Kept",
+            fixed_timestamp(),
+        )
+    };
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &listed,
+        0,
+    );
+    video_repository.insert(&kept).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo {
+            kept: true,
+            ..ChannelVideo::create(
+                ChannelHandle::new("@somechannel").unwrap(),
+                kept.id.clone(),
+                1,
+                fixed_timestamp(),
+            )
+        })
+        .unwrap();
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            pending_video_response("vid_listed", "Listed"),
+            VideoResponse {
+                favorite: true,
+                kept: true,
+                ..pending_video_response("vid_kept", "Kept")
+            }
+        ])
+    );
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }
