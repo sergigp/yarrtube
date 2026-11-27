@@ -139,6 +139,7 @@ Enforced by: cargo test · `architecture_tests::domain_services_are_flat`
 - Domain errors are mapped explicitly per variant (`Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e))`), no catch-all arm. A mapping repeated across handlers gets one small function.
 - Every service call goes through `run_blocking` (`http/blocking.rs`), since services are synchronous (SQLite, blocking HTTP). Don't judge per call whether it's needed.
 - Response DTOs are flat and carry only the fields their consumers use. Never compose one resource's response by wrapping or `#[serde(flatten)]`-ing another response DTO. A genuinely nested JSON object (e.g. a video's `source`) gets its own DTO.
+  Enforced by: cargo test · `architecture_tests::response_dtos_are_flat`
 
 # Testing
 

@@ -20,3 +20,4 @@ mod handlers_return_typed_results;
 mod port_traits_live_in_infrastructure;
 mod repository_files_are_named_after_their_port;
 mod repository_ports_return_anyhow_results;
+mod response_dtos_are_flat;
