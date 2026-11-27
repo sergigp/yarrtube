@@ -1815,6 +1815,61 @@ fn it_should_keep_a_favorite_removed_from_the_playlist() {
     assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
 }
 
+#[test]
+fn it_should_not_reuse_the_episode_number_of_a_kept_favorite() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    playlist_repository
+        .insert(&Playlist {
+            last_episode: Some(PlaylistEpisodeNumber::new(6).unwrap()),
+            ..playlist("PL1")
+        })
+        .unwrap();
+    let kept = favorite(playlist_episode("vidK", "Kept", 6));
+    let stored = save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &kept,
+        0,
+    );
+    playlist_video_repository
+        .save(&PlaylistVideo {
+            kept: true,
+            ..stored
+        })
+        .unwrap();
+    let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository,
+        vec![playlist_item("vidN", "New", 0)],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    let videos = video_repository.list().unwrap();
+    let added_id = videos[1].id.clone();
+    assert_eq!(
+        videos,
+        vec![
+            kept,
+            Video {
+                id: added_id,
+                ..playlist_episode("vidN", "New", 7)
+            }
+        ]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
