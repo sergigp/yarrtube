@@ -1,9 +1,13 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "oxc"],
+  "plugins": ["react", "oxc", "vitest"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    // The vitest plugin is on for no-restricted-vi-methods only: these two
+    // rules it turns on by default stay off, as before.
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/valid-expect": "off"
   },
   "overrides": [
     {
