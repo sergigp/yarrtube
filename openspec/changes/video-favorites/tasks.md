@@ -46,7 +46,7 @@
 - [x] 2.32 `reconcile_playlist_task::it_should_remove_a_kept_video_once_unfavorited_from_the_playlist`.
 - [x] 2.33 `reconcile_playlist_task::it_should_keep_a_video_favorited_during_the_playlist_listing`.
 - [x] 2.34 `reconcile_playlist_task::it_should_store_a_new_playlist_copy_of_a_favorite_as_a_favorite`.
-- [ ] 2.35 Web `FavoriteButton` "favorites a video": `PUT /api/videos/v1/favorite`, toggle becomes "Remove from favorites"; placed in `VideoDetail`.
+- [x] 2.35 Web `FavoriteButton` "favorites a video": `PUT /api/videos/v1/favorite`, toggle becomes "Remove from favorites"; placed in `VideoDetail`.
 - [ ] 2.36 Web `FavoriteButton` "unfavorites a favorite without asking".
 - [ ] 2.37 Web `FavoriteButton` "asks before unfavoriting a kept video": `UnfavoriteKeptDialog` text names the title and source; confirm sends `DELETE`.
 - [ ] 2.38 Web `FavoriteButton` "sends nothing when unfavoriting a kept video is cancelled".

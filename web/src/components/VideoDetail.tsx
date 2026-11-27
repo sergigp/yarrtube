@@ -15,6 +15,7 @@ import { storageLocation } from '@/lib/storageLocation'
 import { canDiscard, canRetry, failingStepLines, statusLabel } from '@/lib/videoSteps'
 import { RetryVideoButton } from './RetryVideoButton'
 import { DiscardVideoButton } from './DiscardVideoButton'
+import { FavoriteButton } from './FavoriteButton'
 
 /** Where the video comes from, as its meta line links it. */
 export interface VideoDetailSource {
@@ -32,6 +33,8 @@ interface VideoDetailProps {
    * playlist's own view), the video's channel is named instead.
    */
   source?: VideoDetailSource
+  /** The name of the channel or playlist the video comes from. */
+  sourceName?: string
   /** E.g. "Episode 4 of 32", in a playlist. */
   episodeLabel?: string | null
   playbackRate: number
@@ -51,6 +54,7 @@ export function VideoDetail({
   basePath,
   video,
   source,
+  sourceName,
   episodeLabel,
   playbackRate,
   onPlaybackRateChange,
@@ -70,6 +74,12 @@ export function VideoDetail({
           <MetaLine video={video} source={source} episodeLabel={episodeLabel} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <FavoriteButton
+            videoId={video.id}
+            title={video.title}
+            favorite={video.favorite}
+            kept={video.kept ? { sourceName: sourceName ?? source?.name ?? '' } : undefined}
+          />
           <MarkWatchedButton
             videoId={video.id}
             title={video.title}
