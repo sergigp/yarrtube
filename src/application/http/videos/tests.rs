@@ -8560,12 +8560,58 @@ async fn it_should_report_favorite_on_home_cards() {
     );
 }
 
+#[tokio::test]
+async fn it_should_list_favorites_most_recently_favorited_first() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    for (youtube_id, title, favorited_at) in [
+        ("vidA", "A", fixed_timestamp()),
+        ("vidB", "B", favorited_timestamp()),
+    ] {
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &Video {
+                favorited_at: Some(favorited_at),
+                ..downloaded_video(youtube_id, title, None, 100)
+            },
+        );
+    }
+    save_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        &downloaded_video("vidC", "Not a favorite", None, 100),
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            favorite_response("vidB", "B", playlist_source()),
+            favorite_response("vidA", "A", playlist_source()),
+        ])
+    );
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }
 
 async fn unfavorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     unfavorite_video(State(video_favoriter), Path(id.to_string())).await
+}
+
+async fn favorites(video_searcher: VideoSearcher) -> Result<Vec<CategoryVideoResponse>, ApiError> {
+    list_favorite_videos(State(video_searcher))
+        .await
+        .map(|Json(videos)| videos)
 }
 
 async fn list_categories_of(
@@ -9627,5 +9673,17 @@ fn unfavorited(video: Video) -> Video {
         updated_at: favorited_timestamp(),
         version: video.version + 1,
         ..video
+    }
+}
+
+/// A favorite as listed: a downloaded video created at second 100.
+fn favorite_response(
+    youtube_id: &str,
+    title: &str,
+    source: HomeVideoSourceResponse,
+) -> CategoryVideoResponse {
+    CategoryVideoResponse {
+        favorite: true,
+        ..category_video_response(youtube_id, title, 100, source)
     }
 }

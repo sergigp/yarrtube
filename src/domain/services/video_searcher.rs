@@ -206,15 +206,7 @@ impl VideoSearcherApi for VideoSearcher {
                 .downloaded_videos(&category)
                 .map_err(ListVideosError::Repository)?,
         );
-        let by_video = self
-            .category_ids_by_video(&self.list_categories()?)
-            .map_err(ListVideosError::Repository)?;
-        let summaries_available = self.find_preferences()?.summaries_available();
-        let mut views = videos
-            .into_iter()
-            .map(|sourced| self.category_view(sourced, &by_video, summaries_available))
-            .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
-            .map_err(ListVideosError::Repository)?;
+        let mut views = self.category_views(videos)?;
         views.sort_by_key(|view| std::cmp::Reverse(Self::published_or_synced(view)));
         Ok(views)
     }
@@ -240,7 +232,15 @@ impl VideoSearcherApi for VideoSearcher {
     }
 
     fn list_favorites(&self) -> Result<Vec<CategoryVideoView>, ListVideosError> {
-        Ok(Vec::new())
+        let mut videos = self
+            .with_sources(
+                self.video_repository
+                    .list_favorites()
+                    .map_err(ListVideosError::Repository)?,
+            )
+            .map_err(ListVideosError::Repository)?;
+        videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.favorited_at));
+        self.category_views(videos)
     }
 }
 
@@ -287,6 +287,22 @@ impl VideoSearcher {
             summary,
             kept,
         })
+    }
+
+    /// `videos` as category videos, in the same order (see `category_view`).
+    fn category_views(
+        &self,
+        videos: Vec<SourcedVideo>,
+    ) -> Result<Vec<CategoryVideoView>, ListVideosError> {
+        let by_video = self
+            .category_ids_by_video(&self.list_categories()?)
+            .map_err(ListVideosError::Repository)?;
+        let summaries_available = self.find_preferences()?.summaries_available();
+        videos
+            .into_iter()
+            .map(|sourced| self.category_view(sourced, &by_video, summaries_available))
+            .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
+            .map_err(ListVideosError::Repository)
     }
 
     /// `sourced` as a category video: with its metadata, its summary when

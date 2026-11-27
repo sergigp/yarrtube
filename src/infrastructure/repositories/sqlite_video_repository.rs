@@ -104,7 +104,6 @@ pub trait VideoRepository: Send + Sync {
     /// ASCII case, newest sync first.
     fn find_downloaded_by_title(&self, text: &str, limit: usize) -> anyhow::Result<Vec<Video>>;
     /// Every video with a `favorited_at`.
-    #[allow(dead_code)] // walking skeleton
     fn list_favorites(&self) -> anyhow::Result<Vec<Video>>;
 }
 
@@ -400,7 +399,19 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn list_favorites(&self) -> anyhow::Result<Vec<Video>> {
-        Ok(Vec::new())
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {VIDEO_COLUMNS} FROM videos WHERE favorited_at IS NOT NULL ORDER BY rowid ASC"
+            ))
+            .context("failed to prepare list favorite videos")?;
+        stmt.query_map([], Self::read_row)
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+            .inspect_err(|e| tracing::error!(error = %e, "failed to list favorite videos"))
+            .context("failed to list favorite videos")?
+            .into_iter()
+            .map(Self::row_to_video)
+            .collect()
     }
 }
 
