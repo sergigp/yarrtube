@@ -162,6 +162,8 @@ export function VideoListPane<T extends Video>({
                       watched={video.watched}
                       positionSeconds={video.position_seconds}
                       durationSeconds={video.duration_seconds}
+                      favorite={video.favorite}
+                      kept={video.kept}
                       size="row"
                     />
                   </div>

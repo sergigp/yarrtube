@@ -31,6 +31,8 @@ interface VideoGridProps {
    * own page, where naming the playlist again says nothing.
    */
   labelOf?: (video: HomeVideo) => string | null
+  /** Whether a card's video is kept by its source, which badges it "Kept". */
+  keptOf?: (video: HomeVideo) => boolean
 }
 
 /** Home-style video cards, each linking to its video in its source. */
@@ -40,6 +42,7 @@ export function VideoGrid({
   layout = 'grid',
   videoPathOf,
   labelOf,
+  keptOf,
 }: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
@@ -88,6 +91,8 @@ export function VideoGrid({
                   positionSeconds={video.position_seconds}
                   durationSeconds={video.duration_seconds}
                   size="card"
+                  favorite={video.favorite}
+                  kept={keptOf?.(video) ?? false}
                 />
                 {!video.watched && <CardMarkWatchedButton videoId={video.id} title={video.title} />}
               </div>

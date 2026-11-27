@@ -234,6 +234,7 @@ function PlaylistBrowser({
   }
 
   const episodes = new Map(videos.map((video) => [video.id, video.episode]))
+  const kept = new Set(videos.filter((video) => video.kept).map((video) => video.id))
   const source = {
     kind: 'playlist' as const,
     id: playlist.id,
@@ -264,6 +265,7 @@ function PlaylistBrowser({
           layout="feed"
           videoPathOf={(video) => videoPathIn(playlistPath(playlist.id), video.id)}
           labelOf={(video) => episodeLabel(episodes.get(video.id))}
+          keptOf={(video) => kept.has(video.id)}
         />
       )}
     </>
