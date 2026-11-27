@@ -12,8 +12,9 @@ use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
-    Chapters, Download, DownloadedQuality, EpisodeNumber, RetryAttempts, StepState, StepStatus,
-    Subtitles, Thumbnail, Video, VideoChapter, VideoDiscarded, VideoId, WatchState, YoutubeVideoId,
+    Chapters, Download, DownloadFailure, DownloadedQuality, EpisodeNumber, RetryAttempts,
+    StepState, StepStatus, Subtitles, Thumbnail, Video, VideoChapter, VideoDiscarded, VideoId,
+    WatchState, YoutubeVideoId,
 };
 use crate::domain::video_category::VideoCategories;
 use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -8636,6 +8637,53 @@ async fn it_should_list_a_favorite_tracked_twice_once_from_its_channel() {
             "vid1",
             "My Video",
             channel_source(None)
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_omit_unavailable_favorites_from_the_favorites_list() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    save_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        &Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..downloaded_video("vid1", "Available", None, 100)
+        },
+    );
+    save_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        &Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..new_video(
+                YoutubeVideoId::new("vid2").unwrap(),
+                "Members only",
+                fixed_timestamp(),
+            )
+            .mark_unavailable(
+                &DownloadFailure::new("Join this channel to get access to members-only content."),
+                fixed_timestamp(),
+            )
+        },
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![favorite_response(
+            "vid1",
+            "Available",
+            playlist_source()
         )])
     );
 }

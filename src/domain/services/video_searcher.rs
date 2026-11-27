@@ -236,7 +236,10 @@ impl VideoSearcherApi for VideoSearcher {
             self.with_sources(
                 self.video_repository
                     .list_favorites()
-                    .map_err(ListVideosError::Repository)?,
+                    .map_err(ListVideosError::Repository)?
+                    .into_iter()
+                    .filter(|video| !video.is_skipped())
+                    .collect(),
             )
             .map_err(ListVideosError::Repository)?,
         ));
