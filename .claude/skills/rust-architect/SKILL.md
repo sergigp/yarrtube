@@ -67,6 +67,8 @@ src/
       <thing>.rs
 ```
 
+Enforced by: cargo test · `architecture_tests::adapter_folder_layout`
+
 Enforced by: cargo test · `architecture_tests::domain_services_are_flat`
 
 - We prefer not generic names: not `entity.rs`, not `value_objects.rs`, not `ports.rs`. A file is named after the single type/concept it holds (`user.rs` holds `User`, `user_id.rs` holds `UserId`).
