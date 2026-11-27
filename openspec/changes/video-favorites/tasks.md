@@ -21,7 +21,7 @@
 - [x] 2.7 `it_should_fail_to_favorite_an_unknown_video`: 404 for favorite and unfavorite.
 - [x] 2.8 `it_should_unfavorite_every_copy_when_discarding_a_favorite`: `Video::discard` clears `favorited_at`, and `VideoDiscarder` calls `unfavorite`.
 - [x] 2.9 `it_should_report_favorite_and_kept_in_a_channel_list`: `VideoView.kept` from the membership row, plus `VideoResponse.favorite` / `kept`.
-- [ ] 2.10 `it_should_report_favorite_on_home_cards`: `HomeVideoView.favorite`.
+- [x] 2.10 `it_should_report_favorite_on_home_cards`: `HomeVideoView.favorite`.
 - [ ] 2.11 `it_should_list_favorites_most_recently_favorited_first`: `VideoSearcher::list_favorites`.
 - [ ] 2.12 `it_should_list_a_favorite_tracked_twice_once_from_its_channel`.
 - [ ] 2.13 `it_should_omit_unavailable_favorites_from_the_favorites_list`.

@@ -8529,6 +8529,37 @@ async fn it_should_report_favorite_and_kept_in_a_channel_list() {
     );
 }
 
+#[tokio::test]
+async fn it_should_report_favorite_on_home_cards() {
+    let db = TestDatabase::new();
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    save_playlist_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..video_lasting("vid1", "Long", Some(3600), 100)
+        },
+    );
+
+    let response = home(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(HomeResponse {
+            latest: vec![HomeVideoResponse {
+                duration_seconds: Some(3600),
+                favorite: true,
+                ..home_video_response("vid1", "Long", playlist_source())
+            }],
+            ..empty_home()
+        })
+    );
+}
+
 async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
     favorite_video(State(video_favoriter), Path(id.to_string())).await
 }

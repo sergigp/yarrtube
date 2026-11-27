@@ -32,6 +32,7 @@ impl From<SourcedVideo> for HomeVideoView {
             watched: video.watch.is_watched(),
             position_seconds: video.watch.position.seconds(),
             in_progress: video.watch_progress().is_in_progress(),
+            favorite: video.is_favorite(),
             id: video.id,
             youtube_id: video.youtube_id,
             title: video.title,
@@ -40,7 +41,6 @@ impl From<SourcedVideo> for HomeVideoView {
             published_at: None,
             source: sourced.source,
             category_ids: Vec::new(),
-            favorite: false,
         }
     }
 }
