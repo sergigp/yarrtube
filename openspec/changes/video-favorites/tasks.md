@@ -16,8 +16,8 @@
 - [x] 2.2 `it_should_favorite_every_copy_of_the_youtube_video`: channel and playlist copies both favorite, same time.
 - [x] 2.3 `it_should_keep_the_favorite_time_when_favorited_again`: 204, `favorited_at` unchanged.
 - [x] 2.4 `it_should_unfavorite_every_copy_of_the_youtube_video`: 204, neither copy favorite.
-- [x] 2.5 `it_should_leave_a_video_that_is_not_a_favorite_unchanged_when_unfavorited`: 204, no write.
-- [x] 2.6 `it_should_refuse_to_favorite_a_discarded_video`: 409, not favorite.
+- [x] 2.5 `it_should_ignore_unfavorite_of_a_video_that_is_not_a_favorite`: 204, no write.
+- [x] 2.6 `it_should_fail_to_favorite_a_discarded_video`: 409, not favorite.
 - [x] 2.7 `it_should_fail_to_favorite_an_unknown_video`: 404 for favorite and unfavorite.
 - [x] 2.8 `it_should_unfavorite_every_copy_when_discarding_a_favorite`: `Video::discard` clears `favorited_at`, and `VideoDiscarder` calls `unfavorite`.
 - [x] 2.9 `it_should_report_favorite_and_kept_in_a_channel_list`: `VideoView.kept` from the membership row, plus `VideoResponse.favorite` / `kept`.
@@ -83,4 +83,12 @@
     - its files are gone
   - Open the channel delete confirmation with one favorite and assert the favorites sentence. Take screenshots.
   - Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
-- [ ] 4.3 Manual (human): on Plex, check that a kept favorite's episode stays in the show after it ages out of its channel's window. Unfavorite it, then check that it leaves the show after the next sync.
+- [x] 4.3 Manual (human): on Plex, check that a kept favorite's episode stays in the show after it ages out of its channel's window. Unfavorite it, then check that it leaves the show after the next sync.
+
+## 5. Audit follow-ups
+
+- [x] 5.1 `reconcile_playlist_task::it_should_keep_a_video_favorited_while_new_playlist_items_are_added`: playlist `keep_or_remove_videos_not_in` re-reads via `is_favorite_now`.
+- [x] 5.2 `reconcile_channel_task::it_should_remove_an_unavailable_favorite_no_longer_listed` and `reconcile_playlist_task::it_should_remove_an_unavailable_favorite_from_the_playlist`: keep step skips `is_skipped` videos.
+- [x] 5.3 Web `VideoGrid` "asks before unfavoriting a kept card from its menu": `keptOf` also feeds `VideoActionsMenu`'s `favorite.kept`.
+- [x] 5.4 `it_should_keep_a_channel_video_at_a_new_position` / `it_should_keep_a_playlist_video_at_a_new_position`.
+- [x] 5.5 End-to-end `favorites.spec.js`; `routeCoverage.js` keeps `/api/favorites/...` paths literal.

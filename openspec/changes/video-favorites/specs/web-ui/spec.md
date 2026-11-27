@@ -25,7 +25,7 @@ The video actions menu SHALL offer "Add to favorites" for a video that is not a 
 - **THEN** the video becomes a favorite and its menu now offers "Remove from favorites"
 
 ### Requirement: Unfavoriting A Kept Video Asks For Confirmation
-Unfavoriting a kept video, from the detail pane or the actions menu, SHALL ask for confirmation first, saying that the video is no longer in its channel or playlist and that its files are deleted at the next sync. Cancelling SHALL send nothing.
+In a channel's or playlist's own views (its video list and grid, and their detail pane), unfavoriting a kept video, from the detail pane or the actions menu, SHALL ask for confirmation first, saying that the video is no longer in its channel or playlist and that its files are deleted at the next sync. Cancelling SHALL send nothing. Elsewhere (the Favorites, category and home views), unfavoriting SHALL send at once, as these views don't show whether a video is kept.
 
 #### Scenario: Confirming
 - **WHEN** a user unfavorites the kept video "Old talk" of the channel "Talks" and confirms
@@ -34,6 +34,14 @@ Unfavoriting a kept video, from the detail pane or the actions menu, SHALL ask f
 #### Scenario: Cancelling
 - **WHEN** a user unfavorites a kept video and cancels the confirmation
 - **THEN** no request is sent and the video stays a favorite
+
+#### Scenario: Kept card's menu asks
+- **WHEN** a user chooses "Remove from favorites" from the menu of a playlist card badged "Kept"
+- **THEN** the confirmation is shown and nothing is sent until the user confirms
+
+#### Scenario: Unfavoriting from the Favorites view
+- **WHEN** a user unfavorites a kept video in the Favorites view
+- **THEN** the application sends `DELETE /api/videos/{id}/favorite` without asking, and the video leaves the list
 
 ### Requirement: Favorite And Kept Marks On Video Cards
 A favorite video's card SHALL show a filled star on its thumbnail. In a channel's or playlist's video list, a kept video's card SHALL also show a "Kept" badge.

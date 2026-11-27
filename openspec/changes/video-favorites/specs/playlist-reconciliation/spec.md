@@ -28,7 +28,7 @@ filename (if any), and whether it had been downloaded.
 ## ADDED Requirements
 
 ### Requirement: Favorites Are Kept (YouTube-Linked Playlists)
-A reconcile pass SHALL keep a stored favorite that is no longer in the source YouTube playlist instead of removing it: its record, episode number, files and pending work stay, no `VideoRemovedFromPlaylist` is published, and it is marked kept. A video favorited while the pass runs SHALL be kept too.
+A reconcile pass SHALL keep a stored favorite that is no longer in the source YouTube playlist instead of removing it: its record, episode number, files and pending work stay, no `VideoRemovedFromPlaylist` is published, and it is marked kept. A video favorited while the pass runs SHALL be kept too. An Unavailable favorite SHALL NOT be kept: it is removed like any video no longer in the playlist, since no view shows it to unfavorite.
 
 #### Scenario: Favorite removed from the YouTube playlist
 - **WHEN** a stored favorite numbered `S01E004` is no longer in its YouTube playlist
@@ -45,6 +45,10 @@ A reconcile pass SHALL keep a stored favorite that is no longer in the source Yo
 #### Scenario: Unfavorited kept video
 - **WHEN** a kept video of a playlist is unfavorited and the next reconcile pass doesn't find it in the YouTube playlist
 - **THEN** it is removed like any video no longer in the playlist, and its files are deleted
+
+#### Scenario: Unavailable favorite
+- **WHEN** a stored favorite whose download is Unavailable is no longer in its YouTube playlist
+- **THEN** it is removed, not marked kept
 
 ### Requirement: Kept Videos Sit After The Listed Ones (YouTube-Linked Playlists)
 A reconcile pass SHALL place the playlist's kept videos after its listed ones, in the order they had before. A kept video that is back in the YouTube playlist SHALL stop being kept and take its playlist position.

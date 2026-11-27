@@ -14,6 +14,8 @@ Key decisions (one line each, so they aren't "fixed" later):
 - **Unfavoriting does nothing else.** The next reconcile evicts a kept video through the normal path (`VideoRemovedFrom*`, which deletes its files).
 - **Discard unfavorites every copy.** `Video::discard` clears its own `favorited_at`, then `VideoDiscarder` calls `VideoFavoriter::unfavorite`.
 - **The favorites list reuses `CategoryVideoView` / `CategoryVideoResponse`.** It's the same shape: the video, its source and its categories.
+- **An Unavailable favorite isn't kept.** No view shows it, so no one could unfavorite it; the keep step checks `!is_skipped()` before `is_favorite_now`.
+- **Only source views know `kept`.** The Favorites, category and home views send none, so unfavoriting there doesn't ask for confirmation.
 
 ## Diagrams
 
@@ -448,13 +450,13 @@ favorite?: { favorite: boolean; kept?: { sourceName: string } }
 2. `list_current_videos(channel, skipped_ids.len(), …)` → `video_window::within_limit(listing, |u| skipped_ids.contains(u), limit)`
 3. new: `add_video(channel, youtube_id, current, now)` → `Video::create(..).with_favorited_at(self.inherited_favorite(&youtube_id)?)`
 4. known: `refresh_known_video` also saves `kept: false` when the row was kept
-5. `keep_or_remove_videos_not_in(channel, &stored, &current_ids, last_listed_position)`: for each stored not listed, in stored order → `is_favorite_now(video)` → favorite: `channel_video_repository.save(&cv.keep(last_listed_position + 1 + i, now))`, else (existing) remember-if-discarded, delete, publish `VideoRemovedFromChannel`
+5. `keep_or_remove_videos_not_in(channel, &stored, &current_ids, last_listed_position)`: for each stored not listed, in stored order → `!video.is_skipped() && is_favorite_now(video)` → favorite: `channel_video_repository.save(&cv.keep(last_listed_position + 1 + i, now))`, else (existing) remember-if-discarded, delete, publish `VideoRemovedFromChannel`
 6. `desired_state` unchanged → `internal_video_reconciler.reconcile(&desired)`
 
 **Playlist reconcile** — `PlaylistVideoReconciler::sync_membership_with_youtube`
 1. new: `add_video(numbering, youtube_id, current, now)` → inherited favorite as above
 2. known: `refresh_known_video` also clears `kept`
-3. `keep_or_remove_videos_not_in(playlist, &stored, &current_ids, max listed position)` as for channels, publishing `VideoRemovedFromPlaylist` for removed ones
+3. `keep_or_remove_videos_not_in(playlist, &stored, &current_ids, max listed position)` as for channels (`!video.is_skipped() && is_favorite_now(video)`, re-reading the favorite), publishing `VideoRemovedFromPlaylist` for removed ones
 
 **Favorites list** — `GET /api/favorites/videos`
 1. `list_favorite_videos` → `video_searcher.list_favorites()`
@@ -466,7 +468,8 @@ favorite?: { favorite: boolean; kept?: { sourceName: string } }
 
 **Web**
 - `FavoriteButton` / `VideoActionsMenu` → `kept` ? `UnfavoriteKeptDialog` → `useSetVideoFavorite()(id, false)` : `useSetVideoFavorite()(id, !favorite)` → `favoriteVideo` / `unfavoriteVideo` → invalidate library + `['favorites']`
-- `Sidebar` → `<FavoritesEntry>` row above `SidebarCategories` → `/favorites` → `FavoritesDetail` → `useFavoriteVideos()` → `VideoGrid` + `CategoryPlayer`-like selection (`useVideoSelection`)
+- `VideoGrid` → `keptOf(video)` → `ThumbnailOverlay` "Kept" badge and `VideoActionsMenu` `favorite.kept`
+- `Sidebar` → `SidebarFavorites` row (`FAVORITES_PATH`) above `SidebarCategories` → `/favorites` → `FavoritesDetail` → `useFavoriteVideos()` → `VideoGrid` + `CategoryPlayer`-like selection (`useVideoSelection`)
 - `Sidebar` row / `DetailHeader` delete → `deleteSourceDescription(kind, item.favorite_count)`
 
 ## Test Plan
@@ -478,8 +481,8 @@ HTTP — `src/application/http/videos/tests.rs`:
 2. `it_should_favorite_every_copy_of_the_youtube_video` — channel + playlist copies both favorite, same time.
 3. `it_should_keep_the_favorite_time_when_favorited_again` — 204, `favorited_at` unchanged.
 4. `it_should_unfavorite_every_copy_of_the_youtube_video` — 204, neither copy favorite.
-5. `it_should_leave_a_video_that_is_not_a_favorite_unchanged_when_unfavorited` — 204, no write.
-6. `it_should_refuse_to_favorite_a_discarded_video` — 409, not favorite.
+5. `it_should_ignore_unfavorite_of_a_video_that_is_not_a_favorite` — 204, no write.
+6. `it_should_fail_to_favorite_a_discarded_video` — 409, not favorite.
 7. `it_should_fail_to_favorite_an_unknown_video` — 404 (and unfavorite 404).
 8. `it_should_unfavorite_every_copy_when_discarding_a_favorite` — discard channel copy → playlist copy not favorite.
 9. `it_should_report_favorite_and_kept_in_a_channel_list` — `favorite`, `kept` in `VideoResponse`.
@@ -514,6 +517,14 @@ Tasks — `src/application/tasks/reconcile_playlist_task/tests.rs`:
 32. `it_should_remove_a_kept_video_once_unfavorited_from_the_playlist`.
 33. `it_should_keep_a_video_favorited_during_the_playlist_listing`.
 34. `it_should_store_a_new_playlist_copy_of_a_favorite_as_a_favorite`.
+34a. `it_should_keep_a_video_favorited_while_new_playlist_items_are_added` — favorite written while new items are added → kept (re-read).
+34b. `it_should_remove_an_unavailable_favorite_from_the_playlist`.
+
+Tasks — `reconcile_channel_task/tests.rs` (audit):
+34c. `it_should_remove_an_unavailable_favorite_no_longer_listed`.
+
+Domain — `channel_video.rs`, `playlist_video.rs`:
+34d. `it_should_keep_a_channel_video_at_a_new_position` / `it_should_keep_a_playlist_video_at_a_new_position` — position, `kept`, `created_at` = now.
 
 Web — Vitest + `mockApi`:
 35. `FavoriteButton.test.tsx` "favorites a video" — `PUT /api/videos/v1/favorite`, toggle becomes "Remove from favorites".
@@ -527,6 +538,10 @@ Web — Vitest + `mockApi`:
 43. `FavoritesDetail.test.tsx` "lists favorites in server order with their source" / "says No favorites yet" / "drops a video once unfavorited".
 44. `lib/sourceDelete.test.ts` — 0, 1 and 2 favorites wording.
 45. `Sidebar.test.tsx` "warns how many favorites deleting a channel deletes".
+45a. `VideoGrid.test.tsx` "asks before unfavoriting a kept card from its menu".
+
+End-to-end — `e2e-tests/tests/favorites.spec.js`:
+45b. "star a video: it shows under Favorites, and unstarring takes it off" — covers the three favorite routes for the route-coverage check.
 
 ### 2. Infrastructure tests
 

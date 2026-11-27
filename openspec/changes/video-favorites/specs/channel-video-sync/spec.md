@@ -84,7 +84,7 @@ channel, SHALL take its slot within the limit.
 ## ADDED Requirements
 
 ### Requirement: Favorites Are Kept (Channels)
-A reconcile pass SHALL keep a stored favorite that is no longer among the channel's current uploads (aged past the window or gone from YouTube) instead of evicting it: its record, files and pending work stay, no `VideoRemovedFromChannel` is published, and it is marked kept. A video favorited while the pass runs SHALL be kept too.
+A reconcile pass SHALL keep a stored favorite that is no longer among the channel's current uploads (aged past the window or gone from YouTube) instead of evicting it: its record, files and pending work stay, no `VideoRemovedFromChannel` is published, and it is marked kept. A video favorited while the pass runs SHALL be kept too. An Unavailable favorite SHALL NOT be kept: it is evicted like any video no longer listed, since no view shows it to unfavorite.
 
 #### Scenario: Favorite ages out of the window
 - **WHEN** a reconcile pass for a channel with `video_limit` 2 lists uploads A, B and the stored favorite C is no longer listed
@@ -105,6 +105,10 @@ A reconcile pass SHALL keep a stored favorite that is no longer among the channe
 #### Scenario: Unfavorited kept video
 - **WHEN** a kept video of a channel is unfavorited and the next reconcile pass doesn't list it
 - **THEN** it is evicted like any video no longer among the channel's uploads, and its files are deleted
+
+#### Scenario: Unavailable favorite
+- **WHEN** a stored favorite whose download is Unavailable is no longer listed by a reconcile pass
+- **THEN** it is evicted, not marked kept
 
 ### Requirement: Kept Videos Sit After The Listed Ones (Channels)
 A reconcile pass SHALL place the channel's kept videos after its listed ones, in the order they had before, so the channel's videos stay ordered with the listed uploads first. A kept video that the channel lists again SHALL stop being kept and take its listed position.
