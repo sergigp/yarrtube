@@ -8,3 +8,5 @@
 mod baseline;
 mod openspec;
 mod source;
+
+mod domain_is_call_agnostic;

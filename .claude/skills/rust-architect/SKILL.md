@@ -115,6 +115,7 @@ src/
   ```
 - Read models (`*View`, e.g. `TaskView`, `ChannelView`) hold the flat fields they expose, not the entity they're derived from.
 - Domain services are call-agnostic: they know nothing about HTTP, CLI, subscribers, or tasks. Adapting any external trigger into a domain call — parsing/validating input, invoking the domain service, mapping its result back — is the application layer's sole responsibility.
+  Enforced by: cargo test · `architecture_tests::domain_is_call_agnostic`
 
 ## HTTP Handlers
 
