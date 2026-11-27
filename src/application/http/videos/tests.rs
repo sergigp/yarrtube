@@ -8330,7 +8330,7 @@ async fn it_should_unfavorite_every_copy_of_the_youtube_video() {
 }
 
 #[tokio::test]
-async fn it_should_leave_a_video_that_is_not_a_favorite_unchanged_when_unfavorited() {
+async fn it_should_ignore_unfavorite_of_a_video_that_is_not_a_favorite() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = new_video(
@@ -8351,7 +8351,7 @@ async fn it_should_leave_a_video_that_is_not_a_favorite_unchanged_when_unfavorit
 }
 
 #[tokio::test]
-async fn it_should_refuse_to_favorite_a_discarded_video() {
+async fn it_should_fail_to_favorite_a_discarded_video() {
     let db = TestDatabase::new();
     let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
     let video = new_video(
@@ -8569,10 +8569,12 @@ async fn it_should_list_favorites_most_recently_favorited_first() {
     SqlitePlaylistRepository::new(db.database())
         .insert(&playlist("PL1"))
         .unwrap();
-    for (youtube_id, title, favorited_at) in [
+    [
         ("vidA", "A", fixed_timestamp()),
         ("vidB", "B", favorited_timestamp()),
-    ] {
+    ]
+    .into_iter()
+    .for_each(|(youtube_id, title, favorited_at)| {
         save_playlist_video(
             &video_repository,
             &playlist_video_repository,
@@ -8582,7 +8584,7 @@ async fn it_should_list_favorites_most_recently_favorited_first() {
                 ..downloaded_video(youtube_id, title, None, 100)
             },
         );
-    }
+    });
     save_playlist_video(
         &video_repository,
         &playlist_video_repository,

@@ -42,4 +42,46 @@ impl ChannelVideo {
             ..self
         }
     }
+
+    /// Listed again at `position`, no longer kept.
+    pub fn listed_at(self, position: i64, now: DateTime<Utc>) -> Self {
+        Self {
+            position,
+            created_at: now,
+            kept: false,
+            ..self
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_keep_a_channel_video_at_a_new_position() {
+        let created_at = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let channel_video = ChannelVideo {
+            id: 7,
+            ..ChannelVideo::create(
+                ChannelHandle::new("@channel").unwrap(),
+                VideoId::new_generated(),
+                2,
+                created_at,
+            )
+        };
+
+        let kept = channel_video.clone().keep(5, now);
+
+        assert_eq!(
+            kept,
+            ChannelVideo {
+                position: 5,
+                created_at: now,
+                kept: true,
+                ..channel_video
+            }
+        );
+    }
 }

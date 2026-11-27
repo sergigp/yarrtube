@@ -132,8 +132,8 @@ impl VideoSearcherApi for VideoSearcher {
             .filter_map(|pv| {
                 self.video_repository
                     .find(&pv.video_id)
-                    .transpose()
                     .map(|video| video.map(|video| (video, pv.kept)))
+                    .transpose()
             })
             .filter(|found| !is_skipped(found))
             .map(|found| found.and_then(|(video, kept)| self.view(video, summaries_shown, kept)))
@@ -161,8 +161,8 @@ impl VideoSearcherApi for VideoSearcher {
             .filter_map(|cv| {
                 self.video_repository
                     .find(&cv.video_id)
-                    .transpose()
                     .map(|video| video.map(|video| (video, cv.kept)))
+                    .transpose()
             })
             .filter(|found| !is_skipped(found))
             .map(|found| found.and_then(|(video, kept)| self.view(video, summaries_shown, kept)))

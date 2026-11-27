@@ -19,7 +19,8 @@ use crate::domain::show::ShowKey;
 use crate::domain::task::{ScheduledTask, TaskStatus};
 use crate::domain::video::Video;
 use crate::domain::video::{
-    EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId, YoutubeVideoId,
+    DownloadFailure, EpisodeNumber, FetchedThumbnail, PlaylistEpisodeNumber, VideoId,
+    YoutubeVideoId,
 };
 use crate::domain::video_category::{
     Verdict, VerdictAuthor, VideoCategories, VideoCategoryVerdict,
@@ -68,7 +69,9 @@ use crate::infrastructure::repositories::youtube_playlist_items_repository::{
 };
 use crate::infrastructure::repositories::youtube_thumbnail_repository::FakeThumbnailRepository;
 use crate::infrastructure::shared::category_lock::CategoryLock;
-use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+use crate::infrastructure::shared::domain_events::event_publisher::{
+    EventPublisher, SqliteEventPublisher,
+};
 use crate::infrastructure::shared::domain_events::event_repository::{
     EventRepository, SqliteEventRepository,
 };
@@ -1816,6 +1819,48 @@ fn it_should_keep_a_favorite_removed_from_the_playlist() {
 }
 
 #[test]
+fn it_should_remove_an_unavailable_favorite_from_the_playlist() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let unavailable = favorite(playlist_episode("vidU", "Taken down", 1).mark_unavailable(
+        &DownloadFailure::new("This video has been removed for a copyright claim."),
+        fixed_timestamp(),
+    ));
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &unavailable,
+        0,
+    );
+    let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+        &db,
+        playlist_repository,
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        vec![],
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.find(&unavailable.id).unwrap(), None);
+    assert_eq!(
+        playlist_video_repository
+            .list_for_playlist(&playlist_id())
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[test]
 fn it_should_not_reuse_the_episode_number_of_a_kept_favorite() {
     let db = TestDatabase::new();
     let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -2093,6 +2138,75 @@ fn it_should_keep_a_video_favorited_during_the_playlist_listing() {
     assert_eq!(
         playlist_youtube_ids(&video_repository, &playlist_video_repository),
         vec![("vidK".to_string(), 0, true)]
+    );
+}
+
+#[test]
+fn it_should_keep_a_video_favorited_while_new_playlist_items_are_added() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let removed = playlist_episode("vidK", "Kept", 1);
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &removed,
+        0,
+    );
+    let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
+        playlist_repository,
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+            playlist_item("vidN", "New", 1),
+        ])),
+        Arc::new(FavoritingOnPublish {
+            publisher: SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ),
+            video_repository: video_repository.clone(),
+            video_id: removed.id.clone(),
+            now: fixed_timestamp(),
+        }),
+        task_repository.clone(),
+        Arc::new(InternalVideoReconciler::new(
+            video_repository.clone(),
+            video_file_repository,
+            task_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )),
+        Arc::new(ShowFileWriter::new(
+            Arc::new(FakeShowFileRepository::default()),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            "/videos",
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(ShowLocks::default()),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        playlist_youtube_ids(&video_repository, &playlist_video_repository),
+        vec![
+            ("vidN".to_string(), 1, false),
+            ("vidK".to_string(), 2, true)
+        ]
     );
 }
 
@@ -2471,4 +2585,27 @@ fn playlist_youtube_ids(
             (video.youtube_id.as_str().to_string(), pv.position, pv.kept)
         })
         .collect()
+}
+
+/// Publishes through the real outbox, then favorites `video_id`: a video
+/// favorited while the pass adds the playlist's new items.
+struct FavoritingOnPublish {
+    publisher: SqliteEventPublisher,
+    video_repository: Arc<SqliteVideoRepository>,
+    video_id: VideoId,
+    now: DateTime<Utc>,
+}
+
+impl EventPublisher for FavoritingOnPublish {
+    fn publish(&self, event: &DomainEvent) -> anyhow::Result<()> {
+        self.publisher.publish(event)?;
+        match self
+            .video_repository
+            .find(&self.video_id)?
+            .and_then(|video| video.favorite(self.now))
+        {
+            Some(favorited) => self.video_repository.update(&favorited),
+            None => Ok(()),
+        }
+    }
 }

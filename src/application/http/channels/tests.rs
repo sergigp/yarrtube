@@ -4660,20 +4660,23 @@ async fn it_should_list_a_channel_with_its_favorite_count() {
         (downloaded_video("vid_b"), false),
         (downloaded_video("vid_c"), false),
     ];
-    for (position, (video, kept)) in (0..).zip(videos) {
-        video_repository.insert(&video).unwrap();
-        channel_video_repository
-            .save(&ChannelVideo {
-                kept,
-                ..ChannelVideo::create(
-                    handle("@somechannel"),
-                    video.id.clone(),
-                    position,
-                    fixed_timestamp(),
-                )
-            })
-            .unwrap();
-    }
+    videos
+        .into_iter()
+        .zip(0..)
+        .for_each(|((video, kept), position)| {
+            video_repository.insert(&video).unwrap();
+            channel_video_repository
+                .save(&ChannelVideo {
+                    kept,
+                    ..ChannelVideo::create(
+                        handle("@somechannel"),
+                        video.id.clone(),
+                        position,
+                        fixed_timestamp(),
+                    )
+                })
+                .unwrap();
+        });
     let channel_view_searcher = ChannelViewSearcher::new(
         channel_repository,
         channel_video_repository,

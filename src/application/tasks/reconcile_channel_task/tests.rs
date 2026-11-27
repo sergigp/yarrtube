@@ -3192,6 +3192,54 @@ fn it_should_keep_a_favorite_deleted_on_youtube() {
 }
 
 #[test]
+fn it_should_remove_an_unavailable_favorite_no_longer_listed() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let unavailable = favorite(
+        Video::create(
+            YoutubeVideoId::new("yt_unavailable").unwrap(),
+            "Taken down",
+            fixed_timestamp(),
+        )
+        .mark_unavailable(
+            &DownloadFailure::new("This video has been removed for a copyright claim."),
+            fixed_timestamp(),
+        ),
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &unavailable,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.find(&unavailable.id).unwrap(), None);
+    assert_eq!(
+        channel_video_repository
+            .list_for_channel(&handle("@somechannel"))
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[test]
 fn it_should_keep_the_pending_download_of_a_kept_favorite() {
     let db = TestDatabase::new();
     let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));

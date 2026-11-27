@@ -1084,7 +1084,6 @@ describe('Sidebar', () => {
   })
 })
 
-
 /** Whether `first` comes before `second` in the document. */
 function isBefore(first: Element, second: Element): boolean {
   return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)

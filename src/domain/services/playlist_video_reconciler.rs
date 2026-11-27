@@ -470,12 +470,8 @@ impl PlaylistVideoReconciler {
             })?;
         }
         if existing.position != current.position || existing.kept {
-            self.playlist_video_repository.save(&PlaylistVideo {
-                position: current.position,
-                created_at: now,
-                kept: false,
-                ..existing.clone()
-            })?;
+            self.playlist_video_repository
+                .save(&existing.clone().listed_at(current.position, now))?;
         }
 
         Ok(())
@@ -495,15 +491,25 @@ impl PlaylistVideoReconciler {
         let (favorites, others): (Vec<_>, Vec<_>) = stored_videos
             .iter()
             .filter(|(_, video)| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .partition(|(_, video)| video.is_favorite());
+            .map(|(pv, video)| {
+                Ok((
+                    pv,
+                    video,
+                    // An Unavailable favorite isn't kept: no view shows it to unfavorite.
+                    !video.is_skipped() && self.is_favorite_now(video)?,
+                ))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .partition(|(_, _, favorite)| *favorite);
         let now = self.clock.now();
         (last_listed_position + 1..)
             .zip(favorites)
-            .try_for_each(|(position, (pv, _))| {
+            .try_for_each(|(position, (pv, _, _))| {
                 self.playlist_video_repository
                     .save(&pv.clone().keep(position, now))
             })?;
-        others.into_iter().try_fold(0, |removed, (_, video)| {
+        others.into_iter().try_fold(0, |removed, (_, video, _)| {
             self.remove_video(playlist, video)?;
             Ok(removed + 1)
         })
@@ -538,6 +544,16 @@ impl PlaylistVideoReconciler {
                     was_downloaded: video.download.is_downloaded(),
                 },
             ))
+    }
+
+    /// Whether `video` is a favorite, re-read: it may have been favorited
+    /// since the pass read it.
+    fn is_favorite_now(&self, video: &Video) -> anyhow::Result<bool> {
+        Ok(video.is_favorite()
+            || self
+                .video_repository
+                .find(&video.id)?
+                .is_some_and(|stored| stored.is_favorite()))
     }
 
     /// Remembers a Discarded video being removed, so the playlist never adds

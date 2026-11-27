@@ -477,12 +477,8 @@ impl ChannelVideoReconciler {
             })?;
         }
         if existing.position != current.position || existing.kept {
-            self.channel_video_repository.save(&ChannelVideo {
-                position: current.position,
-                created_at: now,
-                kept: false,
-                ..existing.clone()
-            })?;
+            self.channel_video_repository
+                .save(&existing.clone().listed_at(current.position, now))?;
         }
 
         Ok(())
@@ -502,7 +498,14 @@ impl ChannelVideoReconciler {
         let (favorites, others): (Vec<_>, Vec<_>) = stored_videos
             .iter()
             .filter(|(_, video)| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .map(|(cv, video)| Ok((cv, video, self.is_favorite_now(video)?)))
+            .map(|(cv, video)| {
+                Ok((
+                    cv,
+                    video,
+                    // An Unavailable favorite isn't kept: no view shows it to unfavorite.
+                    !video.is_skipped() && self.is_favorite_now(video)?,
+                ))
+            })
             .collect::<anyhow::Result<Vec<_>>>()?
             .into_iter()
             .partition(|(_, _, favorite)| *favorite);

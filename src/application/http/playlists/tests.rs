@@ -5323,7 +5323,7 @@ async fn it_should_list_a_playlist_with_its_favorite_count() {
         downloaded_video("vid_c"),
         downloaded_video("vid_d"),
     ];
-    for (position, video) in (0..).zip(videos) {
+    videos.into_iter().zip(0..).for_each(|(video, position)| {
         video_repository.insert(&video).unwrap();
         playlist_video_repository
             .save(&PlaylistVideo::create(
@@ -5333,7 +5333,7 @@ async fn it_should_list_a_playlist_with_its_favorite_count() {
                 fixed_timestamp(),
             ))
             .unwrap();
-    }
+    });
     let playlist_view_searcher = PlaylistViewSearcher::new(
         playlist_repository,
         playlist_video_repository,
