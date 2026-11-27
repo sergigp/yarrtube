@@ -13,6 +13,7 @@ mod acceptance_test_module_layout;
 mod acceptance_tests_assert_whole_values;
 mod acceptance_tests_skip_raw_sql;
 mod adapter_folder_layout;
+mod clock_is_a_port;
 mod domain_errors_live_in_errors_rs;
 mod domain_is_call_agnostic;
 mod domain_service_layout;

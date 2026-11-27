@@ -197,6 +197,8 @@ Enforced by: cargo test · `architecture_tests::persistence_is_not_faked`
 
 The Clock is treated like a port and faked (`FixedClock`) so time is deterministic; it is also what makes stored timestamps (e.g. event `created_at`) assertable.
 
+Enforced by: cargo test · `architecture_tests::clock_is_a_port`
+
 ## Value Object Tests
 
 Each value object's validation rules are tested exhaustively in its own file (every accepted and rejected input, asserting the exact `Ok(vo)` / `Err(ValidationError(message))`). Acceptance tests must not repeat those rules: per endpoint, one invalid-value test proves the `ValidationError` → 4XX mapping, plus tests for the adapter's own checks (e.g. a required field missing from the request). Services take value objects as parameters, so the type system already guarantees a handler validates before calling the domain.
