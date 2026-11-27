@@ -2030,6 +2030,72 @@ fn it_should_remove_a_kept_video_once_unfavorited_from_the_playlist() {
     );
 }
 
+#[test]
+fn it_should_keep_a_video_favorited_during_the_playlist_listing() {
+    let db = TestDatabase::new();
+    let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+    playlist_repository.insert(&playlist("PL1")).unwrap();
+    let removed = playlist_episode("vidK", "Kept", 1);
+    save_playlist_video(
+        video_repository.as_ref(),
+        playlist_video_repository.as_ref(),
+        &removed,
+        0,
+    );
+    let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
+        playlist_repository,
+        video_repository.clone(),
+        Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+        playlist_video_repository.clone(),
+        Arc::new(
+            FakeYoutubePlaylistItemsRepository::favoriting_during_the_listing(
+                vec![],
+                video_repository.clone(),
+                removed.id.clone(),
+                fixed_timestamp(),
+            ),
+        ),
+        Arc::new(SqliteEventPublisher::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        task_repository.clone(),
+        Arc::new(InternalVideoReconciler::new(
+            video_repository.clone(),
+            video_file_repository,
+            task_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )),
+        Arc::new(ShowFileWriter::new(
+            Arc::new(FakeShowFileRepository::default()),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            "/videos",
+        )),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(ShowLocks::default()),
+        Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+        Arc::new(SqliteVideoCategoryVerdictRepository::new(db.database())),
+        Arc::new(SqliteDiscardedVideoRepository::new(db.database())),
+    ));
+
+    let result = run(&task, &task_for("PL1"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        playlist_youtube_ids(&video_repository, &playlist_video_repository),
+        vec![("vidK".to_string(), 0, true)]
+    );
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
