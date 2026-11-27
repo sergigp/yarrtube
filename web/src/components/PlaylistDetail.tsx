@@ -46,6 +46,7 @@ import { VideoGrid } from './VideoGrid'
 import { VideoListToolbar } from './VideoListToolbar'
 import { VideoGridSkeleton } from './VideoSkeletons'
 import { WatchView } from './WatchView'
+import { deleteSourceDescription } from '@/lib/sourceDelete'
 
 const PLAYLIST_SORTS: readonly VideoSort[] = ['playlist', 'newest', 'oldest']
 
@@ -161,7 +162,7 @@ export function PlaylistDetail() {
           await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
           navigate('/')
         })}
-        deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+        deleteDescription={deleteSourceDescription('playlist', playlist.favorite_count)}
         aiCategorization={
           categoriesShown
             ? {

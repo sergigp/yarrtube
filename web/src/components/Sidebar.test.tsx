@@ -1066,7 +1066,24 @@ describe('Sidebar', () => {
       'page',
     )
   })
+
+  it('warns how many favorites deleting a channel deletes', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Talks', favorite_count: 2 })],
+      'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Talks' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Delete "Talks"?' })).toHaveTextContent(
+      'This removes the channel from tracking. Its 2 favorite videos will be deleted too.',
+    )
+  })
 })
+
 
 /** Whether `first` comes before `second` in the document. */
 function isBefore(first: Element, second: Element): boolean {

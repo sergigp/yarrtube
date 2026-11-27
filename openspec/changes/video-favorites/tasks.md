@@ -56,7 +56,7 @@
 - [x] 2.42 Web `Sidebar` "shows Favorites above Categories", "above Channels with categories off", "marks Favorites active on /favorites".
 - [x] 2.43 Web `FavoritesDetail` "lists favorites in server order with their source", "says No favorites yet", "drops a video once unfavorited".
 - [x] 2.44 Web `lib/sourceDelete.test.ts`: wording for 0, 1 and 2 favorites.
-- [ ] 2.45 Web `Sidebar` "warns how many favorites deleting a channel deletes": sidebar rows and `ChannelDetail` / `PlaylistDetail` headers use `deleteSourceDescription`.
+- [x] 2.45 Web `Sidebar` "warns how many favorites deleting a channel deletes": sidebar rows and `ChannelDetail` / `PlaylistDetail` headers use `deleteSourceDescription`.
 - [ ] 2.46 Add a "Favorites" bullet to README.md's Main Features (kept out of rotation, one place to find them); verify the link-free sentence reads with the neighbouring bullets.
 
 ## 3. Infrastructure adapters (TDD)

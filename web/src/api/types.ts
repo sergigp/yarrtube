@@ -98,6 +98,8 @@ export interface LibraryItem {
   unwatched_count?: number
   exclude_from_home?: boolean
   hide_unwatched_count?: boolean
+  /** Its favorite videos, which deleting it deletes too. */
+  favorite_count?: number
 }
 
 /** An entry of `GET /api/playlists/:id/videos` and `/api/channels/:handle/videos`. */
