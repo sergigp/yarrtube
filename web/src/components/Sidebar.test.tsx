@@ -107,7 +107,9 @@ describe('Sidebar', () => {
     await screen.findByText('Ambient')
     // Row link text includes the unwatched badge, so strip the digits.
     expect(
-      screen.getAllByRole('link').map((link) => (link.textContent ?? '').replace(/\d+$/, '')),
+      within(screen.getByRole('list', { name: 'Playlists' }))
+        .getAllByRole('link')
+        .map((link) => (link.textContent ?? '').replace(/\d+$/, '')),
     ).toEqual(['watch later', 'Courses', 'Ambient', 'Music'])
   })
 
@@ -1025,4 +1027,48 @@ describe('Sidebar', () => {
       '[@media(hover:hover)]:opacity-0',
     )
   })
+
+  it('shows Favorites above Categories', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
+    })
+
+    const favorites = await screen.findByRole('link', { name: 'Favorites' })
+    const categories = await screen.findByRole('region', { name: 'Categories' })
+    expect(isBefore(favorites, categories)).toBe(true)
+  })
+
+  it('shows Favorites above Channels with categories off', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [],
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    })
+
+    const favorites = await screen.findByRole('link', { name: 'Favorites' })
+    expect(isBefore(favorites, screen.getByRole('region', { name: 'Channels' }))).toBe(true)
+  })
+
+  it('marks Favorites active on /favorites', async () => {
+    renderSidebar(
+      {
+        'GET /api/channels': [],
+        'GET /api/playlists': [],
+        'GET /api/categories': aCategoryList(),
+      },
+      { route: '/favorites' },
+    )
+
+    expect(await screen.findByRole('link', { name: 'Favorites' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
 })
+
+/** Whether `first` comes before `second` in the document. */
+function isBefore(first: Element, second: Element): boolean {
+  return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
+}

@@ -53,7 +53,7 @@
 - [x] 2.39 Web `FavoriteButton` "tells the user when favoriting fails".
 - [x] 2.40 Web `VideoActionsMenu` "offers Add to favorites and Remove from favorites": new `favorite` prop, passed by every card caller.
 - [x] 2.41 Web `VideoGrid` "shows a star on favorite cards and a Kept badge on kept ones": `ThumbnailOverlay`.
-- [ ] 2.42 Web `Sidebar` "shows Favorites above Categories", "above Channels with categories off", "marks Favorites active on /favorites".
+- [x] 2.42 Web `Sidebar` "shows Favorites above Categories", "above Channels with categories off", "marks Favorites active on /favorites".
 - [ ] 2.43 Web `FavoritesDetail` "lists favorites in server order with their source", "says No favorites yet", "drops a video once unfavorited".
 - [ ] 2.44 Web `lib/sourceDelete.test.ts`: wording for 0, 1 and 2 favorites.
 - [ ] 2.45 Web `Sidebar` "warns how many favorites deleting a channel deletes": sidebar rows and `ChannelDetail` / `PlaylistDetail` headers use `deleteSourceDescription`.

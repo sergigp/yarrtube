@@ -38,6 +38,7 @@ import { EditChannelDialog } from './EditChannelDialog'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { SidebarCategories } from './SidebarCategories'
+import { FAVORITES_PATH, SidebarFavorites } from './SidebarFavorites'
 import { SidebarCount } from './SidebarCount'
 import { SidebarFilter } from './SidebarFilter'
 import { PlaylistIcon } from './PlaylistIcon'
@@ -492,6 +493,9 @@ export function Sidebar({
           withCategories={withCategories}
         />
         {noMatches && <p className="px-3 py-1 text-sm text-muted-foreground">No matches.</p>}
+        {filter === '' && (
+          <SidebarFavorites active={location.pathname === FAVORITES_PATH} onNavigate={onClose} />
+        )}
         {withCategories && (
           <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} filter={filter} />
         )}
