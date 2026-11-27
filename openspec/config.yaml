@@ -68,6 +68,7 @@ rules:
       - Risks and assumptions the agent made.
       - Last line: "Check: the ## Test Plan test names are the behaviour contract;
         review those and the final /audit-change result, not the prose below."
+      Enforced by: cargo test · `architecture_tests::design_review_ends_with_check`
       ## Diagrams
       Only when the change has more than ~3 new/changed types, or changes the SQLite
       schema, or changes a status/lifecycle; otherwise omit this section.
