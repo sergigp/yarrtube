@@ -55,7 +55,6 @@ rules:
     - |
       On design.md add these sections that will be used as an overview of the design. Don't add anything else,
       we want to keep this short and simple
-      Enforced by: cargo test · `architecture_tests::design_md_sections`
       ## Review
       Always the first section, at most ~10 lines. It is the only part the human is
       expected to read; every section after it is agent-facing detail the human opens
@@ -68,7 +67,6 @@ rules:
       - Risks and assumptions the agent made.
       - Last line: "Check: the ## Test Plan test names are the behaviour contract;
         review those and the final /audit-change result, not the prose below."
-      Enforced by: cargo test · `architecture_tests::design_review_ends_with_check`
       ## Diagrams
       Only when the change has more than ~3 new/changed types, or changes the SQLite
       schema, or changes a status/lifecycle; otherwise omit this section.
@@ -145,8 +143,6 @@ rules:
     - |
       Structure tasks.md as a vertical slice built outside-in. Do NOT group tasks by
       layer (domain / application / infrastructure). Use exactly these sections, in order:
-
-      Enforced by: cargo test · `architecture_tests::tasks_md_sections`
 
       ## 1. Walking skeleton
       One task that creates every type and signature from design.md's

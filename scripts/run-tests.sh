@@ -3,7 +3,7 @@
 #   --lint       static checks: the web UI's typecheck and lint, Rust
 #                formatting and clippy
 #   --arch       the architecture tests: the repository's written conventions
-#                (layers, file layout, naming, test layout, OpenSpec artifacts)
+#                (layers, file layout, naming, test layout)
 #                checked over the source (`cargo test architecture_tests`)
 #   --web        the web UI's tests (Vitest)
 #   --rust       the Rust tests (`cargo test`), the architecture tests left out
@@ -478,7 +478,7 @@ run_web() {
 }
 
 # The conventions written in .claude/skills/rust-architect/SKILL.md, CLAUDE.md,
-# doc/DEVELOPMENT.md and openspec/config.yaml, as rules over the source (see
+# and doc/DEVELOPMENT.md, as rules over the source (see
 # src/architecture_tests/mod.rs). A failure names the rule, the code that
 # breaks it, what to do instead and where the convention is written.
 run_arch() {
