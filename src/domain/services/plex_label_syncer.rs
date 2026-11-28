@@ -301,7 +301,7 @@ impl PlexLabelSyncer {
             .map(|(section_id, label)| DesiredPlaylist {
                 section_id: section_id.clone(),
                 label: label.clone(),
-                title: playlist_title(label, section_id, &labelled, sections),
+                title: Self::playlist_title(label, section_id, &labelled, sections),
                 options,
             })
             .collect())
@@ -420,7 +420,12 @@ impl PlexLabelSyncer {
             .video_categories_repository
             .find_many(&ids)?
             .into_iter()
-            .map(|categories| (categories.video_id.clone(), labels_of(&categories, &names)))
+            .map(|categories| {
+                (
+                    categories.video_id.clone(),
+                    Self::labels_of(&categories, &names),
+                )
+            })
             .collect())
     }
 
@@ -476,34 +481,34 @@ impl PlexLabelSyncer {
         self.plex_library_repository
             .save_labels(episode, desired, &current.missing_from(desired))
     }
-}
 
-/// The names of the video's categories.
-fn labels_of(
-    categories: &VideoCategories,
-    names: &HashMap<CategoryId, CategoryName>,
-) -> PlexLabels {
-    PlexLabels::new(
-        categories
-            .category_ids
-            .iter()
-            .filter_map(|id| names.get(id))
-            .map(|name| name.as_str().to_string())
-            .collect(),
-    )
-}
+    /// The names of the video's categories.
+    fn labels_of(
+        categories: &VideoCategories,
+        names: &HashMap<CategoryId, CategoryName>,
+    ) -> PlexLabels {
+        PlexLabels::new(
+            categories
+                .category_ids
+                .iter()
+                .filter_map(|id| names.get(id))
+                .map(|name| name.as_str().to_string())
+                .collect(),
+        )
+    }
 
-/// `label`, followed by the section's title when `label` has playlists in
-/// more than one section.
-fn playlist_title(
-    label: &str,
-    section_id: &str,
-    labelled: &BTreeSet<(String, String)>,
-    sections: &[PlexSection],
-) -> String {
-    let spans_sections = labelled.iter().filter(|(_, other)| other == label).count() > 1;
-    match sections.iter().find(|section| section.id == section_id) {
-        Some(section) if spans_sections => format!("{label} · {}", section.title),
-        _ => label.to_string(),
+    /// `label`, followed by the section's title when `label` has playlists in
+    /// more than one section.
+    fn playlist_title(
+        label: &str,
+        section_id: &str,
+        labelled: &BTreeSet<(String, String)>,
+        sections: &[PlexSection],
+    ) -> String {
+        let spans_sections = labelled.iter().filter(|(_, other)| other == label).count() > 1;
+        match sections.iter().find(|section| section.id == section_id) {
+            Some(section) if spans_sections => format!("{label} · {}", section.title),
+            _ => label.to_string(),
+        }
     }
 }

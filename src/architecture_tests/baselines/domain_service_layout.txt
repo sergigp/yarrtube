@@ -1,8 +1,0 @@
-# Baseline of rule `domain_service_layout` (src/architecture_tests/domain_service_layout.rs): code that broke it
-# when it arrived. It only shrinks: fix a unit, then delete its line.
-src/domain/services/channel_video_reconciler.rs
-src/domain/services/internal_video_reconciler.rs
-src/domain/services/playlist_video_reconciler.rs
-src/domain/services/plex_label_syncer.rs
-src/domain/services/plex_watch_syncer.rs
-src/domain/services/video_searcher.rs
