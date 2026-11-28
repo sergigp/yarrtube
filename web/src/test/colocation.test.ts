@@ -7,7 +7,7 @@ import { WEB_ROOT } from './oxlint'
 
 // Test files that had no source next to them when the rule arrived. This
 // baseline only shrinks: colocate one, then delete its line.
-const BASELINE = ['src/AppShell.test.tsx']
+const BASELINE: string[] = []
 
 const MESSAGE =
   'Colocate each test with what it tests: `foo.ts` → `foo.test.ts`, in the same folder. ' +
