@@ -64,11 +64,10 @@ use crate::infrastructure::shared::domain_events::event_repository::{
 use crate::infrastructure::shared::sqlite_connection::Database;
 use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 use crate::infrastructure::shared::system_clock::FixedClock;
-use category_dto::VideoCategoryChoiceResponse;
 use chrono::{DateTime, Duration, Utc};
 use dto::{
     ChapterResponse, HomeCategorySectionResponse, HomeVideoResponse, HomeVideoSourceResponse,
-    StepResponse, VideoStepsResponse,
+    StepResponse, VideoCategoryChoiceResponse, VideoStepsResponse,
 };
 use rusqlite::Connection;
 use std::ops::Range;
