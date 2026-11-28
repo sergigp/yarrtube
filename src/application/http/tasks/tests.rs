@@ -1386,6 +1386,7 @@ fn video(id: &str, title: &str) -> Video {
         downloaded_quality: DownloadedQuality::pending(),
         thumbnail: Thumbnail::pending(),
         download: Download::pending(),
+        favorited_at: None,
     }
 }
 

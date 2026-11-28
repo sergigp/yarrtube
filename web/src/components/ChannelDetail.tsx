@@ -28,6 +28,7 @@ import { DetailHeader } from './DetailHeader'
 import { EditChannelDialog } from './EditChannelDialog'
 import { PlayLink } from './PlayLink'
 import { WatchView } from './WatchView'
+import { deleteSourceDescription } from '@/lib/sourceDelete'
 
 /**
  * A channel's page (`/channels/:id`), straight into the watching layout:
@@ -117,7 +118,7 @@ export function ChannelDetail() {
           await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
           navigate('/')
         })}
-        deleteDescription="This removes the channel from tracking."
+        deleteDescription={deleteSourceDescription('channel', channel.favorite_count)}
       />
       <EditChannelDialog
         channel={channel}

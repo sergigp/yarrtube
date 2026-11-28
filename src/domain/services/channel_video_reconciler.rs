@@ -265,8 +265,8 @@ impl ChannelVideoReconciler {
     }
 
     /// Brings the stored membership in line with the channel's current
-    /// `video_limit` most recent uploads, Unavailable ones not counting
-    /// toward the limit: adds newly seen videos (never a Discarded one removed
+    /// `video_limit` most recent uploads, Unavailable ones and favorites not
+    /// counting toward the limit: adds newly seen videos (never a Discarded one removed
     /// earlier, which the channel remembers and which still takes its slot),
     /// refreshes the title and position of known ones, and removes stored
     /// videos no longer among them (removed on YouTube or aged past the limit). A
@@ -285,15 +285,15 @@ impl ChannelVideoReconciler {
             .into_iter()
             .map(|discarded| discarded.youtube_id)
             .collect::<HashSet<_>>();
-        let unavailable_ids: HashSet<&str> = stored_videos
+        let skipped_ids: HashSet<&str> = stored_videos
             .iter()
-            .filter(|(_, video)| video.is_unavailable())
+            .filter(|(_, video)| video.is_unavailable() || video.is_favorite())
             .map(|(_, video)| video.youtube_id.as_str())
             .collect();
         let listing_started = self.clock.now();
         let listing = self.list_current_videos(
             channel,
-            u32::try_from(unavailable_ids.len())?,
+            u32::try_from(skipped_ids.len())?,
             on_listing_failure,
         )?;
         let listing_seconds = elapsed_seconds(listing_started, self.clock.now());
@@ -305,7 +305,7 @@ impl ChannelVideoReconciler {
         };
         let current_videos = video_window::within_limit(
             listing,
-            |upload| unavailable_ids.contains(upload.youtube_id.as_str()),
+            |upload| skipped_ids.contains(upload.youtube_id.as_str()),
             channel.video_limit.value() as usize,
         );
         let now = self.clock.now();
@@ -343,7 +343,17 @@ impl ChannelVideoReconciler {
             .iter()
             .map(|current| current.youtube_id.as_str())
             .collect();
-        let removed = self.remove_videos_not_in(channel, &stored_videos, &current_youtube_ids)?;
+        let last_listed_position = current_videos
+            .iter()
+            .map(|current| current.position)
+            .max()
+            .unwrap_or(-1);
+        let removed = self.keep_or_remove_videos_not_in(
+            channel,
+            &stored_videos,
+            &current_youtube_ids,
+            last_listed_position,
+        )?;
 
         Ok(MembershipChanges {
             listed: Some(current_videos.len()),
@@ -357,16 +367,17 @@ impl ChannelVideoReconciler {
     /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
     /// videos"), either `None` (logged) or the error, per
     /// `on_listing_failure`. One more upload is asked for per stored
-    /// `unavailable` video, which doesn't count toward the limit.
+    /// `skipped` video (Unavailable or a favorite), which doesn't count
+    /// toward the limit.
     fn list_current_videos(
         &self,
         channel: &Channel,
-        unavailable: u32,
+        skipped: u32,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<Option<Vec<ChannelVideoListing>>> {
         match (
             self.channel_videos_repository
-                .list_current_videos(&channel.id, channel.video_limit.value() + unavailable),
+                .list_current_videos(&channel.id, channel.video_limit.value() + skipped),
             on_listing_failure,
         ) {
             (Ok(videos), _) => Ok(Some(videos)),
@@ -405,8 +416,9 @@ impl ChannelVideoReconciler {
             .collect())
     }
 
-    /// Stores a newly seen video as `PENDING` at its recency position and
-    /// announces it, which is what schedules its video sync.
+    /// Stores a newly seen video as `PENDING` at its recency position, a
+    /// favorite when another copy of it is, and announces it, which is what
+    /// schedules its video sync.
     fn add_video(
         &self,
         channel: &Channel,
@@ -414,7 +426,9 @@ impl ChannelVideoReconciler {
         current: &ChannelVideoListing,
         now: DateTime<Utc>,
     ) -> anyhow::Result<(ChannelVideo, Video)> {
-        let video = Video::create(youtube_id, current.title.clone(), now);
+        let inherited = self.inherited_favorite(&youtube_id)?;
+        let video =
+            Video::create(youtube_id, current.title.clone(), now).with_favorited_at(inherited);
         self.video_repository.insert(&video)?;
         let channel_video =
             ChannelVideo::create(channel.id.clone(), video.id.clone(), current.position, now);
@@ -434,7 +448,22 @@ impl ChannelVideoReconciler {
         Ok((channel_video, video))
     }
 
-    /// Follows a known video's title and recency position on YouTube.
+    /// Earliest favorite time among the stored copies of `youtube_id`: a
+    /// favorite belongs to the YouTube video.
+    fn inherited_favorite(
+        &self,
+        youtube_id: &YoutubeVideoId,
+    ) -> anyhow::Result<Option<DateTime<Utc>>> {
+        Ok(self
+            .video_repository
+            .find_by_youtube_id(youtube_id)?
+            .into_iter()
+            .filter_map(|copy| copy.favorited_at)
+            .min())
+    }
+
+    /// Follows a known video's title and recency position on YouTube; a
+    /// kept video listed again is no longer kept.
     fn refresh_known_video(
         &self,
         existing: &ChannelVideo,
@@ -447,58 +476,91 @@ impl ChannelVideoReconciler {
                 Some(video.with_title(current.title.clone(), now))
             })?;
         }
-        if existing.position != current.position {
-            self.channel_video_repository.save(&ChannelVideo {
-                position: current.position,
-                created_at: now,
-                ..existing.clone()
-            })?;
+        if existing.position != current.position || existing.kept {
+            self.channel_video_repository
+                .save(&existing.clone().listed_at(current.position, now))?;
         }
 
         Ok(())
     }
 
-    /// Deletes every stored video whose YouTube id is not in
-    /// `current_youtube_ids` and announces its removal, which is what
-    /// cleans up its files. A Discarded one is remembered first.
-    fn remove_videos_not_in(
+    /// Every stored video whose YouTube id is not in `current_youtube_ids`:
+    /// a favorite is kept, placed after `last_listed_position` in its
+    /// previous order; any other is removed (see `remove_video`). Returns
+    /// how many were removed.
+    fn keep_or_remove_videos_not_in(
         &self,
         channel: &Channel,
         stored_videos: &[(ChannelVideo, Video)],
         current_youtube_ids: &HashSet<&str>,
+        last_listed_position: i64,
     ) -> anyhow::Result<usize> {
-        stored_videos
+        let (favorites, others): (Vec<_>, Vec<_>) = stored_videos
             .iter()
-            .map(|(_, video)| video)
-            .filter(|video| !current_youtube_ids.contains(video.youtube_id.as_str()))
-            .try_fold(0, |removed, video| {
-                info!(
-                    channel_id = %channel.id,
-                    youtube_id = %video.youtube_id,
-                    "removing video from channel (no longer among its most recent uploads)"
-                );
-                self.remember_if_discarded(channel, video)?;
-                self.channel_video_repository.delete(&video.id)?;
-                self.video_repository.delete(&video.id)?;
-                self.video_transcript_repository.delete(&video.id)?;
-                self.video_summary_repository.delete(&video.id)?;
-                self.video_categories_repository.delete(&video.id)?;
-                self.video_category_verdict_repository
-                    .delete_for_video(&video.id)?;
-                self.event_publisher
-                    .publish(&DomainEvent::VideoRemovedFromChannel(
-                        VideoRemovedFromChannel {
-                            channel_id: channel.id.as_str().to_string(),
-                            video_id: video.id.as_str().to_string(),
-                            title: video.title.clone(),
-                            filename: video.download.filename().map(str::to_string),
-                            thumbnail_filename: video.thumbnail.filename.clone(),
-                            subtitle_filename: video.subtitles.filename.clone(),
-                            was_downloaded: video.download.is_downloaded(),
-                        },
-                    ))?;
-                Ok(removed + 1)
+            .filter(|(_, video)| !current_youtube_ids.contains(video.youtube_id.as_str()))
+            .map(|(cv, video)| {
+                Ok((
+                    cv,
+                    video,
+                    // An Unavailable favorite isn't kept: no view shows it to unfavorite.
+                    !video.is_skipped() && self.is_favorite_now(video)?,
+                ))
             })
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .partition(|(_, _, favorite)| *favorite);
+        let now = self.clock.now();
+        (last_listed_position + 1..)
+            .zip(favorites)
+            .try_for_each(|(position, (cv, _, _))| {
+                self.channel_video_repository
+                    .save(&cv.clone().keep(position, now))
+            })?;
+        others.into_iter().try_fold(0, |removed, (_, video, _)| {
+            self.remove_video(channel, video)?;
+            Ok(removed + 1)
+        })
+    }
+
+    /// Deletes a stored video no longer among the channel's uploads and
+    /// announces its removal, which is what cleans up its files. A Discarded
+    /// one is remembered first.
+    fn remove_video(&self, channel: &Channel, video: &Video) -> anyhow::Result<()> {
+        info!(
+            channel_id = %channel.id,
+            youtube_id = %video.youtube_id,
+            "removing video from channel (no longer among its most recent uploads)"
+        );
+        self.remember_if_discarded(channel, video)?;
+        self.channel_video_repository.delete(&video.id)?;
+        self.video_repository.delete(&video.id)?;
+        self.video_transcript_repository.delete(&video.id)?;
+        self.video_summary_repository.delete(&video.id)?;
+        self.video_categories_repository.delete(&video.id)?;
+        self.video_category_verdict_repository
+            .delete_for_video(&video.id)?;
+        self.event_publisher
+            .publish(&DomainEvent::VideoRemovedFromChannel(
+                VideoRemovedFromChannel {
+                    channel_id: channel.id.as_str().to_string(),
+                    video_id: video.id.as_str().to_string(),
+                    title: video.title.clone(),
+                    filename: video.download.filename().map(str::to_string),
+                    thumbnail_filename: video.thumbnail.filename.clone(),
+                    subtitle_filename: video.subtitles.filename.clone(),
+                    was_downloaded: video.download.is_downloaded(),
+                },
+            ))
+    }
+
+    /// Whether `video` is a favorite, re-read: it may have been favorited
+    /// since the pass read it.
+    fn is_favorite_now(&self, video: &Video) -> anyhow::Result<bool> {
+        Ok(video.is_favorite()
+            || self
+                .video_repository
+                .find(&video.id)?
+                .is_some_and(|stored| stored.is_favorite()))
     }
 
     /// Remembers a Discarded video being removed, so the channel never adds

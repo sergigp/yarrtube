@@ -41,6 +41,7 @@ Yarrtube is designed to run on your NAS via Docker alongside the rest of your me
 
 - Track public YouTube playlists, or whole channels and get new videos as they're published.
 - Pick the video quality and how many videos to keep, and how often each channel and playlist is checked.
+- Star the videos you want to keep: a favorite stays even once it's out of the channel's latest videos or gone from its playlist, and all your favorites are in one place.
 - Subtitles and chapters come with every video.
 
 **Watch**

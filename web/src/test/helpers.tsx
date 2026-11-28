@@ -146,6 +146,7 @@ export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListI
     unwatched_count: 0,
     work_in_progress: false,
     last_synced_at: null,
+    favorite_count: 0,
     ...overrides,
   }
 }
@@ -167,6 +168,7 @@ export function aPlaylist(overrides: Partial<PlaylistListItem> = {}): PlaylistLi
     unwatched_count: 0,
     work_in_progress: false,
     last_synced_at: null,
+    favorite_count: 0,
     ...overrides,
   }
 }
@@ -195,6 +197,8 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
     chapters: [],
     summary: null,
     episode: null,
+    favorite: false,
+    kept: false,
     ...overrides,
   }
 }
@@ -243,6 +247,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
       avatar_filename: null,
     },
     category_ids: [],
+    favorite: false,
     ...overrides,
   }
 }

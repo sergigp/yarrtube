@@ -421,6 +421,27 @@ export async function discardVideo(videoId: string): Promise<void> {
   })
 }
 
+/** Favorites a video: every copy of its YouTube video. */
+export async function favoriteVideo(videoId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(videoId)}/favorite`, {
+    method: 'PUT',
+    label: `favorite video ${videoId}`,
+  })
+}
+
+/** Unfavorites a video: every copy of its YouTube video. */
+export async function unfavoriteVideo(videoId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(videoId)}/favorite`, {
+    method: 'DELETE',
+    label: `unfavorite video ${videoId}`,
+  })
+}
+
+/** The favorite videos, most recently favorited first. */
+export function fetchFavoriteVideos(): Promise<CategoryVideo[]> {
+  return request('/favorites/videos')
+}
+
 /** Brings the pending tasks among `ids` forward so they run now. */
 export async function runTasksNow(ids: number[]): Promise<void> {
   await send('/tasks/run-now', {
