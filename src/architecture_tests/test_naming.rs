@@ -1,7 +1,9 @@
 //! Tests are named `it_should_<behaviour>[_if_<condition>]`.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::{SourceFile, is_test_fn};
 
 pub const RULE: Rule = Rule {
     name: "test_naming",
@@ -17,17 +19,15 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .flat_map(|file| {
             file.all_items()
                 .into_iter()
-                .filter_map(move |scoped| match &scoped.item.kind {
-                    ItemKind::Fn { name, .. }
-                        if scoped.item.is_test_fn() && !name.starts_with("it_should_") =>
+                .filter_map(move |scoped| match scoped.item {
+                    Item::Fn(f)
+                        if is_test_fn(scoped.item)
+                            && !f.sig.ident.to_string().starts_with("it_should_") =>
                     {
+                        let name = &f.sig.ident;
                         Some(Violation::new(
                             format!("{}::{name}", file.path),
-                            format!(
-                                "{}:{}: test `{name}`",
-                                file.path,
-                                file.line_of(scoped.item.start)
-                            ),
+                            format!("{}:{}: test `{name}`", file.path, file.line_of(name)),
                         ))
                     }
                     _ => None,

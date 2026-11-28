@@ -3,8 +3,10 @@
 
 use std::collections::BTreeSet;
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::{SourceFile, is_cfg_test};
 
 pub const RULE: Rule = Rule {
     name: "adapter_tests_live_in_sibling_file",
@@ -21,22 +23,16 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .iter()
         .filter(|file| {
             file.file_name() == "mod.rs"
-                && DIRS.iter().any(|dir| {
-                    file.path
-                        .strip_prefix(dir)
-                        .is_some_and(|rest| rest.matches('/').count() == 1)
-                })
+                && DIRS
+                    .iter()
+                    .any(|dir| file.path.strip_prefix(dir).is_some_and(|rest| rest.matches('/').count() == 1))
         })
         .filter_map(|file| {
             let folder = file.path.trim_end_matches("mod.rs");
-            let ends_with_tests_decl = file.items().last().is_some_and(|item| {
-                item.is_cfg_test()
-                    && item.body.is_none()
-                    && item.kind
-                        == ItemKind::Mod {
-                            name: "tests".into(),
-                        }
-            });
+            let ends_with_tests_decl = matches!(
+                file.ast.items.last(),
+                Some(Item::Mod(m)) if m.ident == "tests" && m.content.is_none() && is_cfg_test(&m.attrs)
+            );
             let problem = if !ends_with_tests_decl {
                 "doesn't end with `#[cfg(test)] mod tests;`"
             } else if !paths.contains(format!("{folder}tests.rs").as_str()) {
@@ -44,10 +40,7 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
             } else {
                 return None;
             };
-            Some(Violation::new(
-                &file.path,
-                format!("{}: {problem}", file.path),
-            ))
+            Some(Violation::new(&file.path, format!("{}: {problem}", file.path)))
         })
         .collect()
 }

@@ -1,7 +1,9 @@
 //! Domain services know nothing about HTTP, CLI, subscribers or tasks.
 
+use syn::visit::Visit;
+
 use super::baseline::{Rule, Violation};
-use super::source::SourceFile;
+use super::source::{SourceFile, macro_args, path_idents};
 
 pub const RULE: Rule = Rule {
     name: "domain_is_call_agnostic",
@@ -11,29 +13,77 @@ pub const RULE: Rule = Rule {
     convention: "Convention: .claude/skills/rust-architect/SKILL.md (\"Domain services are call-agnostic\")",
 };
 
-const CALLERS: [&str; 5] = [
-    "crate::application",
-    "axum::",
-    "clap::",
-    "tower::",
-    "tower_http::",
-];
+const CALLERS: [&str; 4] = ["axum", "clap", "tower", "tower_http"];
 
 pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
     files
         .iter()
         .filter(|file| file.is_under("src/domain/"))
         .flat_map(|file| {
-            CALLERS.iter().flat_map(move |caller| {
-                file.token_offsets(caller).into_iter().map(move |offset| {
-                    Violation::new(
-                        &file.path,
-                        format!("{}:{}: uses `{caller}`", file.path, file.line_of(offset)),
-                    )
+            let mut paths = Paths::default();
+            paths.visit_file(&file.ast);
+            paths
+                .found
+                .into_iter()
+                .map(|(caller, line)| {
+                    Violation::new(&file.path, format!("{}:{line}: uses `{caller}`", file.path))
                 })
-            })
+                .collect::<Vec<_>>()
         })
         .collect()
+}
+
+/// The paths (in `use` declarations and in code) that start at a caller.
+#[derive(Default)]
+struct Paths {
+    found: Vec<(String, usize)>,
+}
+
+impl<'ast> Visit<'ast> for Paths {
+    fn visit_use_path(&mut self, node: &'ast syn::UsePath) {
+        self.check(
+            &[node.ident.to_string(), use_next(&node.tree)],
+            node.ident.span().start().line,
+        );
+        syn::visit::visit_use_path(self, node);
+    }
+
+    fn visit_path(&mut self, node: &'ast syn::Path) {
+        let idents = path_idents(node);
+        if idents.len() > 1 {
+            self.check(&idents, node.segments[0].ident.span().start().line);
+        }
+        syn::visit::visit_path(self, node);
+    }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        macro_args(node).iter().for_each(|arg| self.visit_expr(arg));
+        syn::visit::visit_macro(self, node);
+    }
+}
+
+impl Paths {
+    fn check(&mut self, idents: &[String], line: usize) {
+        let caller = match idents {
+            [first, second, ..] if first == "crate" && second == "application" => {
+                "crate::application".to_string()
+            }
+            [first, ..] if CALLERS.contains(&first.as_str()) => format!("{first}::"),
+            _ => return,
+        };
+        if !self.found.contains(&(caller.clone(), line)) {
+            self.found.push((caller, line));
+        }
+    }
+}
+
+/// The identifier after `crate::` in a `use crate::…` tree.
+fn use_next(tree: &syn::UseTree) -> String {
+    match tree {
+        syn::UseTree::Path(path) => path.ident.to_string(),
+        syn::UseTree::Name(name) => name.ident.to_string(),
+        _ => String::new(),
+    }
 }
 
 #[cfg(test)]

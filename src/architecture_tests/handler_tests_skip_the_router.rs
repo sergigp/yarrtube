@@ -1,7 +1,9 @@
 //! HTTP acceptance tests call the handler function directly, not through a `Router`.
 
+use syn::visit::Visit;
+
 use super::baseline::{Rule, Violation};
-use super::source::{SourceFile, squash};
+use super::source::{SourceFile, macro_args};
 
 pub const RULE: Rule = Rule {
     name: "handler_tests_skip_the_router",
@@ -10,28 +12,55 @@ pub const RULE: Rule = Rule {
     convention: "Convention: .claude/skills/rust-architect/SKILL.md (Acceptance Tests: HTTP)",
 };
 
-const ROUTING: [&str; 3] = ["Router", "oneshot(", "ServiceExt"];
-
 pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
     files
         .iter()
         .filter(|file| file.is_under("src/application/http/"))
         .flat_map(|file| {
-            file.test_code().into_iter().flat_map(move |code| {
-                let code = squash(code);
-                ROUTING
-                    .iter()
-                    .filter(|token| code.contains(*token))
-                    .map(|token| {
-                        Violation::new(
-                            &file.path,
-                            format!("{}: its tests use `{token}`", file.path),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
+            let mut routing = Routing::default();
+            file.test_items()
+                .into_iter()
+                .for_each(|item| routing.visit_item(item));
+            routing
+                .found
+                .into_iter()
+                .map(|(what, line)| {
+                    Violation::new(
+                        &file.path,
+                        format!("{}:{line}: its tests use `{what}`", file.path),
+                    )
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
+}
+
+/// Uses of `Router`, `ServiceExt` and `.oneshot(…)`.
+#[derive(Default)]
+struct Routing {
+    found: Vec<(String, usize)>,
+}
+
+impl<'ast> Visit<'ast> for Routing {
+    fn visit_ident(&mut self, ident: &'ast proc_macro2::Ident) {
+        if ident == "Router" || ident == "ServiceExt" {
+            self.found
+                .push((ident.to_string(), ident.span().start().line));
+        }
+    }
+
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        if call.method == "oneshot" {
+            self.found
+                .push(("oneshot".to_string(), call.method.span().start().line));
+        }
+        syn::visit::visit_expr_method_call(self, call);
+    }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        macro_args(node).iter().for_each(|arg| self.visit_expr(arg));
+        syn::visit::visit_macro(self, node);
+    }
 }
 
 #[cfg(test)]

@@ -1,8 +1,10 @@
 //! An acceptance test module reads: imports, then every `it_should_*` test,
 //! then the helpers.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{Item, ItemKind, SourceFile};
+use super::source::{SourceFile, describe, is_test_fn};
 
 pub const RULE: Rule = Rule {
     name: "acceptance_test_module_layout",
@@ -25,8 +27,8 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
                             format!(
                                 "{}:{}: `{}` is out of place (imports, then tests, then helpers)",
                                 file.path,
-                                file.line_of(item.start),
-                                item.signature
+                                file.line_of(item),
+                                describe(item)
                             ),
                         )
                     })
@@ -36,18 +38,19 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
 }
 
 /// The first item that comes after a later group's item.
-fn misplaced(items: &[Item]) -> Option<&Item> {
-    let group = |item: &Item| match item.kind {
-        ItemKind::Use => 0,
-        _ if item.is_test_fn() => 1,
+fn misplaced<'a>(items: &[&'a Item]) -> Option<&'a Item> {
+    let group = |item: &Item| match item {
+        Item::Use(_) => 0,
+        _ if is_test_fn(item) => 1,
         _ => 2,
     };
     // Constants go anywhere: the test modules keep them at the top as often
     // as among the helpers.
-    let is_constant = |item: &&Item| {
-        item.signature.starts_with("const ") || item.signature.starts_with("static ")
-    };
-    let items: Vec<&Item> = items.iter().filter(|item| !is_constant(item)).collect();
+    let items: Vec<&Item> = items
+        .iter()
+        .copied()
+        .filter(|item| !matches!(item, Item::Const(_) | Item::Static(_)))
+        .collect();
     items
         .windows(2)
         .find(|pair| group(pair[1]) < group(pair[0]))

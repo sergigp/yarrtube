@@ -1,7 +1,9 @@
 //! Every error type of an aggregate lives in its `errors.rs`.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::SourceFile;
 
 pub const RULE: Rule = Rule {
     name: "domain_errors_live_in_errors_rs",
@@ -19,20 +21,22 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
             file.all_items()
                 .into_iter()
                 .filter(|s| !s.in_test)
-                .filter_map(move |scoped| match &scoped.item.kind {
-                    ItemKind::Struct { name } | ItemKind::Enum { name }
-                        if name.ends_with("Error") =>
-                    {
-                        Some(Violation::new(
-                            format!("{}::{name}", file.path),
+                .filter_map(move |scoped| {
+                    let ident = match scoped.item {
+                        Item::Struct(s) => &s.ident,
+                        Item::Enum(e) => &e.ident,
+                        _ => return None,
+                    };
+                    ident.to_string().ends_with("Error").then(|| {
+                        Violation::new(
+                            format!("{}::{ident}", file.path),
                             format!(
-                                "{}:{}: error type `{name}` outside errors.rs",
+                                "{}:{}: error type `{ident}` outside errors.rs",
                                 file.path,
-                                file.line_of(scoped.item.start)
+                                file.line_of(ident)
                             ),
-                        ))
-                    }
-                    _ => None,
+                        )
+                    })
                 })
         })
         .collect()

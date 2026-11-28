@@ -1,8 +1,10 @@
 //! Deliberate deviation: a port's trait lives next to its implementation in
 //! src/infrastructure/, not in src/domain/.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::SourceFile;
 
 pub const RULE: Rule = Rule {
     name: "port_traits_live_in_infrastructure",
@@ -20,14 +22,15 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .flat_map(|file| {
             file.all_items()
                 .into_iter()
-                .filter_map(move |scoped| match &scoped.item.kind {
-                    ItemKind::Trait { name } if name.ends_with("Repository") => {
+                .filter_map(move |scoped| match scoped.item {
+                    Item::Trait(t) if t.ident.to_string().ends_with("Repository") => {
                         Some(Violation::new(
-                            format!("{}::{name}", file.path),
+                            format!("{}::{}", file.path, t.ident),
                             format!(
-                                "{}:{}: port trait `{name}` in the domain",
+                                "{}:{}: port trait `{}` in the domain",
                                 file.path,
-                                file.line_of(scoped.item.start)
+                                file.line_of(&t.ident),
+                                t.ident
                             ),
                         ))
                     }

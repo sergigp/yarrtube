@@ -2,8 +2,10 @@
 //! / `anthropic_contract_tests` modules and are `#[ignore]`d: `cargo test`
 //! skips them and `scripts/run-tests.sh --contract` runs them by name.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::{SourceFile, has_attribute, is_test_fn};
 
 pub const RULE: Rule = Rule {
     name: "contract_tests_are_ignored",
@@ -20,19 +22,20 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .iter()
         .flat_map(|file| {
             file.all_items().into_iter().filter_map(move |scoped| {
-                let ItemKind::Fn { name, .. } = &scoped.item.kind else {
+                let Item::Fn(f) = scoped.item else {
                     return None;
                 };
                 let in_contract_module = scoped.modules.iter().any(|m| CONTRACT_MODULES.contains(&m.as_str()));
-                let ignored = scoped.item.has_attribute("#[ignore");
-                let problem = match (scoped.item.is_test_fn(), in_contract_module, ignored) {
+                let ignored = has_attribute(&f.attrs, "ignore");
+                let problem = match (is_test_fn(scoped.item), in_contract_module, ignored) {
                     (true, true, false) => "contract test not `#[ignore]`d: plain `cargo test` would hit the real service",
                     (true, false, true) => "`#[ignore]`d test outside a contract module: no suite runs it",
                     _ => return None,
                 };
+                let name = &f.sig.ident;
                 Some(Violation::new(
                     format!("{}::{name}", file.path),
-                    format!("{}:{}: `{name}`: {problem}", file.path, file.line_of(scoped.item.start)),
+                    format!("{}:{}: `{name}`: {problem}", file.path, file.line_of(name)),
                 ))
             })
         })

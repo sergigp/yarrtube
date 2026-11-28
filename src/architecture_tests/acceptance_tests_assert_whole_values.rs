@@ -1,7 +1,9 @@
 //! Acceptance and behaviour tests assert whole typed values, never `len()`.
 
+use syn::visit::Visit;
+
 use super::baseline::{Rule, Violation};
-use super::source::SourceFile;
+use super::source::{SourceFile, macro_args, path_idents};
 
 pub const RULE: Rule = Rule {
     name: "acceptance_tests_assert_whole_values",
@@ -10,45 +12,60 @@ pub const RULE: Rule = Rule {
     convention: "Convention: .claude/skills/rust-architect/SKILL.md (Acceptance Tests: assert whole typed values)",
 };
 
-const ASSERTS: [&str; 3] = ["assert!(", "assert_eq!(", "assert_ne!("];
+const ASSERTS: [&str; 3] = ["assert", "assert_eq", "assert_ne"];
 
 pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
     files
         .iter()
         .filter(|file| file.is_under("src/application/") || file.is_under("src/domain/services/"))
-        .filter(|file| file.test_code().iter().any(|code| asserts_on_len(code)))
-        .map(|file| {
-            Violation::new(
-                &file.path,
-                format!("{}: its tests assert on `.len()`", file.path),
-            )
+        .filter_map(|file| {
+            let mut asserts = LenAsserts::default();
+            file.test_items()
+                .into_iter()
+                .for_each(|item| asserts.visit_item(item));
+            asserts.lines.first().map(|line| {
+                Violation::new(
+                    &file.path,
+                    format!("{}:{line}: its tests assert on `.len()`", file.path),
+                )
+            })
         })
         .collect()
 }
 
-fn asserts_on_len(code: &str) -> bool {
-    ASSERTS.iter().any(|assert| {
-        code.match_indices(assert).any(|(at, _)| {
-            let open = at + assert.len() - 1;
-            arguments(code, open).contains(".len()")
-        })
-    })
+/// The asserts whose arguments call `.len()`.
+#[derive(Default)]
+struct LenAsserts {
+    lines: Vec<usize>,
 }
 
-/// The text inside the parentheses opening at `open`.
-fn arguments(code: &str, open: usize) -> &str {
-    let mut depth = 0;
-    code[open..]
-        .char_indices()
-        .find_map(|(i, c)| {
-            match c {
-                '(' | '[' | '{' => depth += 1,
-                ')' | ']' | '}' => depth -= 1,
-                _ => {}
-            }
-            (depth == 0).then(|| &code[open + 1..open + i])
-        })
-        .unwrap_or("")
+impl<'ast> Visit<'ast> for LenAsserts {
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        let args = macro_args(node);
+        let is_assert = path_idents(&node.path)
+            .last()
+            .is_some_and(|name| ASSERTS.contains(&name.as_str()));
+        if is_assert && args.iter().any(calls_len) {
+            self.lines
+                .push(node.path.segments[0].ident.span().start().line);
+        }
+        args.iter().for_each(|arg| self.visit_expr(arg));
+        syn::visit::visit_macro(self, node);
+    }
+}
+
+fn calls_len(expr: &syn::Expr) -> bool {
+    #[derive(Default)]
+    struct Len(bool);
+    impl<'ast> Visit<'ast> for Len {
+        fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+            self.0 |= call.method == "len" && call.args.is_empty();
+            syn::visit::visit_expr_method_call(self, call);
+        }
+    }
+    let mut len = Len::default();
+    len.visit_expr(expr);
+    len.0
 }
 
 #[cfg(test)]

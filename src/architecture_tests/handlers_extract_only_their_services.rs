@@ -1,7 +1,9 @@
 //! A handler extracts only the service(s) it uses, never the whole `ApiServices`.
 
+use syn::visit::Visit;
+
 use super::baseline::{Rule, Violation};
-use super::source::{SourceFile, squash};
+use super::source::{SourceFile, type_name};
 
 pub const RULE: Rule = Rule {
     name: "handlers_extract_only_their_services",
@@ -16,18 +18,39 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
     files
         .iter()
         .filter(|file| file.is_under(DIR) && file.path[DIR.len()..].contains('/'))
-        .filter(|file| {
-            squash(&file.code)
-                .replace(' ', "")
-                .contains("State<ApiServices>")
-        })
-        .map(|file| {
-            Violation::new(
-                &file.path,
-                format!("{}: extracts `State<ApiServices>`", file.path),
-            )
+        .flat_map(|file| {
+            let mut state = WholeState::default();
+            state.visit_file(&file.ast);
+            state
+                .lines
+                .into_iter()
+                .map(|line| {
+                    Violation::new(
+                        &file.path,
+                        format!("{}:{line}: extracts `State<ApiServices>`", file.path),
+                    )
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
+}
+
+/// Where `State<ApiServices>` appears.
+#[derive(Default)]
+struct WholeState {
+    lines: Vec<usize>,
+}
+
+impl<'ast> Visit<'ast> for WholeState {
+    fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
+        if segment.ident == "State"
+            && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+            && args.args.iter().any(|arg| matches!(arg, syn::GenericArgument::Type(ty) if type_name(ty) == "ApiServices"))
+        {
+            self.lines.push(segment.ident.span().start().line);
+        }
+        syn::visit::visit_path_segment(self, segment);
+    }
 }
 
 #[cfg(test)]

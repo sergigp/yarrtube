@@ -1,7 +1,9 @@
 //! A port method returns `anyhow::Result<…>`: no custom infrastructure error types.
 
+use syn::{Item, ReturnType, TraitItem, Type};
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::{SourceFile, path_idents, render_return};
 
 pub const RULE: Rule = Rule {
     name: "repository_ports_return_anyhow_results",
@@ -19,38 +21,40 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
             file.all_items()
                 .into_iter()
                 .filter(|scoped| !scoped.in_test)
-                .filter_map(|scoped| match &scoped.item.kind {
-                    ItemKind::Trait { name } if name.ends_with("Repository") => {
-                        Some((name.clone(), scoped.item))
-                    }
+                .filter_map(|scoped| match scoped.item {
+                    Item::Trait(t) if t.ident.to_string().ends_with("Repository") => Some(t),
                     _ => None,
                 })
-                .flat_map(move |(port, item)| {
-                    file.children(&item)
-                        .into_iter()
-                        .filter_map(move |method| match &method.kind {
-                            ItemKind::Fn { name, .. }
-                                if !is_anyhow_result(&method.return_type()) =>
-                            {
-                                Some(Violation::new(
-                                    format!("{}::{port}::{name}", file.path),
-                                    format!(
-                                        "{}:{}: `{port}::{name}` returns `{}`",
-                                        file.path,
-                                        file.line_of(method.start),
-                                        method.return_type()
-                                    ),
-                                ))
-                            }
-                            _ => None,
-                        })
+                .flat_map(move |port| {
+                    port.items.iter().filter_map(move |item| match item {
+                        TraitItem::Fn(method) if !is_anyhow_result(&method.sig.output) => {
+                            let name = &method.sig.ident;
+                            Some(Violation::new(
+                                format!("{}::{}::{name}", file.path, port.ident),
+                                format!(
+                                    "{}:{}: `{}::{name}` returns `{}`",
+                                    file.path,
+                                    file.line_of(name),
+                                    port.ident,
+                                    render_return(&method.sig.output)
+                                ),
+                            ))
+                        }
+                        _ => None,
+                    })
                 })
         })
         .collect()
 }
 
-fn is_anyhow_result(return_type: &str) -> bool {
-    return_type.starts_with("anyhow::Result<")
+fn is_anyhow_result(output: &ReturnType) -> bool {
+    match output {
+        ReturnType::Type(_, ty) => match ty.as_ref() {
+            Type::Path(path) => path_idents(&path.path) == ["anyhow", "Result"],
+            _ => false,
+        },
+        ReturnType::Default => false,
+    }
 }
 
 #[cfg(test)]

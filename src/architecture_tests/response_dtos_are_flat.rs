@@ -1,7 +1,9 @@
 //! A response DTO never composes another one with `#[serde(flatten)]`.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile, squash};
+use super::source::{SourceFile, type_name};
 
 pub const RULE: Rule = Rule {
     name: "response_dtos_are_flat",
@@ -16,17 +18,17 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .filter(|file| file.is_under("src/application/http/"))
         .flat_map(|file| {
             file.all_items().into_iter().filter_map(move |scoped| {
-                let ItemKind::Struct { name } = &scoped.item.kind else {
+                let Item::Struct(dto) = scoped.item else {
                     return None;
                 };
-                let body = squash(file.body_of(&scoped.item));
-                flattened_dtos(&body).first().map(|dto| {
+                flattened_dtos(dto).first().map(|flattened| {
                     Violation::new(
-                        format!("{}::{name}", file.path),
+                        format!("{}::{}", file.path, dto.ident),
                         format!(
-                            "{}:{}: `{name}` flattens `{dto}`",
+                            "{}:{}: `{}` flattens `{flattened}`",
                             file.path,
-                            file.line_of(scoped.item.start)
+                            file.line_of(&dto.ident),
+                            dto.ident
                         ),
                     )
                 })
@@ -35,20 +37,28 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .collect()
 }
 
-/// The DTO types of the fields marked `#[serde(flatten)]` in a struct body.
-fn flattened_dtos(body: &str) -> Vec<String> {
-    body.split("#[serde(flatten)]")
-        .skip(1)
-        .filter_map(|after| {
-            let field = after.split(',').next()?;
-            let ty = field.split_once(':')?.1.trim();
-            let base: String = ty
-                .chars()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
-                .collect();
-            (base.ends_with("Response") || base.ends_with("Dto")).then_some(base)
-        })
+/// The DTO types of the fields marked `#[serde(flatten)]`.
+fn flattened_dtos(dto: &syn::ItemStruct) -> Vec<String> {
+    dto.fields
+        .iter()
+        .filter(|field| field.attrs.iter().any(is_serde_flatten))
+        .map(|field| type_name(&field.ty))
+        .filter(|ty| ty.ends_with("Response") || ty.ends_with("Dto"))
         .collect()
+}
+
+fn is_serde_flatten(attr: &syn::Attribute) -> bool {
+    let mut flatten = false;
+    if attr.path().is_ident("serde") {
+        let _ = attr.parse_nested_meta(|meta| {
+            flatten |= meta.path.is_ident("flatten");
+            if meta.input.peek(syn::Token![=]) {
+                meta.value()?.parse::<syn::Lit>()?;
+            }
+            Ok(())
+        });
+    }
+    flatten
 }
 
 #[cfg(test)]

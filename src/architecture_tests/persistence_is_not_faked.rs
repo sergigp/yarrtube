@@ -3,8 +3,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::{SourceFile, path_idents, type_name};
 
 pub const RULE: Rule = Rule {
     name: "persistence_is_not_faked",
@@ -18,8 +20,8 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
     let crate_traits: BTreeSet<String> = files
         .iter()
         .flat_map(|file| file.all_items())
-        .filter_map(|scoped| match scoped.item.kind {
-            ItemKind::Trait { name } => Some(name),
+        .filter_map(|scoped| match scoped.item {
+            Item::Trait(t) => Some(t.ident.to_string()),
             _ => None,
         })
         .collect();
@@ -27,13 +29,9 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .iter()
         .flat_map(|file| file.all_items())
         .filter(|scoped| !scoped.in_test)
-        .filter_map(|scoped| match scoped.item.kind {
-            ItemKind::Impl {
-                ty,
-                trait_: Some(port),
-            } if ty.starts_with("Sqlite") && crate_traits.contains(&port) => Some(port),
-            _ => None,
-        })
+        .filter_map(|scoped| trait_impl(scoped.item))
+        .filter(|(port, ty)| ty.starts_with("Sqlite") && crate_traits.contains(port))
+        .map(|(port, _)| port)
         .collect();
     let mut doubles: BTreeMap<String, Violation> = BTreeMap::new();
     files.iter().for_each(|file| {
@@ -41,24 +39,33 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
             .into_iter()
             .filter(|scoped| scoped.in_test)
             .for_each(|scoped| {
-                if let ItemKind::Impl {
-                    ty,
-                    trait_: Some(port),
-                } = &scoped.item.kind
-                    && sqlite_ports.contains(port)
+                if let Some((port, ty)) = trait_impl(scoped.item)
+                    && sqlite_ports.contains(&port)
                     && !ty.starts_with("Sqlite")
                 {
                     let unit = format!("{}::{ty}", file.path);
                     let detail = format!(
                         "{}:{}: test double `{ty}` of `{port}`, which SQLite implements",
                         file.path,
-                        file.line_of(scoped.item.start)
+                        file.line_of(scoped.item)
                     );
                     doubles.insert(unit.clone(), Violation::new(unit, detail));
                 }
             })
     });
     doubles.into_values().collect()
+}
+
+/// `impl Port for Type` → (Port, Type).
+fn trait_impl(item: &Item) -> Option<(String, String)> {
+    match item {
+        Item::Impl(imp) => imp
+            .trait_
+            .as_ref()
+            .and_then(|(_, path, _)| path_idents(path).last().cloned())
+            .map(|port| (port, type_name(&imp.self_ty))),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

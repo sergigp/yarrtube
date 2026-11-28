@@ -1,8 +1,11 @@
 //! Acceptance and behaviour tests seed and assert through the port traits,
 //! never through raw SQL.
 
+use syn::visit::Visit;
+use syn::{Expr, Lit};
+
 use super::baseline::{Rule, Violation};
-use super::source::SourceFile;
+use super::source::{SourceFile, macro_args};
 
 pub const RULE: Rule = Rule {
     name: "acceptance_tests_skip_raw_sql",
@@ -12,13 +15,12 @@ pub const RULE: Rule = Rule {
     convention: "Convention: .claude/skills/rust-architect/SKILL.md (Persistence and Test Doubles)",
 };
 
-const SQL_CALLS: [&str; 6] = [
-    ".execute(\"",
-    ".execute(r",
-    ".execute_batch(",
-    ".prepare(\"",
-    ".prepare(r",
-    ".query_row(\"",
+const SQL_CALLS: [&str; 5] = [
+    "execute",
+    "execute_batch",
+    "prepare",
+    "prepare_cached",
+    "query_row",
 ];
 
 pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
@@ -26,18 +28,42 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .iter()
         .filter(|file| file.is_under("src/application/") || file.is_under("src/domain/services/"))
         .filter_map(|file| {
-            let code: String = file.test_code().concat().split_whitespace().collect();
-            SQL_CALLS
-                .iter()
-                .find(|call| code.contains(*call))
-                .map(|call| {
-                    Violation::new(
-                        &file.path,
-                        format!("{}: its tests run SQL (`{call}…`)", file.path),
-                    )
-                })
+            let mut sql = Sql::default();
+            file.test_items()
+                .into_iter()
+                .for_each(|item| sql.visit_item(item));
+            sql.found.first().map(|(call, line)| {
+                Violation::new(
+                    &file.path,
+                    format!("{}:{line}: its tests run SQL (`.{call}(\"…\")`)", file.path),
+                )
+            })
         })
         .collect()
+}
+
+/// Calls like `.execute("INSERT …")`: a SQL method whose first argument is a
+/// string literal.
+#[derive(Default)]
+struct Sql {
+    found: Vec<(String, usize)>,
+}
+
+impl<'ast> Visit<'ast> for Sql {
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        let method = call.method.to_string();
+        let sql_literal =
+            matches!(call.args.first(), Some(Expr::Lit(lit)) if matches!(lit.lit, Lit::Str(_)));
+        if SQL_CALLS.contains(&method.as_str()) && sql_literal {
+            self.found.push((method, call.method.span().start().line));
+        }
+        syn::visit::visit_expr_method_call(self, call);
+    }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        macro_args(node).iter().for_each(|arg| self.visit_expr(arg));
+        syn::visit::visit_macro(self, node);
+    }
 }
 
 #[cfg(test)]

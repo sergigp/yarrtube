@@ -2,8 +2,10 @@
 //! with only `new`, the `pub trait <Service>Api: Send + Sync`, its `impl`,
 //! then one `impl` of private helpers.
 
+use syn::{Item, Visibility};
+
 use super::baseline::{Rule, Violation};
-use super::source::{Item, ItemKind, SourceFile};
+use super::source::{SourceFile, describe, impl_fns, path_idents, type_name};
 
 pub const RULE: Rule = Rule {
     name: "domain_service_layout",
@@ -33,48 +35,50 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
 }
 
 fn problems(file: &SourceFile) -> Vec<String> {
-    let items: Vec<Item> = file
-        .items()
-        .into_iter()
-        .filter(|item| !matches!(item.kind, ItemKind::Use | ItemKind::Mod { .. }))
+    let items: Vec<&Item> = file
+        .ast
+        .items
+        .iter()
+        .filter(|item| !matches!(item, Item::Use(_) | Item::Mod(_)))
         .collect();
-    let api_traits: Vec<(usize, String)> = items
+    let api_traits: Vec<(usize, &syn::ItemTrait)> = items
         .iter()
         .enumerate()
-        .filter_map(|(i, item)| match &item.kind {
-            ItemKind::Trait { name } if name.ends_with("Api") => Some((i, name.clone())),
+        .filter_map(|(i, item)| match item {
+            Item::Trait(t) if t.ident.to_string().ends_with("Api") => Some((i, t)),
             _ => None,
         })
         .collect();
-    let [(trait_at, api)] = api_traits.as_slice() else {
+    let [(trait_at, api_trait)] = api_traits.as_slice() else {
         return vec![format!(
             "declares {} `…Api` traits instead of one",
             api_traits.len()
         )];
     };
-    let service = api.trim_end_matches("Api");
+    let api = api_trait.ident.to_string();
+    let service = api.trim_end_matches("Api").to_string();
     let Some(struct_at) = position(
         &items,
-        |k| matches!(k, ItemKind::Struct { name } if name == service),
+        |item| matches!(item, Item::Struct(s) if s.ident == service),
     ) else {
         return vec![format!("no `pub struct {service}` for `{api}`")];
     };
     let inherent: Vec<usize> = (0..items.len())
-        .filter(|&i| matches!(&items[i].kind, ItemKind::Impl { ty, trait_: None } if ty == service))
+        .filter(|&i| matches!(items[i], Item::Impl(imp) if imp.trait_.is_none() && type_name(&imp.self_ty) == service))
         .collect();
-    let api_impl = position(
-        &items,
-        |k| matches!(k, ItemKind::Impl { ty, trait_: Some(t) } if ty == service && t == api),
-    );
+    let api_impl = position(&items, |item| {
+        matches!(item, Item::Impl(imp) if type_name(&imp.self_ty) == service
+            && imp.trait_.as_ref().is_some_and(|(_, path, _)| path_idents(path).last() == Some(&api)))
+    });
     let mut problems = Vec::new();
-    if items[*trait_at].signature != format!("pub trait {api}: Send + Sync") {
+    if !is_pub_send_sync(api_trait) {
         problems.push(format!(
             "`{api}` is not declared `pub trait {api}: Send + Sync`"
         ));
     }
     match (inherent.first(), api_impl) {
         (Some(&constructor), Some(api_impl)) => {
-            if fn_names(file, &items[constructor]) != ["new"] {
+            if fn_names(items[constructor]) != ["new"] {
                 problems.push(format!("the first `impl {service}` holds more than `new`"));
             }
             if !(struct_at < constructor && constructor < *trait_at && *trait_at < api_impl) {
@@ -95,10 +99,8 @@ fn problems(file: &SourceFile) -> Vec<String> {
                         "the helpers `impl {service}` comes before `impl {api} for {service}`"
                     ));
                 }
-                if file
-                    .children(&items[helpers])
-                    .iter()
-                    .any(|f| matches!(f.kind, ItemKind::Fn { is_pub: true, .. }))
+                if let Item::Impl(imp) = items[helpers]
+                    && impl_fns(imp).iter().any(|(_, is_pub)| *is_pub)
                 {
                     problems.push(format!("the helpers `impl {service}` has a `pub fn`"));
                 }
@@ -115,10 +117,10 @@ fn problems(file: &SourceFile) -> Vec<String> {
                 .enumerate()
                 .skip(struct_at + 1)
                 .for_each(|(i, item)| {
-                    if !blocks.contains(&Some(i)) && !matches!(item.kind, ItemKind::Fn { .. }) {
+                    if !blocks.contains(&Some(i)) && !matches!(item, Item::Fn(_)) {
                         problems.push(format!(
                             "`{}` comes after the struct: supporting items go above it",
-                            item.signature
+                            describe(item)
                         ));
                     }
                 });
@@ -127,27 +129,37 @@ fn problems(file: &SourceFile) -> Vec<String> {
         (_, None) => problems.push(format!("no `impl {api} for {service}`")),
     }
     items.iter().for_each(|item| {
-        if let ItemKind::Fn { name, .. } = &item.kind {
+        if let Item::Fn(f) = item {
             problems.push(format!(
-                "free fn `{name}`: helpers go in the last `impl {service}`"
+                "free fn `{}`: helpers go in the last `impl {service}`",
+                f.sig.ident
             ));
         }
     });
     problems
 }
 
-fn position(items: &[Item], predicate: impl Fn(&ItemKind) -> bool) -> Option<usize> {
-    items.iter().position(|item| predicate(&item.kind))
-}
-
-fn fn_names(file: &SourceFile, item: &Item) -> Vec<String> {
-    file.children(item)
+fn is_pub_send_sync(api: &syn::ItemTrait) -> bool {
+    let bounds: Vec<String> = api
+        .supertraits
         .iter()
-        .filter_map(|child| match &child.kind {
-            ItemKind::Fn { name, .. } => Some(name.clone()),
+        .filter_map(|bound| match bound {
+            syn::TypeParamBound::Trait(t) => path_idents(&t.path).last().cloned(),
             _ => None,
         })
-        .collect()
+        .collect();
+    matches!(api.vis, Visibility::Public(_)) && bounds == ["Send", "Sync"]
+}
+
+fn position(items: &[&Item], predicate: impl Fn(&Item) -> bool) -> Option<usize> {
+    items.iter().position(|item| predicate(item))
+}
+
+fn fn_names(item: &Item) -> Vec<String> {
+    match item {
+        Item::Impl(imp) => impl_fns(imp).into_iter().map(|(name, _)| name).collect(),
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(test)]

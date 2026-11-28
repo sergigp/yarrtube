@@ -1,7 +1,9 @@
 //! Handlers return typed results, never an opaque `Response`.
 
+use syn::{Item, ReturnType, Type};
+
 use super::baseline::{Rule, Violation};
-use super::source::{ItemKind, SourceFile};
+use super::source::{SourceFile, path_idents, render_return, type_name};
 
 pub const RULE: Rule = Rule {
     name: "handlers_return_typed_results",
@@ -22,28 +24,35 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
                 && file.file_name() == "mod.rs"
         })
         .flat_map(|file| {
-            file.items()
-                .into_iter()
-                .filter_map(move |item| match &item.kind {
-                    ItemKind::Fn { name, .. } if is_opaque(&item.return_type()) => {
-                        Some(Violation::new(
-                            format!("{}::{name}", file.path),
-                            format!(
-                                "{}:{}: `{name}` returns `{}`",
-                                file.path,
-                                file.line_of(item.start),
-                                item.return_type()
-                            ),
-                        ))
-                    }
-                    _ => None,
-                })
+            file.ast.items.iter().filter_map(move |item| match item {
+                Item::Fn(f) if is_opaque(&f.sig.output) => {
+                    let name = &f.sig.ident;
+                    Some(Violation::new(
+                        format!("{}::{name}", file.path),
+                        format!(
+                            "{}:{}: `{name}` returns `{}`",
+                            file.path,
+                            file.line_of(name),
+                            render_return(&f.sig.output)
+                        ),
+                    ))
+                }
+                _ => None,
+            })
         })
         .collect()
 }
 
-fn is_opaque(return_type: &str) -> bool {
-    return_type.contains("IntoResponse") || return_type.rsplit("::").next() == Some("Response")
+fn is_opaque(output: &ReturnType) -> bool {
+    match output {
+        ReturnType::Type(_, ty) => match ty.as_ref() {
+            Type::ImplTrait(bounds) => bounds.bounds.iter().any(|bound| {
+                matches!(bound, syn::TypeParamBound::Trait(t) if path_idents(&t.path).last().is_some_and(|i| i == "IntoResponse"))
+            }),
+            ty => type_name(ty) == "Response",
+        },
+        ReturnType::Default => false,
+    }
 }
 
 #[cfg(test)]

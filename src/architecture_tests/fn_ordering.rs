@@ -1,8 +1,10 @@
 //! Within an `impl` block, and among a module's free fns: `new` first, then
 //! the public ones (trait-impl methods count as public), then the private ones.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::{Item, ItemKind, SourceFile};
+use super::source::{SourceFile, impl_fns, is_pub, path_idents, type_name};
 
 pub const RULE: Rule = Rule {
     name: "fn_ordering",
@@ -16,14 +18,20 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
         .iter()
         .flat_map(|file| {
             let mut found = Vec::new();
-            check_module(file, &file.items(), &[], &mut found);
+            check_module(file, &file.ast.items, &[], &mut found);
             found
         })
         .collect()
 }
 
 fn check_module(file: &SourceFile, items: &[Item], modules: &[String], found: &mut Vec<Violation>) {
-    let free_fns: Vec<(String, bool)> = items.iter().filter_map(fn_entry).collect();
+    let free_fns: Vec<(String, bool)> = items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Fn(f) => Some((f.sig.ident.to_string(), is_pub(&f.vis))),
+            _ => None,
+        })
+        .collect();
     let scope: String = modules.iter().map(|m| format!("{m}::")).collect();
     if let Some(problem) = misordering(&free_fns) {
         found.push(Violation::new(
@@ -35,42 +43,39 @@ fn check_module(file: &SourceFile, items: &[Item], modules: &[String], found: &m
             ),
         ));
     }
-    items.iter().for_each(|item| match &item.kind {
-        ItemKind::Impl { ty, trait_ } => {
-            let fns: Vec<(String, bool)> = file
-                .children(item)
-                .iter()
-                .filter_map(fn_entry)
-                .map(|(name, is_pub)| (name, is_pub || trait_.is_some()))
+    items.iter().for_each(|item| match item {
+        Item::Impl(imp) => {
+            let is_trait_impl = imp.trait_.is_some();
+            let fns: Vec<(String, bool)> = impl_fns(imp)
+                .into_iter()
+                .map(|(name, is_pub)| (name, is_pub || is_trait_impl))
                 .collect();
             if let Some(problem) = misordering(&fns) {
-                let block = trait_
+                let ty = type_name(&imp.self_ty);
+                let block = imp
+                    .trait_
                     .as_ref()
+                    .and_then(|(_, path, _)| path_idents(path).last().cloned())
                     .map_or(ty.clone(), |t| format!("{t} for {ty}"));
                 found.push(Violation::new(
                     format!("{}::{scope}impl {block}", file.path),
                     format!(
                         "{}:{}: `impl {block}`: {problem}",
                         file.path,
-                        file.line_of(item.start)
+                        file.line_of(&imp.impl_token)
                     ),
                 ));
             }
         }
-        ItemKind::Mod { name } => {
-            let mut inner = modules.to_vec();
-            inner.push(name.clone());
-            check_module(file, &file.children(item), &inner, found);
+        Item::Mod(module) => {
+            if let Some((_, inner)) = &module.content {
+                let mut path = modules.to_vec();
+                path.push(module.ident.to_string());
+                check_module(file, inner, &path, found);
+            }
         }
         _ => {}
     });
-}
-
-fn fn_entry(item: &Item) -> Option<(String, bool)> {
-    match &item.kind {
-        ItemKind::Fn { name, is_pub } => Some((name.clone(), *is_pub)),
-        _ => None,
-    }
 }
 
 fn misordering(fns: &[(String, bool)]) -> Option<String> {

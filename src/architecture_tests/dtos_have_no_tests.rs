@@ -1,7 +1,9 @@
 //! DTO mapping is covered through handler responses, not standalone DTO tests.
 
+use syn::Item;
+
 use super::baseline::{Rule, Violation};
-use super::source::SourceFile;
+use super::source::{SourceFile, is_cfg_test, is_test_fn};
 
 pub const RULE: Rule = Rule {
     name: "dtos_have_no_tests",
@@ -14,7 +16,12 @@ pub fn violations(files: &[SourceFile]) -> Vec<Violation> {
     files
         .iter()
         .filter(|file| file.is_under("src/application/http/") && is_dto_file(file))
-        .filter(|file| !file.test_code().is_empty() || !file.token_offsets("#[test]").is_empty())
+        .filter(|file| {
+            file.all_items().iter().any(|scoped| {
+                is_test_fn(scoped.item)
+                    || matches!(scoped.item, Item::Mod(m) if is_cfg_test(&m.attrs))
+            })
+        })
         .map(|file| Violation::new(&file.path, format!("{}: has tests", file.path)))
         .collect()
 }
