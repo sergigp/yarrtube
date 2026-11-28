@@ -7,26 +7,6 @@ use std::path::{Path, PathBuf};
 const RELEASES_API_URL: &str = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
 const DEFAULT_YTDLP_PATH: &str = "/app/bin/yt-dlp";
 
-/// The standalone-binary release asset name for the given platform (the
-/// production Docker image is always Linux, but `serve`/`update-ytdlp` also
-/// run directly on a developer's machine — see `scripts/run-local.sh` —
-/// where downloading the Linux asset would silently replace a working local
-/// `yt-dlp` with one that can't execute). Linux additionally distinguishes
-/// arm64: an x86_64 binary run there needs emulation the container/host may
-/// not have (e.g. Docker Desktop's Rosetta layer on Apple Silicon), so the
-/// startup self-update would otherwise clobber a correct arm64 binary — such
-/// as the one the Dockerfile's `ytdlp-fetch` stage already fetches for the
-/// same architecture — with one that can't run.
-fn asset_name_for_platform(os: &str, arch: &str) -> &'static str {
-    match os {
-        "macos" => "yt-dlp_macos",
-        _ => match arch {
-            "aarch64" => "yt-dlp_linux_aarch64",
-            _ => "yt-dlp_linux",
-        },
-    }
-}
-
 #[derive(Debug, Deserialize)]
 struct Release {
     assets: Vec<Asset>,
@@ -57,6 +37,26 @@ pub fn target_path() -> PathBuf {
     std::env::var("YTDLP_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_YTDLP_PATH))
+}
+
+/// The standalone-binary release asset name for the given platform (the
+/// production Docker image is always Linux, but `serve`/`update-ytdlp` also
+/// run directly on a developer's machine — see `scripts/run-local.sh` —
+/// where downloading the Linux asset would silently replace a working local
+/// `yt-dlp` with one that can't execute). Linux additionally distinguishes
+/// arm64: an x86_64 binary run there needs emulation the container/host may
+/// not have (e.g. Docker Desktop's Rosetta layer on Apple Silicon), so the
+/// startup self-update would otherwise clobber a correct arm64 binary — such
+/// as the one the Dockerfile's `ytdlp-fetch` stage already fetches for the
+/// same architecture — with one that can't run.
+fn asset_name_for_platform(os: &str, arch: &str) -> &'static str {
+    match os {
+        "macos" => "yt-dlp_macos",
+        _ => match arch {
+            "aarch64" => "yt-dlp_linux_aarch64",
+            _ => "yt-dlp_linux",
+        },
+    }
 }
 
 /// Downloads the latest yt-dlp standalone binary for the current platform

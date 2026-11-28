@@ -24,14 +24,14 @@ use crate::infrastructure::infrastructure_container::{
 use crate::infrastructure::repositories::anthropic_llm_server_repository::{
     AnthropicApiKey, AnthropicConfig,
 };
-use crate::infrastructure::repositories::domain_events_consumer::{
-    DomainEventsConsumer, SubscriberRegistry,
-};
 use crate::infrastructure::repositories::plex_library_repository::{
     HttpPlexLibraryRepository, PlexConfig, PlexLibraryRepository,
 };
-use crate::infrastructure::repositories::task_executor::{HandlerRegistry, TaskExecutor};
 use crate::infrastructure::shared::app_version::AppVersion;
+use crate::infrastructure::shared::domain_events::domain_events_consumer::{
+    DomainEventsConsumer, SubscriberRegistry,
+};
+use crate::infrastructure::shared::task_executor::{HandlerRegistry, TaskExecutor};
 use crate::infrastructure::shared::web_assets::WebAssets;
 use crate::infrastructure::shared::{sqlite_connection, sqlite_migrations};
 use anyhow::{Context, Result};

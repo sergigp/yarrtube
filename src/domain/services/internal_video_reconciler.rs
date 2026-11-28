@@ -36,6 +36,46 @@ pub struct FolderReconciliation {
     pub orphans_deleted: usize,
 }
 
+/// The folder as one pass found it.
+struct ActualState {
+    output_dir: PathBuf,
+    files: Vec<String>,
+    /// Entries of `output_dir` that orphan cleanup must keep.
+    protected_entries: HashSet<String>,
+    /// `Season <s>/<base name>` of every numbered video: the media, thumbnail
+    /// or NFO a download or thumbnail fetch already moved into place under it
+    /// is kept, even before the video records it. A stale container (`.mkv`,
+    /// `.webm`) under it is not, so a reset video's old file is swept.
+    numbered_episode_paths: HashSet<String>,
+    /// The recorded media file's stem of every numbered video whose
+    /// subtitles are still Missing: a subtitle fetch may already have moved
+    /// its `<stem>.<lang>.srt` into place without recording it yet.
+    subtitle_pending_paths: HashSet<String>,
+}
+
+impl ActualState {
+    fn is_protected(&self, entry: &str) -> bool {
+        self.protected_entries.contains(entry)
+            || is_season_folder(entry)
+            || self.is_numbered_episode_file(entry)
+            || self.subtitle_pending_paths.iter().any(|stem| {
+                entry
+                    .strip_prefix(stem.as_str())
+                    .is_some_and(|rest| rest.starts_with('.'))
+            })
+    }
+
+    fn is_numbered_episode_file(&self, entry: &str) -> bool {
+        let path = Path::new(entry);
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| EPISODE_FILE_EXTENSIONS.contains(&ext))
+            && self
+                .numbered_episode_paths
+                .contains(path.with_extension("").to_string_lossy().as_ref())
+    }
+}
+
 /// Reconciles our database with our filesystem: brings a playlist's or
 /// channel's output folder in line with the videos recorded for it. It is
 /// the second step of a reconcile pass, after the membership sync that
@@ -99,9 +139,9 @@ impl InternalVideoReconciler {
         Ok(ActualState {
             output_dir,
             files,
-            protected_entries: protected_entries(&videos),
-            numbered_episode_paths: numbered_episode_paths(&videos),
-            subtitle_pending_paths: subtitle_pending_paths(&videos),
+            protected_entries: Self::protected_entries(&videos),
+            numbered_episode_paths: Self::numbered_episode_paths(&videos),
+            subtitle_pending_paths: Self::subtitle_pending_paths(&videos),
         })
     }
 
@@ -138,108 +178,68 @@ impl InternalVideoReconciler {
                 Ok(deleted + usize::from(removed))
             })
     }
-}
 
-/// The folder as one pass found it.
-struct ActualState {
-    output_dir: PathBuf,
-    files: Vec<String>,
-    /// Entries of `output_dir` that orphan cleanup must keep.
-    protected_entries: HashSet<String>,
-    /// `Season <s>/<base name>` of every numbered video: the media, thumbnail
-    /// or NFO a download or thumbnail fetch already moved into place under it
-    /// is kept, even before the video records it. A stale container (`.mkv`,
-    /// `.webm`) under it is not, so a reset video's old file is swept.
-    numbered_episode_paths: HashSet<String>,
-    /// The recorded media file's stem of every numbered video whose
-    /// subtitles are still Missing: a subtitle fetch may already have moved
-    /// its `<stem>.<lang>.srt` into place without recording it yet.
-    subtitle_pending_paths: HashSet<String>,
-}
+    /// Entries of the output folder orphan cleanup must keep: the show files,
+    /// every `Downloaded` video's file and episode NFO, every stored video's
+    /// thumbnail (a `Pending`/`InProgress` video may already have one
+    /// pre-fetched, see the `video-thumbnails` capability) and every stored
+    /// video's subtitle file. An episode file is kept by its path in its season
+    /// folder, a legacy video by its top-level folder or flat file.
+    fn protected_entries(videos: &[Video]) -> HashSet<String> {
+        let downloaded_files: Vec<&str> = videos
+            .iter()
+            .filter(|v| v.download.is_downloaded())
+            .filter_map(|v| v.download.filename())
+            .collect();
+        let thumbnails = videos
+            .iter()
+            .filter_map(|v| v.thumbnail.filename.as_deref());
+        let subtitles = videos
+            .iter()
+            .filter_map(|v| v.subtitles.filename.as_deref());
+        let episode_nfos = downloaded_files
+            .iter()
+            .filter(|filename| is_episode_path(filename))
+            .map(|filename| nfo_path_for(filename));
+        let recorded = downloaded_files
+            .iter()
+            .copied()
+            .chain(thumbnails)
+            .chain(subtitles)
+            .map(|path| owning_entry(path).to_string());
+        [SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME]
+            .map(str::to_string)
+            .into_iter()
+            .chain(recorded)
+            .chain(episode_nfos)
+            .collect()
+    }
 
-impl ActualState {
-    fn is_protected(&self, entry: &str) -> bool {
-        self.protected_entries.contains(entry)
-            || is_season_folder(entry)
-            || self.is_numbered_episode_file(entry)
-            || self.subtitle_pending_paths.iter().any(|stem| {
-                entry
-                    .strip_prefix(stem.as_str())
-                    .is_some_and(|rest| rest.starts_with('.'))
+    /// The episode base names of numbered videos, whose files may land before
+    /// they are recorded; a Discarded video's never will.
+    fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
+        videos
+            .iter()
+            .filter(|v| !v.download.is_discarded())
+            .filter_map(|v| {
+                v.episode_number
+                    .map(|number| EpisodePaths::new(&number, &v.title).stem())
             })
+            .collect()
     }
 
-    fn is_numbered_episode_file(&self, entry: &str) -> bool {
-        let path = Path::new(entry);
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| EPISODE_FILE_EXTENSIONS.contains(&ext))
-            && self
-                .numbered_episode_paths
-                .contains(path.with_extension("").to_string_lossy().as_ref())
+    fn subtitle_pending_paths(videos: &[Video]) -> HashSet<String> {
+        videos
+            .iter()
+            .filter(|v| {
+                v.subtitles.is_unsettled()
+                    && v.episode_number.is_some()
+                    && !v.download.is_in_legacy_layout()
+            })
+            .filter_map(|v| v.download.filename())
+            .map(|filename| EpisodePaths::from_media(filename).stem())
+            .collect()
     }
-}
-
-/// Entries of the output folder orphan cleanup must keep: the show files,
-/// every `Downloaded` video's file and episode NFO, every stored video's
-/// thumbnail (a `Pending`/`InProgress` video may already have one
-/// pre-fetched, see the `video-thumbnails` capability) and every stored
-/// video's subtitle file. An episode file is kept by its path in its season
-/// folder, a legacy video by its top-level folder or flat file.
-fn protected_entries(videos: &[Video]) -> HashSet<String> {
-    let downloaded_files: Vec<&str> = videos
-        .iter()
-        .filter(|v| v.download.is_downloaded())
-        .filter_map(|v| v.download.filename())
-        .collect();
-    let thumbnails = videos
-        .iter()
-        .filter_map(|v| v.thumbnail.filename.as_deref());
-    let subtitles = videos
-        .iter()
-        .filter_map(|v| v.subtitles.filename.as_deref());
-    let episode_nfos = downloaded_files
-        .iter()
-        .filter(|filename| is_episode_path(filename))
-        .map(|filename| nfo_path_for(filename));
-    let recorded = downloaded_files
-        .iter()
-        .copied()
-        .chain(thumbnails)
-        .chain(subtitles)
-        .map(|path| owning_entry(path).to_string());
-    [SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME]
-        .map(str::to_string)
-        .into_iter()
-        .chain(recorded)
-        .chain(episode_nfos)
-        .collect()
-}
-
-/// The episode base names of numbered videos, whose files may land before
-/// they are recorded; a Discarded video's never will.
-fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
-    videos
-        .iter()
-        .filter(|v| !v.download.is_discarded())
-        .filter_map(|v| {
-            v.episode_number
-                .map(|number| EpisodePaths::new(&number, &v.title).stem())
-        })
-        .collect()
-}
-
-fn subtitle_pending_paths(videos: &[Video]) -> HashSet<String> {
-    videos
-        .iter()
-        .filter(|v| {
-            v.subtitles.is_unsettled()
-                && v.episode_number.is_some()
-                && !v.download.is_in_legacy_layout()
-        })
-        .filter_map(|v| v.download.filename())
-        .map(|filename| EpisodePaths::from_media(filename).stem())
-        .collect()
 }
 
 #[cfg(test)]

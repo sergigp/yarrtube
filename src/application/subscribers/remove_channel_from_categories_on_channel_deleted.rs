@@ -1,7 +1,7 @@
 use crate::domain::category::CategoryMember;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::services::{CategoryMemberRemover, CategoryMemberRemoverApi};
-use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
+use crate::infrastructure::shared::domain_events::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]

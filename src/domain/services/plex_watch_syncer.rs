@@ -197,9 +197,9 @@ impl PlexWatchSyncer {
         rows: &HashMap<VideoId, EpisodeWatch>,
         viewer_id: &str,
     ) -> anyhow::Result<Vec<(Video, &'a PlexEpisode, MergeOutcome)>> {
-        let merged = merge_all(matched, rows, viewer_id);
+        let merged = Self::merge_all(matched, rows, viewer_id);
         if self.pull(&merged)? {
-            Ok(merge_all(self.reread(merged)?, rows, viewer_id))
+            Ok(Self::merge_all(self.reread(merged)?, rows, viewer_id))
         } else {
             Ok(merged)
         }
@@ -260,13 +260,12 @@ impl PlexWatchSyncer {
     /// Copies each pulled state to its video (and every copy of it);
     /// whether anything was pulled.
     fn pull(&self, merged: &[(Video, &PlexEpisode, MergeOutcome)]) -> anyhow::Result<bool> {
-        let pulls =
-            newest_per_youtube_video(merged.iter().filter_map(|(video, episode, outcome)| {
-                match outcome {
-                    MergeOutcome::Pull(progress) => Some((video, *episode, *progress)),
-                    _ => None,
-                }
-            }));
+        let pulls = Self::newest_per_youtube_video(merged.iter().filter_map(
+            |(video, episode, outcome)| match outcome {
+                MergeOutcome::Pull(progress) => Some((video, *episode, *progress)),
+                _ => None,
+            },
+        ));
         let now = self.clock.now();
         pulls.iter().try_for_each(|(video, episode, progress)| {
             self.video_watch_state_updater
@@ -327,59 +326,59 @@ impl PlexWatchSyncer {
                 .mark_unwatched(&episode.rating_key),
         }
     }
-}
 
-/// One pull per YouTube video: the one whose episode Plex played last, so
-/// copies changed differently in Plex end up as the latest change.
-fn newest_per_youtube_video<'a>(
-    pulls: impl Iterator<Item = (&'a Video, &'a PlexEpisode, WatchProgress)>,
-) -> Vec<(&'a Video, &'a PlexEpisode, WatchProgress)> {
-    pulls
-        .fold(
-            HashMap::<&YoutubeVideoId, (&Video, &PlexEpisode, WatchProgress)>::new(),
-            |mut newest, pull| {
-                let played_later = |kept: &(&Video, &PlexEpisode, WatchProgress)| {
-                    pull.1.watch.last_viewed_at > kept.1.watch.last_viewed_at
-                };
-                if newest.get(&pull.0.youtube_id).is_none_or(played_later) {
-                    newest.insert(&pull.0.youtube_id, pull);
-                }
-                newest
-            },
-        )
-        .into_values()
-        .collect()
-}
-
-/// How each video's state merges with its episode's.
-fn merge_all<'a>(
-    matched: Vec<(Video, &'a PlexEpisode)>,
-    rows: &HashMap<VideoId, EpisodeWatch>,
-    viewer_id: &str,
-) -> Vec<(Video, &'a PlexEpisode, MergeOutcome)> {
-    matched
-        .into_iter()
-        .map(|(video, episode)| {
-            let outcome = merge(
-                local_side(&video),
-                remote_side(episode),
-                EpisodeWatch::agreed_with(rows.get(&video.id), episode, viewer_id),
-            );
-            (video, episode, outcome)
-        })
-        .collect()
-}
-
-fn local_side(video: &Video) -> WatchSide {
-    WatchSide {
-        progress: video.watch_progress(),
-        changed_at: video.watch.changed_at(),
+    /// One pull per YouTube video: the one whose episode Plex played last, so
+    /// copies changed differently in Plex end up as the latest change.
+    fn newest_per_youtube_video<'a>(
+        pulls: impl Iterator<Item = (&'a Video, &'a PlexEpisode, WatchProgress)>,
+    ) -> Vec<(&'a Video, &'a PlexEpisode, WatchProgress)> {
+        pulls
+            .fold(
+                HashMap::<&YoutubeVideoId, (&Video, &PlexEpisode, WatchProgress)>::new(),
+                |mut newest, pull| {
+                    let played_later = |kept: &(&Video, &PlexEpisode, WatchProgress)| {
+                        pull.1.watch.last_viewed_at > kept.1.watch.last_viewed_at
+                    };
+                    if newest.get(&pull.0.youtube_id).is_none_or(played_later) {
+                        newest.insert(&pull.0.youtube_id, pull);
+                    }
+                    newest
+                },
+            )
+            .into_values()
+            .collect()
     }
-}
 
-fn remote_side(episode: &PlexEpisode) -> WatchSide {
-    WatchSide {
-        progress: episode.watch.progress(),
-        changed_at: episode.watch.last_viewed_at,
+    /// How each video's state merges with its episode's.
+    fn merge_all<'a>(
+        matched: Vec<(Video, &'a PlexEpisode)>,
+        rows: &HashMap<VideoId, EpisodeWatch>,
+        viewer_id: &str,
+    ) -> Vec<(Video, &'a PlexEpisode, MergeOutcome)> {
+        matched
+            .into_iter()
+            .map(|(video, episode)| {
+                let outcome = merge(
+                    Self::local_side(&video),
+                    Self::remote_side(episode),
+                    EpisodeWatch::agreed_with(rows.get(&video.id), episode, viewer_id),
+                );
+                (video, episode, outcome)
+            })
+            .collect()
+    }
+
+    fn local_side(video: &Video) -> WatchSide {
+        WatchSide {
+            progress: video.watch_progress(),
+            changed_at: video.watch.changed_at(),
+        }
+    }
+
+    fn remote_side(episode: &PlexEpisode) -> WatchSide {
+        WatchSide {
+            progress: episode.watch.progress(),
+            changed_at: episode.watch.last_viewed_at,
+        }
     }
 }

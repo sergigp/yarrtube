@@ -1,7 +1,7 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::domain::task::{Task, TaskOutcome};
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 
 /// Recursively deletes a deleted channel's output directory, scheduled by
 /// `subscribers::delete_channel_files_on_channel_deleted` whenever a channel

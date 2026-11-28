@@ -135,7 +135,7 @@ impl VideoSearcherApi for VideoSearcher {
                     .map(|video| video.map(|video| (video, pv.kept)))
                     .transpose()
             })
-            .filter(|found| !is_skipped(found))
+            .filter(|found| !Self::is_skipped(found))
             .map(|found| found.and_then(|(video, kept)| self.view(video, summaries_shown, kept)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
@@ -164,7 +164,7 @@ impl VideoSearcherApi for VideoSearcher {
                     .map(|video| video.map(|video| (video, cv.kept)))
                     .transpose()
             })
-            .filter(|found| !is_skipped(found))
+            .filter(|found| !Self::is_skipped(found))
             .map(|found| found.and_then(|(video, kept)| self.view(video, summaries_shown, kept)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
@@ -246,14 +246,6 @@ impl VideoSearcherApi for VideoSearcher {
         videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.favorited_at));
         self.category_views(videos)
     }
-}
-
-/// Whether a looked-up video is Unavailable or Discarded, so the video-list
-/// read paths can omit it (see the `video-listing` capability). An `Err` is
-/// never excluded, so a lookup failure still propagates rather than being
-/// silently dropped.
-fn is_skipped(found: &anyhow::Result<(Video, bool)>) -> bool {
-    matches!(found, Ok((video, _)) if video.is_skipped())
 }
 
 impl VideoSearcher {
@@ -732,5 +724,17 @@ impl VideoSearcher {
             .collect::<anyhow::Result<Vec<Vec<SourcedVideo>>>>()
             .map(|nested| nested.into_iter().flatten().collect())
             .map_err(ListVideosError::Repository)
+    }
+
+    /// Whether a looked-up video is Unavailable or Discarded, so the video-list
+    /// read paths can omit it (see the `video-listing` capability). An `Err` is
+    /// never excluded, so a lookup failure still propagates rather than being
+    /// silently dropped.
+    /// Whether a looked-up video is Unavailable or Discarded, so the video-list
+    /// read paths can omit it (see the `video-listing` capability). An `Err` is
+    /// never excluded, so a lookup failure still propagates rather than being
+    /// silently dropped.
+    fn is_skipped(found: &anyhow::Result<(Video, bool)>) -> bool {
+        matches!(found, Ok((video, _)) if video.is_skipped())
     }
 }

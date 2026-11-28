@@ -1,7 +1,7 @@
 use crate::domain::services::{SubtitleFetcher, SubtitleFetcherApi};
 use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
 
 /// Fetches one downloaded video's subtitles, scheduled by

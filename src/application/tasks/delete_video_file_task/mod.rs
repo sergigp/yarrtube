@@ -1,6 +1,6 @@
 use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::domain::task::{Task, TaskOutcome};
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 use std::path::Path;
 
 /// Deletes one video's downloaded file, scheduled by

@@ -1,4 +1,3 @@
-pub mod category_dto;
 pub mod dto;
 
 use super::blocking::run_blocking;
@@ -23,10 +22,10 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::http::header::{CONTENT_TYPE, HeaderName};
-use category_dto::{INVALID_BELONGS, SetVideoCategoryRequest, VideoCategoriesResponse};
 use dto::{
-    CategoryVideoResponse, HomeResponse, HomeVideoResponse, RecordProgressRequest,
-    RecordProgressResponse, SearchVideosQuery, SearchVideosResponse, VideoResponse,
+    CategoryVideoResponse, HomeResponse, HomeVideoResponse, INVALID_BELONGS, RecordProgressRequest,
+    RecordProgressResponse, SearchVideosQuery, SearchVideosResponse, SetVideoCategoryRequest,
+    VideoCategoriesResponse, VideoResponse,
 };
 
 /// A WebVTT body with its content type header.

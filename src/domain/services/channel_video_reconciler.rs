@@ -35,6 +35,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::{info, info_span, warn};
 
+/// What a pass does when listing the channel's videos on YouTube fails.
+#[derive(Clone, Copy)]
+enum ListingFailure {
+    /// Leave membership untouched and run the rest of the pass.
+    SkipMembership,
+    /// Fail the pass.
+    FailPass,
+}
+
 /// Reconciles a channel with YouTube: brings its stored membership in line
 /// with its current `video_limit` most recent uploads, then hands its folder
 /// to `InternalVideoReconciler` to bring it in line with the database — the
@@ -616,13 +625,4 @@ impl ChannelVideoReconciler {
 
         Ok(())
     }
-}
-
-/// What a pass does when listing the channel's videos on YouTube fails.
-#[derive(Clone, Copy)]
-enum ListingFailure {
-    /// Leave membership untouched and run the rest of the pass.
-    SkipMembership,
-    /// Fail the pass.
-    FailPass,
 }

@@ -1,7 +1,7 @@
 use crate::domain::services::{VideoReconciler, VideoReconcilerApi};
 use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 
 /// Syncs one stored video: brings it to its desired state and schedules
 /// whichever of its steps it still needs (`VideoReconciler`). Scheduled by

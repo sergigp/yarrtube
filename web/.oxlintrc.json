@@ -1,9 +1,46 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "oxc"],
+  "plugins": ["react", "oxc", "vitest"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    // The vitest plugin is on for no-restricted-vi-methods only: these two
+    // rules it turns on by default stay off, as before.
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/valid-expect": "off",
+    "vitest/no-restricted-vi-methods": [
+      "error",
+      {
+        "mock": "Only the network boundary is mocked: declare the endpoints with mockApi (src/test/helpers.tsx), never mock modules, components, hooks, react-query or the router. Convention: CLAUDE.md (Frontend testing (web/))",
+        "doMock": "Only the network boundary is mocked: declare the endpoints with mockApi (src/test/helpers.tsx), never mock modules, components, hooks, react-query or the router. Convention: CLAUDE.md (Frontend testing (web/))"
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@testing-library/react",
+            "importNames": ["fireEvent"],
+            "message": "Drive the UI with @testing-library/user-event (`const user = userEvent.setup()`), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))"
+          },
+          {
+            "name": "@testing-library/dom",
+            "importNames": ["fireEvent"],
+            "message": "Drive the UI with @testing-library/user-event (`const user = userEvent.setup()`), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))"
+          }
+        ]
+      }
+    ],
+    "no-restricted-properties": [
+      "error",
+      { "property": "getByTestId", "message": "Query by role or label (getByRole, getByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "getAllByTestId", "message": "Query by role or label (getAllByRole, getAllByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "queryByTestId", "message": "Query by role or label (queryByRole, queryByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "queryAllByTestId", "message": "Query by role or label (queryAllByRole, queryAllByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "findByTestId", "message": "Query by role or label (findByRole, findByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" },
+      { "property": "findAllByTestId", "message": "Query by role or label (findAllByRole, findAllByLabelText), the way a user would. Convention: CLAUDE.md (Frontend testing (web/))" }
+    ]
   },
   "overrides": [
     {
@@ -11,6 +48,17 @@
       "rules": {
         "react/only-export-components": "off"
       }
+    },
+    // Baselines: files that broke a rule when it arrived. They only shrink
+    // (src/test/oxlint.test.ts fails once a listed file follows the rule):
+    // fix the file, then delete its line.
+    {
+      "files": ["src/components/CategoryColorPicker.test.tsx", "src/components/VideoPlayer.test.tsx"],
+      "rules": { "no-restricted-imports": "off" }
+    },
+    {
+      "files": ["src/components/MoveSourceDialog.test.tsx"],
+      "rules": { "no-restricted-properties": "off" }
     }
   ]
 }

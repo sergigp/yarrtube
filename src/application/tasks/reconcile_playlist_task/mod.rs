@@ -1,7 +1,7 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
 use crate::domain::task::{Task, TaskOutcome};
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs every subsequent reconcile for a playlist (the first one is
 /// triggered by `subscribers::reconcile_on_playlist_created` instead).

@@ -77,8 +77,9 @@ suite, and needs at least one:
 | Flag         | Runs                                                                                       |
 |--------------|--------------------------------------------------------------------------------------------|
 | `--lint`     | The web UI's typecheck and oxlint, `cargo fmt --check`, clippy                             |
+| `--arch`     | The architecture tests: the written conventions checked over the source                   |
 | `--web`      | The web UI's unit tests (Vitest)                                                           |
-| `--rust`     | `cargo test`                                                                               |
+| `--rust`     | `cargo test`, the architecture tests left out                                              |
 | `--contract` | The [contract tests](#contract-tests): adapters against the real YouTube                   |
 | `--e2e`      | The end-to-end suite: the Docker image driven through real browsers against a fake YouTube |
 | `--all`      | Every suite                                                                                |
@@ -118,6 +119,8 @@ and avatars) have tests against the real thing, in modules named
 `scripts/run-tests.sh --contract`, which needs `YOUTUBE_API_KEY`, after
 upgrading `yt-dlp` or when downloads start failing, to tell a change on
 YouTube's side from a bug of ours.
+
+Enforced by: cargo test · `architecture_tests::contract_tests_are_ignored`
 
 The same flag runs the Anthropic adapter's contract test when
 `YARRTUBE_ANTHROPIC_API_KEY` is set: one tiny call, billed to that key.

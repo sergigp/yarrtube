@@ -3,6 +3,9 @@ mod domain;
 mod infrastructure;
 mod serve;
 
+#[cfg(test)]
+mod architecture_tests;
+
 use application::cli::{Cli, Commands};
 use clap::Parser;
 use std::process::ExitCode;

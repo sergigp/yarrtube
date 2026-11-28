@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest'
+import { baselineOverrides, lint, lintSource, readConfig, withoutOverride } from './oxlint'
+
+// Each lint rule that enforces a convention, proven against the real
+// .oxlintrc.json: red on a violation, green on code that follows it.
+describe('oxlint rules', () => {
+  describe('only the network boundary is mocked', () => {
+    it('reports vi.mock and vi.doMock', () => {
+      const source = "import { vi } from 'vitest'\nvi.mock('../api/client')\nvi.doMock('react-router-dom')\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([
+        'vitest(no-restricted-vi-methods)',
+        'vitest(no-restricted-vi-methods)',
+      ])
+    })
+
+    it('accepts mocking fetch through mockApi', () => {
+      const source = "import { mockApi } from '../test/helpers'\nmockApi({ 'GET /api/videos': [] })\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([])
+    })
+  })
+
+  describe('the UI is driven with user-event', () => {
+    it('reports importing fireEvent', () => {
+      const source = "import { fireEvent, screen } from '@testing-library/react'\nfireEvent.click(screen.getByRole('button'))\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual(['eslint(no-restricted-imports)'])
+    })
+
+    it('accepts user-event', () => {
+      const source =
+        "import { screen } from '@testing-library/react'\nimport userEvent from '@testing-library/user-event'\n" +
+        "await userEvent.setup().click(screen.getByRole('button'))\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([])
+    })
+  })
+
+  describe('queries go by role or label', () => {
+    it('reports test id queries', () => {
+      const source =
+        "import { screen } from '@testing-library/react'\nscreen.getByTestId('notice')\nconst { findAllByTestId } = screen\nvoid findAllByTestId\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([
+        'eslint(no-restricted-properties)',
+        'eslint(no-restricted-properties)',
+      ])
+    })
+
+    it('accepts role and label queries', () => {
+      const source =
+        "import { screen } from '@testing-library/react'\nscreen.getByRole('button', { name: 'Save' })\nscreen.getByLabelText('Name')\n"
+
+      expect(lintSource('Thing.test.tsx', source)).toEqual([])
+    })
+  })
+
+  describe('baselines', () => {
+    it('only list files that still break the rules they are exempt from', () => {
+      const config = readConfig()
+      const stale = baselineOverrides(config).flatMap((override) => {
+        const found = lint(override.files, withoutOverride(config, override))
+        return override.files.flatMap((file) =>
+          Object.keys(override.rules)
+            .filter((rule) => !found.some((d) => d.file === file && d.rule.endsWith(`(${rule.split('/').pop()})`)))
+            .map((rule) => `${file} no longer breaks ${rule}: delete it from its baseline in .oxlintrc.json`),
+        )
+      })
+
+      expect(stale).toEqual([])
+    })
+  })
+})

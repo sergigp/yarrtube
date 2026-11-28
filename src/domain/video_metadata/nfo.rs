@@ -3,10 +3,6 @@ use crate::domain::show::Show;
 use crate::domain::video::EpisodeNumber;
 use quick_xml::escape::escape;
 
-fn element(tag: &str, value: &str) -> String {
-    format!("<{tag}>{}</{tag}>", escape(value))
-}
-
 /// Renders an episode NFO (`<episodedetails>`) from a video's
 /// `VideoMetadata` and its episode number, with every text value escaped so
 /// the result is always well-formed XML.
@@ -51,4 +47,8 @@ pub fn render_show_nfo(show: &Show) -> String {
     ]
     .concat();
     format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><tvshow>{body}</tvshow>"#)
+}
+
+fn element(tag: &str, value: &str) -> String {
+    format!("<{tag}>{}</{tag}>", escape(value))
 }
