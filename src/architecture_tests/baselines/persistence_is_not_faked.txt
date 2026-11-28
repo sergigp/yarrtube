@@ -1,4 +1,0 @@
-# Baseline of rule `persistence_is_not_faked` (src/architecture_tests/persistence_is_not_faked.rs): code that broke it
-# when it arrived. It only shrinks: fix a unit, then delete its line.
-src/application/http/playlists/tests.rs::FailingUpdatePlaylistRepository
-src/application/tasks/categorize_video_task/tests.rs::RemovingVideoOnPublish
