@@ -2,8 +2,11 @@
 # Runs the test suites, the same way locally and in CI:
 #   --lint       static checks: the web UI's typecheck and lint, Rust
 #                formatting and clippy
+#   --arch       the architecture tests: the repository's written conventions
+#                (layers, file layout, naming, test layout, OpenSpec artifacts)
+#                checked over the source (`cargo test architecture_tests`)
 #   --web        the web UI's tests (Vitest)
-#   --rust       the Rust tests (`cargo test`)
+#   --rust       the Rust tests (`cargo test`), the architecture tests left out
 #   --contract   the contract tests: adapters against the real yt-dlp and
 #                YouTube Data API (needs yt-dlp, ffprobe, YOUTUBE_API_KEY), and
 #                against the real Anthropic API when YARRTUBE_ANTHROPIC_API_KEY
@@ -29,7 +32,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ALL_SUITES=(lint web rust contract e2e)
+ALL_SUITES=(lint arch web rust contract e2e)
 
 usage() {
   sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
@@ -40,7 +43,7 @@ REQUESTED=()
 WORKERS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --lint | --web | --rust | --contract | --e2e)
+    --lint | --arch | --web | --rust | --contract | --e2e)
       REQUESTED+=("${1#--}")
       shift
       ;;
@@ -50,7 +53,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ci)
       CI_MODE=true
-      REQUESTED+=(lint web rust e2e)
+      REQUESTED+=(lint arch web rust e2e)
       shift
       ;;
     --workers)
@@ -74,7 +77,7 @@ done
 
 if [[ ${#REQUESTED[@]} -eq 0 ]]; then
   echo "no suite selected: pass --all, --ci or one or more of --lint," >&2
-  echo "--web, --rust, --contract, --e2e (see --help)" >&2
+  echo "--arch, --web, --rust, --contract, --e2e (see --help)" >&2
   exit 1
 fi
 
@@ -356,7 +359,7 @@ check_dependencies() {
   }
   # Every suite needs npm: the Rust binary embeds the built web UI.
   need_command npm
-  if selected lint || selected rust || selected contract; then
+  if selected lint || selected arch || selected rust || selected contract; then
     need_command cargo
   fi
   if selected contract; then
@@ -400,11 +403,11 @@ node_modules_stale() {
 # beforehand.
 prepare() {
   local web_install=false web_build=false e2e_install=false
-  if (selected lint || selected web || selected rust || selected contract) && node_modules_stale web; then
+  if (selected lint || selected arch || selected web || selected rust || selected contract) && node_modules_stale web; then
     web_install=true
   fi
   # The Rust binary embeds the built web UI, so even clippy needs it.
-  if (selected lint || selected rust || selected contract) && { [[ "$web_install" == true ]] || [[ ! -d "$REPO_ROOT/web/dist" ]]; }; then
+  if (selected lint || selected arch || selected rust || selected contract) && { [[ "$web_install" == true ]] || [[ ! -d "$REPO_ROOT/web/dist" ]]; }; then
     web_build=true
   fi
   if selected e2e && node_modules_stale e2e-tests; then
@@ -474,9 +477,18 @@ run_web() {
   run_phase "tests" vitest npm --prefix "$REPO_ROOT/web" run test -- --reporter=default
 }
 
+# The conventions written in .claude/skills/rust-architect/SKILL.md, CLAUDE.md,
+# doc/DEVELOPMENT.md and openspec/config.yaml, as rules over the source (see
+# src/architecture_tests/mod.rs). A failure names the rule, the code that
+# breaks it, what to do instead and where the convention is written.
+run_arch() {
+  step "architecture tests"
+  run_phase "tests" cargo cargo test --locked architecture_tests
+}
+
 run_rust() {
   step "Rust tests"
-  run_phase "tests" cargo cargo test --locked
+  run_phase "tests" cargo cargo test --locked -- --skip architecture_tests
 }
 
 # The adapters' `#[ignore]`d tests against the real yt-dlp and YouTube Data
@@ -723,6 +735,7 @@ for suite in "${ALL_SUITES[@]}"; do
     SUITE="$suite"
     case "$suite" in
       lint) run_lint ;;
+      arch) run_arch ;;
       web) run_web ;;
       rust) run_rust ;;
       contract) run_contract ;;

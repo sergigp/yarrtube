@@ -77,8 +77,9 @@ suite, and needs at least one:
 | Flag         | Runs                                                                                       |
 |--------------|--------------------------------------------------------------------------------------------|
 | `--lint`     | The web UI's typecheck and oxlint, `cargo fmt --check`, clippy                             |
+| `--arch`     | The architecture tests: the written conventions checked over the source                   |
 | `--web`      | The web UI's unit tests (Vitest)                                                           |
-| `--rust`     | `cargo test`                                                                               |
+| `--rust`     | `cargo test`, the architecture tests left out                                              |
 | `--contract` | The [contract tests](#contract-tests): adapters against the real YouTube                   |
 | `--e2e`      | The end-to-end suite: the Docker image driven through real browsers against a fake YouTube |
 | `--all`      | Every suite                                                                                |

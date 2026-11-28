@@ -51,16 +51,17 @@ npm run build       # produces dist/, embedded into the binary by cargo build
 | Flag | Runs |
 |---|---|
 | `--lint` | web typecheck + oxlint, `cargo fmt --check`, clippy |
+| `--arch` | architecture tests: the written conventions checked over the source |
 | `--web` | Vitest |
-| `--rust` | `cargo test` |
+| `--rust` | `cargo test`, architecture tests left out |
 | `--contract` | adapters against the real yt-dlp / YouTube API |
 | `--e2e` | Docker image + Playwright against a fake YouTube |
 | `--all` | every suite |
 | `--ci` | what CI runs: every suite but contract, failing e2e tests retried |
 
 Before calling a change done, run the fast suites:
-`scripts/run-tests.sh --lint --web --rust`, or just `--lint` plus
-the suite of the side you touched (e.g. `--lint --web`). The slow
+`scripts/run-tests.sh --lint --arch --web --rust`, or just `--lint --arch` plus
+the suite of the side you touched (e.g. `--lint --arch --web`). The slow
 suites (contract, end-to-end) are not run per change: CI runs `--ci` on
 every push, and
 `/audit-change` runs every suite, contract included, before auditing. Run
