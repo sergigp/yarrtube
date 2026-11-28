@@ -48,10 +48,13 @@ operations:
 rules:
   design:
     - |
-      Before writing design.md, list your open assumptions and non-obvious choices as
-      3-5 short questions to the user, each with your recommended answer, and wait for
-      the answers. Record each answer as a decision line in ## Review. If there are no
-      open assumptions or non-obvious choices, skip the questions and write design.md.
+      Before writing design.md, ask the user at most 5 short questions, usually 0-2, all
+      in one message, each with your recommended answer, and wait for the answers. Ask
+      only when the answer changes the design (a type, port, flow, schema or scope).
+      Decide yourself whatever the code, specs, /rust-architect or this config already
+      answer, and list those choices as assumptions in ## Review instead of asking.
+      Never add questions to reach a count. Record each answer as a decision line in
+      ## Review. With nothing to ask, skip the questions and write design.md.
     - |
       On design.md add these sections that will be used as an overview of the design. Don't add anything else,
       we want to keep this short and simple
