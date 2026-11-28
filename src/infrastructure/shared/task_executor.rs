@@ -1,10 +1,10 @@
 use crate::domain::shared::elapsed_seconds;
 use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane, TaskOutcome};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
-use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::panic_message::panic_message;
 use crate::infrastructure::shared::system_clock::Clock;
+use crate::infrastructure::shared::task_handler::TaskHandler;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::panic::{self, AssertUnwindSafe};

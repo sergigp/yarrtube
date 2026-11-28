@@ -1,6 +1,6 @@
 use crate::domain::services::{PlexWatchSyncer, PlexWatchSyncerApi};
 use crate::domain::task::{Task, TaskOutcome};
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs one Plex watch sync (`PlexWatchSyncer::sync`), which requests the
 /// next one itself. Registered only when the Plex integration is configured.

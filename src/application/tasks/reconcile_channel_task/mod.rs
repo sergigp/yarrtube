@@ -1,7 +1,7 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::services::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
 use crate::domain::task::{Task, TaskOutcome};
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 
 /// Runs every subsequent reconcile for a channel (the first one is
 /// triggered by `subscribers::reconcile_on_channel_created` instead).

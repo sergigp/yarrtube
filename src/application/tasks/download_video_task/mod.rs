@@ -1,7 +1,7 @@
 use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
 use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 
 /// Downloads one video via `yt-dlp`, scheduled by
 /// the video sync (`SyncVideoTask` via `VideoReconciler`) whenever a video

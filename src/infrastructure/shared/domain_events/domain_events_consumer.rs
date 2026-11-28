@@ -1,7 +1,7 @@
 use crate::domain::event::{EventFailureOutcome, ScheduledEvent};
 use crate::domain::shared::elapsed_seconds;
-use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::shared::domain_events::event_repository::EventRepository;
+use crate::infrastructure::shared::domain_events::event_subscriber::EventSubscriber;
 use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::panic_message::panic_message;
 use crate::infrastructure::shared::system_clock::Clock;

@@ -1,7 +1,7 @@
 use crate::domain::services::plex_label_syncer::AFTER_DOWNLOAD_DELAY;
 use crate::domain::services::{PlexLabelSyncer, PlexLabelSyncerApi};
 use crate::domain::video::VideoId;
-use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
+use crate::infrastructure::shared::domain_events::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 
 /// The only field this subscriber reads from `VideoDownloaded`.
