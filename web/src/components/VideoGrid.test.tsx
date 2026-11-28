@@ -328,4 +328,50 @@ describe('VideoGrid', () => {
     )
     expect(card('Fresh Video')).toBeInTheDocument()
   })
+
+  it('shows a star on favorite cards and a Kept badge on kept ones', () => {
+    mockApi({})
+    renderWithProviders(
+      <VideoGrid
+        videos={[
+          aHomeVideo({ id: 'fav', title: 'Favorite', favorite: true }),
+          aHomeVideo({ id: 'plain', title: 'Plain' }),
+          aHomeVideo({ id: 'kept', title: 'Old talk', favorite: true }),
+        ]}
+        keptOf={(video) => video.id === 'kept'}
+      />,
+    )
+
+    const marks = (title: string) => ({
+      star: within(card(title)).queryByRole('img', { name: 'Favorite' }) !== null,
+      kept: within(card(title)).queryByText('Kept') !== null,
+    })
+    expect([marks('Favorite'), marks('Plain'), marks('Old talk')]).toEqual([
+      { star: true, kept: false },
+      { star: false, kept: false },
+      { star: true, kept: true },
+    ])
+  })
+
+  it('asks before unfavoriting a kept card from its menu', async () => {
+    const unfavorite = vi.fn(() => null)
+    mockApi({ 'DELETE /api/videos/kept/favorite': unfavorite })
+    renderWithProviders(
+      <VideoGrid
+        videos={[
+          aHomeVideo({ id: 'kept', title: 'Old talk', favorite: true, source: BETTATECH }),
+        ]}
+        keptOf={() => true}
+      />,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Old talk' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove from favorites' }))
+
+    expect(
+      screen.getByRole('dialog', { name: 'Remove "Old talk" from favorites?' }),
+    ).toHaveTextContent('"Old talk" is no longer in "BettaTech".')
+    expect(unfavorite).not.toHaveBeenCalled()
+  })
 })

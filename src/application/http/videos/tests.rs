@@ -12,8 +12,9 @@ use crate::domain::services::{VideoCategoryAssigner, VideoOwnerFinder};
 use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::task::{ScheduledTask, Task, TaskStatus};
 use crate::domain::video::{
-    Chapters, Download, DownloadedQuality, EpisodeNumber, RetryAttempts, StepState, StepStatus,
-    Subtitles, Thumbnail, Video, VideoChapter, VideoDiscarded, VideoId, WatchState, YoutubeVideoId,
+    Chapters, Download, DownloadFailure, DownloadedQuality, EpisodeNumber, RetryAttempts,
+    StepState, StepStatus, Subtitles, Thumbnail, Video, VideoChapter, VideoDiscarded, VideoId,
+    WatchState, YoutubeVideoId,
 };
 use crate::domain::video_category::VideoCategories;
 use crate::domain::video_category::{Verdict, VideoCategoriesChanged};
@@ -8193,6 +8194,533 @@ async fn it_should_announce_the_thumbnail_of_a_discarded_video_never_downloaded(
     );
 }
 
+#[tokio::test]
+async fn it_should_favorite_a_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    video_repository.insert(&video).unwrap();
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = favorite(video_favoriter, video.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository.find(&video.id).unwrap(),
+        Some(Video {
+            favorited_at: Some(favorited_timestamp()),
+            updated_at: favorited_timestamp(),
+            version: 1,
+            ..video
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_favorite_every_copy_of_the_youtube_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_copy = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    let playlist_copy = playlist_copy_of(&channel_copy);
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &channel_copy,
+        0,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &playlist_copy,
+    );
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = favorite(video_favoriter, channel_copy.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository
+            .find_many(&[channel_copy.id.clone(), playlist_copy.id.clone()])
+            .unwrap(),
+        vec![favorited(channel_copy), favorited(playlist_copy)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_keep_the_favorite_time_when_favorited_again() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+    };
+    video_repository.insert(&video).unwrap();
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = favorite(video_favoriter, video.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
+#[tokio::test]
+async fn it_should_unfavorite_every_copy_of_the_youtube_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_copy = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+    };
+    let playlist_copy = playlist_copy_of(&channel_copy);
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &channel_copy,
+        0,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &playlist_copy,
+    );
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = unfavorite(video_favoriter, playlist_copy.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository
+            .find_many(&[channel_copy.id.clone(), playlist_copy.id.clone()])
+            .unwrap(),
+        vec![unfavorited(channel_copy), unfavorited(playlist_copy)]
+    );
+}
+
+#[tokio::test]
+async fn it_should_ignore_unfavorite_of_a_video_that_is_not_a_favorite() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    );
+    video_repository.insert(&video).unwrap();
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = unfavorite(video_favoriter, video.id.as_str()).await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
+#[tokio::test]
+async fn it_should_fail_to_favorite_a_discarded_video() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let video = new_video(
+        YoutubeVideoId::new("vid1").unwrap(),
+        "My Video",
+        fixed_timestamp(),
+    )
+    .discard(fixed_timestamp())
+    .unwrap();
+    video_repository.insert(&video).unwrap();
+    let video_favoriter = VideoFavoriter::new(
+        video_repository.clone(),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let response = favorite(video_favoriter, video.id.as_str()).await;
+
+    assert_eq!(
+        response,
+        Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "video rec-vid1 can't be favorited while discarded"
+        ))
+    );
+    assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+}
+
+#[tokio::test]
+async fn it_should_fail_to_favorite_an_unknown_video() {
+    let db = TestDatabase::new();
+    let video_favoriter = VideoFavoriter::new(
+        Arc::new(SqliteVideoRepository::new(db.database())),
+        Arc::new(FixedClock(favorited_timestamp())),
+    );
+
+    let favorited = favorite(video_favoriter.clone(), "rec1").await;
+    let unfavorited = unfavorite(video_favoriter, "rec1").await;
+
+    assert_eq!(
+        (favorited, unfavorited),
+        (
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found")),
+            Err(ApiError::new(StatusCode::NOT_FOUND, "video rec1 not found"))
+        )
+    );
+}
+
+#[tokio::test]
+async fn it_should_unfavorite_every_copy_when_discarding_a_favorite() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    let channel_copy = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..new_video(
+            YoutubeVideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+    };
+    let playlist_copy = playlist_copy_of(&channel_copy);
+    save_channel_video(
+        video_repository.as_ref(),
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &channel_copy,
+        0,
+    );
+    save_playlist_video(
+        video_repository.as_ref(),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &playlist_copy,
+    );
+
+    let response = discard_video(
+        State(video_discarder(
+            &db,
+            video_repository.clone(),
+            task_repository.clone(),
+        )),
+        Path(channel_copy.id.as_str().to_string()),
+    )
+    .await;
+
+    assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+    assert_eq!(
+        video_repository
+            .find_many(&[channel_copy.id.clone(), playlist_copy.id.clone()])
+            .unwrap(),
+        vec![
+            Video {
+                favorited_at: None,
+                version: 1,
+                ..channel_copy.discard(fixed_timestamp()).unwrap()
+            },
+            Video {
+                favorited_at: None,
+                version: 1,
+                ..playlist_copy
+            }
+        ]
+    );
+}
+
+#[tokio::test]
+async fn it_should_report_favorite_and_kept_in_a_channel_list() {
+    let db = TestDatabase::new();
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    channel_repository
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let listed = new_video(
+        YoutubeVideoId::new("vid_listed").unwrap(),
+        "Listed",
+        fixed_timestamp(),
+    );
+    let kept = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..new_video(
+            YoutubeVideoId::new("vid_kept").unwrap(),
+            "Kept",
+            fixed_timestamp(),
+        )
+    };
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        "@somechannel",
+        &listed,
+        0,
+    );
+    video_repository.insert(&kept).unwrap();
+    channel_video_repository
+        .save(&ChannelVideo {
+            kept: true,
+            ..ChannelVideo::create(
+                ChannelHandle::new("@somechannel").unwrap(),
+                kept.id.clone(),
+                1,
+                fixed_timestamp(),
+            )
+        })
+        .unwrap();
+    let video_searcher = VideoSearcher::new(
+        Arc::new(SqlitePlaylistRepository::new(db.database())),
+        Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+        channel_repository,
+        channel_video_repository,
+        video_repository,
+        Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        Arc::new(FixedClock(fixed_timestamp())),
+        Arc::new(SqliteCategoryRepository::new(db.database())),
+        category_video_collector(&db),
+        Arc::new(SqlitePreferencesRepository::new(db.database())),
+        Arc::new(SqliteVideoSummaryRepository::new(db.database())),
+    );
+
+    let response = list_for_channel(video_searcher, "@somechannel").await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            pending_video_response("vid_listed", "Listed"),
+            VideoResponse {
+                favorite: true,
+                kept: true,
+                ..pending_video_response("vid_kept", "Kept")
+            }
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_report_favorite_on_home_cards() {
+    let db = TestDatabase::new();
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    save_playlist_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..video_lasting("vid1", "Long", Some(3600), 100)
+        },
+    );
+
+    let response = home(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(HomeResponse {
+            latest: vec![HomeVideoResponse {
+                duration_seconds: Some(3600),
+                favorite: true,
+                ..home_video_response("vid1", "Long", playlist_source())
+            }],
+            ..empty_home()
+        })
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_favorites_most_recently_favorited_first() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    [
+        ("vidA", "A", fixed_timestamp()),
+        ("vidB", "B", favorited_timestamp()),
+    ]
+    .into_iter()
+    .for_each(|(youtube_id, title, favorited_at)| {
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &Video {
+                favorited_at: Some(favorited_at),
+                ..downloaded_video(youtube_id, title, None, 100)
+            },
+        );
+    });
+    save_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        &downloaded_video("vidC", "Not a favorite", None, 100),
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![
+            favorite_response("vidB", "B", playlist_source()),
+            favorite_response("vidA", "A", playlist_source()),
+        ])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_a_favorite_tracked_twice_once_from_its_channel() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    SqliteChannelRepository::new(db.database())
+        .insert(&channel("@somechannel", None))
+        .unwrap();
+    let channel_copy = Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..downloaded_video("vid1", "My Video", None, 100)
+    };
+    save_playlist_video(
+        &video_repository,
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &playlist_copy_of(&channel_copy),
+    );
+    save_channel_video(
+        &video_repository,
+        &SqliteChannelVideoRepository::new(db.database()),
+        "@somechannel",
+        &channel_copy,
+        0,
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![favorite_response(
+            "vid1",
+            "My Video",
+            channel_source(None)
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_omit_unavailable_favorites_from_the_favorites_list() {
+    let db = TestDatabase::new();
+    let video_repository = SqliteVideoRepository::new(db.database());
+    let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    save_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        &Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..downloaded_video("vid1", "Available", None, 100)
+        },
+    );
+    save_playlist_video(
+        &video_repository,
+        &playlist_video_repository,
+        "PL1",
+        &Video {
+            favorited_at: Some(fixed_timestamp()),
+            ..new_video(
+                YoutubeVideoId::new("vid2").unwrap(),
+                "Members only",
+                fixed_timestamp(),
+            )
+            .mark_unavailable(
+                &DownloadFailure::new("Join this channel to get access to members-only content."),
+                fixed_timestamp(),
+            )
+        },
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(
+        response,
+        Ok(vec![favorite_response(
+            "vid1",
+            "Available",
+            playlist_source()
+        )])
+    );
+}
+
+#[tokio::test]
+async fn it_should_list_no_favorites() {
+    let db = TestDatabase::new();
+    SqlitePlaylistRepository::new(db.database())
+        .insert(&playlist("PL1"))
+        .unwrap();
+    save_playlist_video(
+        &SqliteVideoRepository::new(db.database()),
+        &SqlitePlaylistVideoRepository::new(db.database()),
+        "PL1",
+        &downloaded_video("vid1", "Not a favorite", None, 100),
+    );
+
+    let response = favorites(home_video_searcher(&db)).await;
+
+    assert_eq!(response, Ok(vec![]));
+}
+
+async fn favorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
+    favorite_video(State(video_favoriter), Path(id.to_string())).await
+}
+
+async fn unfavorite(video_favoriter: VideoFavoriter, id: &str) -> Result<StatusCode, ApiError> {
+    unfavorite_video(State(video_favoriter), Path(id.to_string())).await
+}
+
+async fn favorites(video_searcher: VideoSearcher) -> Result<Vec<CategoryVideoResponse>, ApiError> {
+    list_favorite_videos(State(video_searcher))
+        .await
+        .map(|Json(videos)| videos)
+}
+
 async fn list_categories_of(
     video_category_choice_searcher: VideoCategoryChoiceSearcher,
     id: &str,
@@ -8265,7 +8793,8 @@ fn video_discarder(
         Arc::new(video_owner_finder(&|| db.database())),
         task_repository,
         Arc::new(SqliteEventPublisher::new(db.database(), clock.clone())),
-        clock,
+        clock.clone(),
+        VideoFavoriter::new(Arc::new(SqliteVideoRepository::new(db.database())), clock),
     )
 }
 
@@ -8683,6 +9212,8 @@ fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         chapters: vec![],
         summary: None,
         episode: None,
+        favorite: false,
+        kept: false,
     }
 }
 
@@ -8736,6 +9267,7 @@ fn home_video_response(
         published_at: None,
         source,
         category_ids: vec![],
+        favorite: false,
     }
 }
 
@@ -8768,6 +9300,7 @@ fn category_video_response(
         chapters: vec![],
         summary: None,
         episode: None,
+        favorite: false,
         source,
         category_ids: vec![],
     }
@@ -9215,4 +9748,49 @@ fn categorize_source(db: &TestDatabase, source: &CategoryMember, categories: &[&
                 .collect::<Vec<_>>(),
         )
         .unwrap();
+}
+
+/// When a test favorites a video: a day after `fixed_timestamp()`.
+fn favorited_timestamp() -> DateTime<Utc> {
+    fixed_timestamp() + Duration::days(1)
+}
+
+/// Another stored copy of `video`'s YouTube video, as a playlist holds it.
+fn playlist_copy_of(video: &Video) -> Video {
+    Video {
+        id: VideoId::new(format!("{}-playlist", video.id.as_str())).unwrap(),
+        ..video.clone()
+    }
+}
+
+/// `video` as stored once favorited at `favorited_timestamp()`.
+fn favorited(video: Video) -> Video {
+    Video {
+        favorited_at: Some(favorited_timestamp()),
+        updated_at: favorited_timestamp(),
+        version: video.version + 1,
+        ..video
+    }
+}
+
+/// `video` as stored once unfavorited at `favorited_timestamp()`.
+fn unfavorited(video: Video) -> Video {
+    Video {
+        favorited_at: None,
+        updated_at: favorited_timestamp(),
+        version: video.version + 1,
+        ..video
+    }
+}
+
+/// A favorite as listed: a downloaded video created at second 100.
+fn favorite_response(
+    youtube_id: &str,
+    title: &str,
+    source: HomeVideoSourceResponse,
+) -> CategoryVideoResponse {
+    CategoryVideoResponse {
+        favorite: true,
+        ..category_video_response(youtube_id, title, 100, source)
+    }
 }

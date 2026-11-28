@@ -49,6 +49,9 @@ pub struct Video {
     /// capability.
     pub categorization: StepState,
     pub watch: WatchState,
+    /// When the YouTube video was favorited; `None` when it isn't a
+    /// favorite — see the `video-favorites` capability.
+    pub favorited_at: Option<DateTime<Utc>>,
     /// Bumped by every stored update; an update only applies on top of the
     /// version it was read at — see the `video-write-consistency` capability.
     pub version: u32,
@@ -76,6 +79,7 @@ impl Video {
             summary: StepState::pending(),
             categorization: StepState::pending(),
             watch: WatchState::unwatched(),
+            favorited_at: None,
             version: 0,
         }
     }
@@ -134,7 +138,8 @@ impl Video {
 
     /// Discards the video (see the `video-discard` capability):
     /// `None` unless its download is discardable; else its download
-    /// Discarded and its thumbnail and subtitle filenames cleared.
+    /// Discarded, its thumbnail and subtitle filenames cleared, and no longer
+    /// a favorite.
     pub fn discard(self, now: DateTime<Utc>) -> Option<Self> {
         if !self.download.is_discardable() {
             return None;
@@ -149,6 +154,7 @@ impl Video {
                 filename: None,
                 ..self.subtitles
             },
+            favorited_at: None,
             updated_at: now,
             ..self
         })
@@ -171,6 +177,42 @@ impl Video {
             updated_at: now,
             ..self
         })
+    }
+
+    /// Favorited at `at`; `None` when already a favorite or Discarded.
+    pub fn favorite(self, at: DateTime<Utc>) -> Option<Self> {
+        if self.is_favorite() || self.download.is_discarded() {
+            return None;
+        }
+        Some(Self {
+            favorited_at: Some(at),
+            updated_at: at,
+            ..self
+        })
+    }
+
+    /// No longer a favorite; `None` when it wasn't one.
+    pub fn unfavorite(self, now: DateTime<Utc>) -> Option<Self> {
+        if !self.is_favorite() {
+            return None;
+        }
+        Some(Self {
+            favorited_at: None,
+            updated_at: now,
+            ..self
+        })
+    }
+
+    pub fn is_favorite(&self) -> bool {
+        self.favorited_at.is_some()
+    }
+
+    /// For a new copy: the favorite time of an existing copy.
+    pub fn with_favorited_at(self, favorited_at: Option<DateTime<Utc>>) -> Self {
+        Self {
+            favorited_at,
+            ..self
+        }
     }
 
     /// Download Unavailable: outside a channel's video limit.

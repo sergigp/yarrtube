@@ -37,16 +37,18 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
     fn save(&self, playlist_video: &PlaylistVideo) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO playlist_videos (playlist_id, video_id, position, created_at)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO playlist_videos (playlist_id, video_id, position, created_at, kept)
+             VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (playlist_id, video_id) DO UPDATE SET
                 position = excluded.position,
-                created_at = excluded.created_at",
+                created_at = excluded.created_at,
+                kept = excluded.kept",
             params![
                 playlist_video.playlist_id.as_str(),
                 playlist_video.video_id.as_str(),
                 playlist_video.position,
                 playlist_video.created_at.to_rfc3339(),
+                playlist_video.kept,
             ],
         )
         .inspect_err(|e| {
@@ -59,7 +61,7 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
     fn find_by_video(&self, video_id: &VideoId) -> anyhow::Result<Option<PlaylistVideo>> {
         let conn = self.db.read()?;
         conn.query_row(
-            "SELECT id, playlist_id, video_id, position, created_at
+            "SELECT id, playlist_id, video_id, position, created_at, kept
              FROM playlist_videos WHERE video_id = ?1",
             params![video_id.as_str()],
             row_to_columns,
@@ -77,7 +79,7 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, playlist_id, video_id, position, created_at
+                "SELECT id, playlist_id, video_id, position, created_at, kept
                  FROM playlist_videos WHERE playlist_id = ?1
                  ORDER BY position ASC, id ASC",
             )
@@ -105,7 +107,7 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, playlist_id, video_id, position, created_at
+                "SELECT id, playlist_id, video_id, position, created_at, kept
                  FROM playlist_videos ORDER BY id ASC",
             )
             .inspect_err(
@@ -153,7 +155,7 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
     }
 }
 
-type Columns = (i64, String, String, i64, String);
+type Columns = (i64, String, String, i64, String, bool);
 
 fn row_to_columns(row: &rusqlite::Row) -> rusqlite::Result<Columns> {
     Ok((
@@ -162,11 +164,12 @@ fn row_to_columns(row: &rusqlite::Row) -> rusqlite::Result<Columns> {
         row.get::<_, String>(2)?,
         row.get::<_, i64>(3)?,
         row.get::<_, String>(4)?,
+        row.get::<_, bool>(5)?,
     ))
 }
 
 fn columns_to_playlist_video(columns: Columns) -> anyhow::Result<PlaylistVideo> {
-    let (id, playlist_id, video_id, position, created_at) = columns;
+    let (id, playlist_id, video_id, position, created_at, kept) = columns;
     Ok(PlaylistVideo {
         id,
         playlist_id: PlaylistId::new(playlist_id)?,
@@ -175,6 +178,7 @@ fn columns_to_playlist_video(columns: Columns) -> anyhow::Result<PlaylistVideo> 
         created_at: DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc),
+        kept,
     })
 }
 
@@ -213,6 +217,60 @@ mod tests {
         )
         .unwrap();
         video
+    }
+
+    #[test]
+    fn it_should_round_trip_a_kept_playlist_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let kept = seed_video(&repo, "yt_kept", "Kept");
+        let listed = seed_video(&repo, "yt_listed", "Listed");
+        let kept_row = PlaylistVideo {
+            kept: true,
+            ..PlaylistVideo::create(playlist_id(), kept.id.clone(), 0, now)
+        };
+        let listed_row = PlaylistVideo::create(playlist_id(), listed.id.clone(), 1, now);
+        repo.save(&kept_row).unwrap();
+        repo.save(&listed_row).unwrap();
+        let saved = repo.list_for_playlist(&playlist_id()).unwrap();
+        repo.save(&PlaylistVideo {
+            kept: false,
+            ..kept_row.clone()
+        })
+        .unwrap();
+        repo.save(&PlaylistVideo {
+            kept: true,
+            ..listed_row.clone()
+        })
+        .unwrap();
+
+        assert_eq!(
+            (saved, repo.list_for_playlist(&playlist_id()).unwrap()),
+            (
+                vec![
+                    PlaylistVideo {
+                        id: 1,
+                        ..kept_row.clone()
+                    },
+                    PlaylistVideo {
+                        id: 2,
+                        ..listed_row.clone()
+                    }
+                ],
+                vec![
+                    PlaylistVideo {
+                        id: 1,
+                        kept: false,
+                        ..kept_row
+                    },
+                    PlaylistVideo {
+                        id: 2,
+                        kept: true,
+                        ..listed_row
+                    }
+                ]
+            )
+        );
     }
 
     #[test]

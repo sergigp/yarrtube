@@ -157,3 +157,22 @@ impl From<anyhow::Error> for RestoreDiscardedVideosError {
         Self::Repository(e)
     }
 }
+
+#[derive(Debug)]
+pub enum FavoriteVideoError {
+    VideoNotFound(VideoId),
+    Discarded(VideoId),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for FavoriteVideoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::VideoNotFound(id) => write!(f, "video {id} not found"),
+            Self::Discarded(id) => write!(f, "video {id} can't be favorited while discarded"),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for FavoriteVideoError {}

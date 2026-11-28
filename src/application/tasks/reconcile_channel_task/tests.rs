@@ -2966,6 +2966,626 @@ fn it_should_count_a_remembered_discarded_upload_toward_the_limit() {
     assert_eq!(stored_youtube_ids(&video_repository), vec!["ytA"]);
 }
 
+#[test]
+fn it_should_request_one_more_upload_per_favorite() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(3).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(Video::create(
+            YoutubeVideoId::new("ytF").unwrap(),
+            "Favorite",
+            fixed_timestamp(),
+        )),
+        0,
+    );
+    save_kept_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(Video::create(
+            YoutubeVideoId::new("ytK").unwrap(),
+            "Kept",
+            fixed_timestamp(),
+        )),
+        1,
+    );
+    let channel_videos_repository = Arc::new(FakeChannelVideosRepository::with_videos(vec![
+        listed_video("ytF", "Favorite", 0),
+        listed_video("ytA", "A", 1),
+    ]));
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository,
+        channel_video_repository,
+        channel_videos_repository.clone(),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        *channel_videos_repository.requested_limits.lock().unwrap(),
+        vec![5]
+    );
+}
+
+#[test]
+fn it_should_not_count_a_favorite_toward_the_limit() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(3).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(Video::create(
+            YoutubeVideoId::new("ytB").unwrap(),
+            "B",
+            fixed_timestamp(),
+        )),
+        1,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+            listed_video("ytC", "C", 2),
+            listed_video("ytD", "D", 3),
+            listed_video("ytE", "E", 4),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        stored_youtube_ids(&video_repository),
+        vec!["ytA", "ytB", "ytC", "ytD"]
+    );
+}
+
+#[test]
+fn it_should_keep_a_favorite_that_ages_out() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    let stored = [
+        Video::create(YoutubeVideoId::new("ytA").unwrap(), "A", fixed_timestamp()),
+        Video::create(YoutubeVideoId::new("ytB").unwrap(), "B", fixed_timestamp()),
+        favorite(Video::create(
+            YoutubeVideoId::new("ytC").unwrap(),
+            "C",
+            fixed_timestamp(),
+        )),
+    ]
+    .iter()
+    .zip(0..)
+    .map(|(video, position)| {
+        save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            video,
+            position,
+        )
+    })
+    .collect::<Vec<_>>();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        stored_youtube_ids(&video_repository),
+        vec!["ytA", "ytB", "ytC"]
+    );
+    assert_eq!(
+        channel_video_repository
+            .list_for_channel(&handle("@somechannel"))
+            .unwrap(),
+        vec![
+            stored[0].clone(),
+            stored[1].clone(),
+            ChannelVideo {
+                kept: true,
+                ..stored[2].clone()
+            }
+        ]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_keep_a_favorite_deleted_on_youtube() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let deleted = favorite(downloaded_episode());
+    let stored = save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &deleted,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::with_listing(episode_files())),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.find(&deleted.id).unwrap(), Some(deleted));
+    assert_eq!(
+        channel_video_repository
+            .list_for_channel(&handle("@somechannel"))
+            .unwrap(),
+        vec![ChannelVideo {
+            kept: true,
+            ..stored
+        }]
+    );
+    assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+}
+
+#[test]
+fn it_should_remove_an_unavailable_favorite_no_longer_listed() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let unavailable = favorite(
+        Video::create(
+            YoutubeVideoId::new("yt_unavailable").unwrap(),
+            "Taken down",
+            fixed_timestamp(),
+        )
+        .mark_unavailable(
+            &DownloadFailure::new("This video has been removed for a copyright claim."),
+            fixed_timestamp(),
+        ),
+    );
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &unavailable,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(video_repository.find(&unavailable.id).unwrap(), None);
+    assert_eq!(
+        channel_video_repository
+            .list_for_channel(&handle("@somechannel"))
+            .unwrap(),
+        vec![]
+    );
+}
+
+#[test]
+fn it_should_keep_the_pending_download_of_a_kept_favorite() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        db.database(),
+        Arc::new(FixedClock(fixed_timestamp())),
+    ));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(1).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    let retrying = favorite(my_video().mark_errored("HTTP Error 503", fixed_timestamp()));
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &retrying,
+        1,
+    );
+    let download = Task::DownloadVideo {
+        video_id: retrying.id.as_str().to_string(),
+    };
+    let retry_at = fixed_timestamp() + chrono::Duration::hours(1);
+    task_repository.schedule(&download, retry_at).unwrap();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+        ])),
+        task_repository.clone(),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        task_repository
+            .list_non_completed()
+            .unwrap()
+            .into_iter()
+            .filter(|scheduled| matches!(scheduled.task, Task::DownloadVideo { .. }))
+            .collect::<Vec<_>>(),
+        vec![pending_task(1, &download, retry_at)]
+    );
+    assert_eq!(video_repository.find(&retrying.id).unwrap(), Some(retrying));
+}
+
+#[test]
+fn it_should_place_kept_videos_after_the_listed_ones() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    [("ytC", "C"), ("ytD", "D")].into_iter().zip(0..).for_each(
+        |((youtube_id, title), position)| {
+            save_channel_video_at(
+                video_repository.as_ref(),
+                channel_video_repository.as_ref(),
+                &favorite(Video::create(
+                    YoutubeVideoId::new(youtube_id).unwrap(),
+                    title,
+                    fixed_timestamp(),
+                )),
+                position,
+            );
+        },
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytB", "B", 1),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        channel_youtube_ids(&video_repository, &channel_video_repository),
+        vec![
+            ("ytA".to_string(), 0, false),
+            ("ytB".to_string(), 1, false),
+            ("ytC".to_string(), 2, true),
+            ("ytD".to_string(), 3, true)
+        ]
+    );
+}
+
+#[test]
+fn it_should_stop_keeping_a_kept_video_listed_again() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    save_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &Video::create(YoutubeVideoId::new("ytA").unwrap(), "A", fixed_timestamp()),
+        0,
+    );
+    save_kept_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(Video::create(
+            YoutubeVideoId::new("ytC").unwrap(),
+            "C",
+            fixed_timestamp(),
+        )),
+        1,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+            listed_video("ytC", "C", 1),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        channel_youtube_ids(&video_repository, &channel_video_repository),
+        vec![("ytA".to_string(), 0, false), ("ytC".to_string(), 1, false)]
+    );
+}
+
+#[test]
+fn it_should_evict_a_kept_video_once_unfavorited() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let event_repository =
+        SqliteEventRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let unfavorited = downloaded_episode();
+    save_kept_channel_video_at(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &unfavorited,
+        0,
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(stored_youtube_ids(&video_repository), Vec::<String>::new());
+    assert_eq!(
+        event_repository.list_eligible().unwrap(),
+        vec![pending_event(
+            1,
+            DomainEvent::VideoRemovedFromChannel(VideoRemovedFromChannel {
+                channel_id: "@somechannel".to_string(),
+                video_id: unfavorited.id.as_str().to_string(),
+                title: "My Video".to_string(),
+                filename: Some("Season 2023/S2023E111401 - My Video.mp4".to_string()),
+                thumbnail_filename: Some("Season 2023/S2023E111401 - My Video.jpg".to_string()),
+                subtitle_filename: None,
+                was_downloaded: true,
+            })
+        )]
+    );
+}
+
+#[test]
+fn it_should_keep_a_video_favorited_during_the_listing() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    channel_repository
+        .insert(&Channel {
+            video_limit: VideoLimit::new(2).unwrap(),
+            ..channel("@somechannel")
+        })
+        .unwrap();
+    let aged_out = Video::create(YoutubeVideoId::new("ytC").unwrap(), "C", fixed_timestamp());
+    [
+        Video::create(YoutubeVideoId::new("ytA").unwrap(), "A", fixed_timestamp()),
+        aged_out.clone(),
+    ]
+    .iter()
+    .zip(0..)
+    .for_each(|(video, position)| {
+        save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            video,
+            position,
+        );
+    });
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(FakeChannelVideosRepository::favoriting_during_the_listing(
+            vec![
+                listed_video("ytN", "N", 0),
+                listed_video("ytA", "A", 1),
+                listed_video("ytC", "C", 2),
+            ],
+            video_repository.clone(),
+            aged_out.id.clone(),
+            fixed_timestamp(),
+        )),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        channel_youtube_ids(&video_repository, &channel_video_repository),
+        vec![
+            ("ytN".to_string(), 0, false),
+            ("ytA".to_string(), 1, false),
+            ("ytC".to_string(), 2, true)
+        ]
+    );
+}
+
+#[test]
+fn it_should_store_a_new_copy_of_a_favorite_as_a_favorite() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    let favorited_at = fixed_timestamp() - chrono::Duration::days(1);
+    let playlist_copy = Video {
+        favorited_at: Some(favorited_at),
+        ..my_video()
+    };
+    video_repository.insert(&playlist_copy).unwrap();
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository.clone(),
+        Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("yt1", "My Video", 0),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        Arc::new(FakeVideoFileRepository::default()),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(
+        video_repository
+            .find_by_youtube_id(&YoutubeVideoId::new("yt1").unwrap())
+            .unwrap()
+            .into_iter()
+            .map(|copy| copy.favorited_at)
+            .collect::<Vec<_>>(),
+        vec![Some(favorited_at), Some(favorited_at)]
+    );
+}
+
+#[test]
+fn it_should_not_delete_the_files_of_a_kept_favorite() {
+    let db = TestDatabase::new();
+    let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+    let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+    let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(episode_files()));
+    channel_repository.insert(&channel("@somechannel")).unwrap();
+    save_channel_video(
+        video_repository.as_ref(),
+        channel_video_repository.as_ref(),
+        &favorite(downloaded_episode()),
+    );
+    let task = ReconcileChannelTask::new(channel_video_reconciler(
+        &db,
+        channel_repository,
+        video_repository,
+        channel_video_repository,
+        Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            listed_video("ytA", "A", 0),
+        ])),
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )),
+        video_file_repository.clone(),
+    ));
+
+    let result = run(&task, &task_for("@somechannel"));
+
+    assert_eq!(result, Ok(TaskOutcome::Done));
+    assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
+}
+
 /// Builds a reconciler around the repositories and fakes a test seeds,
 /// configures or asserts; the remaining ports (YouTube metadata, video
 /// metadata, thumbnails) are ones these tests don't observe — the ones
@@ -3101,6 +3721,35 @@ fn save_channel_video_at(
         .find_by_video(&video.id)
         .unwrap()
         .unwrap()
+}
+
+/// Like `save_channel_video_at`, the membership kept: a favorite the
+/// channel no longer lists.
+fn save_kept_channel_video_at(
+    video_repository: &dyn VideoRepository,
+    channel_video_repository: &dyn ChannelVideoRepository,
+    video: &Video,
+    position: i64,
+) -> ChannelVideo {
+    let stored = save_channel_video_at(video_repository, channel_video_repository, video, position);
+    channel_video_repository
+        .save(&ChannelVideo {
+            kept: true,
+            ..stored.clone()
+        })
+        .unwrap();
+    ChannelVideo {
+        kept: true,
+        ..stored
+    }
+}
+
+/// `video` favorited at `fixed_timestamp()`.
+fn favorite(video: Video) -> Video {
+    Video {
+        favorited_at: Some(fixed_timestamp()),
+        ..video
+    }
 }
 
 fn channel(channel_handle: &str) -> Channel {
@@ -3310,4 +3959,21 @@ fn stored_youtube_ids(video_repository: &SqliteVideoRepository) -> Vec<String> {
         .collect();
     ids.sort();
     ids
+}
+
+/// The channel's videos in order: each YouTube id with its position and
+/// whether it is kept.
+fn channel_youtube_ids(
+    video_repository: &SqliteVideoRepository,
+    channel_video_repository: &SqliteChannelVideoRepository,
+) -> Vec<(String, i64, bool)> {
+    channel_video_repository
+        .list_for_channel(&handle("@somechannel"))
+        .unwrap()
+        .into_iter()
+        .map(|cv| {
+            let video = video_repository.find(&cv.video_id).unwrap().unwrap();
+            (video.youtube_id.as_str().to_string(), cv.position, cv.kept)
+        })
+        .collect()
 }

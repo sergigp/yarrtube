@@ -33,11 +33,13 @@ import {
   unwatchedTotal,
 } from '@/lib/sidebarSections'
 import { markWatchedConfirmation } from '@/lib/markWatchedConfirmation'
+import { deleteSourceDescription } from '@/lib/sourceDelete'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EditChannelDialog } from './EditChannelDialog'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { SidebarCategories } from './SidebarCategories'
+import { FAVORITES_PATH, SidebarFavorites } from './SidebarFavorites'
 import { SidebarCount } from './SidebarCount'
 import { SidebarFilter } from './SidebarFilter'
 import { PlaylistIcon } from './PlaylistIcon'
@@ -193,7 +195,8 @@ interface SidebarSectionProps {
   /** Channels only: opens the edit channel dialog, which the caller owns. */
   onEditRequest?: (id: string) => void
   onDelete: (id: string) => Promise<void>
-  deleteDescription: string
+  /** What deleting `item` does, for its delete confirmation. */
+  deleteDescriptionOf: (item: LibraryItem) => string
   showAvatar?: boolean
   onNavigate: () => void
   /** Rows left out past the section's limit; offers "Show N more" when > 0. */
@@ -222,7 +225,7 @@ function SidebarSection({
   onSetUnwatchedCountHidden,
   onEditRequest,
   onDelete,
-  deleteDescription,
+  deleteDescriptionOf,
   showAvatar,
   onNavigate,
   hiddenCount,
@@ -327,7 +330,7 @@ function SidebarSection({
           }
         }}
         title={pendingDelete ? `Delete "${pendingDelete.name}"?` : ''}
-        description={deleteDescription}
+        description={pendingDelete ? deleteDescriptionOf(pendingDelete) : undefined}
         onConfirm={async () => {
           if (pendingDelete) {
             await onDelete(pendingDelete.id)
@@ -492,6 +495,9 @@ export function Sidebar({
           withCategories={withCategories}
         />
         {noMatches && <p className="px-3 py-1 text-sm text-muted-foreground">No matches.</p>}
+        {filter === '' && (
+          <SidebarFavorites active={location.pathname === FAVORITES_PATH} onNavigate={onClose} />
+        )}
         {withCategories && (
           <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} filter={filter} />
         )}
@@ -522,7 +528,9 @@ export function Sidebar({
               navigate('/')
             }
           })}
-          deleteDescription="This removes the channel from tracking."
+          deleteDescriptionOf={(channel) =>
+            deleteSourceDescription('channel', channel.favorite_count ?? 0)
+          }
         />
         <SidebarSection
           title="Playlists"
@@ -551,7 +559,9 @@ export function Sidebar({
               navigate('/')
             }
           })}
-          deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+          deleteDescriptionOf={(playlist) =>
+            deleteSourceDescription('playlist', playlist.favorite_count ?? 0)
+          }
         />
       </aside>
       {editingChannel && (

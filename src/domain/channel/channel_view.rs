@@ -20,4 +20,6 @@ pub struct ChannelView {
     pub unwatched_count: usize,
     pub work_in_progress: bool,
     pub last_synced_at: Option<DateTime<Utc>>,
+    /// Favorite videos, Unavailable and Discarded ones not counted.
+    pub favorite_count: usize,
 }

@@ -105,6 +105,10 @@ pub trait VideoSearcherApi: Send + Sync {
         text: &VideoSearchText,
         limit: usize,
     ) -> Result<Vec<HomeVideoView>, ListVideosError>;
+
+    /// Favorite videos, Unavailable and Discarded ones left out, once per
+    /// YouTube video (channel copy preferred), most recently favorited first.
+    fn list_favorites(&self) -> Result<Vec<CategoryVideoView>, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -125,9 +129,14 @@ impl VideoSearcherApi for VideoSearcher {
             .map_err(ListVideosError::Repository)?;
         playlist_videos
             .iter()
-            .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
-            .filter(|video| !Self::is_skipped(video))
-            .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
+            .filter_map(|pv| {
+                self.video_repository
+                    .find(&pv.video_id)
+                    .map(|video| video.map(|video| (video, pv.kept)))
+                    .transpose()
+            })
+            .filter(|found| !Self::is_skipped(found))
+            .map(|found| found.and_then(|(video, kept)| self.view(video, summaries_shown, kept)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -149,9 +158,14 @@ impl VideoSearcherApi for VideoSearcher {
             .map_err(ListVideosError::Repository)?;
         channel_videos
             .iter()
-            .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
-            .filter(|video| !Self::is_skipped(video))
-            .map(|video| video.and_then(|video| self.view(video, summaries_shown)))
+            .filter_map(|cv| {
+                self.video_repository
+                    .find(&cv.video_id)
+                    .map(|video| video.map(|video| (video, cv.kept)))
+                    .transpose()
+            })
+            .filter(|found| !Self::is_skipped(found))
+            .map(|found| found.and_then(|(video, kept)| self.view(video, summaries_shown, kept)))
             .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
@@ -192,15 +206,7 @@ impl VideoSearcherApi for VideoSearcher {
                 .downloaded_videos(&category)
                 .map_err(ListVideosError::Repository)?,
         );
-        let by_video = self
-            .category_ids_by_video(&self.list_categories()?)
-            .map_err(ListVideosError::Repository)?;
-        let summaries_available = self.find_preferences()?.summaries_available();
-        let mut views = videos
-            .into_iter()
-            .map(|sourced| self.category_view(sourced, &by_video, summaries_available))
-            .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
-            .map_err(ListVideosError::Repository)?;
+        let mut views = self.category_views(videos)?;
         views.sort_by_key(|view| std::cmp::Reverse(Self::published_or_synced(view)));
         Ok(views)
     }
@@ -224,6 +230,22 @@ impl VideoSearcherApi for VideoSearcher {
             .map_err(ListVideosError::Repository)?;
         Ok(Self::with_categories(self.views(videos)?, &by_video))
     }
+
+    fn list_favorites(&self) -> Result<Vec<CategoryVideoView>, ListVideosError> {
+        let mut videos = Self::once_per_youtube_video(Self::channels_first(
+            self.with_sources(
+                self.video_repository
+                    .list_favorites()
+                    .map_err(ListVideosError::Repository)?
+                    .into_iter()
+                    .filter(|video| !video.is_skipped())
+                    .collect(),
+            )
+            .map_err(ListVideosError::Repository)?,
+        ));
+        videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.favorited_at));
+        self.category_views(videos)
+    }
 }
 
 impl VideoSearcher {
@@ -246,8 +268,9 @@ impl VideoSearcher {
             .ok_or_else(|| ListVideosError::CategoryNotFound(id.clone()))
     }
 
-    /// `video` with its metadata, and its summary when `summaries_shown`.
-    fn view(&self, video: Video, summaries_shown: bool) -> anyhow::Result<VideoView> {
+    /// `video` with its metadata, its summary when `summaries_shown`, and
+    /// whether its source keeps it (`kept`).
+    fn view(&self, video: Video, summaries_shown: bool, kept: bool) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
         let summary = if summaries_shown {
             self.video_summary_repository.find(&video.id)?
@@ -258,7 +281,24 @@ impl VideoSearcher {
             video,
             metadata,
             summary,
+            kept,
         })
+    }
+
+    /// `videos` as category videos, in the same order (see `category_view`).
+    fn category_views(
+        &self,
+        videos: Vec<SourcedVideo>,
+    ) -> Result<Vec<CategoryVideoView>, ListVideosError> {
+        let by_video = self
+            .category_ids_by_video(&self.list_categories()?)
+            .map_err(ListVideosError::Repository)?;
+        let summaries_available = self.find_preferences()?.summaries_available();
+        videos
+            .into_iter()
+            .map(|sourced| self.category_view(sourced, &by_video, summaries_available))
+            .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
+            .map_err(ListVideosError::Repository)
     }
 
     /// `sourced` as a category video: with its metadata, its summary when
@@ -276,7 +316,8 @@ impl VideoSearcher {
             video,
             metadata,
             summary,
-        } = self.view(sourced.video, summaries_shown)?;
+            ..
+        } = self.view(sourced.video, summaries_shown, false)?;
         let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
         Ok(CategoryVideoView {
             video,
@@ -689,7 +730,11 @@ impl VideoSearcher {
     /// read paths can omit it (see the `video-listing` capability). An `Err` is
     /// never excluded, so a lookup failure still propagates rather than being
     /// silently dropped.
-    fn is_skipped(video: &anyhow::Result<Video>) -> bool {
-        matches!(video, Ok(video) if video.is_skipped())
+    /// Whether a looked-up video is Unavailable or Discarded, so the video-list
+    /// read paths can omit it (see the `video-listing` capability). An `Err` is
+    /// never excluded, so a lookup failure still propagates rather than being
+    /// silently dropped.
+    fn is_skipped(found: &anyhow::Result<(Video, bool)>) -> bool {
+        matches!(found, Ok((video, _)) if video.is_skipped())
     }
 }

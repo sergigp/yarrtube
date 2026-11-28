@@ -13,8 +13,8 @@ use crate::domain::services::{
     PreferencesSearcher, PreferencesUpdater, QualityUpgrader, ShowFileWriter, ShowMover,
     SubtitleFetcher, SubtitleReader, TaskRunNowRequester, TaskViewSearcher, ThumbnailFetcher,
     VideoCategorizer, VideoCategoryAssigner, VideoCategoryChoiceSearcher, VideoCategoryEditor,
-    VideoDiscarder, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
-    VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
+    VideoDiscarder, VideoDownloader, VideoFavoriter, VideoFileDeleter, VideoOwnerFinder,
+    VideoReconciler, VideoRetrier, VideoSearcher, VideoSummarizer, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -678,7 +678,9 @@ fn api_services(
             infrastructure.task_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.clock.clone(),
+            video_favoriter(infrastructure),
         ),
+        video_favoriter: video_favoriter(infrastructure),
         task_run_now_requester: TaskRunNowRequester::new(
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
@@ -1027,6 +1029,13 @@ fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler
         video_category_assigner(infrastructure),
         infrastructure.preferences_repository.clone(),
         video_categorizer(infrastructure),
+    )
+}
+
+fn video_favoriter(infrastructure: &InfrastructureContainer) -> VideoFavoriter {
+    VideoFavoriter::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.clock.clone(),
     )
 }
 

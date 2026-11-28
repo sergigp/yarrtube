@@ -8,14 +8,14 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     SubtitleReader, SubtitleReaderApi, VideoCategoryChoiceSearcher, VideoCategoryChoiceSearcherApi,
-    VideoCategoryEditor, VideoCategoryEditorApi, VideoDiscarder, VideoDiscarderApi, VideoRetrier,
-    VideoRetrierApi, VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater,
-    VideoWatchStateUpdaterApi,
+    VideoCategoryEditor, VideoCategoryEditorApi, VideoDiscarder, VideoDiscarderApi, VideoFavoriter,
+    VideoFavoriterApi, VideoRetrier, VideoRetrierApi, VideoSearcher, VideoSearcherApi,
+    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
-    DiscardVideoError, HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError,
-    RestoreDiscardedVideosError, RetryVideoError, UpdateWatchStateError, VideoDuration, VideoId,
-    VideoSearchText, WebVtt,
+    DiscardVideoError, FavoriteVideoError, HomeLimits, ListVideosError, PlaybackPosition,
+    ReadSubtitlesError, RestoreDiscardedVideosError, RetryVideoError, UpdateWatchStateError,
+    VideoDuration, VideoId, VideoSearchText, WebVtt,
 };
 use crate::domain::video_category::EditVideoCategoriesError;
 use axum::Json;
@@ -237,6 +237,46 @@ pub async fn discard_video(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn favorite_video(
+    State(video_favoriter): State<VideoFavoriter>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = VideoId::new(id)?;
+
+    run_blocking(move || video_favoriter.favorite(&id))
+        .await?
+        .map_err(favorite_video_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn unfavorite_video(
+    State(video_favoriter): State<VideoFavoriter>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = VideoId::new(id)?;
+
+    run_blocking(move || video_favoriter.unfavorite(&id))
+        .await?
+        .map_err(favorite_video_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn list_favorite_videos(
+    State(video_searcher): State<VideoSearcher>,
+) -> Result<Json<Vec<CategoryVideoResponse>>, ApiError> {
+    let videos = run_blocking(move || video_searcher.list_favorites())
+        .await?
+        .map_err(list_videos_error)?;
+    Ok(Json(
+        videos
+            .into_iter()
+            .map(CategoryVideoResponse::from)
+            .collect(),
+    ))
+}
+
 /// Maps a failed read or edit of a video's categories, the same for every
 /// route touching them.
 pub fn edit_video_categories_error(error: EditVideoCategoriesError) -> ApiError {
@@ -267,6 +307,15 @@ pub fn restore_discarded_videos_error(error: RestoreDiscardedVideosError) -> Api
             ApiError::new(StatusCode::NOT_FOUND, e)
         }
         e @ RestoreDiscardedVideosError::Repository(_) => ApiError::internal(e),
+    }
+}
+
+/// Maps a failed favorite or unfavorite, the same for both routes.
+fn favorite_video_error(error: FavoriteVideoError) -> ApiError {
+    match error {
+        e @ FavoriteVideoError::VideoNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ FavoriteVideoError::Discarded(_) => ApiError::new(StatusCode::CONFLICT, e),
+        e @ FavoriteVideoError::Repository(_) => ApiError::internal(e),
     }
 }
 
