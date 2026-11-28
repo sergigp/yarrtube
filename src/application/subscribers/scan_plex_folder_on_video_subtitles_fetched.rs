@@ -1,5 +1,5 @@
 use crate::domain::services::{PlexFolderScanner, PlexFolderScannerApi};
-use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
+use crate::infrastructure::shared::domain_events::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 use std::path::Path;
 

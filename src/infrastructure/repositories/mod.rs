@@ -1,6 +1,4 @@
 pub mod anthropic_llm_server_repository;
-pub mod domain_events_consumer;
-pub mod event_subscriber;
 pub mod filesystem_channel_avatar_repository;
 pub mod filesystem_directory_repository;
 pub mod filesystem_show_file_repository;
@@ -26,8 +24,6 @@ pub mod sqlite_video_metadata_repository;
 pub mod sqlite_video_repository;
 pub mod sqlite_video_summary_repository;
 pub mod sqlite_video_transcript_repository;
-pub mod task_executor;
-pub mod task_handler;
 pub mod youtube_caption_repository;
 pub mod youtube_channel_repository;
 pub mod youtube_channel_videos_repository;

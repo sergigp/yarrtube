@@ -32,10 +32,10 @@ use crate::domain::video::{
     VideoDiscarded, VideoDownloaded, VideoFileDeleted, VideoSubtitlesFetched, VideoSummaryGenerated,
 };
 use crate::domain::video_category::VideoCategoriesChanged;
-use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::shared::domain_events::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::shared::system_clock::Clock;
 use delete_channel_files_on_channel_deleted::DeleteChannelFilesOnChannelDeleted;
 use delete_playlist_files_on_playlist_deleted::DeletePlaylistFilesOnPlaylistDeleted;

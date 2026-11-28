@@ -1,6 +1,6 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
-use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
+use crate::infrastructure::shared::domain_events::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]

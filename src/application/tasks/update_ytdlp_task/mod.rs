@@ -1,8 +1,8 @@
 use crate::domain::task::{Task, TaskOutcome};
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
 use crate::infrastructure::shared::system_clock::Clock;
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use std::sync::Arc;

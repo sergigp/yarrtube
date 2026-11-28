@@ -7,11 +7,6 @@ use uuid::Uuid;
 pub struct CategoryId(String);
 
 impl CategoryId {
-    /// Generates a new, unique identifier for a freshly created `Category`.
-    pub fn new_generated() -> Self {
-        Self(Uuid::new_v4().to_string())
-    }
-
     /// Parses an identifier as stored or as supplied by a client.
     pub fn new(id: impl Into<String>) -> Result<Self, ValidationError> {
         let id = id.into();
@@ -19,6 +14,11 @@ impl CategoryId {
             return Err(ValidationError("Category ID must not be empty".to_string()));
         }
         Ok(Self(id))
+    }
+
+    /// Generates a new, unique identifier for a freshly created `Category`.
+    pub fn new_generated() -> Self {
+        Self(Uuid::new_v4().to_string())
     }
 
     pub fn as_str(&self) -> &str {

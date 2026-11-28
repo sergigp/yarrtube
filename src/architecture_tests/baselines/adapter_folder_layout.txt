@@ -1,3 +1,0 @@
-# Baseline of rule `adapter_folder_layout` (src/architecture_tests/adapter_folder_layout.rs): code that broke it
-# when it arrived. It only shrinks: fix a unit, then delete its line.
-src/application/http/videos/category_dto.rs

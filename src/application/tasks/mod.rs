@@ -25,8 +25,8 @@ use crate::domain::services::{
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_executor::HandlerRegistry;
 use crate::infrastructure::shared::system_clock::Clock;
+use crate::infrastructure::shared::task_executor::HandlerRegistry;
 use categorize_video_task::CategorizeVideoTask;
 use delete_channel_files_task::DeleteChannelFilesTask;
 use delete_playlist_files_task::DeletePlaylistFilesTask;

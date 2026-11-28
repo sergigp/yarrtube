@@ -34,6 +34,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::{debug, info, info_span, warn};
 
+/// What a pass does when listing the playlist's items on YouTube fails.
+#[derive(Clone, Copy)]
+enum ListingFailure {
+    /// Leave membership untouched and run the rest of the pass.
+    SkipMembership,
+    /// Fail the pass.
+    FailPass,
+}
+
 /// Reconciles a playlist with YouTube: brings its stored membership in line
 /// with YouTube's playlist items, then hands its folder to
 /// `InternalVideoReconciler` to bring it in line with the database.
@@ -556,13 +565,4 @@ impl PlaylistVideoReconciler {
 
         Ok(())
     }
-}
-
-/// What a pass does when listing the playlist's items on YouTube fails.
-#[derive(Clone, Copy)]
-enum ListingFailure {
-    /// Leave membership untouched and run the rest of the pass.
-    SkipMembership,
-    /// Fail the pass.
-    FailPass,
 }

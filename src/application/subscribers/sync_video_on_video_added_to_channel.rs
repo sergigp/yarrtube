@@ -1,6 +1,6 @@
 use crate::domain::task::Task;
-use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::shared::domain_events::event_subscriber::EventSubscriber;
 use crate::infrastructure::shared::system_clock::Clock;
 use serde::Deserialize;
 use std::sync::Arc;

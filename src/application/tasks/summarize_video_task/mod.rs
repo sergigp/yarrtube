@@ -2,7 +2,7 @@ use crate::domain::services::{VideoSummarizer, VideoSummarizerApi};
 use crate::domain::task::{Task, TaskOutcome};
 use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::task_handler::{TaskHandler, unexpected_task};
+use crate::infrastructure::shared::task_handler::{TaskHandler, unexpected_task};
 use std::sync::Arc;
 
 /// Writes one video's AI summary, scheduled by the video sync
